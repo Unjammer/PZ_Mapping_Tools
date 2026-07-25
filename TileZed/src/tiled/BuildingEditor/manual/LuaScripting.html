@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Lua scripting in BuildingEd</title>
+  <style>
+    body { max-width: 1050px; margin: 24px auto; padding: 0 20px; font: 15px/1.5 "Segoe UI", Arial, sans-serif; }
+    code, pre { font-family: Consolas, monospace; }
+    code { background: #eee; padding: .1em .3em; }
+    pre { overflow: auto; padding: 12px; background: #eee; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 7px 9px; border: 1px solid #aaa; text-align: left; vertical-align: top; }
+    .note { padding: 10px 14px; border-left: 4px solid #477fc0; background: #edf5ff; }
+    .warning { padding: 10px 14px; border-left: 4px solid #c58a00; background: #fff4d9; }
+    @media (prefers-color-scheme: dark) {
+      body { color: #eee; background: #202225; }
+      code, pre { background: #151719; }
+      .note { background: #213247; }
+      .warning { background: #493b1d; }
+    }
+  </style>
+</head>
+<body>
+<h1>Lua scripting in BuildingEd</h1>
+
+<p>BuildingEd embeds Lua 5.2 for editor automation. Choose
+<strong>Building &gt; Run Lua Script...</strong>, or open
+<strong>Building &gt; Lua Console</strong>. F5 reruns the last BuildingEd
+script while the console is in BuildingEd mode.</p>
+
+<div class="note">
+  The global <code>building</code> is a transactional view of the current
+  document. A successful script is committed as one Undo operation. A syntax
+  error, runtime error, or user cancellation changes nothing in the document.
+  The current API version is <code>building.apiVersion == 2</code>.
+</div>
+
+<p>The global <code>scriptDirectory</code> contains the absolute directory of
+the running script. API indexes and coordinates are zero-based. Lua list tables
+returned by the API are iterated normally with <code>ipairs()</code>.</p>
+
+<h2>Quick inspection</h2>
+<pre><code>print(building:width(), building:height())
+
+for floorIndex = 0, building:floorCount() - 1 do
+    local level = building:floorLevel(floorIndex)
+    print("level", level, "objects", building:objectCount(level))
+end
+
+for roomIndex = 0, building:roomCount() - 1 do
+    print(roomIndex, building:roomName(roomIndex))
+end</code></pre>
+
+<h2>Rooms</h2>
+<pre><code>local level = building:currentLevel()
+local roomIndex = 0
+building:setRoom(level, 5, 8, roomIndex)
+building:fillRoom(level, 10, 10, 4, 3, roomIndex)
+building:setRoom(level, 5, 8, -1) -- erase assignment</code></pre>
+
+<table>
+<tr><th>Function</th><th>Result or effect</th></tr>
+<tr><td><code>roomCount()</code></td><td>Number of room definitions.</td></tr>
+<tr><td><code>roomName(index)</code></td><td>Display name of a room.</td></tr>
+<tr><td><code>roomInternalName(index)</code></td><td>Internal PZ room name.</td></tr>
+<tr><td><code>roomAt(level,x,y)</code></td><td>Room index, or -1 for no room.</td></tr>
+<tr><td><code>setRoom(level,x,y,index)</code></td><td>Assigns one cell in the transaction.</td></tr>
+<tr><td><code>fillRoom(level,x,y,w,h,index)</code></td><td>Assigns a complete rectangle.</td></tr>
+</table>
+
+<h2>Floors and objects</h2>
+<table>
+<tr><th>Function</th><th>Result or effect</th></tr>
+<tr><td><code>floorCount()</code></td><td>Number of building floors.</td></tr>
+<tr><td><code>floorLevel(index)</code></td><td>Level represented by a zero-based floor index.</td></tr>
+<tr><td><code>currentLevel()</code></td><td>Level selected in BuildingEd.</td></tr>
+<tr><td><code>objectCount(level)</code></td><td>Current transactional object count.</td></tr>
+<tr><td><code>objectType(level,index)</code></td><td>Door, Window, Stairs, Furniture, Roof, Wall, or Object.</td></tr>
+<tr><td><code>objectX(level,index)</code>, <code>objectY(level,index)</code></td><td>Transactional object position.</td></tr>
+<tr><td><code>objectDirection(level,index)</code></td><td>Direction string used by BuildingEd.</td></tr>
+<tr><td><code>moveObject(level,index,x,y)</code></td><td>Moves an object after validating its bounds.</td></tr>
+<tr><td><code>removeObject(level,index)</code></td><td>Removes an object. Later indexes reflect the removal.</td></tr>
+</table>
+
+<div class="warning">
+  If removing multiple objects, iterate indexes from the end toward zero.
+  Adding catalog-backed objects is not part of API version 2.
+</div>
+
+<h2>User-tile and grime layers</h2>
+<p>These functions access the per-floor string tile grids used for grime and
+user-tile overrides. Structural floors, walls, doors and furniture remain
+generated from rooms and BuildingEd objects; these functions intentionally do
+not overwrite that generated structure.</p>
+<pre><code>local level = building:currentLevel()
+for _, layer in ipairs(building:userLayerNames(level)) do print(layer) end
+print(building:tileAt(level, "FloorGrime", 3, 4))
+building:placeTile(level, "FloorGrime", 3, 4, "floors_overlay_01_12")
+building:replaceTile(level, "FloorGrime", 3, 4,
+    "floors_overlay_01_12", "floors_overlay_01_13")
+building:deleteTile(level, "FloorGrime", 3, 4)</code></pre>
+
+<table>
+<tr><th>Function</th><th>Result or effect</th></tr>
+<tr><td><code>userLayerNames(level)</code></td><td>One-based list of existing grid names.</td></tr>
+<tr><td><code>userTileAt(level,layer,x,y)</code></td><td>Tile name or an empty string.</td></tr>
+<tr><td><code>setUserTile(level,layer,x,y,tileName)</code></td><td>Records one override and creates the named grid when needed.</td></tr>
+<tr><td><code>tileAt(level,layer,x,y)</code></td><td>Alias returning the exact tile name or an empty string.</td></tr>
+<tr><td><code>placeTile(level,layer,x,y,tileName)</code></td><td>Validates and places one known tile; creates the layer when needed.</td></tr>
+<tr><td><code>deleteTile(level,layer,x,y[,tileName])</code></td><td>Deletes by position. With a name, deletion occurs only on an exact match. Returns a boolean.</td></tr>
+<tr><td><code>deleteTilesByName(level,layer,tileName)</code></td><td>Deletes all exact matches in one layer and returns the count.</td></tr>
+<tr><td><code>replaceTile(level,layer,x,y,oldName,newName)</code></td><td>Conditionally replaces one position and returns a boolean.</td></tr>
+<tr><td><code>replaceTilesByName(level,layer,oldName,newName)</code></td><td>Replaces every exact match in one layer and returns the count.</td></tr>
+</table>
+
+<h2>Qt application actions</h2>
+<p>The global <code>app</code> queues existing BuildingEd actions. They execute
+only after the script succeeds and its transactional edits enter the Undo
+stack.</p>
+<table>
+<tr><th>Function</th><th>Result or effect</th></tr>
+<tr><td><code>app:availableActions()</code></td><td>Returns <code>save</code>, <code>saveAs</code>, <code>exportTMX</code>, <code>exportBinary</code>, <code>buildingProperties</code>, <code>rooms</code>, <code>floors</code>, and <code>tiles</code>.</td></tr>
+<tr><td><code>app:invoke(actionName)</code></td><td>Queues a whitelisted action; dialog actions open the normal Qt window.</td></tr>
+</table>
+<pre><code>app:invoke("exportTMX")
+app:invoke("exportBinary")</code></pre>
+<div class="warning">
+  Arbitrary QObject construction, widget ownership, signals and slots are not
+  exposed. In-game map feature generation belongs to WorldEd and cannot be
+  invoked on a BuildingEd document.
+</div>
+
+<h2>Properties and selections</h2>
+<table>
+<tr><th>Function</th><th>Result or effect</th></tr>
+<tr><td><code>property(name)</code></td><td>String value or nil.</td></tr>
+<tr><td><code>propertyNames()</code></td><td>Sorted one-based list.</td></tr>
+<tr><td><code>setProperty(name,value)</code></td><td>Creates or replaces a property.</td></tr>
+<tr><td><code>removeProperty(name)</code></td><td>Removes a property.</td></tr>
+<tr><td><code>setRoomSelection(x,y,w,h)</code></td><td>Changes the room selection.</td></tr>
+<tr><td><code>clearRoomSelection()</code></td><td>Clears the room selection.</td></tr>
+<tr><td><code>setTileSelection(x,y,w,h)</code></td><td>Changes the tile selection.</td></tr>
+<tr><td><code>clearTileSelection()</code></td><td>Clears the tile selection.</td></tr>
+</table>
+
+<h2>Errors, cancellation, and trust</h2>
+<p>Invalid levels, indexes, coordinates, rectangles, or object destinations
+raise a Lua error. Long scripts process UI events every 10,000 Lua
+instructions and can be cancelled from the progress dialog.</p>
+<p>BuildingEd currently opens Lua's standard libraries, including file and OS
+functions. Run only scripts you trust. These are editor scripts, not Project
+Zomboid gameplay scripts.</p>
+
+<p>Installed examples:</p>
+<ul>
+  <li><code>lua/example-building-inspect.lua</code> — read-only report;</li>
+  <li><code>lua/example-building-fill-room.lua</code> — room fill and selection.</li>
+</ul>
+</body>
+</html>

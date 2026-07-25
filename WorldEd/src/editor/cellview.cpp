@@ -1,0 +1,71 @@
+/*
+ * Copyright 2012, Tim Baker <treectrl@users.sf.net>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the Free
+ * Software Foundation; either version 2 of the License, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include "cellview.h"
+
+#include "celldocument.h"
+#include "cellscene.h"
+#include "preferences.h"
+#include "world.h"
+#include "zoomable.h"
+
+#include "maprenderer.h"
+
+#include <QMouseEvent>
+#include <QPainter>
+
+CellView::CellView(QWidget *parent) :
+    BaseGraphicsView(PreferenceGL, parent)
+{
+    zoomable()->setScale(0.25);
+}
+
+CellScene *CellView::scene() const
+{
+    return static_cast<CellScene*>(mScene);
+}
+
+void CellView::mouseMoveEvent(QMouseEvent *event)
+{
+    int level = scene()->document()->currentLevel();
+    QPoint tilePos = scene()->renderer()->pixelToTileCoordsInt(mapToScene(event->pos()), level);
+    emit statusBarCoordinatesChanged(tilePos.x(), tilePos.y());
+
+    BaseGraphicsView::mouseMoveEvent(event);
+}
+
+void CellView::paintEvent(QPaintEvent *event)
+{
+    if (scene())
+        scene()->handlePendingUpdates();
+    BaseGraphicsView::paintEvent(event);
+}
+
+void CellView::drawForeground(QPainter *painter, const QRectF &rect)
+{
+    QGraphicsView::drawForeground(painter, rect);
+    if (scene() && scene()->document() && scene()->document()->world())
+        drawProjectGridBadge(painter, scene()->document()->world()->cellSize());
+}
+
+QRectF CellView::sceneRectForMiniMap() const
+{
+    if (!scene() || !scene()->renderer() || !scene()->map())
+        return QRectF();
+    return scene()->renderer()->boundingRect(
+                QRect(QPoint(), scene()->map()->size()));
+}

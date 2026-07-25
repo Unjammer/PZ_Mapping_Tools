@@ -1,0 +1,39 @@
+version = 1
+revision = 12
+layers
+{
+    tile = Floor
+    tile = FloorOverlay
+    tile = FloorGrime
+    tile = FloorGrime2
+    tile = FloorFurniture
+    tile = 0_Vegetation
+    tile = Walls
+    tile = WallTrim
+    tile = Walls2
+    tile = WallTrim2
+    tile = RoofCap
+    tile = RoofCap2
+    tile = WallOverlay
+    tile = WallOverlay2
+    tile = WallGrime
+    tile = WallGrime2
+    tile = WallFurniture
+    tile = WallFurniture2
+    tile = Frames
+    tile = Doors
+    tile = Windows
+    tile = Curtains
+    tile = Furniture
+    tile = Furniture2
+    tile = Furniture3
+    tile = Furniture4
+    tile = Curtains2
+    tile = WallFurniture3
+    tile = WallFurniture4
+    tile = WallOverlay3
+    tile = WallOverlay4
+    tile = Roof
+    tile = Roof2
+    tile = RoofTop
+}

@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>BiomeMapGeneratorDialog</class>
+ <widget class="QDialog" name="BiomeMapGeneratorDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>580</width>
+    <height>410</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>520</width>
+    <height>300</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Generate Biome Map</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="mainImageGroup">
+     <property name="title">
+      <string>Base map image (biome source)</string>
+     </property>
+     <layout class="QHBoxLayout" name="mainImageLayout">
+      <item>
+       <widget class="QLineEdit" name="mainImagePath">
+        <property name="placeholderText">
+         <string>Select Map.png</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="browseMainImage">
+        <property name="text">
+         <string>...</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="vegetationImageGroup">
+     <property name="title">
+      <string>Vegetation map image (biome source)</string>
+     </property>
+     <layout class="QHBoxLayout" name="vegetationImageLayout">
+      <item>
+       <widget class="QLineEdit" name="vegetationImagePath">
+        <property name="placeholderText">
+         <string>Select Map_veg.png</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="browseVegetationImage">
+        <property name="text">
+         <string>...</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="zoneSourceGroup">
+     <property name="title"><string>Foraging zones (green channel)</string></property>
+     <layout class="QVBoxLayout" name="zoneSourceLayout">
+      <item><widget class="QRadioButton" name="zonesFromWorld">
+       <property name="text"><string>Rasterize zone objects from the current WorldEd project</string></property>
+       <property name="checked"><bool>true</bool></property>
+      </widget></item>
+      <item><layout class="QHBoxLayout" name="zonePngLayout">
+       <item><widget class="QRadioButton" name="zonesFromPng">
+        <property name="text"><string>Read exact zone IDs from PNG:</string></property>
+       </widget></item>
+       <item><widget class="QLineEdit" name="zoneImagePath">
+        <property name="placeholderText"><string>Green channel or grayscale zone IDs</string></property>
+       </widget></item>
+       <item><widget class="QToolButton" name="browseZoneImage"><property name="text"><string>...</string></property></widget></item>
+      </layout></item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="outputGroup">
+     <property name="title">
+      <string>Output Directory</string>
+     </property>
+     <layout class="QHBoxLayout" name="outputLayout">
+      <item>
+       <widget class="QLineEdit" name="outputDirectory">
+        <property name="placeholderText">
+         <string>Choose where biome.png and biomemap tiles are saved</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="browseOutputDirectory">
+        <property name="text">
+         <string>...</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="worldOriginGroup">
+     <property name="title">
+      <string>World Origin</string>
+     </property>
+     <layout class="QVBoxLayout" name="worldOriginLayout">
+      <item>
+       <widget class="QLabel" name="worldOriginDescription">
+        <property name="text">
+         <string>The world origin determines the coordinates in generated tile names.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="coordinatesLayout">
+        <item>
+         <widget class="QLabel" name="xOriginLabel">
+          <property name="text">
+           <string>X:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="xOrigin">
+          <property name="minimum">
+           <number>-100000</number>
+          </property>
+          <property name="maximum">
+           <number>100000</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="yOriginLabel">
+          <property name="text">
+           <string>Y:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="yOrigin">
+          <property name="minimum">
+           <number>-100000</number>
+          </property>
+          <property name="maximum">
+           <number>100000</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="coordinatesSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,875 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>BuildingEditorWindow</class>
+ <widget class="QMainWindow" name="BuildingEditorWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>800</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Building Editor</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout_2">
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>800</width>
+     <height>17</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionNewBuilding"/>
+    <addaction name="actionOpen"/>
+    <addaction name="actionSave"/>
+    <addaction name="actionSaveAs"/>
+    <addaction name="separator"/>
+    <addaction name="actionExportTMX"/>
+    <addaction name="actionExportNewBinary"/>
+    <addaction name="separator"/>
+    <addaction name="actionClose"/>
+   </widget>
+   <widget class="QMenu" name="menuEdit">
+    <property name="title">
+     <string>Edit</string>
+    </property>
+    <addaction name="actionCut"/>
+    <addaction name="actionCopy"/>
+    <addaction name="actionPaste"/>
+    <addaction name="actionDelete"/>
+    <addaction name="actionDeleteInAllLayers"/>
+    <addaction name="separator"/>
+    <addaction name="actionSelectAll"/>
+    <addaction name="actionSelectNone"/>
+    <addaction name="separator"/>
+    <addaction name="actionPreferences"/>
+    <addaction name="actionKeyboardShortcuts"/>
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>View</string>
+    </property>
+    <widget class="QMenu" name="menuViews">
+     <property name="title">
+      <string>Views</string>
+     </property>
+     <addaction name="actionViewsPlaceholder"/>
+    </widget>
+    <addaction name="actionShowGrid"/>
+    <addaction name="actionHighlightFloor"/>
+    <addaction name="actionHighlightRoom"/>
+    <addaction name="actionShowLowerFloors"/>
+    <addaction name="actionShowOnlyFloors"/>
+    <addaction name="actionShowObjects"/>
+    <addaction name="actionHighlightUnlitRooms"/>
+    <addaction name="separator"/>
+    <addaction name="menuViews"/>
+    <addaction name="separator"/>
+    <addaction name="actionZoomIn"/>
+    <addaction name="actionZoomOut"/>
+    <addaction name="actionNormalSize"/>
+   </widget>
+   <widget class="QMenu" name="menuBuilding">
+    <property name="title">
+     <string>Building</string>
+    </property>
+    <widget class="QMenu" name="menuBasement_Access">
+     <property name="title">
+      <string>Basement Access</string>
+     </property>
+     <addaction name="actionBasementAccessNone"/>
+     <addaction name="actionBasementAccessNorth"/>
+     <addaction name="actionBasementAccessWest"/>
+    </widget>
+    <addaction name="actionCropToMinimum"/>
+    <addaction name="actionCropToSelection"/>
+    <addaction name="actionResize"/>
+    <addaction name="actionFlipHorizontal"/>
+    <addaction name="actionFlipVertical"/>
+    <addaction name="actionRotateRight"/>
+    <addaction name="actionRotateLeft"/>
+    <addaction name="separator"/>
+    <addaction name="actionBuildingProperties"/>
+    <addaction name="actionKeyValues"/>
+    <addaction name="actionGrime"/>
+    <addaction name="actionRooms"/>
+    <addaction name="actionTemplates"/>
+    <addaction name="actionTiles"/>
+    <addaction name="separator"/>
+    <addaction name="menuBasement_Access"/>
+    <addaction name="actionTemplateFromBuilding"/>
+   </widget>
+   <widget class="QMenu" name="menuFloor">
+    <property name="title">
+     <string>Floor</string>
+    </property>
+    <addaction name="actionInsertFloorAbove"/>
+    <addaction name="actionInsertFloorBelow"/>
+    <addaction name="actionRemoveFloor"/>
+    <addaction name="actionFloors"/>
+    <addaction name="separator"/>
+    <addaction name="actionUpLevel"/>
+    <addaction name="actionDownLevel"/>
+   </widget>
+   <widget class="QMenu" name="menuHelp">
+    <property name="title">
+     <string>Help</string>
+    </property>
+    <addaction name="actionHelp"/>
+    <addaction name="actionAboutQt"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuEdit"/>
+   <addaction name="menuView"/>
+   <addaction name="menuBuilding"/>
+   <addaction name="menuFloor"/>
+   <addaction name="menuHelp"/>
+  </widget>
+  <action name="actionClose">
+   <property name="text">
+    <string>Close</string>
+   </property>
+  </action>
+  <action name="actionOpen">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/document-open.png</normaloff>:/images/16x16/document-open.png</iconset>
+   </property>
+   <property name="text">
+    <string>Open...</string>
+   </property>
+  </action>
+  <action name="actionSave">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/document-save.png</normaloff>:/images/16x16/document-save.png</iconset>
+   </property>
+   <property name="text">
+    <string>Save</string>
+   </property>
+  </action>
+  <action name="actionUndo">
+   <property name="text">
+    <string>Undo</string>
+   </property>
+  </action>
+  <action name="actionRedo">
+   <property name="text">
+    <string>Redo</string>
+   </property>
+  </action>
+  <action name="actionNewBuilding">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/document-new.png</normaloff>:/images/16x16/document-new.png</iconset>
+   </property>
+   <property name="text">
+    <string>New...</string>
+   </property>
+  </action>
+  <action name="actionPencil">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_pencil.png</normaloff>:/BuildingEditor/icons/icon_pencil.png</iconset>
+   </property>
+   <property name="text">
+    <string>Pencil</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw Room</string>
+   </property>
+  </action>
+  <action name="actionDoor">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_door.png</normaloff>:/BuildingEditor/icons/icon_door.png</iconset>
+   </property>
+   <property name="text">
+    <string>Door</string>
+   </property>
+   <property name="toolTip">
+    <string>Place Door</string>
+   </property>
+  </action>
+  <action name="actionWindow">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_window.png</normaloff>:/BuildingEditor/icons/icon_window.png</iconset>
+   </property>
+   <property name="text">
+    <string>Window</string>
+   </property>
+   <property name="toolTip">
+    <string>Place Window</string>
+   </property>
+  </action>
+  <action name="actionStairs">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_stair.png</normaloff>:/BuildingEditor/icons/icon_stair.png</iconset>
+   </property>
+   <property name="text">
+    <string>Stairs</string>
+   </property>
+   <property name="toolTip">
+    <string>Place Stairs</string>
+   </property>
+  </action>
+  <action name="actionUpLevel">
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_floorup.png</normaloff>:/BuildingEditor/icons/icon_floorup.png</iconset>
+   </property>
+   <property name="text">
+    <string>Up One Level</string>
+   </property>
+   <property name="shortcut">
+    <string>PgUp</string>
+   </property>
+  </action>
+  <action name="actionDownLevel">
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_floordn.png</normaloff>:/BuildingEditor/icons/icon_floordn.png</iconset>
+   </property>
+   <property name="text">
+    <string>Down One Level</string>
+   </property>
+   <property name="shortcut">
+    <string>PgDown</string>
+   </property>
+  </action>
+  <action name="actionSelectObject">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/22x22/tool-select-objects.png</normaloff>:/images/22x22/tool-select-objects.png</iconset>
+   </property>
+   <property name="text">
+    <string>Select Objects</string>
+   </property>
+   <property name="toolTip">
+    <string>Select and Move Objects</string>
+   </property>
+  </action>
+  <action name="actionExportTMX">
+   <property name="text">
+    <string>Export TMX...</string>
+   </property>
+  </action>
+  <action name="actionZoomIn">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/zoom-in.png</normaloff>:/images/16x16/zoom-in.png</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom In</string>
+   </property>
+  </action>
+  <action name="actionZoomOut">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/zoom-out.png</normaloff>:/images/16x16/zoom-out.png</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom Out</string>
+   </property>
+  </action>
+  <action name="actionNormalSize">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/zoom-original.png</normaloff>:/images/16x16/zoom-original.png</iconset>
+   </property>
+   <property name="text">
+    <string>Normal Size</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+0</string>
+   </property>
+  </action>
+  <action name="actionPreferences">
+   <property name="text">
+    <string>Preferences...</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::PreferencesRole</enum>
+   </property>
+  </action>
+  <action name="actionSaveAs">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/document-save-as.png</normaloff>:/images/16x16/document-save-as.png</iconset>
+   </property>
+   <property name="text">
+    <string>Save As...</string>
+   </property>
+  </action>
+  <action name="actionRooms">
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_rooms.png</normaloff>:/BuildingEditor/icons/icon_rooms.png</iconset>
+   </property>
+   <property name="text">
+    <string>Rooms...</string>
+   </property>
+   <property name="toolTip">
+    <string>Edit Rooms</string>
+   </property>
+  </action>
+  <action name="actionTemplates">
+   <property name="text">
+    <string>Templates...</string>
+   </property>
+  </action>
+  <action name="actionTiles">
+   <property name="text">
+    <string>Tiles...</string>
+   </property>
+  </action>
+  <action name="actionTemplateFromBuilding">
+   <property name="text">
+    <string>Template From Building...</string>
+   </property>
+  </action>
+  <action name="actionRotateRight">
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_rotate_right.png</normaloff>:/BuildingEditor/icons/icon_rotate_right.png</iconset>
+   </property>
+   <property name="text">
+    <string>Rotate Right</string>
+   </property>
+  </action>
+  <action name="actionRotateLeft">
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_rotate_left.png</normaloff>:/BuildingEditor/icons/icon_rotate_left.png</iconset>
+   </property>
+   <property name="text">
+    <string>Rotate Left</string>
+   </property>
+  </action>
+  <action name="actionResize">
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_resize.png</normaloff>:/BuildingEditor/icons/icon_resize.png</iconset>
+   </property>
+   <property name="text">
+    <string>Resize Building...</string>
+   </property>
+  </action>
+  <action name="actionFlipHorizontal">
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_flip_horizontal.png</normaloff>:/BuildingEditor/icons/icon_flip_horizontal.png</iconset>
+   </property>
+   <property name="text">
+    <string>Flip Horizontal</string>
+   </property>
+  </action>
+  <action name="actionFlipVertical">
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_flip_vertical.png</normaloff>:/BuildingEditor/icons/icon_flip_vertical.png</iconset>
+   </property>
+   <property name="text">
+    <string>Flip Vertical</string>
+   </property>
+  </action>
+  <action name="actionFurniture">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_furniture.png</normaloff>:/BuildingEditor/icons/icon_furniture.png</iconset>
+   </property>
+   <property name="text">
+    <string>Furniture</string>
+   </property>
+   <property name="toolTip">
+    <string>Place Furniture</string>
+   </property>
+  </action>
+  <action name="actionRoof">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_roof_peakNS.png</normaloff>:/BuildingEditor/icons/icon_roof_peakNS.png</iconset>
+   </property>
+   <property name="text">
+    <string>Add Roof</string>
+   </property>
+   <property name="toolTip">
+    <string>Place Roof</string>
+   </property>
+  </action>
+  <action name="actionInsertFloorAbove">
+   <property name="text">
+    <string>Add Floor Above</string>
+   </property>
+   <property name="toolTip">
+    <string>Add a new floor above the current one</string>
+   </property>
+  </action>
+  <action name="actionInsertFloorBelow">
+   <property name="text">
+    <string>Add Floor Below</string>
+   </property>
+   <property name="toolTip">
+    <string>Add a new floor below the current one</string>
+   </property>
+  </action>
+  <action name="actionRemoveFloor">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/edit-delete.png</normaloff>:/images/16x16/edit-delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Remove Current Floor</string>
+   </property>
+   <property name="toolTip">
+    <string>Remove the current floor</string>
+   </property>
+  </action>
+  <action name="actionSelectRooms">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/22x22/stock-tool-rect-select.png</normaloff>:/images/22x22/stock-tool-rect-select.png</iconset>
+   </property>
+   <property name="text">
+    <string>Select and Move Rooms</string>
+   </property>
+   <property name="toolTip">
+    <string>Select and Move Rooms</string>
+   </property>
+  </action>
+  <action name="actionRoofCorner">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_corner_innerNW.png</normaloff>:/BuildingEditor/icons/icon_corner_innerNW.png</iconset>
+   </property>
+   <property name="text">
+    <string>Add Roof Corner</string>
+   </property>
+   <property name="toolTip">
+    <string>Place Roof Corner</string>
+   </property>
+  </action>
+  <action name="actionShowObjects">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Object Shapes</string>
+   </property>
+   <property name="shortcut">
+    <string>O</string>
+   </property>
+  </action>
+  <action name="actionWall">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_wall.png</normaloff>:/BuildingEditor/icons/icon_wall.png</iconset>
+   </property>
+   <property name="text">
+    <string>Wall</string>
+   </property>
+   <property name="toolTip">
+    <string>Place Wall</string>
+   </property>
+  </action>
+  <action name="actionAboutQt">
+   <property name="text">
+    <string>About Qt</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::AboutQtRole</enum>
+   </property>
+  </action>
+  <action name="actionHelp">
+   <property name="text">
+    <string>BuildingEd Help</string>
+   </property>
+  </action>
+  <action name="actionDelete">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/edit-delete.png</normaloff>:/images/16x16/edit-delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Delete</string>
+   </property>
+  </action>
+  <action name="actionFloors">
+   <property name="text">
+    <string>Floors...</string>
+   </property>
+  </action>
+  <action name="actionSelectAll">
+   <property name="text">
+    <string>Select All</string>
+   </property>
+  </action>
+  <action name="actionSelectNone">
+   <property name="text">
+    <string>Select None</string>
+   </property>
+  </action>
+  <action name="actionHighlightFloor">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Highlight Current Floor</string>
+   </property>
+   <property name="shortcut">
+    <string>H</string>
+   </property>
+  </action>
+  <action name="actionCut">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/edit-cut.png</normaloff>:/images/16x16/edit-cut.png</iconset>
+   </property>
+   <property name="text">
+    <string>Cut</string>
+   </property>
+  </action>
+  <action name="actionCopy">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/edit-copy.png</normaloff>:/images/16x16/edit-copy.png</iconset>
+   </property>
+   <property name="text">
+    <string>Copy</string>
+   </property>
+  </action>
+  <action name="actionPaste">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/edit-paste.png</normaloff>:/images/16x16/edit-paste.png</iconset>
+   </property>
+   <property name="text">
+    <string>Paste</string>
+   </property>
+  </action>
+  <action name="actionShowGrid">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Grid</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+G</string>
+   </property>
+  </action>
+  <action name="actionHighlightRoom">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Highlight Room Under Pointer</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+R</string>
+   </property>
+  </action>
+  <action name="actionBuildingProperties">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/document-properties.png</normaloff>:/images/16x16/document-properties.png</iconset>
+   </property>
+   <property name="text">
+    <string>Properties...</string>
+   </property>
+  </action>
+  <action name="actionGrime">
+   <property name="text">
+    <string>Grime...</string>
+   </property>
+   <property name="shortcut">
+    <string>G</string>
+   </property>
+  </action>
+  <action name="actionDrawTiles">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_pencil.png</normaloff>:/BuildingEditor/icons/icon_pencil.png</iconset>
+   </property>
+   <property name="text">
+    <string>Draw Tiles</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw Tiles (1)</string>
+   </property>
+   <property name="shortcut">
+    <string>1</string>
+   </property>
+  </action>
+  <action name="actionSelectTiles">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_select.png</normaloff>:/BuildingEditor/icons/icon_select.png</iconset>
+   </property>
+   <property name="text">
+    <string>Select Tiles</string>
+   </property>
+   <property name="toolTip">
+    <string>Select Tiles (2)</string>
+   </property>
+   <property name="shortcut">
+    <string>2</string>
+   </property>
+  </action>
+  <action name="actionPickTiles">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_eyedrop.png</normaloff>:/BuildingEditor/icons/icon_eyedrop.png</iconset>
+   </property>
+   <property name="text">
+    <string>Pick Tiles</string>
+   </property>
+   <property name="toolTip">
+    <string>Pick Tiles (3)</string>
+   </property>
+   <property name="shortcut">
+    <string>3</string>
+   </property>
+  </action>
+  <action name="actionViewsPlaceholder">
+   <property name="text">
+    <string>Placeholder</string>
+   </property>
+  </action>
+  <action name="actionCropToSelection">
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_crop.png</normaloff>:/BuildingEditor/icons/icon_crop.png</iconset>
+   </property>
+   <property name="text">
+    <string>Crop To Selection</string>
+   </property>
+  </action>
+  <action name="actionCropToMinimum">
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_crop.png</normaloff>:/BuildingEditor/icons/icon_crop.png</iconset>
+   </property>
+   <property name="text">
+    <string>Crop To Minimum</string>
+   </property>
+  </action>
+  <action name="actionRoofShallow">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_roof_peakNS.png</normaloff>:/BuildingEditor/icons/icon_roof_peakNS.png</iconset>
+   </property>
+   <property name="text">
+    <string>Add Roof (Shallow)</string>
+   </property>
+   <property name="toolTip">
+    <string>Place Roof</string>
+   </property>
+  </action>
+  <action name="actionShowLowerFloors">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Lower Floors</string>
+   </property>
+  </action>
+  <action name="actionExportNewBinary">
+   <property name="text">
+    <string>Export New Binary...</string>
+   </property>
+  </action>
+  <action name="actionKeyValues">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/document-properties.png</normaloff>:/images/16x16/document-properties.png</iconset>
+   </property>
+   <property name="text">
+    <string>KeyValues...</string>
+   </property>
+  </action>
+  <action name="actionHighlightUnlitRooms">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Highlight Unlit Rooms</string>
+   </property>
+   <property name="toolTip">
+    <string>Highlight rooms without light switches</string>
+   </property>
+   <property name="shortcut">
+    <string>L</string>
+   </property>
+  </action>
+  <action name="actionBasementAccessNone">
+   <property name="text">
+    <string>None</string>
+   </property>
+  </action>
+  <action name="actionBasementAccessNorth">
+   <property name="text">
+    <string>North</string>
+   </property>
+  </action>
+  <action name="actionBasementAccessWest">
+   <property name="text">
+    <string>West</string>
+   </property>
+  </action>
+  <action name="actionBasementAccessTool">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_stair.png</normaloff>:/BuildingEditor/icons/icon_stair.png</iconset>
+   </property>
+   <property name="text">
+    <string>Move Basement Access</string>
+   </property>
+  </action>
+  <action name="actionShowOnlyFloors">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Only Floors</string>
+   </property>
+   <property name="shortcut">
+    <string>F</string>
+   </property>
+  </action>
+  <action name="actionDeleteInAllLayers">
+   <property name="icon">
+    <iconset resource="../tiled.qrc">
+     <normaloff>:/images/16x16/edit-delete.png</normaloff>:/images/16x16/edit-delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Delete In All Layers</string>
+   </property>
+  </action>
+  <action name="actionKeyboardShortcuts">
+   <property name="text">
+    <string>Keyboard Shortcuts</string>
+   </property>
+  </action>
+  <action name="actionFloorGrime">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_floor_grime.png</normaloff>:/BuildingEditor/icons/icon_floor_grime.png</iconset>
+   </property>
+   <property name="text">
+    <string>Floor Grime</string>
+   </property>
+   <property name="toolTip">
+    <string>Floor Grime</string>
+   </property>
+  </action>
+  <action name="actionRoof30Degree">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_roof_peakNS.png</normaloff>:/BuildingEditor/icons/icon_roof_peakNS.png</iconset>
+   </property>
+   <property name="text">
+    <string>Add Roof (30 Degree)</string>
+   </property>
+   <property name="toolTip">
+    <string>Place Roof (30 Degree)</string>
+   </property>
+  </action>
+  <action name="actionRoofCorner30Degree">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="buildingeditor.qrc">
+     <normaloff>:/BuildingEditor/icons/icon_corner_innerNW.png</normaloff>:/BuildingEditor/icons/icon_corner_innerNW.png</iconset>
+   </property>
+   <property name="text">
+    <string>Add Roof Corner (30 Degree)</string>
+   </property>
+   <property name="toolTip">
+    <string>Place Roof Corner (30 Degree)</string>
+   </property>
+  </action>
+ </widget>
+ <resources>
+  <include location="buildingeditor.qrc"/>
+  <include location="../tiled.qrc"/>
+ </resources>
+ <connections/>
+</ui>

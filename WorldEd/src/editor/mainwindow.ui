@@ -1,0 +1,1146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1011</width>
+    <height>630</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>PZWorldEd</string>
+  </property>
+  <widget class="QWidget" name="centralWidget">
+   <layout class="QGridLayout" name="gridLayout_4">
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <property name="verticalSpacing">
+     <number>0</number>
+    </property>
+    <item row="0" column="0">
+     <widget class="QTabWidget" name="documentTabWidget">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="QWidget" name="tabWorld">
+       <attribute name="title">
+        <string>World</string>
+       </attribute>
+       <layout class="QGridLayout" name="gridLayout_3">
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
+         <number>0</number>
+        </property>
+        <item row="0" column="0">
+         <widget class="QGraphicsView" name="worldView">
+          <property name="frameShape">
+           <enum>QFrame::NoFrame</enum>
+          </property>
+          <property name="frameShadow">
+           <enum>QFrame::Sunken</enum>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabCell">
+       <attribute name="title">
+        <string>Grid</string>
+       </attribute>
+       <layout class="QGridLayout" name="gridLayout_5">
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
+         <number>0</number>
+        </property>
+        <item row="0" column="0">
+         <widget class="QGraphicsView" name="cellView">
+          <property name="frameShape">
+           <enum>QFrame::NoFrame</enum>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+    <item row="1" column="0">
+     <widget class="QFrame" name="viewTools">
+      <property name="frameShape">
+       <enum>QFrame::StyledPanel</enum>
+      </property>
+      <property name="frameShadow">
+       <enum>QFrame::Raised</enum>
+      </property>
+      <layout class="QHBoxLayout" name="horizontalLayout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>3</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>3</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="coordinatesLabel">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>Cell x,y</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="Line" name="line">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="worldCoordinatesLabel">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>World x,y</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="Line" name="line_4">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="currentCellLabel">
+         <property name="text">
+          <string>Current cell: &lt;none&gt;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="Line" name="line_2">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="currentLevelButton">
+         <property name="text">
+          <string>Current level: 0</string>
+         </property>
+         <property name="popupMode">
+          <enum>QToolButton::InstantPopup</enum>
+         </property>
+         <property name="arrowType">
+          <enum>Qt::NoArrow</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="Line" name="line_3">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="objectGroupButton">
+         <property name="text">
+          <string>Obj Grp:</string>
+         </property>
+         <property name="popupMode">
+          <enum>QToolButton::InstantPopup</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QComboBox" name="zoomComboBox"/>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menuBar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1011</width>
+     <height>17</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="fileMenu">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <widget class="QMenu" name="menuBMP_To_TMX">
+     <property name="title">
+      <string>BMP To TMX</string>
+     </property>
+     <addaction name="actionBMPToTMXAll"/>
+     <addaction name="actionBMPToTMXSelected"/>
+    </widget>
+    <widget class="QMenu" name="menuTMX_To_BMP">
+     <property name="title">
+      <string>TMX To BMP</string>
+     </property>
+     <addaction name="actionTMXToBMPAll"/>
+     <addaction name="actionTMXToBMPSelected"/>
+    </widget>
+    <widget class="QMenu" name="menuGenerate_Lots_8x8">
+     <property name="title">
+      <string>Generate Lots 8x8</string>
+     </property>
+     <addaction name="actionGenerateLotsAll8x8"/>
+     <addaction name="actionGenerateLotsSelected8x8"/>
+    </widget>
+    <widget class="QMenu" name="menuOverwriteSpawnMap256">
+     <property name="title">
+      <string>Overwrite SpawnMap 8x8</string>
+     </property>
+     <addaction name="actionOverwriteSpawnMap_AllCells_256"/>
+     <addaction name="actionOverwriteSpawnMap_SelectedCells_256"/>
+    </widget>
+    <addaction name="actionNew"/>
+    <addaction name="actionOpen"/>
+    <addaction name="actionSave"/>
+    <addaction name="actionSaveAs"/>
+    <addaction name="separator"/>
+    <addaction name="menuBMP_To_TMX"/>
+    <addaction name="menuTMX_To_BMP"/>
+    <addaction name="menuGenerate_Lots_8x8"/>
+    <addaction name="actionExportModAll8x8"/>
+    <addaction name="menuOverwriteSpawnMap256"/>
+    <addaction name="actionLUAObjectDump"/>
+    <addaction name="actionWriteObjects"/>
+    <addaction name="actionReadObjectsFromLua"/>
+    <addaction name="actionWriteRoomTonesToLua"/>
+    <addaction name="separator"/>
+    <addaction name="actionClose"/>
+    <addaction name="actionCloseAll"/>
+    <addaction name="actionQuit"/>
+   </widget>
+   <widget class="QMenu" name="helpMenu">
+    <property name="title">
+     <string>Help</string>
+    </property>
+    <addaction name="actionAboutQt"/>
+   </widget>
+   <widget class="QMenu" name="editMenu">
+    <property name="title">
+     <string>Edit</string>
+    </property>
+    <addaction name="separator"/>
+    <addaction name="actionCopy"/>
+    <addaction name="actionPaste"/>
+    <addaction name="actionClipboard"/>
+    <addaction name="separator"/>
+    <addaction name="actionPreferences"/>
+    <addaction name="actionKeyboardShortcuts"/>
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>View</string>
+    </property>
+    <addaction name="actionShowCellBorder"/>
+    <addaction name="actionShowCoordinates"/>
+    <addaction name="actionShowGrid"/>
+    <addaction name="actionShowInvisibleTiles"/>
+    <addaction name="actionShowLotFloorsOnly"/>
+    <addaction name="actionShowMiniMap"/>
+    <addaction name="actionShowObjects"/>
+    <addaction name="actionShowObjectNames"/>
+    <addaction name="actionShowOtherWorlds"/>
+    <addaction name="actionShowBMP"/>
+    <addaction name="actionShowWorldThumbnails"/>
+    <addaction name="actionShowZombieSpawnImage"/>
+    <addaction name="actionShowBiomeMap"/>
+    <addaction name="actionShowZonesInWorldView"/>
+    <addaction name="separator"/>
+    <addaction name="actionHighlightCurrentLevel"/>
+    <addaction name="actionHighlightRoomUnderPointer"/>
+    <addaction name="actionLevelAbove"/>
+    <addaction name="actionLevelBelow"/>
+    <addaction name="separator"/>
+    <addaction name="actionZoomIn"/>
+    <addaction name="actionZoomOut"/>
+    <addaction name="actionZoomNormal"/>
+    <addaction name="separator"/>
+   </widget>
+   <widget class="QMenu" name="menuWorld">
+    <property name="title">
+     <string>World</string>
+    </property>
+    <addaction name="actionEditCell"/>
+    <addaction name="actionGoToXY"/>
+    <addaction name="actionResizeWorld"/>
+    <addaction name="separator"/>
+    <addaction name="actionObjectGroups"/>
+    <addaction name="actionObjectTypes"/>
+    <addaction name="separator"/>
+    <addaction name="actionEnums"/>
+    <addaction name="actionProperties"/>
+    <addaction name="actionTemplates"/>
+    <addaction name="separator"/>
+    <addaction name="actionRemoveRoad"/>
+    <addaction name="actionRemoveBMP"/>
+   </widget>
+   <widget class="QMenu" name="menuCell">
+    <property name="title">
+     <string>Cell</string>
+    </property>
+    <addaction name="actionRemoveLot"/>
+    <addaction name="actionRemoveObject"/>
+    <addaction name="actionSplitObjectPolygon"/>
+    <addaction name="separator"/>
+    <addaction name="actionExtractLots"/>
+    <addaction name="actionExtractObjects"/>
+    <addaction name="separator"/>
+    <addaction name="actionClearCell"/>
+    <addaction name="actionClearMapOnly"/>
+    <addaction name="actionRemoveEmptyBorderCells"/>
+    <addaction name="actionCheckForHoles"/>
+   </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="title">
+     <string>Tools</string>
+    </property>
+    <widget class="QMenu" name="menuAlias_Fixup">
+     <property name="title">
+      <string>Tiles From -&gt; To</string>
+     </property>
+     <addaction name="actionFromToAll"/>
+     <addaction name="actionFromToSelected"/>
+    </widget>
+    <addaction name="actionLotPackViewer"/>
+    <addaction name="menuAlias_Fixup"/>
+    <addaction name="actionBuildingsToPNG"/>
+    <addaction name="actionLootInspector"/>
+    <addaction name="actionZonesToPNG"/>
+    <addaction name="separator"/>
+    <addaction name="actionTerrainImageEditor"/>
+    <addaction name="actionGenerateBiomeMap"/>
+   </widget>
+   <widget class="QMenu" name="menuInGameMap">
+    <property name="title">
+     <string>InGameMap</string>
+    </property>
+    <addaction name="actionRemoveInGameMapFeatures"/>
+    <addaction name="actionRemoveInGameMapPoints"/>
+    <addaction name="actionSplitInGameMapPolygon"/>
+    <addaction name="actionAddInGameMapHole"/>
+    <addaction name="actionRemoveInGameMapHole"/>
+    <addaction name="actionConvertToPolygon"/>
+    <addaction name="separator"/>
+    <addaction name="actionGenerateInGameMapBuildingFeatures"/>
+    <addaction name="actionGenerateInGameMapTreeFeatures"/>
+    <addaction name="actionGenerateInGameMapWaterFeatures"/>
+    <addaction name="actionGenerateInGameMapRoadFeatures"/>
+    <addaction name="separator"/>
+    <addaction name="actionReadInGameMapFeaturesXML"/>
+    <addaction name="actionWriteInGameMapFeaturesXML_256"/>
+    <addaction name="actionOverwriteInGameMapFeaturesXML_256"/>
+    <addaction name="actionCreateFeatureImage"/>
+    <addaction name="actionCreateWorldImage"/>
+    <addaction name="actionCreateImagePyramid"/>
+   </widget>
+   <addaction name="fileMenu"/>
+   <addaction name="editMenu"/>
+   <addaction name="menuView"/>
+   <addaction name="menuWorld"/>
+   <addaction name="menuCell"/>
+   <addaction name="menuInGameMap"/>
+   <addaction name="menuTools"/>
+   <addaction name="helpMenu"/>
+  </widget>
+  <widget class="QToolBar" name="mainToolBar">
+   <property name="windowTitle">
+    <string>Main Toolbar</string>
+   </property>
+   <property name="toolButtonStyle">
+    <enum>Qt::ToolButtonFollowStyle</enum>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionNew"/>
+   <addaction name="actionOpen"/>
+   <addaction name="actionSave"/>
+   <addaction name="actionSaveAs"/>
+   <addaction name="separator"/>
+  </widget>
+  <widget class="QStatusBar" name="statusBar"/>
+  <action name="actionQuit">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/application-exit.png</normaloff>:/images/16x16/application-exit.png</iconset>
+   </property>
+   <property name="text">
+    <string>Quit</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::QuitRole</enum>
+   </property>
+  </action>
+  <action name="actionAboutQt">
+   <property name="text">
+    <string>About Qt</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::AboutQtRole</enum>
+   </property>
+  </action>
+  <action name="actionOpen">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/document-open.png</normaloff>:/images/16x16/document-open.png</iconset>
+   </property>
+   <property name="text">
+    <string>Open...</string>
+   </property>
+  </action>
+  <action name="actionEditCell">
+   <property name="text">
+    <string>Edit Cell</string>
+   </property>
+  </action>
+  <action name="actionUndo">
+   <property name="text">
+    <string>Undo</string>
+   </property>
+  </action>
+  <action name="actionRedo">
+   <property name="text">
+    <string>Redo</string>
+   </property>
+  </action>
+  <action name="actionZoomIn">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/zoom-in.png</normaloff>:/images/16x16/zoom-in.png</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom In</string>
+   </property>
+  </action>
+  <action name="actionZoomOut">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/zoom-out.png</normaloff>:/images/16x16/zoom-out.png</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom Out</string>
+   </property>
+  </action>
+  <action name="actionShowGrid">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Grid</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+G</string>
+   </property>
+  </action>
+  <action name="actionHighlightCurrentLevel">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Highlight Current Level</string>
+   </property>
+   <property name="shortcut">
+    <string>H</string>
+   </property>
+  </action>
+  <action name="actionZoomNormal">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/zoom-original.png</normaloff>:/images/16x16/zoom-original.png</iconset>
+   </property>
+   <property name="text">
+    <string>Normal Size</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+0</string>
+   </property>
+  </action>
+  <action name="actionSave">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/document-save.png</normaloff>:/images/16x16/document-save.png</iconset>
+   </property>
+   <property name="text">
+    <string>Save</string>
+   </property>
+  </action>
+  <action name="actionSaveAs">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/document-save-as.png</normaloff>:/images/16x16/document-save-as.png</iconset>
+   </property>
+   <property name="text">
+    <string>Save As...</string>
+   </property>
+  </action>
+  <action name="actionClose">
+   <property name="text">
+    <string>Close</string>
+   </property>
+  </action>
+  <action name="actionCloseAll">
+   <property name="text">
+    <string>Close All</string>
+   </property>
+  </action>
+  <action name="actionProperties">
+   <property name="text">
+    <string>Property Definitions...</string>
+   </property>
+  </action>
+  <action name="actionTemplates">
+   <property name="text">
+    <string>Templates...</string>
+   </property>
+  </action>
+  <action name="actionShowCoordinates">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Coordinates</string>
+   </property>
+  </action>
+  <action name="actionRemoveLot">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/edit-delete.png</normaloff>:/images/16x16/edit-delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Remove Selected Lots</string>
+   </property>
+   <property name="toolTip">
+    <string>Remove Selected Lots</string>
+   </property>
+  </action>
+  <action name="actionNew">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/document-new.png</normaloff>:/images/16x16/document-new.png</iconset>
+   </property>
+   <property name="text">
+    <string>New...</string>
+   </property>
+  </action>
+  <action name="actionCreateObject">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/24x24/insert-object.png</normaloff>:/images/24x24/insert-object.png</iconset>
+   </property>
+   <property name="text">
+    <string>Create Object</string>
+   </property>
+  </action>
+  <action name="actionRemoveObject">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/edit-delete.png</normaloff>:/images/16x16/edit-delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Remove Selected Objects</string>
+   </property>
+   <property name="toolTip">
+    <string>Remove Selected Objects</string>
+   </property>
+  </action>
+  <action name="actionSnapToGrid">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Snap To Grid</string>
+   </property>
+  </action>
+  <action name="actionObjectTypes">
+   <property name="text">
+    <string>Object Types...</string>
+   </property>
+  </action>
+  <action name="actionClearCell">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/edit-clear.png</normaloff>:/images/16x16/edit-clear.png</iconset>
+   </property>
+   <property name="text">
+    <string>Clear</string>
+   </property>
+  </action>
+  <action name="actionPreferences">
+   <property name="text">
+    <string>Preferences...</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::PreferencesRole</enum>
+   </property>
+  </action>
+  <action name="actionShowMiniMap">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Mini-map</string>
+   </property>
+   <property name="shortcut">
+    <string>M</string>
+   </property>
+  </action>
+  <action name="actionClearMapOnly">
+   <property name="text">
+    <string>Clear Map Only</string>
+   </property>
+  </action>
+  <action name="actionRemoveEmptyBorderCells">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/edit-delete.png</normaloff>:/images/16x16/edit-delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Remove All Empty Border Cells...</string>
+   </property>
+   <property name="toolTip">
+    <string>Shrink the rectangular world around cells containing actual map data</string>
+   </property>
+  </action>
+  <action name="actionExtractLots">
+   <property name="text">
+    <string>Extract Lots...</string>
+   </property>
+  </action>
+  <action name="actionExtractObjects">
+   <property name="text">
+    <string>Extract Objects...</string>
+   </property>
+  </action>
+  <action name="actionObjectGroups">
+   <property name="text">
+    <string>Object Groups...</string>
+   </property>
+  </action>
+  <action name="actionCopy">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/edit-copy.png</normaloff>:/images/16x16/edit-copy.png</iconset>
+   </property>
+   <property name="text">
+    <string>Copy</string>
+   </property>
+  </action>
+  <action name="actionPaste">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/edit-paste.png</normaloff>:/images/16x16/edit-paste.png</iconset>
+   </property>
+   <property name="text">
+    <string>Paste</string>
+   </property>
+  </action>
+  <action name="actionClipboard">
+   <property name="text">
+    <string>Show Clipboard</string>
+   </property>
+  </action>
+  <action name="actionLevelAbove">
+   <property name="text">
+    <string>Select Level Above</string>
+   </property>
+   <property name="shortcut">
+    <string>PgUp</string>
+   </property>
+  </action>
+  <action name="actionLevelBelow">
+   <property name="text">
+    <string>Select Level Below</string>
+   </property>
+   <property name="shortcut">
+    <string>PgDown</string>
+   </property>
+  </action>
+  <action name="actionShowObjectNames">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Object Names</string>
+   </property>
+  </action>
+  <action name="actionRemoveRoad">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/edit-delete.png</normaloff>:/images/16x16/edit-delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Removed Selected Roads</string>
+   </property>
+   <property name="toolTip">
+    <string>Remove Selected Roads</string>
+   </property>
+  </action>
+  <action name="actionBMPToTMXAll">
+   <property name="text">
+    <string>All Cells...</string>
+   </property>
+  </action>
+  <action name="actionBMPToTMXSelected">
+   <property name="text">
+    <string>Selected Cells Only...</string>
+   </property>
+  </action>
+  <action name="actionRemoveBMP">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/edit-delete.png</normaloff>:/images/16x16/edit-delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Remove Selected BMP Images</string>
+   </property>
+  </action>
+  <action name="actionShowBMP">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show BMP Images</string>
+   </property>
+  </action>
+  <action name="actionResizeWorld">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/document-page-setup.png</normaloff>:/images/16x16/document-page-setup.png</iconset>
+   </property>
+   <property name="text">
+    <string>Resize World...</string>
+   </property>
+  </action>
+  <action name="actionLotPackViewer">
+   <property name="text">
+    <string>LotPack Viewer</string>
+   </property>
+  </action>
+  <action name="actionFromToAll">
+   <property name="text">
+    <string>All Cells...</string>
+   </property>
+  </action>
+  <action name="actionFromToSelected">
+   <property name="text">
+    <string>Selected Cells Only...</string>
+   </property>
+  </action>
+  <action name="actionHMMesh">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Mesh</string>
+   </property>
+  </action>
+  <action name="actionHMFlat">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Flat</string>
+   </property>
+  </action>
+  <action name="actionGoToXY">
+   <property name="text">
+    <string>Go To Coordinates...</string>
+   </property>
+  </action>
+  <action name="actionEnums">
+   <property name="text">
+    <string>Enums...</string>
+   </property>
+  </action>
+  <action name="actionLUAObjectDump">
+   <property name="text">
+    <string>Write Spawn Points...</string>
+   </property>
+  </action>
+  <action name="actionHighlightRoomUnderPointer">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Highlight Room Under Pointer</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+R</string>
+   </property>
+  </action>
+  <action name="actionBuildingsToPNG">
+   <property name="text">
+    <string>Buildings To PNG...</string>
+   </property>
+  </action>
+  <action name="actionLootInspector">
+   <property name="text">
+    <string>Loot Inspector</string>
+   </property>
+  </action>
+  <action name="actionGenerateBiomeMap">
+   <property name="text">
+    <string>Generate Biome Map...</string>
+   </property>
+   <property name="toolTip">
+     <string>Compose exact red biome IDs and green foraging-zone IDs into 256x256 biomemap tiles</string>
+   </property>
+  </action>
+  <action name="actionTerrainImageEditor">
+   <property name="text">
+    <string>Terrain / Vegetation Image Editor...</string>
+   </property>
+   <property name="toolTip">
+    <string>Paint Rules.txt colors into multi-cell Map.png and Map_veg.png files</string>
+   </property>
+  </action>
+  <action name="actionWriteObjects">
+   <property name="text">
+    <string>Write Objects to Lua...</string>
+   </property>
+  </action>
+  <action name="actionTMXToBMPAll">
+   <property name="text">
+    <string>All Cells...</string>
+   </property>
+  </action>
+  <action name="actionTMXToBMPSelected">
+   <property name="text">
+    <string>Selected Cells Only...</string>
+   </property>
+  </action>
+  <action name="actionShowObjects">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Objects</string>
+   </property>
+  </action>
+  <action name="actionShowOtherWorlds">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Other Worlds</string>
+   </property>
+  </action>
+  <action name="actionGenerateInGameMapBuildingFeatures">
+   <property name="text">
+    <string>Generate Building Features</string>
+   </property>
+  </action>
+  <action name="actionGenerateInGameMapWaterFeatures">
+   <property name="text">
+    <string>Generate Water Features</string>
+   </property>
+  </action>
+  <action name="actionGenerateInGameMapRoadFeatures">
+   <property name="text">
+    <string>Generate Road Features</string>
+   </property>
+   <property name="toolTip">
+    <string>Generate primary, secondary, tertiary, trail and railway features from map tiles</string>
+   </property>
+  </action>
+  <action name="actionReadInGameMapFeaturesXML">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/document-open.png</normaloff>:/images/16x16/document-open.png</iconset>
+   </property>
+   <property name="text">
+    <string>Read Features XML...</string>
+   </property>
+  </action>
+  <action name="actionSplitInGameMapPolygon">
+   <property name="text">
+    <string>Split Polygon</string>
+   </property>
+  </action>
+  <action name="actionRemoveInGameMapPoints">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/edit-delete.png</normaloff>:/images/16x16/edit-delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Remove Selected Points</string>
+   </property>
+  </action>
+  <action name="actionGenerateInGameMapTreeFeatures">
+   <property name="text">
+    <string>Generate Tree Features</string>
+   </property>
+  </action>
+  <action name="actionRemoveInGameMapFeatures">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/edit-delete.png</normaloff>:/images/16x16/edit-delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Remove Selected Features</string>
+   </property>
+   <property name="shortcut">
+    <string>Del</string>
+   </property>
+  </action>
+  <action name="actionCreateImagePyramid">
+   <property name="text">
+    <string>Create Image Pyramid...</string>
+   </property>
+  </action>
+  <action name="actionAddInGameMapHole">
+   <property name="text">
+    <string>Add Polygon Hole</string>
+   </property>
+  </action>
+  <action name="actionRemoveInGameMapHole">
+   <property name="text">
+    <string>Remove Polygon Hole</string>
+   </property>
+  </action>
+  <action name="actionConvertToPolygon">
+   <property name="text">
+    <string>Convert To Polygon</string>
+   </property>
+  </action>
+  <action name="actionShowZonesInWorldView">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Zones In World View</string>
+   </property>
+  </action>
+  <action name="actionShowZombieSpawnImage">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Zombie Spawn Image</string>
+   </property>
+  </action>
+  <action name="actionShowBiomeMap">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Biomemap (Biome Layer)</string>
+   </property>
+   <property name="toolTip">
+    <string>Display the red Biome channel from maps/biome.png or biomemap tiles</string>
+   </property>
+  </action>
+  <action name="actionSplitObjectPolygon">
+   <property name="text">
+    <string>Split Object Polygon</string>
+   </property>
+  </action>
+  <action name="actionCreateWorldImage">
+   <property name="text">
+    <string>Create World Image...</string>
+   </property>
+  </action>
+  <action name="actionGenerateLotsAll8x8">
+   <property name="text">
+    <string>All Cells...</string>
+   </property>
+  </action>
+  <action name="actionGenerateLotsSelected8x8">
+   <property name="text">
+    <string>Selected Cells Only...</string>
+   </property>
+  </action>
+  <action name="actionExportModAll8x8">
+   <property name="text">
+    <string>Export Complete Mod (8x8)...</string>
+   </property>
+   <property name="toolTip">
+    <string>Generate all LOT files and create a complete Project Zomboid mod structure.</string>
+   </property>
+  </action>
+  <action name="actionWriteInGameMapFeaturesXML_256">
+   <property name="icon">
+    <iconset resource="editor.qrc">
+     <normaloff>:/images/16x16/document-save-as.png</normaloff>:/images/16x16/document-save-as.png</iconset>
+   </property>
+   <property name="text">
+    <string>Write Features XML 8x8...</string>
+   </property>
+   <property name="toolTip">
+    <string>Don't forget to do this!</string>
+   </property>
+  </action>
+  <action name="actionOverwriteInGameMapFeaturesXML_256">
+   <property name="text">
+    <string>Overwrite256</string>
+   </property>
+   <property name="toolTip">
+    <string>Overwrite 256</string>
+   </property>
+  </action>
+  <action name="actionZonesToPNG">
+   <property name="text">
+    <string>Zones To PNG...</string>
+   </property>
+  </action>
+  <action name="actionWriteRoomTonesToLua">
+   <property name="text">
+    <string>Write RoomTones to Lua...</string>
+   </property>
+  </action>
+  <action name="actionShowInvisibleTiles">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Invisible Tiles</string>
+   </property>
+  </action>
+  <action name="actionShowCellBorder">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Cell Border</string>
+   </property>
+  </action>
+  <action name="actionOverwriteSpawnMap_AllCells_256">
+   <property name="text">
+    <string>All Cells...</string>
+   </property>
+   <property name="toolTip">
+    <string>All Cells</string>
+   </property>
+  </action>
+  <action name="actionOverwriteSpawnMap_SelectedCells_256">
+   <property name="text">
+    <string>Selected Cells...</string>
+   </property>
+   <property name="toolTip">
+    <string>Selected Cells</string>
+   </property>
+  </action>
+  <action name="actionCreateFeatureImage">
+   <property name="text">
+    <string>Create Feature Image...</string>
+   </property>
+  </action>
+  <action name="actionReadObjectsFromLua">
+   <property name="text">
+    <string>Read Objects from Lua...</string>
+   </property>
+  </action>
+  <action name="actionShowLotFloorsOnly">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Lot Floors Only</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+L</string>
+   </property>
+  </action>
+  <action name="actionKeyboardShortcuts">
+   <property name="text">
+    <string>Keyboard Shortcuts...</string>
+   </property>
+  </action>
+  <action name="actionShowWorldThumbnails">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show World Thumbnails</string>
+   </property>
+  </action>
+  <action name="actionCheckForHoles">
+   <property name="text">
+    <string>Check For Holes</string>
+   </property>
+  </action>
+ </widget>
+ <layoutdefault spacing="6" margin="11"/>
+ <resources>
+  <include location="editor.qrc"/>
+ </resources>
+ <connections/>
+</ui>

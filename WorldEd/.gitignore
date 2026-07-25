@@ -1,0 +1,35 @@
+# IDE and qmake user state
+*.pro.user
+*.pro.user.*
+.idea/
+.vs/
+.qmake.cache
+.qmake.stash
+
+# Shadow-build output
+/build/
+/build-*/
+/debug/
+/release/
+Makefile
+Makefile.*
+*.o
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+
+# Portable runtime state
+/logs/
+/settings/
+*.log
+*.autosave
+*.bak
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+

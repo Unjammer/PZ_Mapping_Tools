@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PZTools Unofficial user guide</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --page: #f5f6f8;
+      --panel: #fff;
+      --text: #20242a;
+      --muted: #59616c;
+      --border: #cdd2d9;
+      --accent: #b31c2c;
+      --code: #f0f2f5;
+      --note: #eef5ff;
+      --warn: #fff4dd;
+      --ok: #e8f6eb;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page: #1b1d20;
+        --panel: #24272b;
+        --text: #eee;
+        --muted: #b8bec7;
+        --border: #4b5058;
+        --accent: #ff6675;
+        --code: #181a1d;
+        --note: #1f3045;
+        --warn: #4b3a18;
+        --ok: #173d27;
+      }
+    }
+    body {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+      color: var(--text);
+      background: var(--page);
+      font: 15px/1.55 "Segoe UI", Arial, sans-serif;
+    }
+    h1, h2, h3 { line-height: 1.2; }
+    h1 { margin-top: 0; }
+    h2 {
+      margin-top: 2em;
+      padding-bottom: .25em;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 { margin-top: 1.5em; }
+    a { color: var(--accent); }
+    code, pre { font-family: Consolas, "Courier New", monospace; }
+    code {
+      padding: .08em .3em;
+      border-radius: 3px;
+      background: var(--code);
+    }
+    pre {
+      overflow: auto;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: var(--code);
+    }
+    table {
+      width: 100%;
+      margin: 1em 0;
+      border-collapse: collapse;
+      background: var(--panel);
+    }
+    th, td {
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { white-space: nowrap; }
+    .note, .warning, .success {
+      margin: 1em 0;
+      padding: 10px 14px;
+      border-left: 4px solid #4488cc;
+      background: var(--note);
+    }
+    .warning {
+      border-left-color: #d59100;
+      background: var(--warn);
+    }
+    .success {
+      border-left-color: #2d9b4f;
+      background: var(--ok);
+    }
+    .toc {
+      columns: 2 300px;
+      padding: 14px 30px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+    }
+    .muted { color: var(--muted); }
+    kbd {
+      padding: 1px 5px;
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
+      border-radius: 3px;
+      background: var(--panel);
+    }
+  </style>
+</head>
+<body>
+  <h1>PZTools Unofficial user guide</h1>
+
+  <p>This guide covers the functions added or restored on top of Tim Baker's
+  WorldEd, TileZed and BuildingEd `basements` branches. It describes what each
+  function does, where to find it, the data it expects, and the important
+  limitations.</p>
+
+  <div class="note">
+    Supported development target: Windows 10, Qt 5.14.2, qmake, Qt Creator and
+    MSVC 2017. A Qt 6 or C# migration is not part of this branch.
+  </div>
+
+  <h2>Contents</h2>
+  <ul class="toc">
+    <li><a href="#installation">Portable installation</a></li>
+    <li><a href="#settings">Settings, layouts and logs</a></li>
+    <li><a href="#themes">Themes</a></li>
+    <li><a href="#grids">300 and 256 projects</a></li>
+    <li><a href="#worlded-navigation">WorldEd navigation</a></li>
+    <li><a href="#thumbnails">WorldEd thumbnails</a></li>
+    <li><a href="#empty-cells">Removing empty cells</a></li>
+    <li><a href="#biomemap">Biomemap Generator</a></li>
+    <li><a href="#heatmap">Zombie Heatmap editor</a></li>
+    <li><a href="#features">InGameMap features</a></li>
+    <li><a href="#mod-export">Complete mod export</a></li>
+    <li><a href="#tilesets">TileZed tilesets</a></li>
+    <li><a href="#tiledefs">TileDefs</a></li>
+    <li><a href="#automapper">Automapper</a></li>
+    <li><a href="#lua">Lua mapping automation</a></li>
+    <li><a href="#buildinged">BuildingEd</a></li>
+    <li><a href="#troubleshooting">Troubleshooting</a></li>
+  </ul>
+
+  <h2 id="installation">Portable installation</h2>
+  <p>The applications are intended to share one installation root. Keeping them
+  together lets them use the same Qt runtime, plugins, catalogs, themes and
+  editor data.</p>
+
+  <pre><code>PZTools-Qt5-Latest/
+  bin/
+    PZWorldEd.exe
+    TileZed.exe
+    BuildingEd.exe
+    Qt5*.dll
+  config/
+    Tilesets.txt
+    TileProperties.txt
+    Building*.txt
+    LuaTools.txt
+  docs/
+  lua/
+  plugins/
+  settings/
+  themes/
+  translations/</code></pre>
+
+  <table>
+    <thead><tr><th>Directory</th><th>Purpose</th><th>Can it be shared?</th></tr></thead>
+    <tbody>
+      <tr><td><code>bin</code></td><td>Executables and Qt DLLs.</td><td>Yes, all three applications use the same runtime.</td></tr>
+      <tr><td><code>config</code></td><td>Tileset, TileDef, Building and Lua tool catalogs.</td><td>Yes.</td></tr>
+      <tr><td><code>settings</code></td><td>Portable INI files and per-application state.</td><td>The directory is shared; each application keeps its own keys/files.</td></tr>
+      <tr><td><code>themes</code></td><td>External QSS stylesheets.</td><td>Yes.</td></tr>
+      <tr><td><code>lua</code></td><td>TileZed mapping scripts and interactive tools.</td><td>Used by TileZed.</td></tr>
+      <tr><td><code>docs</code></td><td>Offline documentation.</td><td>Yes.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="warning">
+    Do not move only one executable out of <code>bin</code>. WorldEd's
+    <strong>Open in TileZed</strong> deliberately looks for the sibling
+    <code>TileZed.exe</code>, and Qt also needs the DLL and plugin layout.
+  </div>
+
+  <h2 id="settings">Portable settings, layouts and logs</h2>
+
+  <h3>Why portable settings matter</h3>
+  <p>The original applications used a mix of the Windows Registry, user-profile
+  directories and application defaults. The current branch routes persistent
+  state to local INI files so multiple PZTools installations can coexist with
+  different tiles, themes and projects.</p>
+
+  <h3>What is saved</h3>
+  <ul>
+    <li>main-window size, position and maximized state;</li>
+    <li>dock location, visibility and tab order;</li>
+    <li>the width of the left and right dock columns;</li>
+    <li>vertical sizes between dock groups;</li>
+    <li>horizontal and vertical <code>QSplitter</code> positions inside panels;</li>
+    <li>the visible tab whose geometry should be used when a dock group is tabbed;</li>
+    <li>theme, map paths, thumbnail preferences and feature-generation settings;</li>
+    <li>whether the previous editing session should be restored.</li>
+  </ul>
+
+  <p>Layout state is also saved periodically. This makes a crash less likely to
+  discard the latest panel arrangement. Hidden editing modes are prevented from
+  overwriting a valid splitter state with zero-sized placeholders.</p>
+
+  <h3>Resetting a broken layout</h3>
+  <ol>
+    <li>Close the affected application.</li>
+    <li>Make a backup of its INI file under <code>settings</code>.</li>
+    <li>Remove only the layout/window groups from that INI, or rename the INI
+      temporarily.</li>
+    <li>Restart the application and arrange the panels again.</li>
+  </ol>
+
+  <h3>Logs</h3>
+  <p>Logs live in the portable installation instead of a user-profile directory.
+  They record tileset loading, missing images, Building catalog loading, invalid
+  PNG profiles, biomemap warnings and InGameMap geometry repairs.</p>
+
+  <h2 id="themes">External QSS themes</h2>
+  <p>Built-in themes are extracted as QSS files and external themes are discovered
+  from <code>themes</code>. A QSS theme changes Qt widget styling only; it does
+  not change map colors, tile images or project data.</p>
+
+  <h3>Adding the Dark theme from an older fork</h3>
+  <ol>
+    <li>Copy the old <code>.qss</code> file into the installation's
+      <code>themes</code> directory.</li>
+    <li>Restart the application so the theme list is rebuilt.</li>
+    <li>Select the theme in Preferences.</li>
+    <li>If an icon becomes unreadable, adjust its QSS foreground/background
+      rules rather than editing application resources.</li>
+  </ol>
+
+  <p>WorldEd, TileZed and BuildingEd resolve themes using the same portable
+  location, but each application remembers its selection independently.</p>
+
+  <h2 id="grids">Legacy 300 and native 256 projects</h2>
+  <p>The grid format belongs to the project. It is not inferred from the current
+  zoom, thumbnail size or global settings.</p>
+
+  <table>
+    <thead><tr><th>Property</th><th>300 × 300 Legacy</th><th>256 × 256 Native</th></tr></thead>
+    <tbody>
+      <tr><td>Cell size</td><td>300 × 300 map squares</td><td>256 × 256 map squares</td></tr>
+      <tr><td>Historical use</td><td>Original WorldEd workflow</td><td>Direct match for native 256 binary cells</td></tr>
+      <tr><td>LOT export</td><td>Converted to the game's 256 layout where required</td><td>No 300-to-256 cell conversion</td></tr>
+      <tr><td>Zombie samples</td><td>30 × 30 per project cell</td><td>32 × 32 per project cell</td></tr>
+      <tr><td>Project badge</td><td><code>300 × 300 · LEGACY</code></td><td><code>256 × 256 · NATIVE</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Creating a native 256 project</h3>
+  <ol>
+    <li>Use <strong>File &gt; New World</strong>.</li>
+    <li>Choose <strong>256 × 256 (Native)</strong> in the grid-format field.</li>
+    <li>Choose world width, height, tiles directory and destination normally.</li>
+    <li>Save the PZW before adding TMX cells so paths and automations have a
+      stable project location.</li>
+  </ol>
+
+  <div class="warning">
+    Changing the grid flag of an existing project is not a safe conversion.
+    TMX dimensions, cell coordinates, roads, objects, thumbnails and generated
+    files must all agree. Create a new project or use a dedicated converter.
+  </div>
+
+  <p>TMX 2.0 is independent from the grid choice. A map without basements may
+  have no negative levels even though the file format supports them.</p>
+
+  <h2 id="worlded-navigation">WorldEd navigation and tile resolution</h2>
+
+  <h3>Project format badge</h3>
+  <p>WorldView and CellView display the grid kind. Check this badge first when a
+  thumbnail appears smaller than a cell, coordinates drift, or generated image
+  dimensions are rejected.</p>
+
+  <h3>Select all cells</h3>
+  <p><kbd>Ctrl</kbd>+<kbd>A</kbd> in WorldView selects all cells. Commands that
+  work on the current selection, such as thumbnail regeneration or feature
+  generation, can then process the entire world.</p>
+
+  <h3>Open in TileZed</h3>
+  <p>The context action starts the sibling <code>TileZed.exe</code> directly and
+  passes the selected TMX path. It does not consult the system default application
+  for <code>.tmx</code>. An explicit warning includes the expected executable
+  path if TileZed cannot be found.</p>
+
+  <h3>Consistent tile loading</h3>
+  <p>WorldEd and TileZed now resolve tilesets through the same catalogs and wait
+  for the tilesets required by a TMX. A red question-mark tile means the tile
+  reference could not be resolved, not that the TMX geometry failed to open.</p>
+
+  <h2 id="thumbnails">WorldEd thumbnails</h2>
+
+  <h3>What a thumbnail represents</h3>
+  <p>A cell thumbnail is an isometric preview cached below the project's
+  <code>.pzeditor</code> data. The minimap and WorldView use that cache; the
+  Zombie Heatmap is a separate image and is not a map thumbnail.</p>
+
+  <h3>Recreate thumbnails</h3>
+  <ol>
+    <li>Select one or more cells in WorldView.</li>
+    <li>Run the thumbnail recreate action for the selection.</li>
+    <li>Watch the status/progress feedback while TileZed-compatible rendering
+      data is loaded.</li>
+    <li>If the result is blank, check the logs for missing tilesets or TMX errors.</li>
+  </ol>
+
+  <p>The output resolution is configurable. Changing resolution changes preview
+  detail and memory/disk usage; it does not change the project's 300/256 geometry.
+  Grid color and thickness affect the editor overlay only.</p>
+
+  <h2 id="empty-cells">Removing empty border cells</h2>
+  <p>A PZW world is rectangular, even if only a few cells contain TMX files.
+  <strong>Cell &gt; Remove All Empty Border Cells...</strong> trims complete empty
+  rows and columns from the outside of that rectangle.</p>
+
+  <h3>Eligibility</h3>
+  <p>A border cell must not contain identifiable map content. Cells with an
+  existing TMX, objects or other protected data are retained. Interior holes are
+  not removed because the PZW still has to describe a rectangle.</p>
+
+  <h3>Result</h3>
+  <ul>
+    <li>world width and height shrink;</li>
+    <li>the world origin moves when the left or top border is removed;</li>
+    <li>roads and world-coordinate data are shifted to preserve their location;</li>
+    <li>the operation is grouped in Undo where supported.</li>
+  </ul>
+
+  <div class="warning">
+    Save a backup before changing the rectangle of a mature project. External
+    scripts may have hard-coded the old origin.
+  </div>
+
+  <h2 id="biomemap">Biomemap Generator</h2>
+  <p>Open it with <strong>Tools &gt; Generate Biome Map...</strong>. A biomemap
+  is a data grid, not a decorative image. Input pixels must align exactly with
+  project map squares.</p>
+
+  <h3>Inputs and channels</h3>
+  <table>
+    <thead><tr><th>Input</th><th>Contribution</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>Map.png</code></td><td>Base biome source</td><td>Required.</td></tr>
+      <tr><td><code>Map_veg.png</code></td><td>Vegetation contribution to biome classification</td><td>Required; it is not copied as the output green channel.</td></tr>
+      <tr><td>WorldEd Zone objects</td><td>Foraging-zone IDs in the output green channel</td><td>Rasterized from the current project.</td></tr>
+      <tr><td>Zone PNG</td><td>Alternative exact green-channel IDs</td><td>Grayscale or green-channel values; must match Map.png dimensions.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Zone-source choices</h3>
+  <p><strong>Rasterize zone objects</strong> is convenient when the PZW contains
+  authoritative zones. <strong>Read exact zone IDs from PNG</strong> is useful
+  after a Zone-to-PNG workflow or when another program generated the zone layer.
+  Both produce the same kind of green-channel data.</p>
+
+  <h3>Dimension validation</h3>
+  <p>The input must cover the project using its own cell size. A legacy project
+  expects multiples of 300; a native project expects multiples of 256. The
+  generator does not resize or pad source images because doing so would shift
+  biome and zone data.</p>
+
+  <h3>Warnings</h3>
+  <p>Unknown source colors preserve their red byte and are listed. Zone types
+  without a known biomemap ID are ignored and reported. Treat these warnings as
+  data-review items rather than image-decoding failures.</p>
+
+  <h2 id="heatmap">Zombie Heatmap editor</h2>
+  <p>First enable <strong>View &gt; ZombieMap</strong>. The painting tool remains
+  disabled while the layer is hidden, which prevents accidental edits to an
+  invisible data image.</p>
+
+  <table>
+    <thead><tr><th>Control</th><th>Function</th><th>Stored effect</th></tr></thead>
+    <tbody>
+      <tr><td>Heat radius</td><td>Brush radius in heatmap samples</td><td>Changes the number of edited pixels.</td></tr>
+      <tr><td>Raw intensity</td><td>Red-channel value, 0–255</td><td>Written exactly to the PNG.</td></tr>
+      <tr><td>B42 preview ×40</td><td>Amplifies visibility in WorldView</td><td>No change to stored PNG values.</td></tr>
+      <tr><td>Left drag</td><td>Paint selected intensity</td><td>Creates an Undoable stroke.</td></tr>
+      <tr><td>Right drag</td><td>Erase to zero</td><td>Creates an Undoable stroke.</td></tr>
+      <tr><td>Expand to world</td><td>Extend image bounds</td><td>Adds zero-valued pixels outside the old image.</td></tr>
+    </tbody>
+  </table>
+
+  <p>For a 300 project, one heatmap pixel represents a 10 × 10 square area and
+  each cell uses 30 × 30 samples. A native 256 project uses 32 × 32 samples,
+  corresponding to 8 × 8 square areas. B42's apparent intensity increase is
+  represented by the optional preview multiplier, not by rewriting values.</p>
+
+  <p>The first disk edit creates <code>.before-paint.bak</code>. Later strokes
+  use Undo, and the source PNG is saved atomically.</p>
+
+  <p>For the exact boundary between heatmap density, zombie-type zones, room
+  loot and runtime scripting, see
+  <a href="MappingSpawnControl.html">Mapping-side zombie and item spawn
+  control</a>.</p>
+
+  <h2 id="features">InGameMap feature generation</h2>
+
+  <h3>Generate Road Features</h3>
+  <p>Select cells, then use
+  <strong>InGameMap &gt; Generate Road Features</strong>. The generator derives
+  polygons for primary, secondary and tertiary roads, trails and railways from
+  recognized map tiles.</p>
+
+  <h3>Feature Generation preferences</h3>
+  <table>
+    <thead><tr><th>Setting</th><th>Meaning</th><th>Trade-off</th></tr></thead>
+    <tbody>
+      <tr><td>Simplification tolerance</td><td>How far the simplified contour may deviate, in tiles.</td><td>Higher values reduce vertices but can soften corners or narrow roads.</td></tr>
+      <tr><td>Maximum point spacing</td><td>Prevents very long contour segments.</td><td>Lower values preserve long-shape detail but create more points.</td></tr>
+    </tbody>
+  </table>
+
+  <p>Separate settings are stored for normal roads, trails and railways because
+  their shapes and expected precision differ. Defaults are deliberately
+  conservative.</p>
+
+  <h3>Polygon repair and export safety</h3>
+  <p>Generated or manually edited geometry is normalized before XML or binary
+  export. The exporter can remove duplicate closing vertices, consecutive
+  duplicates and collinear points. It rejects shapes that cannot be represented
+  safely.</p>
+
+  <table>
+    <thead><tr><th>Rejected condition</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td>Fewer than three distinct polygon vertices</td><td>The game renderer cannot fill a polygon without an area.</td></tr>
+      <tr><td>Zero-area or collinear polygon</td><td>It is geometrically a line, not a polygon.</td></tr>
+      <tr><td>Non-finite coordinate</td><td>NaN and infinity cannot be serialized or rendered safely.</td></tr>
+      <tr><td>Coordinate outside signed 16-bit limits</td><td>The binary/game representation would overflow.</td></tr>
+      <tr><td>Excessive properties or point complexity</td><td>The target binary format has bounded counts and indexes.</td></tr>
+    </tbody>
+  </table>
+
+  <p>Logs identify the output, cell, feature index, feature properties and exact
+  repair/rejection reason. Use these entries to locate source geometry that
+  previously caused <code>WorldMapRenderer$Drawer.fillPolygon()</code> crashes.</p>
+
+  <h2 id="mod-export">Complete Project Zomboid mod export</h2>
+  <p><strong>File &gt; Export Complete Mod (8x8)...</strong> runs the LOT export
+  and creates a complete mod structure rather than only loose lot files.</p>
+
+  <pre><code>MyMapMod/
+  42.0/
+    mod.info
+    poster.png
+  common/
+    mod.info
+    media/
+      maps/
+        MyMap/
+          map.info
+          objects.lua
+          spawnpoints.lua
+          worldmap.xml
+          worldmap-forest.xml
+          *.lotheader
+          *.bin
+          maps/
+            biomemap_*.png</code></pre>
+
+  <p>The dialogue collects the mod name, map name, output location and poster
+  data. The export uses the current 8 × 8 layout. Existing files in a chosen mod
+  directory should be backed up before replacement.</p>
+
+  <h2 id="tilesets">TileZed tilesets and tiles</h2>
+
+  <h3>Understanding list status</h3>
+  <table>
+    <thead><tr><th>Appearance</th><th>Meaning</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>Green</td><td>The TMX uses the tileset and its PNG is available.</td><td>No action required.</td></tr>
+      <tr><td>Orange</td><td>The map or catalog references the tileset, but the PNG cannot be found.</td><td>Fix the Tiles directory, filename or catalog entry.</td></tr>
+      <tr><td>Normal theme color</td><td>The tileset is available but unused by this map.</td><td>Keep it for future use or remove the map reference if unnecessary.</td></tr>
+    </tbody>
+  </table>
+
+  <p>The leading icon reports <code>1x</code>, <code>2x</code>, or a custom tile
+  size. The tooltip includes usage, availability, resolution and source path.</p>
+
+  <h3>Import Project Zomboid Tileset PNG</h3>
+  <p>This function creates the minimal Project Zomboid tileset information from
+  a PNG. It avoids requiring generic Tiled metadata that PZ does not use. The PNG
+  must still have a valid tile-grid layout and a unique tileset name.</p>
+
+  <ol>
+    <li>Choose <strong>Import Project Zomboid Tileset PNG...</strong>.</li>
+    <li>Select the PNG and confirm the tile resolution/grid.</li>
+    <li>Review the generated tileset name and image path.</li>
+    <li>Save the TMX and update <code>Tilesets.txt</code> if the image is meant
+      to be part of the shared catalog.</li>
+  </ol>
+
+  <h3>Large custom and Jumbo tiles</h3>
+  <p>Custom dimensions up to 4096 are accepted by creation and pack tools. Jumbo
+  support removes former assumptions that all packed source rectangles fit the
+  historical small-tile bounds. Large images consume more texture memory and can
+  reveal game-side limits that are outside the editor.</p>
+
+  <h3>Identification, IDs and export</h3>
+  <ul>
+    <li>Tile palettes display the tileset name and numeric tile ID.</li>
+    <li>ID reconstruction/reassignment tools repair catalog order after tileset
+      additions or changes.</li>
+    <li>Direct tile export writes a selected tile as a PNG to an explicit
+      portable path.</li>
+    <li>Pack Extractor supports exact full-name searches and multiple prefixes,
+      reducing unwanted matches in large packs.</li>
+  </ul>
+
+  <h2 id="tiledefs">TileDefs and property help</h2>
+  <p>TileDefs are tile properties consumed by Project Zomboid. Many exist in
+  Java or Lua without public mapping documentation. The current property catalog
+  includes additional B42 definitions found by source analysis.</p>
+
+  <p>Hover over a property to read its English description. Descriptions explain
+  expected value shape and likely engine use; where game behavior is inferred
+  rather than explicit, treat the text as guidance and validate in-game.</p>
+
+  <p>Property and value filters help answer:</p>
+  <ul>
+    <li>which tiles already use a definition;</li>
+    <li>which values occur in the current tileset set;</li>
+    <li>whether a renamed or removed property remains referenced;</li>
+    <li>whether IDs and definitions remain consistent after importing tiles.</li>
+  </ul>
+
+  <h2 id="automapper">Automapper</h2>
+  <p class="muted">This section describes the current in-integration Automapper
+  panel.</p>
+  <p>See the dedicated <a href="Automapper.html">Automapper rule-map
+  reference</a> for layer naming, indexes, map properties, tile and object
+  matching, output alternatives, and troubleshooting.</p>
+
+  <h3>Rule discovery</h3>
+  <p>A saved target TMX uses a nearby <code>rules.txt</code>. Each non-comment
+  entry may point to a rule-map <code>.tmx</code> or another <code>.txt</code>
+  list. Relative paths are resolved from the list containing them.</p>
+
+  <ul>
+    <li><strong>Reload</strong> rereads lists and rule maps.</li>
+    <li><strong>Apply</strong> runs all loaded rule patterns on the target map.</li>
+    <li><strong>Interactive</strong> reapplies relevant rules as tiles or objects
+      change.</li>
+    <li>The panel shows file paths, pattern counts, warnings and errors.</li>
+  </ul>
+
+  <h3>Safety checks</h3>
+  <p>Recursive list inclusion is skipped with a warning. The same rule map is not
+  loaded twice. Unsupported extensions are reported. Unsaved target maps cannot
+  reliably resolve a neighboring <code>rules.txt</code> and are rejected
+  explicitly.</p>
+
+  <h3>Tile and object inputs</h3>
+  <p><code>input</code> and <code>inputnot</code> may be tile layers or Object
+  Groups. Object patterns can compare name, type, shape, position, dimensions,
+  polygon data and custom properties. A property value of <code>*</code> means
+  “the candidate must have this property, but any value is accepted.”</p>
+
+  <div class="warning">
+    Interactive automapping can produce many changes quickly. Keep Undo history
+    visible and test a new rule set on a copy before enabling it.
+  </div>
+
+  <h2 id="lua">Lua mapping automation</h2>
+  <p>TileZed embeds Lua for editor automation. It does not run Project Zomboid
+  gameplay scripts. Batch scripts can inspect or modify tiles, BMP data,
+  selections, layers, Object Groups, zones and RoomDefs. Interactive Lua tools
+  can preview placement and create one Undo command per gesture.</p>
+
+  <p>See the dedicated <a href="LuaScripting.html">Lua scripting and API
+  reference</a> for:</p>
+  <ul>
+    <li>current-map, directory and WorldEd-world execution modes;</li>
+    <li>zero-based API indexing versus one-based Lua tables;</li>
+    <li>all exposed Map, Layer, Tile, BMP, Object, Region and TileTool functions;</li>
+    <li>tile lookup, placement, deletion and replacement by exact name;</li>
+    <li>deferred access to whitelisted TileZed Qt actions and export dialogs;</li>
+    <li>RoomDefs and object-property examples;</li>
+    <li>interactive callbacks, preview and Undo;</li>
+    <li>error handling, progress and cooperative cancellation.</li>
+  </ul>
+
+  <h2 id="buildinged">BuildingEd</h2>
+
+  <p>BuildingEd now supports transactional Lua editor scripts. See the
+  <a href="../BuildingEd/LuaScripting.html">BuildingEd Lua scripting and API
+  reference</a> for execution, rooms, objects, user-tile layers, properties,
+  selections, Undo behavior and examples.</p>
+
+  <h3>Separate application</h3>
+  <p>BuildingEd is launched as its own executable and uses its own red
+  <code>B</code> icon. It still shares the TileZed libraries, tilesets and
+  Building catalogs in the portable suite.</p>
+
+  <h3>Startup progress</h3>
+  <p>On first launch or after changing the Tiles directory, BuildingEd may need
+  to read many tilesets and the following catalogs:</p>
+  <ul>
+    <li><code>BuildingFurniture.txt</code>;</li>
+    <li><code>BuildingTemplates.txt</code>;</li>
+    <li><code>BuildingTiles.txt</code>;</li>
+    <li><code>TMXConfig.txt</code>.</li>
+  </ul>
+
+  <p>The progress display proves that the application is working instead of
+  frozen. The log records loaded and missing files. A varying tileset count
+  usually means the available PNG/catalog set changed or a file failed to load;
+  consult the detailed log rather than relying only on the total.</p>
+
+  <h3>Appearance and state</h3>
+  <p>BuildingEd uses the same QSS theme system as TileZed. Its window, docks and
+  internal panel splitters are stored in portable settings, including the
+  tileset/layer panel proportions.</p>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <table>
+    <thead><tr><th>Symptom</th><th>Likely cause</th><th>Check</th></tr></thead>
+    <tbody>
+      <tr><td>Red question-mark tiles only in WorldEd</td><td>Different tileset path/catalog or WorldEd did not finish loading.</td><td>Tiles directory, <code>Tilesets.txt</code>, missing-image log entries.</td></tr>
+      <tr><td>Blank minimap thumbnail</td><td>No cached thumbnail, unresolved tiles, or old geometry cache.</td><td>Recreate selected thumbnails and inspect logs.</td></tr>
+      <tr><td>Thumbnail does not fill the cell</td><td>Wrong project grid flag or stale pre-fix thumbnail.</td><td>Project badge, then recreate the thumbnail.</td></tr>
+      <tr><td>Dock sizes reset</td><td>Wrong INI, application terminated before a save, or invalid legacy state.</td><td>Portable <code>settings</code> path and layout keys.</td></tr>
+      <tr><td>Open in TileZed asks for a default application</td><td>Old executable or separated installation.</td><td>Use the current build and keep both EXEs together.</td></tr>
+      <tr><td>Biomemap rejects size</td><td>Image dimensions do not match the project's 300/256 grid.</td><td>Project badge and exact input pixel size.</td></tr>
+      <tr><td>Heatmap looks too bright in B42 preview</td><td>The ×40 visualization is enabled.</td><td>Inspect raw intensity; disable preview to see 0–255 literally.</td></tr>
+      <tr><td>BuildingEd appears frozen at first launch</td><td>Large tileset/Building catalog load.</td><td>Progress window and portable log.</td></tr>
+      <tr><td>InGameMap export drops a polygon</td><td>Degenerate or unrepresentable geometry.</td><td>Search logs for the cell, feature index and rejection reason.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="success">
+    When reporting a problem, include the application name, project grid format,
+    exact menu action, affected cell/TMX path and the matching portable log
+    lines. That is usually enough to distinguish bad source data from an editor
+    regression.
+  </div>
+</body>
+</html>

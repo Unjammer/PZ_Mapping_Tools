@@ -1,0 +1,2597 @@
+property
+{
+    Type = Integer
+    Name = Surface
+    ShortName =
+    Min = 0
+    Max = 128
+    Default = 0
+    ToolTip = <p>Defines how high a usable surface on this tile is from its base.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsSurfaceOffset
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, Surface is interpreted as the base of the object.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IgnoreSurfaceSnap
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can be placed on surfaces in any orientation, ignoring direction surface is positioned.</p>
+}
+property
+{
+    Type = Integer
+    Name = ItemHeight
+    ShortName = 
+    Min = 0
+    Max = 256
+    Default = 0
+    ToolTip = <p>Defines tile height.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Countertop
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, this tile is attached to the next lower tile with CountertopAttach=true.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = CountertopAttach
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, a higher tile with Countertop=true is attached to this object.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = FitsBeneathCountertop
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, this object may be placed beneath a stand-alone Countertop=true object.</p>
+}
+
+separator
+{
+}
+
+property
+{
+    Type = Boolean
+    Name = IsMoveAble
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can be moved by players.</p>
+}
+property
+{
+    Type = Enum
+    Name = MoveType
+    ShortName =
+    Enums
+    {
+        Normal = Object
+        WallObject = WallObject
+        WindowObject = WindowObject
+        Window = Window
+        FloorTile = FloorTile
+        FloorRug = FloorRug
+        Vegitation = Vegitation
+        DoorObject = DoorObject
+    }
+    Default = Normal
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines how this moveable object can be placed.</p>
+}
+property
+{
+    Type = Boolean
+    Name = WallObjectAllowDoorframe
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can share a space with doorframes.</p>
+}
+property
+{
+    Type = Boolean
+    Name = CanAttachAnimal
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>Used by wooden poles. If true, animals can be tethered to tile.</p>
+}
+property
+{
+    Type = String
+    Name = CustomName
+    ShortName =
+    Default = 
+    ToolTip = <p>Defines the name of this tile.</p>
+}
+property
+{
+    Type = Enum
+    Name = PickUpTool
+    ShortName =
+    Enums
+    {
+        None =
+        Crowbar = Crowbar
+        Cutter = Cutter
+        Door = Door
+        Electrician = Electrician
+        Hammer = Hammer
+        Screwdriver = Screwdriver
+        Shovel = Shovel
+        Wrench = Wrench
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines tool set required to pick up this tile.</p>
+}
+property
+{
+    Type = Enum
+    Name = PlaceTool
+    ShortName =
+    Enums
+    {
+        None =
+        Crowbar = Crowbar
+        Cutter = Cutter
+        Door = Door
+        Electrician = Electrician
+        Hammer = Hammer
+        Screwdriver = Screwdriver
+        Shovel = Shovel
+        Wrench = Wrench
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines tool set required to place this tile.</p>
+}
+property
+{
+    Type = Integer
+    Name = PickUpLevel
+    ShortName =
+    Min = 0
+    Max = 5
+    Default = 0
+    ToolTip = <p>Defines minimum required skill level for players to pick up this tile.</p>
+}
+property
+{
+    Type = Integer
+    Name = PickUpWeight
+    ShortName =
+    Min = 0
+    Max = 1000
+    Default = 0
+    ToolTip = <p>Defines how heavy this tile is.</p>
+}
+property
+{
+    Type = Boolean
+    Name = CanBreak
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can be broken with weapons or vehicles.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsClosedState
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>Used by curtains. If true, curtains are closed.</p>
+}
+property
+{
+    Type = String
+    Name = GroupName
+    ShortName =
+    Default =
+    ToolTip = <p>Defines the group of objects this tile belongs to.</p>
+}
+property
+{
+    Type = Enum
+    Name = Facing
+    ShortName =
+    Enums
+    {
+        None = none
+        North = N
+        West = W
+        South = S
+        East = E
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines direction tile is facing. Used when rotating moveable objects.</p>
+}
+property
+{
+    Type = String
+    Name = SpriteGridPos
+    ShortName =
+    Default =
+    ToolTip = <p><b>Engine key:</b> SpriteGridPos</p><p>Zero-based position of this sprite inside a multi-tile movable. Enter <code>x,y</code> or <code>x,y,z</code>, for example <code>12,3,1</code>. Every face of the object must form the same complete rectangular grid. This free-form field intentionally has no legacy 8x6 size limit.</p>
+}
+property
+{
+    Type = String
+    Name = SpriteGridLevel
+    ShortName =
+    Default =
+    ToolTip = <p><b>Engine key:</b> SpriteGridLevel</p><p>Optional zero-based integer level for a multi-tile movable. When present, including when set to <code>0</code>, it overrides the third component of SpriteGridPos. Negative levels are rejected by the game.</p>
+}
+property
+{
+    Type = Integer
+    Name = North face sprite offset
+    ShortName = Noffset
+    Min = -2147483647
+    Max = 2147483647
+    Default = 0
+    ToolTip = <p><b>Engine key:</b> Noffset</p><p>Signed local tile-ID delta from this sprite to the north-facing sprite of the same movable. The game adds this value to the current sprite ID when rotating the object.</p>
+}
+property
+{
+    Type = Integer
+    Name = West face sprite offset
+    ShortName = Woffset
+    Min = -2147483647
+    Max = 2147483647
+    Default = 0
+    ToolTip = <p><b>Engine key:</b> Woffset</p><p>Signed local tile-ID delta from this sprite to the west-facing sprite of the same movable. The game adds this value to the current sprite ID when rotating the object.</p>
+}
+property
+{
+    Type = Integer
+    Name = South face sprite offset
+    ShortName = Soffset
+    Min = -2147483647
+    Max = 2147483647
+    Default = 0
+    ToolTip = <p><b>Engine key:</b> Soffset</p><p>Signed local tile-ID delta from this sprite to the south-facing sprite of the same movable. The game adds this value to the current sprite ID when rotating the object.</p>
+}
+property
+{
+    Type = Integer
+    Name = East face sprite offset
+    ShortName = Eoffset
+    Min = -2147483647
+    Max = 2147483647
+    Default = 0
+    ToolTip = <p><b>Engine key:</b> Eoffset</p><p>Signed local tile-ID delta from this sprite to the east-facing sprite of the same movable. The game adds this value to the current sprite ID when rotating the object.</p>
+}
+property
+{
+    Type = Integer
+    Name = Linked movable offset
+    ShortName = LinkedOffset
+    Min = -2147483647
+    Max = 2147483647
+    Default = 0
+    ToolTip = <p><b>Engine key:</b> LinkedOffset</p><p><b>Advanced B42:</b> signed tile-ID offset stored in the moveable metadata for a linked sprite. Use only for content that also defines LinkedLocIs; behavior depends on the target game version.</p>
+}
+property
+{
+    Type = String
+    Name = Linked movable location
+    ShortName = LinkedLocIs
+    Default =
+    ToolTip = <p><b>Engine key:</b> LinkedLocIs</p><p><b>Advanced B42:</b> location token stored in the moveable metadata for a linked sprite. The supplied game scripts read this value but do not document a closed list of accepted tokens.</p>
+}
+property
+{
+    Type = Boolean
+    Name = ForceSingleItem
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, multi-tile objects are considered one single item, and will automatically generate adjacent tiles if missing.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsGridExtensionTile
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is an extension of an existing functional tile, such as a bathtub.</p>
+}
+property
+{
+    Type = Enum
+    Name = IsoType
+    ShortName =
+    Enums
+    {
+        IsoObject = IsoObject
+        IsoBarbecue = IsoBarbecue
+        IsoBrokenGlass = IsoBrokenGlass
+        IsoClothingDryer = IsoClothingDryer
+        IsoClothingWasher = IsoClothingWasher
+        IsoCombinationWasherDryer = IsoCombinationWasherDryer
+        IsoCompost = IsoCompost
+        IsoFireplace = IsoFireplace
+        IsoFeedingTrough = IsoFeedingTrough
+        IsoMannequin = IsoMannequin
+        IsoRadio = IsoRadio
+        IsoJukebox = IsoJukebox
+        IsoStove = IsoStove
+        IsoTelevision = IsoTelevision
+        IsoMultiMedia = IsoMultiMedia
+    }
+    Default = IsoObject
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines tile behaviour.</p>
+}
+property
+{
+    Type = Boolean
+    Name = B42 entity script
+    ShortName = EntityScript
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p><b>Engine key:</b> EntityScript</p><p><b>Advanced B42:</b> marks this sprite for creation through the game-entity pipeline. This flag is normally generated by SpriteConfigManager. Set it manually only when EntityScriptName resolves to a valid game entity script.</p>
+}
+property
+{
+    Type = String
+    Name = B42 entity script name
+    ShortName = EntityScriptName
+    Default =
+    ToolTip = <p><b>Engine key:</b> EntityScriptName</p><p><b>Advanced B42:</b> exact script identifier passed to ScriptManager.getGameEntityScript(). An unknown or missing identifier makes entity creation fail. Usually generated from a sprite-config script.</p>
+}
+property
+{
+    Type = String
+    Name = Item (full name)
+    ShortName = CustomItem
+    Default =
+    ToolTip = <p>Defines technical name of this tile. Always starts with "Base.".</p>
+}
+separator
+{
+}
+property
+{
+    Type = Boolean
+    Name = BlocksPlacement
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, no other objects can be placed on this tile.</p>
+}
+property
+{
+	Type = Boolean
+	Name = Can tie sheet rope (no hammer or nails needed)
+	ShortName = TieSheetRope
+	Default = false
+	ReverseLogic = false
+    ToolTip = <p>If true, sheet rope can be tied to tile, without needing hammer and nails.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsHigh (only occupies upper half)
+    ShortName = IsHigh
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, object occupies top half of a tile's volume.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsLow (only occupies lower half)
+    ShortName = IsLow
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, object occupies bottom half of a tile's volume.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Half-height wall or cutaway
+    ShortName = halfheight
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p><b>Engine key:</b> halfheight</p><p>Treats a wall or cutaway sprite as half height. The engine excludes it from several full-height wall and vision checks and adjusts vertical object placement. This is independent from IsHigh and IsLow.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsTable
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can be used to place objects on.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsTableTop
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can only be placed on tables.</p>
+}
+property
+{
+    Type = Enum
+    Name = GenericCraftingSurface
+    ShortName =
+    Enums
+    {
+        None = 
+        True = true
+        False = false
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>If true, tile can be used for generic crafting. False is used for debug purposes.</p>
+}
+property
+{
+    Type = Enum
+    Name = signal
+    ShortName =
+    Enums
+    {
+        none = none
+        Radio Device = radio
+        Television Device = tv
+    }
+    Default = none
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines type of signal this tile can output, either none, audio only, or audio & video.</p>
+}
+property
+{
+    Type = Enum
+    Name = Material
+    ShortName =
+    Enums
+    {
+        Undefined = Undefined
+        AluminumScrap = AluminumScrap
+        Brick = Brick
+        Door = Door
+        Electric = Electric
+        Fabric = Fabric
+        Foam = Foam
+        Fridge = Fridge
+        Glass = Glass
+        GoldBar = GoldBar
+        Leather = Leather
+        Log = Log
+        Mechanical = Mechanical
+        MetalBars = MetalBars
+        MetalPipe = MetalPipe
+        MetalPlates = MetalPlates
+        SmallMetalPlates = SmallMetalPlates
+        MetalScrap = MetalScrap
+        MetalWire = MetalWire
+        Mirror = Mirror
+        Nails = Nails
+        Natural = Natural
+        Paper = Paper
+        Pipes = Pipes
+        Plastic = Plastic
+        PlasticBag = PlasticBag
+        PlasticHard = PlasticHard
+        Plumbing = Plumbing
+        RailroadTie = RailroadTie,
+        RailroadTrack = RailroadTrack,
+        Rubber = Rubber
+        Sandbag = Sandbag
+        Screws = Screws
+        Sink = Sink
+        Steel = Steel
+        Stone = Stone
+        Transmission = Transmission
+        WaterContainer = WaterContainer
+        Wood = Wood
+    }
+    Default = Undefined
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines primary material gained from scrapping this tile.</p>
+}
+property
+{
+    Type = Enum
+    Name = Material2
+    ShortName =
+    Enums
+    {
+        Undefined = Undefined
+        AluminumScrap = AluminumScrap
+        Brick = Brick
+        Door = Door
+        Electric = Electric
+        Fabric = Fabric
+        Foam = Foam
+        Fridge = Fridge
+        Glass = Glass
+        Leather = Leather
+        Log = Log
+        Mechanical = Mechanical
+        MetalBars = MetalBars
+        MetalPipe = MetalPipe
+        MetalPlates = MetalPlates
+        SmallMetalPlates = SmallMetalPlates
+        MetalScrap = MetalScrap
+        MetalWire = MetalWire
+        Mirror = Mirror
+        Nails = Nails
+        Natural = Natural
+        Paper = Paper
+        Pipes = Pipes
+        Plastic = Plastic
+        PlasticBag = PlasticBag
+        PlasticHard = PlasticHard
+        Plumbing = Plumbing
+        RailroadTie = RailroadTie,
+        RailroadTrack = RailroadTrack,
+        Rubber = Rubber
+        Screws = Screws
+        Sink = Sink
+        Steel = Steel
+        Stone = Stone
+        Transmission = Transmission
+        WaterContainer = WaterContainer
+        Wood = Wood
+    }
+    Default = Undefined
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines secondary material gained from scrapping this tile.</p>
+}
+property
+{
+    Type = Enum
+    Name = Material3
+    ShortName =
+    Enums
+    {
+        Undefined = Undefined
+        AluminumScrap = AluminumScrap
+        Brick = Brick
+        Door = Door
+        Electric = Electric
+        Fabric = Fabric
+        Foam = Foam
+        Fridge = Fridge
+        Glass = Glass
+        Leather = Leather
+        Mechanical = Mechanical
+        MetalBars = MetalBars
+        MetalPipe = MetalPipe
+        MetalPlates = MetalPlates
+        SmallMetalPlates = SmallMetalPlates
+        MetalScrap = MetalScrap
+        MetalWire = MetalWire
+        Mirror = Mirror
+        Nails = Nails
+        Natural = Natural
+        Paper = Paper
+        Pipes = Pipes
+        Plastic = Plastic
+        PlasticBag = PlasticBag
+        PlasticHard = PlasticHard
+        Plumbing = Plumbing
+        RailroadTie = RailroadTie,
+        RailroadTrack = RailroadTrack,
+        Rubber = Rubber
+        Screws = Screws
+        Sink = Sink
+        Steel = Steel
+        Stone = Stone
+        Transmission = Transmission
+        WaterContainer = WaterContainer
+        Wood = Wood
+    }
+    Default = Undefined
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines tertiary material gained from scrapping this tile.</p>
+}
+property
+{
+    Type = Boolean
+    Name = CanScrap
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can be dismantled.</p>
+}
+property
+{
+    Type = Boolean
+    Name = ScrapUseTool
+    ShortName =
+    Default = true
+    ReverseLogic = false
+    ToolTip = <p>If true, players must have correct tools to dismantle tile.</p>
+}
+property
+{
+    Type = Boolean
+    Name = ScrapUseSkill
+    ShortName =
+    Default = true
+    ReverseLogic = false
+    ToolTip = <p>If true, players must have minimum skill level to dismantle tile.</p>
+}
+property
+{
+    Type = Enum
+    Name = ScrapSize
+    ShortName =
+    Enums
+    {
+        Small = Small
+        Medium = Medium
+        Large = Large
+    }
+    Default = Medium
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines amount of scrap materials gained from dismantling this tile.</p>
+}
+property
+{
+    Type = Integer
+    Name = ScrapToolUseOverride
+    ShortName =
+    Min = -1
+    Max = 100
+    Default = -1
+    ToolTip = <p>Used in the code, but no tiles have this property.</p>
+}
+
+separator
+{
+}
+
+property
+{
+    Type = Boolean
+    Name = TileOverlay
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is overlaid on a different tile to create small differences in appearance.</p>
+}
+
+property
+{
+    Type = String
+    Name = BurntTile
+    ShortName = BurntTile
+    Default =
+    ToolTip = <p>When burnt, specified tile replaces this tile.</p>
+}
+
+property
+{
+    Type = String
+    Name = SnowTile
+    ShortName = SnowTile
+    Default =
+    ToolTip = <p>When snowing, specified tile replaces this tile.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = GrimeType
+    ShortName =
+    Enums
+    {
+        None =
+        FullWindow =
+        Trim =
+        DoubleLeft =
+        DoubleRight =
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines coverage type of grime on this tile.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Light
+    ShortName = lightswitch
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can emit light when powered.</p>
+}
+property
+{
+    Type = Boolean
+    Name = HasLightOnSprite
+    ShortName = 
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile has accompanying light tile in <tileset name>_on sheet.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsMirror
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile has a reflective surface that can be used for applying makeup, among other things.</p>
+}
+
+
+
+property
+{
+    Type = Boolean
+    Name = Force Fade
+    ShortName = forceFade
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is forced to fade when players occupy a room behind it.</p>
+}
+
+
+property
+{
+    Type = Integer
+    Name = LightR
+    ShortName = lightR
+    Min = 0
+    Max = 255
+    Default = 0
+    ToolTip = <p>Defines amount of red light given off by the light source.</p>
+}
+
+property
+{
+    Type = Integer
+    Name = LightG
+    ShortName = lightG
+    Min = 0
+    Max = 255
+    Default = 0
+    ToolTip = <p>Defines amount of green light given off by the light source.</p>
+}
+
+property
+{
+    Type = Integer
+    Name = LightB
+    ShortName = lightB
+    Min = 0
+    Max = 255
+    Default = 0
+    ToolTip = <p>Defines amount of blue light given off by the light source.</p>
+}
+
+property
+{
+    Type = Integer
+    Name = LightRadius
+    ShortName =
+    Min = 0
+    Max = 128
+    Default = 0
+    ToolTip = <p>Defines distance light from this light source will travel.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Streetlight
+    ShortName = streetlight
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile will emit light when sunlight is low.</p>
+}
+
+
+property
+{
+    Type = Boolean
+    Name = CollideNorth
+    ShortName = collideN
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile has a north wall collision.</p>
+}
+property
+{
+    Type = Boolean
+    Name = CollideWest
+    ShortName = collideW
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile has a west wall collision.</p>
+}
+separator
+{
+}
+property
+{
+    Type = Enum
+    Name = Door
+    ShortName =
+    Enums
+    {
+        None =
+        North = doorN
+        West = doorW
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p>Defines tile as door.</p>
+}
+property
+{
+    Type = Enum
+    Name = DoorFrame
+    ShortName =
+    Enums
+    {
+        None =
+        North = doorFrN
+        West = doorFrW
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p>Defines tile as doorframe.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Door Transparent
+    ShortName = doorTrans
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, door has window.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Force Locked
+    ShortName = forceLocked
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, door always starts locked.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Double-Doorframe Left
+    ShortName = DoubleDoor1
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is southern/eastern most tile of two tile spanning doorframe.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Double-Doorframe Right
+    ShortName = DoubleDoor2
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is northern/western most tile of two tile spanning doorframe.</p>
+}
+property
+{
+    Type = Integer
+    Name = DoubleDoor
+    ShortName =
+    Min = 0
+    Max = 8
+    Default = 0
+    ToolTip = <p>Defines tile as double door. 1, 2, 3 & 4 are closed states, 5, 6, 7 & 8 are open states. 1 opens to 5, 2 to 6, etc.</p>
+}
+property
+{
+    Type = Integer
+    Name = GarageDoor
+    ShortName = 
+    Min = 0
+    Max = 6
+    Default = 0
+    ToolTip = <p>Defines relative position of this tile in a garage door. 1, 2 & 3 are closed left, middle, right. 4, 5, & 6 are open left, middle, right.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Door Interior Side
+    ShortName = InteriorSide
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is interior side of garage door.</p>
+}
+separator
+{
+}
+property
+{
+    Type = Boolean
+    Name = IsBed
+    ShortName = bed
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is marked as a bed for players to rest or sleep on.</p>
+}
+property
+{
+    Type = Enum
+    Name = BedType
+    ShortName =
+    Enums
+    {
+        None =       
+        Good Bed = goodBed
+        Average Bed = averageBed
+        Bad Bed = badBed
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Sets bed quality. Higher quality means more restful sleep.</p>
+}
+property
+{
+    Type = Enum
+    Name = Chair
+    ShortName =
+    Enums
+    {
+        None =
+        North = chairN
+        East = chairE
+		South = chairS
+		West = chairW
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p>Defines tile as chair.</p>
+}
+property
+{
+    Type = Boolean
+    Name = FloorOverlay
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is overlaid on the floor.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsFloor
+    ShortName = solidfloor
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is a solid floor.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Zac Diamond Floor
+    ShortName = diamondFloor
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is completely flat floor.</p>
+}
+property
+{
+    Type = Enum
+    Name = FloorMaterial
+    ShortName =
+    Enums
+    {
+        None =
+        Burnt = Burnt
+        Clay = Clay
+        Dirt = Dirt
+        Dirt with patchy grass = Dirt_Grass
+        Grass - Dark = Grass_Dark
+        Grass - Medium = Grass_Medium
+		Grass - Light = Grass_Light
+        Road - Type 1 = Road_01
+        Road - Type 2 = Road_02
+        Road - Type 3 = Road_03
+        Road - Type 4 = Road_04
+        Road - Type 5 = Road_05
+		Road - Type 6 = Road_06
+        Road - Type 7 = Road_07
+        Sand = Sand
+        Water = Water
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines material of natural floor.</p>
+}
+property
+{
+    Type = Boolean
+    Name = grassFloor
+    ShortName =
+    Default = false
+    ReverseLogic = false
+	ToolTip = <p>If true, tile is grass floor.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = BlockRain
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile shields all tiles placed below it from rain.</p>
+}
+property
+{
+    Type = Enum
+    Name = Render Layer
+    ShortName = RenderLayer
+    Enums
+    {
+        Default =
+        Floor =
+    }
+    Default = Default
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines render layer for this tile, either as part of the floor or not.</p>
+}
+property
+{
+    Type = Enum
+    Name = FloorHeight
+    ShortName =
+    Enums
+    {
+        Flat =
+        OneThird =
+        TwoThirds =
+    }
+    Default = Flat
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines how high the floor of this tile is.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsIndoor
+    ShortName = exterior
+    Default = true
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is indoors. Is true by default.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Transparent Floor
+    ShortName = transparentFloor
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is a floor that can be seen through, either a glass floor or a metal mesh floor.</p>
+}
+property
+{
+    Type = Enum
+    Name = Curtain
+    ShortName =
+    Enums
+    {
+        None =
+        North = curtainN
+        West = curtainW
+        South = curtainS
+        East = curtainE
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p>Marks tile as curtains.</p>
+}
+property
+{
+    Type = Integer
+    Name = LightFilterR
+    ShortName =
+    Min = 0
+    Max = 255
+    Default = 0
+    ToolTip = <p>Defines the red component of light after passing through a closed curtain.</p>
+}
+property
+{
+    Type = Integer
+    Name = LightFilterG
+    ShortName =
+    Min = 0
+    Max = 255
+    Default = 0
+    ToolTip = <p>Defines the green component of light after passing through a closed curtain.</p>
+}
+property
+{
+    Type = Integer
+    Name = LightFilterB
+    ShortName =
+    Min = 0
+    Max = 255
+    Default = 0
+    ToolTip = <p>Defines the blue component of light after passing through a closed curtain.</p>
+}
+property
+{
+    Type = Integer
+    Name = LightFilterIntensity
+    ShortName =
+    Min = 0
+    Max = 100
+    Default = 0
+    ToolTip = <p>Defines the percentage of incoming light allowed to pass through a closed curtain.</p>
+}
+property
+{
+    Type = Integer
+    Name = LightFilterMix
+    ShortName =
+    Min = 0
+    Max = 100
+    Default = 0
+    ToolTip = <p>Defines the percentage of incoming light color to preserve as it passes through a closed curtain.</p>
+}
+separator
+{
+}
+property
+{
+    Type = Enum
+    Name = TileBlockStyle
+    ShortName =
+    Enums
+    {
+        None =
+        Solid = solid
+        SolidTransparent = solidtrans
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p>Defines how tile blocks movement and vision. "Solid" blocks both, "SolidTransparent" only blocks movement.</p>
+}
+property
+{
+    Type = Enum
+    Name = Movement
+    ShortName =
+    Enums
+    {
+        NoEffect =
+        HedgeLow =
+        HedgeHigh =
+    }
+    Default = NoEffect
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines how tile affects player movement.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Invisible
+    ShortName = invisible
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is invisible.</p>
+}
+property
+{
+    Type = Boolean
+    Name = trans
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>Used in the code, but no tiles have this property.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Bush
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is marked as a bush, slowing player movement through tile.</p>
+}
+property
+{
+    Type = Boolean
+    Name = ForceAmbient
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile ignores square lighting and uses global ambient lighting instead.</p>
+}
+property
+{
+    Type = Boolean
+    Name = forceRender
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile will always render, ignoring cutaway system.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = NoWallLighting
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile uses same colour at each vertex, as opposed to standard walls where colour can vary per vertex.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Unlit sprite
+    ShortName = unlit
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p><b>Engine key:</b> unlit</p><p>Renders this sprite at full white brightness instead of multiplying it by the square's light colour. Use for genuinely self-lit artwork; it does not create a light source.</p>
+}
+separator
+{
+}
+property
+{
+    Type = String
+    Name = ContainerType
+    ShortName = container
+    Default =
+    ToolTip = <p>Defines type of container.</p>
+}
+property
+{
+    Type = Integer
+    Name = ContainerCapacity
+    ShortName = 
+    Min = 0
+    Max = 100
+    Default = 0
+    ToolTip = <p>Defines max capacity of container.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsTrashCan
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is trash can. Items placed in trash cans can be deleted from the world.</p>
+}
+property
+{
+    Type = Enum
+    Name = ContainerPosition
+    ShortName =
+    Enums
+    {
+    	Normal = 
+    	Low = Low
+    	High = High
+    }
+    Default = Normal
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines container location within the tile.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsFridge
+    ShortName =
+    Default = false
+    ReverseLogic = false
+	ToolTip = <p>If true, tile is fridge.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Freezer
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is a freezer.</p>
+}
+property
+{
+    Type = Integer
+    Name = FreezerCapacity
+    ShortName = 
+    Min = 0
+    Max = 50
+    Default = 0
+    ToolTip = <p>Defines capacity of this tile's freezer.</p>
+}
+property
+{
+    Type = Enum
+    Name = FreezerPosition
+    ShortName =
+    Enums
+    {
+    	Normal = 
+    	Low = Low
+    	High = High
+    }
+    Default = Normal
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines location of the freezer within the tile.</p>
+}
+property
+{
+    Type = Boolean
+    Name = NoFreezer
+    ShortName =
+    Default = false
+    ReverseLogic = false
+	ToolTip = <p>If true, tile doesn't contain freezer.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Microwave
+    ShortName =
+    Default = false
+    ReverseLogic = false
+	ToolTip = <p>If true, tile is microwave.</p>
+}
+property
+{
+    Type = Boolean
+    Name = WheelieBin
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is a wheelie bin.</p>
+}
+separator
+{
+}
+property
+{
+    Name = RoofStyle
+    Type = Enum
+    ShortName =
+    Enums
+    {
+        None =
+        WestRoofB =
+        WestRoofM =
+        WestRoofT =
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p>Marks tile as a roof tile, used in cutaway logic.</p>
+}
+property
+{
+    Type = Integer
+    Name = RoofGroup
+    ShortName = 
+    Min = 0
+	Max = 100
+    Default = 0
+    ToolTip = <p>Defines which roof group tile belongs to.</p>
+}
+property
+{
+    Name = FasciaEdge
+    Type = Enum
+    ShortName =
+    Enums
+    {
+        None =
+        North =
+        East =
+        South =
+        West =
+        NorthAndEast =
+        SouthAndEast =
+        SouthAndWest =
+        NorthAndWest =
+        NorthEastCorner =
+        SouthEastCorner =
+        SouthWestCorner =
+        NorthWestCorner =
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Marks tile as a fascia; a decorative band applied to the top of a wall.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Reversible fascia edge
+    ShortName = FasciaEdgeReversible
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p><b>Engine key:</b> FasciaEdgeReversible</p><p>Allows north- or west-facing fascia edges to attach to the tile's own square one level above when the normally adjacent attachment square is unavailable.</p>
+}
+property
+{
+    Type = Boolean
+    Name = isEave
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is an eave.</p>
+}
+separator
+{
+}
+property
+{
+    Type = Enum
+    Name = ClimbSheet
+    ShortName =
+    Enums
+    {
+        None =
+        ClimbSheetN = climbSheetN
+        ClimbSheetS = climbSheetS
+        ClimbSheetW = climbSheetW
+        ClimbSheetE = climbSheetE
+        ClimbSheetTopN = climbSheetTopN
+        ClimbSheetTopS = climbSheetTopS
+        ClimbSheetTopW = climbSheetTopW
+        ClimbSheetTopE = climbSheetTopE
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p>Defines tile as sheet rope.</p>
+}
+separator
+{
+}
+property
+{
+    Type = Enum
+    Name = StairStyle
+    ShortName =
+    Enums
+    {
+        None =
+        BottomW = stairsBW
+        MiddleW = stairsMW
+        TopW = stairsTW
+        BottomN = stairsBN
+        MiddleN = stairsMN
+        TopN = stairsTN
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p>Marks tile as part of a set of stairs.</p>
+}
+separator
+{
+}
+property
+{
+    Type = Enum
+    Name = WallStyle
+    ShortName =
+    Enums
+    {
+        None =
+        WestWall = WallW
+        WestWallTrans = WallWTrans
+        WestWindow = WindowW
+        WestDoorFrame = DoorWallW
+		WestDoorFrameTrans = DoorWallWTrans
+        NorthWall = WallN
+        NorthWallTrans = WallNTrans
+        NorthWindow = WindowN
+        NorthDoorFrame = DoorWallN
+		NorthDoorFrameTrans = DoorWallNTrans
+        NorthWestCorner = WallNW
+        NorthWestCornerTrans = WallNWTrans
+        SouthEastCorner = WallSE
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ExtraPropertyIfSet = wall
+    ToolTip = <p>Defines wall type and direction.</p>
+}
+property
+{
+    Type = String
+    Name = RoofWallStart
+    ShortName = 
+    Default =
+    ToolTip = <p>Defines first tile of visually identical roof walls.</p>
+}
+property
+{
+    Type = Boolean
+    Name = SpearOnlyAttackThrough
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, players can attack through tile using spears, but no other weapon.</p>
+}      
+property
+{
+    Type = Enum
+    Name = CutawayStyle
+    ShortName =
+    Enums
+    {
+        None =
+        cutW = cutW
+        cutN = cutN
+        NeverCutaway = NeverCutaway
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p>"NeverCutaway" means the object will not be cut away. "Cut" will make the tile cutaway as if it were a wall.</p>
+}
+property
+{
+    Type = Enum
+    Name = CutawayHint
+    ShortName =
+    Enums
+    {
+        None =
+        Double Door Left = DoubleDoorLeft
+        Double Door Right = DoubleDoorRight
+        Garage Door Left = GarageDoorLeft
+        Garage Door Middle = GarageDoorMiddle
+        Garage Door Right = GarageDoorRight
+        Double Window Left = DoubleWindowLeft
+        Double Window Right = DoubleWindowRight
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Used by multi-tile doors and windows. When set, this determines how the cutaway behaves.</p>
+}
+property
+{
+    Type = String
+    Name = CornerWestWall
+    ShortName =
+    Default = 
+    ToolTip = <p>Defines specific west facing wall that makes up half of this corner wall. This is used when players destroy the north facing wall of a corner.</p>
+}
+property
+{
+    Type = String
+    Name = CornerNorthWall
+    ShortName =
+    Default = 
+    ToolTip = <p>Defines specific north facing wall that makes up half of this corner wall. This is used when players destroy the west facing wall of a corner.</p>
+}
+property
+{
+    Type = Boolean
+    Name = CantClimb
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, players can't climb over tile.</p>
+}              
+property
+{
+    Type = Boolean
+    Name = TallHoppableW
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is a wall that can be hopped over from west to east, or vice versa.</p>
+}              
+property
+{
+    Type = Boolean
+    Name = TallHoppableN
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is a wall that can be hopped over from north to south, or vice versa.</p>
+}              
+property
+{
+    Type = String
+    Name = PaintingType
+    ShortName =
+    Default = 
+    ToolTip = <p>Defines what type of paintable object this tile is.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsPaintable
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can be painted.</p>
+}
+property
+{
+    Type = Boolean
+    Name = HoppableN
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can be hopped over from north to south, or vice versa.</p>
+}
+property
+{
+    Type = Boolean
+    Name = HoppableW
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can be hopped over from west to east, or vice versa.</p>
+}
+property
+{
+    Type = Integer
+    Name = CloseSneakBonus
+    ShortName =
+    Min = 0
+    Max = 10000
+    Default = 0
+    ToolTip = <p>Defines stealth bonus given to players for sneaking near tile.</p>
+}
+property
+{
+    Type = Boolean
+    Name = WallOverlay
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is a decorative element attached to a wall.</p>
+}
+property
+{
+    Type = Boolean
+    Name = alwaysDraw
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile ignores cutaway logic and is always visible on screen.</p>
+}
+property
+{
+    Type = Boolean
+    Name = attachedN
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is attached to north wall [top right].</p>
+}
+property
+{
+    Type = Boolean
+    Name = attachedS
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is attached to south wall [bottom left].</p>
+}
+property
+{
+    Type = Boolean
+    Name = attachedE
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is attached to east wall [bottom right].</p>
+}
+property
+{
+    Type = Boolean
+    Name = attachedW
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is attached to west wall [top left].</p>
+}
+property
+{
+    Type = Boolean
+    Name = attachedNW
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is attached to both north and west walls [top left and top right].</p>
+}
+property
+{
+    Type = Boolean
+    Name = attachedSE
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is attached to both south and east walls [bottom left and bottom right].</p>
+}
+property
+{
+    Type = Boolean
+    Name = attachedFloor
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is attached to floor.</p>
+}
+property
+{
+    Type = Boolean
+    Name = attachedCeiling
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is attached to ceiling.</p>
+}
+property
+{
+    Type = Boolean
+    Name = attachedSurface
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is attached to surface.</p>
+}
+property
+{
+    Type = Boolean
+    Name = AttachedToGlass
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is attached to glass window.</p>
+}
+separator
+{
+}
+property
+{
+    Type = Integer
+    Name = WaterAmount
+    ShortName = waterAmount
+    Min = 0
+    Max = 1000000
+    Default = 0
+    ToolTip = <p>Defines amount of water tile starts with.</p>
+}
+property
+{
+    Type = Integer
+    Name = WaterMaxAmount
+    ShortName = waterMaxAmount
+    Min = 0
+    Max = 1000000
+    Default = 0
+    ToolTip = <p>Defines max amount of water tile can store.</p>
+}
+property
+{
+    Type = Boolean
+    Name = WaterPiped
+    ShortName = waterPiped
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is plumbed directly to water grid. Used on tiles such as sinks, washing machines, etc.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = TaintedWater
+    ShortName = taintedWater
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, water is unsafe for consumption.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = FishingWater
+    ShortName = water
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile is water.</p>
+}
+
+property
+{
+    Type = Integer
+    Name = FuelAmount
+    ShortName = fuelAmount
+    Min = 0
+    Max = 1000
+    Default = 0
+    ToolTip = <p>Defines amount of fuel tile starts with.</p>
+}
+
+separator
+{
+}
+property
+{
+    Type = Enum
+    Name = Window
+    ShortName =
+    Enums
+    {
+        None =
+        North = windowN
+        West = windowW
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p>Defines tile as window.</p>
+}
+property
+{
+    Type = Enum
+    Name = WindowShape
+    ShortName =
+    Enums
+    {
+        None =
+        1 =
+        2 =
+        3 =
+        4 =
+        5 =
+        6 =
+        7 =
+        8 =
+        9 =
+        10 =
+        11 =
+        12 =
+        13 =
+        14 =
+        15 =
+        16 =
+        17 =
+        18 =
+        19 =
+        20 =
+        21 =
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines the shape of a window. Used to determine the wall-cutout sprite.</p>
+}
+property
+{
+    Type = Integer
+    Name = OpenTileOffset
+    ShortName =
+    Min = -1000
+    Max = 1000
+    Default = 0
+    ToolTip = <p>Defines offset to visually identical tile with open window.</p>
+}
+property
+{
+    Type = Integer
+    Name = SmashedTileOffset
+    ShortName =
+    Min = -1000
+    Max = 1000
+    Default = 0
+    ToolTip = <p>Defines offset to visually identical tile with smashed window.</p>
+}
+property
+{
+    Type = Integer
+    Name = GlassRemovedOffset
+    ShortName =
+    Min = -1000
+    Max = 1000
+    Default = 0
+    ToolTip = <p>Defines offset to visually identical tile with no window.</p>
+}
+property
+{
+    Type = Boolean
+    Name = WindowLocked
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile contains a window that cannot be unlocked with a key, such as shop windows or barred windows in prison cells.</p>
+}
+property
+{
+    Type = Boolean
+    Name = MakeWindowInvincible
+    ShortName = makeWindowInvincible
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, window can't be broken.</p>
+}
+property
+{
+    Type = Enum
+    Name = Unbreakable Window
+    ShortName =
+    Enums
+    {
+        None =
+        North = UnbreakableWindowN
+        West = UnbreakableWindowW
+        NorthWest = UnbreakableWindowNW
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p><b>Engine keys:</b> UnbreakableWindowN, UnbreakableWindowW, UnbreakableWindowNW</p><p>Creates an opaque wall-style window opening that keeps window collision and transparency but cannot be smashed. Do not combine it with the regular Window direction property.</p>
+}
+
+
+separator
+{
+}
+property
+{
+    Type = Enum
+    Name = Tree Size
+    ShortName = tree
+    Enums
+    {
+        None =
+        1/4 = 1
+        2/4 = 2
+        3/4 = 3
+        4/4 = 4
+        Jumbo = 5
+        Jumbo L = 6
+        Jumbo XL = 7
+        Jumbo XXL = 8
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines size of tree.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Can Be Cut (tree)
+    ShortName = canBeCut
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tree can be cut down.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Can Be Removed (grass)
+    ShortName = canBeRemoved
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>Used by tall grass. If true, tile can be removed from the ground.</p>
+}
+
+property
+{
+    Type = Integer
+    Name = FireRequirement
+    ShortName = fireRequirement
+    Min = 0
+    Max = 1000000
+    Default = 0
+    ToolTip = <p>Defines required energy for tile to catch fire.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Vegitation
+    ShortName = vegitation
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile has grass.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Propane Tank
+    ShortName = propaneTank
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, marks tile as containing a propane tank.</p>
+}
+
+separator
+{
+}
+
+property
+{
+    Type = Integer
+    Name = StackReplaceTileOffset
+    ShortName = 
+    Min = -1000
+    Max = 1000
+    Default = 0
+    ToolTip = <p>Defines offset to visually identical tile placed on floor.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsStackable
+    ShortName = 
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can be stacked.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsWaterCollector
+    ShortName = 
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile can collect water from rainfall.</p>
+}
+
+separator
+{
+}
+
+property
+{
+    Type = Boolean
+    Name = Can be hit by car
+    ShortName = HitByCar
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, cars can collide with tile.</p>
+}
+property
+{
+    Type = Boolean
+    Name = Stop car (when hit)
+    ShortName = StopCar
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile will stop cars upon collision.</p>
+}
+property
+{
+    Type = Integer
+    Name = Minimum Speed To Damage
+    ShortName = MinimumCarSpeedDmg
+    Min = 0
+    Max = 120
+    Default = 0
+    ToolTip = <p>Defines minimum speed of a vehicle, in KpH, for this tile to be damaged in an impact.</p>
+}
+property
+{
+    Type = Integer
+    Name = Car Slow Factor
+    ShortName = CarSlowFactor
+    Min = 0
+    Max = 34
+    Default = 0
+    ToolTip = <p>Used in the code, but no tiles have this property.</p>
+}
+property
+{
+    Type = String
+    Name = Damaged Sprite (by car)
+    ShortName = DamagedSprite
+    Default = 
+    ToolTip = <p>When hit by a car at sufficient speed, specified tile replaces existing tile.</p>
+}
+property
+{
+    Type = Enum
+    Name = PhysicsShape
+    ShortName =
+    Enums
+    {
+        None =
+        Solid = Solid
+        WallN = WallN
+        WallW = WallW
+        WallE = WallE
+        WallS = WallS
+        Tree = Tree
+        Floor = Floor
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines basic collision shape.</p>
+}
+property
+{
+    Type = String
+    Name = PhysicsMesh
+    ShortName =
+    Default =
+    ToolTip = <p>Defines detailed collision shape.</p>
+}
+property
+{
+    Type = Enum
+    Name = SlopedSurfaceDirection
+    ShortName =
+    Enums
+    {
+        None = 
+        North = N
+        South = S
+        West = W
+        East = E
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines which direction this tile slopes in.</p>
+}
+property
+{
+    Type = Integer
+    Name = SlopedSurfaceHeightMin
+    ShortName = 
+    Min = 0
+    Max = 100
+    Default = 0
+    ToolTip = <p>Defines height of lowest point in slope.</p>
+}
+property
+{
+    Type = Integer
+    Name = SlopedSurfaceHeightMax
+    ShortName = 
+    Min = 0
+    Max = 100
+    Default = 0
+    ToolTip = <p>Defines height of highest point in slope.</p>
+}
+
+separator
+{
+}
+
+
+property
+{
+    Type = Boolean
+    Name = MoveWithWind
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile will be affected by wind movement.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = Wind Speed
+    ShortName = WindType
+	Enums
+	{
+		0.05 = 1
+		0.21 = 2
+		0.54 = 3
+	}
+    Default = 0.05
+	ValueAsPropertyName = false
+    ToolTip = <p>Defines required wind speed for tile to sway.</p>
+}
+
+separator
+{
+}
+
+property
+{
+    Type = Enum
+    Name = CurtainSound
+    ShortName = 
+    Enums
+    {
+        None =
+        Shade = Shade
+        Sheet = Sheet
+        Long = Long
+        Short = Short
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines sound made by curtains when opened or closed.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = DoorSound
+    ShortName = 
+    Enums
+    {
+        None =
+        Farm Gate = FarmGate
+        Garage Door = GarageDoor
+        Metal Door = MetalDoor
+        Metal Gate = MetalGate
+        Metal Pole Gate = MetalPoleGate
+        Metal Pole Gate (Double) = MetalPoleGateDouble
+        Metal Pole Gate (Small) = MetalPoleGateSmall
+        Prison Metal Door = PrisonMetalDoor
+        Sliding Glass Door = SlidingGlassDoor
+        Small Wood Gate = WoodGateSmall
+        Wood Door = WoodDoor
+        Wood Gate = WoodGate
+        Wood Log Gate = WoodLogGate
+        Wood Shack Door = WoodShackDoor
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines sound made by door when opened or closed.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = ThumpSound
+    ShortName = 
+    Enums
+    {
+        None =
+        ZombieThumpChainlinkFence =
+        ZombieThumpGarageDoor =
+        ZombieThumpGeneric =
+        ZombieThumpMetalPoleFence =
+        ZombieThumpMetalPoleGate =
+        ZombieThumpMetal =
+        ZombieThumpWindow =
+        ZombieThumpWood =
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines sound made when zombies hit this tile.</p>
+}
+
+property
+{
+    Type = String
+    Name = AmbientSound
+    ShortName =
+    Default = 
+    ToolTip = <p>Defines the ambient sound heard when near tile.</p>
+}
+
+property
+{
+    Type = String
+    Name = ContainerOpenSound
+    ShortName =
+    Default = 
+    ToolTip = <p>Defines the sound played when opening a container in the loot window.</p>
+}
+
+property
+{
+    Type = String
+    Name = ContainerCloseSound
+    ShortName =
+    Default = 
+    ToolTip = <p>Defines the sound played when closing a container in the loot window.</p>
+}
+
+property
+{
+    Type = String
+    Name = ContainerPutSound
+    ShortName =
+    Default = 
+    ToolTip = <p>Defines the sound played when transfering an item into a container.</p>
+}
+
+property
+{
+    Type = String
+    Name = ContainerTakeSound
+    ShortName =
+    Default = 
+    ToolTip = <p>Defines the sound played when transfering an item from a container.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = FenceTypeHigh
+    ShortName = 
+    Enums
+    {
+        None =
+        Wood =
+        Metal =
+        MetalBars = MetalGate
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines material of high fence.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = FenceTypeLow
+    ShortName = 
+    Enums
+    {
+        None =
+        Wood =
+        Metal =
+        Sandbag =
+        Gravelbag =
+        Barbwire =
+        RoadBlock =
+        MetalGate =
+        Other =
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines material of low fence.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = FootstepMaterial
+    ShortName = 
+    Enums
+    {
+        None =
+        Concrete = Concrete
+        Grass = Grass
+        Gravel = Gravel
+        Wood = Wood
+        Carpet = Carpet
+        Dirt = Dirt
+        Sand = Sand
+        Ceramic = Ceramic
+        Metal = Metal
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines footstep sound of tile when traversed.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = GeneratorSound
+    ShortName =
+    Enums
+    {
+        Generator =
+        OldGenerator =
+    }
+    Default = Generator
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines sound made by generator.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = MaterialType
+    ShortName = 
+    Enums
+    {
+        None =
+        Flesh = Flesh
+        Flesh_Hollow = Flesh_Hollow
+        Concrete = Concrete
+        Plaster = Plaster
+        Stone = Stone
+        Wood = Wood
+        Wood_Solid = Wood_Solid
+        Brick = Brick
+        Metal = Metal
+        Metal_Large = Metal_Large
+        Metal_Light = Metal_Light
+        Metal_Solid = Metal_Solid
+        Glass = Glass
+        Glass_Light = Glass_Light
+        Glass_Solid = Glass_Solid
+        Cinderblock = Cinderblock
+        Plastic = Plastic
+        Ceramic = Ceramic
+        Rubber = Rubber
+        Fabric = Fabric
+        Carpet = Carpet
+        Dirt = Dirt
+        Grass = Grass
+        Gravel = Gravel
+        Sand = Sand
+        Snow = Snow
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines sound made by attacking moveable objects.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = SeatMaterial
+    ShortName = 
+    Enums
+    {
+        None =
+        CastorChair =
+        Fabric =
+        Leather =
+        Metal =
+        Plastic =
+        Wooden =
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines material of seat.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = SinkType
+    ShortName = 
+    Enums
+    {
+        Generic =
+        Ceramic =
+        Metal =
+    }
+    Default = Generic
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines sink material.</p>
+}
+
+separator
+{
+}
+
+property
+{
+    Type = Boolean
+    Name = natureFloor
+    ShortName =
+    Default = false
+    ReverseLogic = false
+	ToolTip = <p>If true, tile is natural floor.</p>
+}
+property
+{
+    Type = Boolean
+    Name = IsFloorAttached
+    ShortName =
+    Default = false
+    ReverseLogic = false
+	ToolTip = <p>If true, tile is attached to natural floor.</p>
+}
+property
+{
+    Type = Boolean
+    Name = FloorAttachmentN
+    ShortName =
+    Default = false
+    ReverseLogic = false
+	ToolTip = <p>If true, tile has natural blend across north edge.</p>
+}
+property
+{
+    Type = Boolean
+    Name = FloorAttachmentS
+    ShortName =
+    Default = false
+    ReverseLogic = false
+	ToolTip = <p>If true, tile has natural blend across south edge.</p>
+}
+property
+{
+    Type = Boolean
+    Name = FloorAttachmentE
+    ShortName =
+    Default = false
+    ReverseLogic = false
+	ToolTip = <p>If true, tile has natural blend across east edge.</p>
+}
+property
+{
+    Type = Boolean
+    Name = FloorAttachmentW
+    ShortName =
+    Default = false
+    ReverseLogic = false
+	ToolTip = <p>If true, tile has natural blend across west edge.</p>
+}
+
+separator
+{
+}
+
+property
+{
+    Type = Boolean
+    Name = TV
+    ShortName =
+    Default = false
+    ReverseLogic = false
+	ToolTip = <p>If true, tile is TV.</p>
+}
+
+
+property
+{
+    Type = Boolean
+    Name = livingRoom
+    ShortName =
+    Default = false
+    ReverseLogic = false
+	ToolTip = <p>If true, tile is located in a living room.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = TreatAsWallOrder
+    ShortName =
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>If true, tile will always draw on top of all other objects on square. Used for shower doors.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = WallType
+    ShortName = 
+    Enums
+    {
+		None =
+        Wall = wall
+        Doorframe = doorframe
+        Windowframe = windowsframe
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p>Defines sink material.</p>
+}

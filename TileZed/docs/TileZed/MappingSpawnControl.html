@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mapping-side zombie and item spawn control</title>
+  <style>
+    body { max-width: 1050px; margin: 24px auto; padding: 0 20px; font: 15px/1.5 "Segoe UI", Arial, sans-serif; }
+    code, pre { font-family: Consolas, monospace; }
+    code { background: #eee; padding: .1em .3em; }
+    pre { overflow: auto; padding: 12px; background: #eee; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 7px 9px; border: 1px solid #aaa; text-align: left; vertical-align: top; }
+    .yes { border-left: 4px solid #3d8b40; padding: 9px 12px; background: #edf8ed; }
+    .limit { border-left: 4px solid #c58a00; padding: 9px 12px; background: #fff4d9; }
+    @media (prefers-color-scheme: dark) {
+      body { color: #eee; background: #202225; }
+      code, pre { background: #151719; }
+      .yes { background: #203822; }
+      .limit { background: #493b1d; }
+    }
+  </style>
+</head>
+<body>
+<h1>Mapping-side zombie and item spawn control</h1>
+
+<p>This page records the result of checking both the PZ mapping-tool sources
+and the available Project Zomboid game-engine/Lua sources. “Mapping-side”
+means data authored in BuildingEd, TileZed or WorldEd and exported with the
+map, without a runtime gameplay mod.</p>
+
+<h2>Summary</h2>
+<table>
+<tr><th>Goal</th><th>Mapping-side result</th><th>What is actually controlled</th></tr>
+<tr><td>Zombie population density</td><td>Yes</td><td>The WorldEd Zombie Heatmap writes an intensity byte for each output chunk. Sandbox population, redistribution and runtime rules still affect the resulting zombies.</td></tr>
+<tr><td>Zombie outfit/type in an area</td><td>Yes, with game/mod Lua definitions</td><td>A WorldEd metazone can select a <code>ZombiesZoneDefinition</code>. Chance, gender, outfit and room filters come from Lua.</td></tr>
+<tr><td>Exact zombie instance at an exact square</td><td>No, not from static mapping alone</td><td>Use a runtime Lua event/mod to create the zombie. Room and heatmap data remain population inputs rather than fixed entities.</td></tr>
+<tr><td>Container loot family</td><td>Yes</td><td>BuildingEd room internal names, container sprite/type, tiles and WorldEd zones select or force distributions.</td></tr>
+<tr><td>Exact guaranteed item instance</td><td>No, not from static mapping alone</td><td>Use a custom distribution or runtime Lua. The map does not serialize a ready-made inventory item at an arbitrary coordinate.</td></tr>
+</table>
+
+<h2>Zombie density: what the heatmap enforces</h2>
+<div class="yes">
+  WorldEd reads the red channel of the configured Zombie Spawn Map and writes
+  the resulting intensity into generated map binary data. Native 256 projects
+  preserve the 32-by-32 raw samples associated with each output cell.
+</div>
+<p>The relevant tool path is
+<code>integration/WorldEd/src/editor/lotfilesmanager256.cpp</code>,
+<code>LotFilesManager256::writeZombieIntensity()</code>. The configured image
+path is stored in the PZW <code>GenerateLots/ZombieSpawnMap</code> setting.</p>
+<p>This value is a density input, not an exact zombie count or coordinate.
+Game sandbox multipliers, time/peak settings, respawn, migration, room spawning
+and population-management rules are applied later. Painting zero is the
+mapping-side way to request no initial density, but runtime scripts or moving
+populations can still introduce zombies.</p>
+
+<h2>Zombie type and outfit zones</h2>
+<p>WorldEd objects are written to <code>objects.lua</code> with their
+<code>name</code>, <code>type</code>, geometry, level and properties. The
+game's metazone loader registers these objects with the meta grid.</p>
+<p>The engine checks zones in
+<code>zombie/characters/ZombiesZoneDefinition.java</code>:</p>
+<ul>
+  <li>a zone with <code>type = "ZombiesType"</code> uses its
+  <code>name</code> as the definition key;</li>
+  <li>a zone whose <code>type</code> directly matches a
+  <code>ZombiesZoneDefinition</code> key is also accepted;</li>
+  <li>the chosen Lua definition controls <code>chanceToSpawn</code>,
+  <code>toSpawn</code>, gender chances, outfits, mandatory counts and optional
+  room filters.</li>
+</ul>
+<div class="limit">
+  This can strongly constrain the zombies produced in a mapped area, but the
+  engine still selects during spawn. To guarantee a concrete zombie at one
+  X/Y/Z coordinate, create it from gameplay Lua rather than relying on map
+  population data.
+</div>
+
+<h2>Item spawning and loot</h2>
+<p>BuildingEd exports each room's <strong>internal name</strong> into
+RoomDefs. TileZed's binary writer removes the RoomDef suffix and stores that
+room name. At runtime, <code>ItemPickerJava</code> first looks up the room
+distribution and then the container type.</p>
+<p>Procedural distributions can additionally be selected with:</p>
+<ul>
+  <li><code>forceForTiles</code> — a mapped sprite is present on the container
+  square;</li>
+  <li><code>forceForZones</code> — a WorldEd zone name or type covers it;</li>
+  <li><code>forceForRooms</code> — the building contains a matching RoomDef;</li>
+  <li><code>forceForItems</code> — a matching mapped sprite exists in the room.</li>
+</ul>
+<p>The engine paths checked are
+<code>zombie/inventory/ItemPickerJava.java</code>,
+<code>lua/server/Items/SuburbsDistributions.lua</code> and
+<code>lua/server/Items/ProceduralDistributions.lua</code>.</p>
+<div class="limit">
+  The map chooses context; the distribution creates inventory. Exact item
+  guarantees require a deliberately constrained custom distribution or a
+  gameplay Lua hook such as <code>OnFillContainer</code>. A runtime script can
+  also use <code>AddWorldInventoryItem</code> for an explicit world item.
+</div>
+
+<h2>Recommended authoring workflow</h2>
+<ol>
+  <li>Paint and save the Zombie Heatmap in WorldEd, then generate the 8x8 lot
+  output again. Merely editing the PNG does not update already-generated
+  binaries.</li>
+  <li>For themed zombies, create the intended WorldEd metazone, write
+  <code>objects.lua</code>, and provide a matching
+  <code>ZombiesZoneDefinition</code> in the map mod.</li>
+  <li>For loot, set the correct BuildingEd room internal name and use a tile
+  whose object/container type matches the intended distribution.</li>
+  <li>Use <code>forceForTiles</code>, <code>forceForZones</code> or
+  <code>forceForRooms</code> when a procedural distribution must be selected
+  by map context.</li>
+  <li>Use runtime Lua only when a precise entity or item instance must be
+  guaranteed.</li>
+</ol>
+
+<h2>What the editor Lua engines can automate</h2>
+<p>TileZed Lua can now inspect, place, delete and replace tiles by exact name
+and coordinate, and can create/edit object-layer rectangles and properties.
+BuildingEd Lua can perform those tile operations on user/grime layers and edit
+room assignments. These APIs help author the required map context; they do not
+execute the Project Zomboid gameplay Lua VM.</p>
+</body>
+</html>

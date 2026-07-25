@@ -1,0 +1,48 @@
+version = 1
+
+tool
+{
+    label = Draw Edge
+    icon = tool-edge.png
+    script = tool-edge.lua
+    dialog-title = Edge Tool
+}
+
+tool
+{
+    label = Draw Curb
+    icon = tool-curb.png
+    script = tool-curb.lua
+    dialog-title = Curb Tool
+}
+
+tool
+{
+    label = Draw Fence
+    icon = tool-fence.png
+    script = tool-fence.lua
+    dialog-title = Fence Tool
+}
+
+tool
+{
+    label = Parking Stall
+    icon = tool-parking-stall.png
+    script = tool-parking-stall.lua
+}
+
+tool
+{
+    label = Street Decoration
+    icon = tool-street-decoration.png
+    script = tool-street-decoration.lua
+    dialog-title = Street Stuff
+}
+
+tool
+{
+    label = Random Houseplant
+    icon = tool-random-houseplant.png
+    script = tool-random-houseplant.lua
+}
+

@@ -1,0 +1,1573 @@
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = darkgrass
+    blendTile = darkgrass_n
+    dir = n
+    exclude = water clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = darkgrass
+    blendTile = darkgrass_w
+    dir = w
+    exclude = water clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = darkgrass
+    blendTile = darkgrass_e
+    dir = e
+    exclude = water clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = darkgrass
+    blendTile = darkgrass_s
+    dir = s
+    exclude = water clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = darkgrass
+    blendTile = blends_natural_01_17
+    dir = nw
+    exclude = water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = darkgrass
+    blendTile = blends_natural_01_20
+    dir = ne
+    exclude = water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = darkgrass
+    blendTile = blends_natural_01_19
+    dir = sw
+    exclude = water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = darkgrass
+    blendTile = blends_natural_01_18
+    dir = se
+    exclude = water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+
+
+
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = medgrass
+    blendTile = medgrass_n
+    dir = n
+    exclude = darkgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = medgrass
+    blendTile = medgrass_w
+    dir = w
+    exclude = darkgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = medgrass
+    blendTile = medgrass_e
+    dir = e
+    exclude = darkgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = medgrass
+    blendTile = medgrass_s
+    dir = s
+    exclude = darkgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = medgrass
+    blendTile = blends_natural_01_33
+    dir = nw
+    exclude = darkgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = medgrass
+    blendTile = blends_natural_01_36
+    dir = ne
+    exclude = darkgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = medgrass
+    blendTile = blends_natural_01_35
+    dir = sw
+    exclude = darkgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = medgrass
+    blendTile = blends_natural_01_34
+    dir = se
+    exclude = darkgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+
+
+
+
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = lightgrass
+    blendTile = lightgrass_n
+    dir = n
+    exclude = darkgrass medgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = lightgrass
+    blendTile = lightgrass_w
+    dir = w
+    exclude = darkgrass medgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = lightgrass
+    blendTile = lightgrass_e
+    dir = e
+    exclude = darkgrass medgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = lightgrass
+    blendTile = lightgrass_s
+    dir = s
+    exclude = darkgrass medgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = lightgrass
+    blendTile = blends_natural_01_49
+    dir = nw
+    exclude = darkgrass medgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = lightgrass
+    blendTile = blends_natural_01_52
+    dir = ne
+    exclude = darkgrass medgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = lightgrass
+    blendTile = blends_natural_01_51
+    dir = sw
+    exclude = darkgrass medgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = lightgrass
+    blendTile = blends_natural_01_50
+    dir = se
+    exclude = darkgrass medgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = sand
+    blendTile = sand_n
+    dir = n
+    exclude = darkgrass medgrass lightgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = sand
+    blendTile = sand_w
+    dir = w
+    exclude = darkgrass medgrass lightgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = sand
+    blendTile = sand_e
+    dir = e
+    exclude = darkgrass medgrass lightgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = sand
+    blendTile = sand_s
+    dir = s
+    exclude = darkgrass medgrass lightgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = sand
+    blendTile = blends_natural_01_1
+    dir = nw
+    exclude = darkgrass medgrass lightgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = sand
+    blendTile = blends_natural_01_4
+    dir = ne
+    exclude = darkgrass medgrass lightgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = sand
+    blendTile = blends_natural_01_3
+    dir = sw
+    exclude = darkgrass medgrass lightgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = sand
+    blendTile = blends_natural_01_2
+    dir = se
+    exclude = darkgrass medgrass lightgrass water clay scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+
+
+
+
+
+
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = darkpothole
+    blendTile = blends_street_01_8
+    dir = n
+    exclude = darkgrass medgrass lightgrass sand dirt water clay lightpothole scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = darkpothole
+    blendTile = blends_street_01_9
+    dir = w
+    exclude = darkgrass medgrass lightgrass sand dirt water clay lightpothole scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = darkpothole
+    blendTile = blends_street_01_10
+    dir = e
+    exclude = darkgrass medgrass lightgrass sand dirt water clay lightpothole scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = darkpothole
+    blendTile = blends_street_01_11
+    dir = s
+    exclude = darkgrass medgrass lightgrass sand dirt water clay lightpothole scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = darkpothole
+    blendTile = blends_street_01_1
+    dir = nw
+    exclude = darkgrass medgrass lightgrass sand dirt water clay lightpothole scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = darkpothole
+    blendTile = blends_street_01_2
+    dir = se
+    exclude = darkgrass medgrass lightgrass sand dirt water clay lightpothole scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = darkpothole
+    blendTile = blends_street_01_3
+    dir = sw
+    exclude = darkgrass medgrass lightgrass sand dirt water clay lightpothole scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = darkpothole
+    blendTile = blends_street_01_4
+    dir = ne
+    exclude = darkgrass medgrass lightgrass sand dirt water clay lightpothole scorchedEarth CharredEarth
+}
+
+
+
+
+
+
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = lightpothole
+    blendTile = blends_street_01_24
+    dir = n
+ exclude = lightgrass medgrass darkgrass sand dirt water clay scorchedEarth CharredEarth
+
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = lightpothole
+    blendTile = blends_street_01_25
+    dir = w
+ exclude = lightgrass medgrass darkgrass sand dirt water clay scorchedEarth CharredEarth
+
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = lightpothole
+    blendTile = blends_street_01_26
+    dir = e
+ exclude = lightgrass medgrass darkgrass sand dirt water clay scorchedEarth CharredEarth
+
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = lightpothole
+    blendTile = blends_street_01_27
+    dir = s
+    exclude = lightgrass medgrass darkgrass sand dirt water clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = lightpothole
+    blendTile = blends_street_01_17
+    dir = nw
+    exclude = lightgrass medgrass darkgrass sand dirt water clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = lightpothole
+    blendTile = blends_street_01_18
+    dir = se
+ exclude = lightgrass medgrass darkgrass sand dirt water clay scorchedEarth CharredEarth
+
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = lightpothole
+    blendTile = blends_street_01_19
+    dir = sw
+ exclude = lightgrass medgrass darkgrass sand dirt water clay scorchedEarth CharredEarth
+
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = lightpothole
+    blendTile = blends_street_01_20
+    dir = ne
+    exclude = lightgrass medgrass darkgrass sand dirt water clay scorchedEarth CharredEarth
+
+}
+
+
+
+
+
+
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = dirt
+    blendTile = blends_natural_01_72
+    dir = n
+    exclude = water lightgrass medgrass darkgrass sand dirtgrass clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = dirt
+    blendTile = blends_natural_01_73
+    dir = w
+    exclude = water lightgrass medgrass darkgrass sand dirtgrass clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = dirt
+    blendTile = blends_natural_01_74
+    dir = e
+    exclude = water lightgrass medgrass darkgrass sand dirtgrass clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = dirt
+    blendTile = blends_natural_01_75
+    dir = s
+    exclude = water lightgrass medgrass darkgrass sand dirtgrass clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = dirt
+    blendTile = blends_natural_01_65
+    dir = nw
+    exclude = water lightgrass medgrass darkgrass sand dirtgrass clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = dirt
+    blendTile = blends_natural_01_66
+    dir = se
+    exclude = water lightgrass medgrass darkgrass sand dirtgrass clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = dirt
+    blendTile = blends_natural_01_67
+    dir = sw
+    exclude = water lightgrass medgrass darkgrass sand dirtgrass clay scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = dirt
+    blendTile = blends_natural_01_68
+    dir = ne
+    exclude = water lightgrass medgrass darkgrass sand dirtgrass clay scorchedEarth CharredEarth
+}
+
+
+
+
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = dirtgrass
+    blendTile = blends_natural_01_88
+    dir = n
+    exclude = water lightgrass medgrass darkgrass sand scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = dirtgrass
+    blendTile = blends_natural_01_89
+    dir = w
+    exclude = water lightgrass medgrass darkgrass sand scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = dirtgrass
+    blendTile = blends_natural_01_90
+    dir = e
+    exclude = water lightgrass medgrass darkgrass sand scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = dirtgrass
+    blendTile = blends_natural_01_91
+    dir = s
+    exclude = water lightgrass medgrass darkgrass sand scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = dirtgrass
+    blendTile = blends_natural_01_81
+    dir = nw
+    exclude = water lightgrass medgrass darkgrass sand scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = dirtgrass
+    blendTile = blends_natural_01_82
+    dir = se
+    exclude = water lightgrass medgrass darkgrass sand scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = dirtgrass
+    blendTile = blends_natural_01_83
+    dir = sw
+    exclude = water lightgrass medgrass darkgrass sand scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = dirtgrass
+    blendTile = blends_natural_01_84
+    dir = ne
+    exclude = water lightgrass medgrass darkgrass sand scorchedEarth CharredEarth
+}
+
+
+
+
+
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = water
+    blendTile = blends_natural_02_8
+    dir = n
+    exclude = 
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = water
+    blendTile = blends_natural_02_9
+    dir = w
+    exclude = 
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = water
+    blendTile = blends_natural_02_10
+    dir = e
+    exclude = 
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = water
+    blendTile = blends_natural_02_11
+    dir = s
+    exclude = 
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = water
+    blendTile = blends_natural_02_1
+    dir = nw
+    exclude = 
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = water
+    blendTile = blends_natural_02_2
+    dir = se
+    exclude = 
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = water
+    blendTile = blends_natural_02_3
+    dir = sw
+    exclude = 
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = water
+    blendTile = blends_natural_02_4
+    dir = ne
+    exclude = 
+}
+
+
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = clay
+    blendTile = clay_n
+    dir = n
+    exclude = water scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = clay
+    blendTile = clay_w
+    dir = w
+    exclude = water scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = clay
+    blendTile = clay_e
+    dir = e
+    exclude = water scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = clay
+    blendTile = clay_s
+    dir = s
+    exclude = water scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = clay
+    blendTile = blends_natural_01_97
+    dir = nw
+    exclude = water scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = clay
+    blendTile = blends_natural_01_100
+    dir = ne
+    exclude = water scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = clay
+    blendTile = blends_natural_01_99
+    dir = sw
+    exclude = water scorchedEarth CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = clay
+    blendTile = blends_natural_01_98
+    dir = se
+    exclude = water scorchedEarth CharredEarth
+}
+
+
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = street
+    blendTile = blends_street_01_104
+    dir = n
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = street
+    blendTile = blends_street_01_105
+    dir = w
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = street
+    blendTile = blends_street_01_106
+    dir = e
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = street
+    blendTile = blends_street_01_107
+    dir = s
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = street
+    blendTile = blends_street_01_97
+    dir = nw
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = street
+    blendTile = blends_street_01_100
+    dir = ne
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = street
+    blendTile = blends_street_01_99
+    dir = sw
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = street
+    blendTile = blends_street_01_98
+    dir = se
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = lightgravel
+    blendTile = blends_street_01_56
+    dir = n
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = lightgravel
+    blendTile = blends_street_01_57
+    dir = w
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = lightgravel
+    blendTile = blends_street_01_58
+    dir = e
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = lightgravel
+    blendTile = blends_street_01_59
+    dir = s
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = lightgravel
+    blendTile = blends_street_01_49
+    dir = nw
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = lightgravel
+    blendTile = blends_street_01_52
+    dir = ne
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = lightgravel
+    blendTile = blends_street_01_51
+    dir = sw
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = lightgravel
+    blendTile = blends_street_01_50
+    dir = se
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = street3
+    blendTile = blends_street_01_72
+    dir = n
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole street4 scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = street3
+    blendTile = blends_street_01_73
+    dir = w
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole street4 scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = street3
+    blendTile = blends_street_01_74
+    dir = e
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole street4 scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = street3
+    blendTile = blends_street_01_75
+    dir = s
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole street4 scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = street3
+    blendTile = blends_street_01_65
+    dir = nw
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole street4 scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = street3
+    blendTile = blends_street_01_68
+    dir = ne
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole street4 scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = street3
+    blendTile = blends_street_01_67
+    dir = sw
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole street4 scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = street3
+    blendTile = blends_street_01_66
+    dir = se
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole street4 scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = street4
+    blendTile = blends_street_01_40
+    dir = n
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = street4
+    blendTile = blends_street_01_41
+    dir = w
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = street4
+    blendTile = blends_street_01_42
+    dir = e
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = street4
+    blendTile = blends_street_01_43
+    dir = s
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = street4
+    blendTile = blends_street_01_33
+    dir = nw
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = street4
+    blendTile = blends_street_01_36
+    dir = ne
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = street4
+    blendTile = blends_street_01_35
+    dir = sw
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = street4
+    blendTile = blends_street_01_34
+    dir = se
+    exclude = darkgrass medgrass lightgrass sand dirt water pavingstone clay street lightgravel lightpothole darkpothole scorchedEarth CharredEarth
+    exclude2 = [
+	street_trafficlines_01 0_FloorOverlay
+	street_trafficlines_01 0_FloorOverlay2
+	street_trafficlines_01 0_FloorOverlay3
+	street_trafficlines_01 0_FloorOverlay4
+    ]
+}
+
+
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = scorchedEarth
+    blendTile = floors_burnt_01_29
+    dir = n
+    exclude = water CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = scorchedEarth
+    blendTile = floors_burnt_01_28
+    dir = w
+    exclude = water CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = scorchedEarth
+    blendTile = floors_burnt_01_30
+    dir = e
+    exclude = water CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = scorchedEarth
+    blendTile = floors_burnt_01_31
+    dir = s
+    exclude = water CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = scorchedEarth
+    blendTile = floors_burnt_01_25
+    dir = nw
+    exclude = water CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = scorchedEarth
+    blendTile = floors_burnt_01_27
+    dir = ne
+    exclude = water CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = scorchedEarth
+    blendTile = floors_burnt_01_26
+    dir = sw
+    exclude = water CharredEarth
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = scorchedEarth
+    blendTile = floors_burnt_01_24
+    dir = se
+    exclude = water CharredEarth
+}
+
+
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = CharredEarth
+    blendTile = CharredEarth_n
+    dir = n
+    exclude = water
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = CharredEarth
+    blendTile = CharredEarth_w
+    dir = w
+    exclude = water
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = CharredEarth
+    blendTile = CharredEarth_e
+    dir = e
+    exclude = water
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = CharredEarth
+    blendTile = CharredEarth_s
+    dir = s
+    exclude = water
+}
+
+blend
+{
+    layer = 0_FloorOverlay
+    mainTile = CharredEarth
+    blendTile = floors_burnt_01_9
+    dir = nw
+    exclude = water
+}
+
+blend
+{
+    layer = 0_FloorOverlay2
+    mainTile = CharredEarth
+    blendTile = floors_burnt_01_12
+    dir = ne
+    exclude = water
+}
+
+blend
+{
+    layer = 0_FloorOverlay3
+    mainTile = CharredEarth
+    blendTile = floors_burnt_01_11
+    dir = sw
+    exclude = water
+}
+
+blend
+{
+    layer = 0_FloorOverlay4
+    mainTile = CharredEarth
+    blendTile = floors_burnt_01_10
+    dir = se
+    exclude = water
+}
+
+
+

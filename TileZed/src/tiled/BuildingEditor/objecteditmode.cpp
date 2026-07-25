@@ -1,0 +1,862 @@
+/*
+ * Copyright 2013, Tim Baker <treectrl@users.sf.net>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the Free
+ * Software Foundation; either version 2 of the License, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include "objecteditmode.h"
+#include "objecteditmode_p.h"
+
+#include "building.h"
+#include "buildingdocument.h"
+#include "buildingdocumentmgr.h"
+#include "buildingeditorwindow.h"
+#include "buildingfloor.h"
+#include "ui_buildingeditorwindow.h"
+#include "buildingisoview.h"
+#include "buildingorthoview.h"
+#include "buildingpreferences.h"
+#include "buildingtemplates.h"
+#include "buildingtools.h"
+#include "categorydock.h"
+#include "editmodestatusbar.h"
+#include "embeddedmainwindow.h"
+
+#include "zoomable.h"
+
+#include <QAction>
+#include <QAbstractItemView>
+#include <QComboBox>
+#include <QDir>
+#include <QMainWindow>
+#include <QStackedWidget>
+#include <QTabWidget>
+#include <QToolBar>
+#include <QToolButton>
+#include <QUndoStack>
+#include <QVBoxLayout>
+
+using namespace BuildingEditor;
+
+#define docman() BuildingDocumentMgr::instance()
+
+/////
+
+ObjectEditModeToolBar::ObjectEditModeToolBar(ObjectEditMode *mode, QWidget *parent) :
+    QToolBar(parent),
+    mCurrentDocument(0)
+{
+    Q_UNUSED(mode)
+
+    setObjectName(QString::fromUtf8("ObjectEditModeToolBar"));
+    setWindowTitle(tr("Object ToolBar"));
+
+    Ui::BuildingEditorWindow *actions = BuildingEditorWindow::instance()->actionIface();
+
+    addAction(actions->actionPencil);
+    addAction(actions->actionWall);
+    addAction(actions->actionSelectRooms);
+    addSeparator();
+    addAction(actions->actionDoor);
+    addAction(actions->actionWindow);
+    addAction(actions->actionStairs);
+    addAction(actions->actionRoof);
+    addAction(actions->actionRoofShallow);
+    addAction(actions->actionRoof30Degree);
+    addAction(actions->actionRoofCorner);
+    addAction(actions->actionRoofCorner30Degree);
+    addAction(actions->actionFurniture);
+    addAction(actions->actionSelectObject);
+    addAction(actions->actionBasementAccessTool);
+    addAction(actions->actionRooms);
+    addAction(actions->actionUpLevel);
+    addAction(actions->actionDownLevel);
+    addSeparator();
+
+    mRoomComboBox = new QComboBox;
+    mRoomComboBox->setIconSize(QSize(20, 20));
+//    mRoomComboBox->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+
+    addWidget(mRoomComboBox);
+    addAction(actions->actionRooms);
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    connect(mRoomComboBox, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &ObjectEditModeToolBar::roomIndexChanged);
+#else
+    connect(mRoomComboBox, &QComboBox::currentIndexChanged,
+            this, &ObjectEditModeToolBar::roomIndexChanged);
+#endif
+
+    mFloorLabel = new QToolButton;
+    mFloorLabel->setMinimumWidth(90);
+    mFloorLabel->setAutoRaise(true);
+    mFloorLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::MinimumExpanding);
+    mFloorLabel->setToolTip(tr("Click to edit floors"));
+    connect(mFloorLabel, &QAbstractButton::clicked,
+            BuildingEditorWindow::instance(), &BuildingEditorWindow::floorsDialog);
+
+    addSeparator();
+    addWidget(mFloorLabel);
+    addAction(actions->actionUpLevel);
+    addAction(actions->actionDownLevel);
+
+    /////
+    QMenu *roofMenu = new QMenu(this);
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_slopeW.png")),
+                        mode->tr("Slope (W)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_slopeE.png")),
+                         mode->tr("Slope (E)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_slopeN.png")),
+                         mode->tr("Slope (N)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_slopeS.png")),
+                         mode->tr("Slope (S)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_peakWE.png")),
+                         mode->tr("Peak (Horizontal)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_peakNS.png")),
+                         mode->tr("Peak (Vertical)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_dormerW.png")),
+                         mode->tr("Dormer (W)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_dormerE.png")),
+                         mode->tr("Dormer (E)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_dormerN.png")),
+                         mode->tr("Dormer (N)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_dormerS.png")),
+                         mode->tr("Dormer (S)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_flat.png")),
+                         mode->tr("Flat Top"));
+    connect(roofMenu, &QMenu::triggered, this, &ObjectEditModeToolBar::roofTypeChanged);
+
+    QToolButton *button = static_cast<QToolButton*>(widgetForAction(actions->actionRoof));
+    button->setMenu(roofMenu);
+    button->setPopupMode(QToolButton::MenuButtonPopup);
+    /////
+
+    /////
+    roofMenu = new QMenu(this);
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_slopeW.png")),
+                        mode->tr("Shallow Slope (W)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_slopeE.png")),
+                         mode->tr("Shallow Slope (E)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_slopeN.png")),
+                         mode->tr("Shallow Slope (N)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_slopeS.png")),
+                         mode->tr("Shallow Slope (S)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_peakWE.png")),
+                         mode->tr("Shallow Peak (Horizontal)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_peakNS.png")),
+                         mode->tr("Shallow Peak (Vertical)"));
+    connect(roofMenu, &QMenu::triggered, this, &ObjectEditModeToolBar::roofShallowTypeChanged);
+
+    button = static_cast<QToolButton*>(widgetForAction(actions->actionRoofShallow));
+    button->setMenu(roofMenu);
+    button->setPopupMode(QToolButton::MenuButtonPopup);
+    /////
+
+    /////
+    roofMenu = new QMenu(this);
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_slopeW.png")),
+                        mode->tr("30-Degree Slope (W)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_slopeE.png")),
+                        mode->tr("30-Degree Slope (E)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_slopeN.png")),
+                        mode->tr("30-Degree Slope (N)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_slopeS.png")),
+                        mode->tr("30-Degree Slope (S)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_peakWE.png")),
+                        mode->tr("30-Degree Peak (Horizontal)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_peakNS.png")),
+                        mode->tr("30-Degree Peak (Vertical)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_peakQuad.png")),
+                        mode->tr("30-Degree Peak (Quad)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_dormerW.png")),
+                        mode->tr("30-Degree Dormer (W)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_dormerE.png")),
+                        mode->tr("30-Degree Dormer (E)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_dormerN.png")),
+                        mode->tr("30-Degree Dormer (N)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_roof_dormerS.png")),
+                        mode->tr("30-Degree Dormer (S)"));
+    connect(roofMenu, &QMenu::triggered, this, &ObjectEditModeToolBar::roofSlope30TypeChanged);
+
+    button = static_cast<QToolButton*>(widgetForAction(actions->actionRoof30Degree));
+    button->setMenu(roofMenu);
+    button->setPopupMode(QToolButton::MenuButtonPopup);
+    /////
+
+    /////
+    roofMenu = new QMenu(this);
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_innerNW.png")),
+                        mode->tr("Inner (NW)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_innerNE.png")),
+                        mode->tr("Inner (NE)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_innerSE.png")),
+                        mode->tr("Inner (SE)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_innerSW.png")),
+                        mode->tr("Inner (SW)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_outerNW.png")),
+                        mode->tr("Outer (NW)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_outerNE.png")),
+                        mode->tr("Outer (NE)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_outerSE.png")),
+                        mode->tr("Outer (SE)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_outerSW.png")),
+                        mode->tr("Outer (SW)"));
+    connect(roofMenu, &QMenu::triggered, this, &ObjectEditModeToolBar::roofCornerTypeChanged);
+
+    button = static_cast<QToolButton*>(widgetForAction(actions->actionRoofCorner));
+    button->setMenu(roofMenu);
+    button->setPopupMode(QToolButton::MenuButtonPopup);
+    /////
+
+    /////
+    roofMenu = new QMenu(this);
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_innerNW.png")),
+                        mode->tr("30-Degree Inner (NW)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_innerNE.png")),
+                        mode->tr("30-Degree Inner (NE)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_innerSE.png")),
+                        mode->tr("30-Degree Inner (SE)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_innerSW.png")),
+                        mode->tr("30-Degree Inner (SW)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_outerNW.png")),
+                        mode->tr("30-Degree Outer (NW)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_outerNE.png")),
+                        mode->tr("30-Degree Outer (NE)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_outerSE.png")),
+                        mode->tr("30-Degree Outer (SE)"));
+    roofMenu->addAction(QPixmap(QStringLiteral(":/BuildingEditor/icons/icon_corner_outerSW.png")),
+                        mode->tr("30-Degree Outer (SW)"));
+    connect(roofMenu, &QMenu::triggered, this, &ObjectEditModeToolBar::roofCornerSlope30TypeChanged);
+
+    button = static_cast<QToolButton*>(widgetForAction(actions->actionRoofCorner30Degree));
+    button->setMenu(roofMenu);
+    button->setPopupMode(QToolButton::MenuButtonPopup);
+    /////
+
+    connect(docman(), &BuildingDocumentMgr::currentDocumentChanged,
+            this, &ObjectEditModeToolBar::currentDocumentChanged);
+}
+
+Building *ObjectEditModeToolBar::currentBuilding() const
+{
+    return mCurrentDocument ? mCurrentDocument->building() : 0;
+}
+
+Room *ObjectEditModeToolBar::currentRoom() const
+{
+    return mCurrentDocument ? mCurrentDocument->currentRoom() : 0;
+}
+
+void ObjectEditModeToolBar::currentDocumentChanged(BuildingDocument *doc)
+{
+    if (mCurrentDocument)
+        mCurrentDocument->disconnect(this);
+
+    mCurrentDocument = doc;
+
+    if (mCurrentDocument) {
+        connect(mCurrentDocument, &BuildingDocument::roomAdded, this, &ObjectEditModeToolBar::roomAdded);
+        connect(mCurrentDocument, &BuildingDocument::roomRemoved, this, &ObjectEditModeToolBar::roomRemoved);
+        connect(mCurrentDocument, &BuildingDocument::roomsReordered, this, &ObjectEditModeToolBar::roomsReordered);
+        connect(mCurrentDocument, &BuildingDocument::roomChanged, this, &ObjectEditModeToolBar::roomChanged);
+
+        connect(mCurrentDocument, &BuildingDocument::currentRoomChanged, this, &ObjectEditModeToolBar::currentRoomChanged);
+
+        connect(mCurrentDocument, &BuildingDocument::floorAdded,
+                this, &ObjectEditModeToolBar::updateActions);
+        connect(mCurrentDocument, &BuildingDocument::floorRemoved,
+                this, &ObjectEditModeToolBar::updateActions);
+        connect(mCurrentDocument, &BuildingDocument::currentFloorChanged,
+                this, &ObjectEditModeToolBar::updateActions);
+    }
+
+    updateRoomComboBox();
+    updateActions();
+}
+
+void ObjectEditModeToolBar::currentRoomChanged()
+{
+    if (Room *room = currentRoom()) {
+        int roomIndex = mCurrentDocument->building()->indexOf(room);
+        mRoomComboBox->setCurrentIndex(roomIndex);
+    } else
+        mRoomComboBox->setCurrentIndex(-1);
+}
+
+void ObjectEditModeToolBar::updateRoomComboBox()
+{
+    Room *currentRoom = this->currentRoom();
+    // blockSignals() to avoid setting currentRoom()==0 which might change the
+    // currently-selected tool.
+    mRoomComboBox->blockSignals(true);
+    mRoomComboBox->clear();
+
+    int scrollBarWidth = qApp->style()->pixelMetric(QStyle::PM_ScrollBarExtent);
+    int minWidth = 0;
+
+    if (mCurrentDocument) {
+        int index = 0;
+        foreach (Room *room, currentBuilding()->rooms()) {
+            QImage image(20, 20, QImage::Format_ARGB32);
+            image.fill(qRgba(0,0,0,0));
+            QPainter painter(&image);
+            painter.fillRect(1, 1, 18, 18, room->Color);
+            mRoomComboBox->addItem(room->Name);
+            mRoomComboBox->setItemIcon(index, QPixmap::fromImage(image));
+            index++;
+
+            minWidth = qMax(minWidth, 20 + mRoomComboBox->view()->fontMetrics().horizontalAdvance(room->Name) + scrollBarWidth + 20);
+        }
+
+        index = currentBuilding()->indexOf(currentRoom);
+        if (index != -1)
+            mRoomComboBox->setCurrentIndex(index);
+        else
+            roomIndexChanged(mRoomComboBox->currentIndex());
+    }
+    mRoomComboBox->blockSignals(false);
+
+    mRoomComboBox->setMinimumWidth(minWidth);
+}
+
+void ObjectEditModeToolBar::roomIndexChanged(int index)
+{
+    if (mCurrentDocument)
+        mCurrentDocument->setCurrentRoom((index == -1) ? 0 : currentBuilding()->room(index));
+}
+
+void ObjectEditModeToolBar::roomAdded(Room *room)
+{
+    Q_UNUSED(room)
+    updateRoomComboBox();
+    updateActions();
+}
+
+void ObjectEditModeToolBar::roomRemoved(Room *room)
+{
+    Q_UNUSED(room)
+    updateRoomComboBox();
+    updateActions();
+}
+
+void ObjectEditModeToolBar::roomsReordered()
+{
+    updateRoomComboBox();
+}
+
+void ObjectEditModeToolBar::roomChanged(Room *room)
+{
+    Q_UNUSED(room)
+    updateRoomComboBox();
+}
+
+void ObjectEditModeToolBar::roofTypeChanged(QAction *action)
+{
+    int index = qobject_cast<QWidget*>(action->parent())->actions().indexOf(action);
+
+    static RoofObject::RoofType roofTypes[] = {
+        RoofObject::SlopeW,
+        RoofObject::SlopeE,
+        RoofObject::SlopeN,
+        RoofObject::SlopeS,
+        RoofObject::PeakWE,
+        RoofObject::PeakNS,
+        RoofObject::DormerW,
+        RoofObject::DormerE,
+        RoofObject::DormerN,
+        RoofObject::DormerS,
+        RoofObject::FlatTop,
+    };
+
+    RoofTool::instance()->setRoofType(roofTypes[index]);
+
+    RoofTool::instance()->action()->setIcon(action->icon());
+
+    if (!RoofTool::instance()->isCurrent())
+        RoofTool::instance()->makeCurrent();
+}
+
+void ObjectEditModeToolBar::roofShallowTypeChanged(QAction *action)
+{
+    int index = qobject_cast<QWidget*>(action->parent())->actions().indexOf(action);
+
+    static RoofObject::RoofType roofTypes[] = {
+        RoofObject::ShallowSlopeW,
+        RoofObject::ShallowSlopeE,
+        RoofObject::ShallowSlopeN,
+        RoofObject::ShallowSlopeS,
+        RoofObject::ShallowPeakWE,
+        RoofObject::ShallowPeakNS
+    };
+
+    RoofShallowTool::instance()->setRoofType(roofTypes[index]);
+    RoofShallowTool::instance()->action()->setIcon(action->icon());
+
+    if (!RoofShallowTool::instance()->isCurrent())
+        RoofShallowTool::instance()->makeCurrent();
+}
+
+void ObjectEditModeToolBar::roofSlope30TypeChanged(QAction *action)
+{
+    int index = qobject_cast<QWidget*>(action->parent())->actions().indexOf(action);
+
+    static RoofObject::RoofType roofTypes[] = {
+        RoofObject::Slope30W,
+        RoofObject::Slope30E,
+        RoofObject::Slope30N,
+        RoofObject::Slope30S,
+        RoofObject::Peak30WE,
+        RoofObject::Peak30NS,
+        RoofObject::Peak30Quad,
+        RoofObject::Dormer30W,
+        RoofObject::Dormer30E,
+        RoofObject::Dormer30N,
+        RoofObject::Dormer30S
+    };
+
+    RoofSlope30Tool::instance()->setRoofType(roofTypes[index]);
+    RoofSlope30Tool::instance()->action()->setIcon(action->icon());
+
+    if (!RoofSlope30Tool::instance()->isCurrent())
+        RoofSlope30Tool::instance()->makeCurrent();
+}
+
+void ObjectEditModeToolBar::roofCornerTypeChanged(QAction *action)
+{
+    int index = qobject_cast<QWidget*>(action->parent())->actions().indexOf(action);
+
+    static RoofObject::RoofType roofTypes[] = {
+        RoofObject::CornerInnerNW,
+        RoofObject::CornerInnerNE,
+        RoofObject::CornerInnerSE,
+        RoofObject::CornerInnerSW,
+
+        RoofObject::CornerOuterNW,
+        RoofObject::CornerOuterNE,
+        RoofObject::CornerOuterSE,
+        RoofObject::CornerOuterSW
+    };
+
+    RoofCornerTool::instance()->setRoofType(roofTypes[index]);
+
+    RoofCornerTool::instance()->action()->setIcon(action->icon());
+
+    if (!RoofCornerTool::instance()->isCurrent()) {
+        RoofCornerTool::instance()->makeCurrent();
+    }
+}
+
+void ObjectEditModeToolBar::roofCornerSlope30TypeChanged(QAction *action)
+{
+    int index = qobject_cast<QWidget*>(action->parent())->actions().indexOf(action);
+
+    static RoofObject::RoofType roofTypes[] = {
+        RoofObject::CornerSlope30InnerNW,
+        RoofObject::CornerSlope30InnerNE,
+        RoofObject::CornerSlope30InnerSE,
+        RoofObject::CornerSlope30InnerSW,
+
+        RoofObject::CornerSlope30OuterNW,
+        RoofObject::CornerSlope30OuterNE,
+        RoofObject::CornerSlope30OuterSE,
+        RoofObject::CornerSlope30OuterSW
+    };
+
+    RoofCornerSlope30Tool::instance()->setRoofType(roofTypes[index]);
+
+    RoofCornerSlope30Tool::instance()->action()->setIcon(action->icon());
+
+    if (!RoofCornerSlope30Tool::instance()->isCurrent()) {
+        RoofCornerSlope30Tool::instance()->makeCurrent();
+    }
+}
+
+void ObjectEditModeToolBar::updateActions()
+{
+    bool hasDoc = mCurrentDocument != 0;
+
+    mRoomComboBox->setEnabled(hasDoc && currentRoom() != 0);
+
+    if (mCurrentDocument)
+        mFloorLabel->setText(tr("Floor %1/%2")
+                             .arg(mCurrentDocument->currentLevel() + 1)
+                             .arg(mCurrentDocument->building()->floorCount()));
+    else
+        mFloorLabel->setText(QString());
+    mFloorLabel->setEnabled(mCurrentDocument != 0);
+}
+
+/////
+
+ObjectEditModePerDocumentStuff::ObjectEditModePerDocumentStuff(
+        ObjectEditMode *mode, BuildingDocument *doc) :
+    QObject(doc),
+    mMode(mode),
+    mDocument(doc)
+{
+    connect(document(), &BuildingDocument::fileNameChanged, this, &ObjectEditModePerDocumentStuff::updateDocumentTab);
+    connect(document(), &BuildingDocument::cleanChanged, this, &ObjectEditModePerDocumentStuff::updateDocumentTab);
+    connect(document()->undoStack(), &QUndoStack::cleanChanged, this, &ObjectEditModePerDocumentStuff::updateDocumentTab);
+
+    connect(BuildingPreferences::instance(), &BuildingPreferences::showObjectsChanged,
+            this, &ObjectEditModePerDocumentStuff::showObjectsChanged);
+    connect(BuildingPreferences::instance(), &BuildingPreferences::showLowerFloorsChanged,
+            this, &ObjectEditModePerDocumentStuff::showLowerFloorsChanged);
+
+    connect(ToolManager::instance(), &ToolManager::currentEditorChanged,
+            this, &ObjectEditModePerDocumentStuff::updateActions);
+}
+
+ObjectEditModePerDocumentStuff::~ObjectEditModePerDocumentStuff()
+{
+}
+
+void ObjectEditModePerDocumentStuff::activate()
+{
+    ToolManager::instance()->setEditor(scene());
+
+    connect(view(), SIGNAL(mouseCoordinateChanged(QPoint)),
+            mMode->mStatusBar, SLOT(mouseCoordinateChanged(QPoint)));
+    connect(zoomable(), &Tiled::Internal::Zoomable::scaleChanged,
+            this, &ObjectEditModePerDocumentStuff::updateActions);
+
+    zoomable()->connectToComboBox(mMode->mStatusBar->editorScaleComboBox);
+
+//    connect(document(), SIGNAL(cleanChanged()), SLOT(updateWindowTitle()));
+
+    Ui::BuildingEditorWindow *actions = BuildingEditorWindow::instance()->actionIface();
+    connect(actions->actionZoomIn, &QAction::triggered,
+            this, &ObjectEditModePerDocumentStuff::zoomIn);
+    connect(actions->actionZoomOut, &QAction::triggered,
+            this, &ObjectEditModePerDocumentStuff::zoomOut);
+    connect(actions->actionNormalSize, &QAction::triggered,
+            this, &ObjectEditModePerDocumentStuff::zoomNormal);
+}
+
+void ObjectEditModePerDocumentStuff::deactivate()
+{
+//    document()->disconnect(this);
+//    document()->disconnect(mMode);
+//    view()->disconnect(this);
+    view()->disconnect(mMode->mStatusBar);
+    zoomable()->disconnect(this);
+//    zoomable()->disconnect(mMode); /////
+
+    Ui::BuildingEditorWindow *actions = BuildingEditorWindow::instance()->actionIface();
+    actions->actionZoomIn->disconnect(this);
+    actions->actionZoomOut->disconnect(this);
+    actions->actionNormalSize->disconnect(this);
+
+    actions->actionZoomIn->setEnabled(false);
+    actions->actionZoomOut->setEnabled(false);
+    actions->actionNormalSize->setEnabled(false);
+}
+
+void ObjectEditModePerDocumentStuff::updateDocumentTab()
+{
+    int tabIndex = BuildingDocumentMgr::instance()->indexOf(document());
+    if (tabIndex == -1)
+        return;
+
+    QString tabText = document()->displayName();
+    if (document()->isModified())
+        tabText.prepend(QLatin1Char('*'));
+    mMode->mTabWidget->setTabText(tabIndex, tabText);
+
+    QString tooltipText = QDir::toNativeSeparators(document()->fileName());
+    mMode->mTabWidget->setTabToolTip(tabIndex, tooltipText);
+}
+
+void ObjectEditModePerDocumentStuff::showObjectsChanged()
+{
+    scene()->synchObjectItemVisibility();
+}
+
+void ObjectEditModePerDocumentStuff::showLowerFloorsChanged()
+{
+    scene()->synchObjectItemVisibility();
+}
+
+void ObjectEditModePerDocumentStuff::zoomIn()
+{
+    zoomable()->zoomIn();
+}
+
+void ObjectEditModePerDocumentStuff::zoomOut()
+{
+    zoomable()->zoomOut();
+}
+
+void ObjectEditModePerDocumentStuff::zoomNormal()
+{
+    zoomable()->resetZoom();
+}
+
+void ObjectEditModePerDocumentStuff::updateActions()
+{
+    if (ToolManager::instance()->currentEditor() == scene()) {
+        BuildingEditorWindow::instance()->actionIface()->actionZoomIn->setEnabled(zoomable()->canZoomIn());
+        BuildingEditorWindow::instance()->actionIface()->actionZoomOut->setEnabled(zoomable()->canZoomOut());
+        BuildingEditorWindow::instance()->actionIface()->actionNormalSize->setEnabled(zoomable()->scale() != 1.0);
+    }
+}
+
+/////
+
+OrthoObjectEditModePerDocumentStuff::OrthoObjectEditModePerDocumentStuff(
+        OrthoObjectEditMode *mode, BuildingDocument *doc) :
+    ObjectEditModePerDocumentStuff(mode, doc),
+    mView(new BuildingOrthoView),
+    mScene(new BuildingOrthoScene(mView))
+{
+    mView->setScene(mScene);
+    mView->setDocument(doc);
+}
+
+OrthoObjectEditModePerDocumentStuff::~OrthoObjectEditModePerDocumentStuff()
+{
+    // This is added to a QTabWidget.
+    // Removing a tab does not delete the page widget.
+    // mScene is owned by the view.
+    delete mView;
+}
+
+Tiled::Internal::Zoomable *OrthoObjectEditModePerDocumentStuff::zoomable() const
+{
+    return mView->zoomable();
+}
+
+/////
+
+IsoObjectEditModePerDocumentStuff::IsoObjectEditModePerDocumentStuff(
+        IsoObjectEditMode *mode, BuildingDocument *doc) :
+    ObjectEditModePerDocumentStuff(mode, doc),
+    mView(new BuildingIsoView),
+    mScene(new BuildingIsoScene(mView))
+{
+    mView->setScene(mScene);
+    mView->setDocument(doc);
+}
+
+IsoObjectEditModePerDocumentStuff::~IsoObjectEditModePerDocumentStuff()
+{
+    // This is added to a QTabWidget.
+    // Removing a tab does not delete the page widget.
+    // mScene is owned by the view.
+    delete mView;
+}
+
+Tiled::Internal::Zoomable *IsoObjectEditModePerDocumentStuff::zoomable() const
+{
+    return mView->zoomable();
+}
+
+/////
+
+ObjectEditMode::ObjectEditMode(QObject *parent) :
+    IMode(parent),
+    mCategoryDock(new CategoryDock),
+    mCurrentDocument(0),
+    mCurrentDocumentStuff(0)
+{
+    mMainWindow = new EmbeddedMainWindow;
+    mMainWindow->setObjectName(QLatin1String("ObjectEditMode.Widget"));
+
+    mToolBar = new ObjectEditModeToolBar(this);
+    mStatusBar = new EditModeStatusBar(QLatin1String("ObjectEditMode.StatusBar."));
+
+    mTabWidget = new QTabWidget;
+    mTabWidget->setObjectName(QLatin1String("ObjectEditMode.TabWidget"));
+    mTabWidget->setDocumentMode(true);
+    mTabWidget->setTabsClosable(true);
+
+    QVBoxLayout *vbox = new QVBoxLayout;
+    vbox->setObjectName(QLatin1String("ObjectEditMode.VBox"));
+    vbox->setContentsMargins(0, 0, 0, 0);
+//    vbox->addWidget(mToolBar);
+    vbox->addWidget(mTabWidget);
+    vbox->addLayout(mStatusBar->statusBarLayout);
+    vbox->setStretchFactor(mTabWidget, 1);
+    QWidget *w = new QWidget;
+    w->setObjectName(QLatin1String("ObjectEditMode.VBoxWidget"));
+    w->setLayout(vbox);
+
+    QToolBar *commonToolBar = BuildingEditorWindow::instance()->createCommonToolBar();
+    commonToolBar->setObjectName(QLatin1String("ObjectEditMode.CommonToolBar"));
+
+    mMainWindow->setCentralWidget(w);
+    mMainWindow->addToolBar(Qt::LeftToolBarArea, commonToolBar);
+    mMainWindow->addToolBar(mToolBar);
+    mMainWindow->registerDockWidget(mCategoryDock);
+    mMainWindow->addDockWidget(Qt::RightDockWidgetArea, mCategoryDock);
+
+    setWidget(mMainWindow);
+
+    connect(mTabWidget, &QTabWidget::currentChanged,
+            this, &ObjectEditMode::currentDocumentTabChanged);
+    connect(mTabWidget, &QTabWidget::tabCloseRequested,
+            this, &ObjectEditMode::documentTabCloseRequested);
+
+    connect(BuildingDocumentMgr::instance(), &BuildingDocumentMgr::documentAdded,
+            this, &ObjectEditMode::documentAdded);
+    connect(BuildingDocumentMgr::instance(), &BuildingDocumentMgr::currentDocumentChanged,
+            this, &ObjectEditMode::currentDocumentChanged);
+    connect(BuildingDocumentMgr::instance(), &BuildingDocumentMgr::documentAboutToClose,
+            this, &ObjectEditMode::documentAboutToClose);
+
+    connect(this, &IMode::activeStateChanged, this, &ObjectEditMode::onActiveStateChanged);
+}
+
+Building *ObjectEditMode::currentBuilding() const
+{
+    return mCurrentDocument ? mCurrentDocument->building() : 0;
+}
+
+Room *ObjectEditMode::currentRoom() const
+{
+    return mCurrentDocument ? mCurrentDocument->currentRoom() : 0;
+}
+
+#define WIDGET_STATE_VERSION 0
+void ObjectEditMode::readSettings(QSettings &settings)
+{
+    settings.beginGroup(QString::fromLatin1("%1ObjectEditMode").arg(mSettingsPrefix));
+    mMainWindow->readSettings(settings);
+    mCategoryDock->readSettings(settings);
+    settings.endGroup();
+}
+
+void ObjectEditMode::writeSettings(QSettings &settings)
+{
+    settings.beginGroup(QString::fromLatin1("%1ObjectEditMode").arg(mSettingsPrefix));
+    mMainWindow->writeSettings(settings);
+    mCategoryDock->writeSettings(settings);
+    settings.endGroup();
+}
+
+void ObjectEditMode::onActiveStateChanged(bool active)
+{
+    QMenu *menu = BuildingEditorWindow::instance()->actionIface()->menuViews;
+    menu->clear();
+
+    if (active) {
+        if (mCurrentDocumentStuff)
+            mCurrentDocumentStuff->activate();
+
+        QMap<QString,QAction*> map;
+        foreach (QDockWidget *dockWidget, mMainWindow->dockWidgets()) {
+            QAction *action = dockWidget->toggleViewAction();
+            map[action->text()] = action;
+        }
+        foreach (QAction *action, map.values())
+            menu->addAction(action);
+        menu->addSeparator();
+        foreach (QToolBar *toolBar, mMainWindow->toolBars()) {
+            menu->addAction(toolBar->toggleViewAction());
+        }
+    } else {
+        if (mCurrentDocumentStuff)
+            mCurrentDocumentStuff->deactivate();
+    }
+}
+
+void ObjectEditMode::documentAdded(BuildingDocument *doc)
+{
+    mDocumentStuff[doc] = createPerDocumentStuff(doc);
+
+    int docIndex = BuildingDocumentMgr::instance()->indexOf(doc);
+    mTabWidget->blockSignals(true);
+    mTabWidget->insertTab(docIndex, mDocumentStuff[doc]->view(), doc->displayName());
+    mTabWidget->blockSignals(false);
+    mDocumentStuff[doc]->updateDocumentTab();
+}
+
+void ObjectEditMode::currentDocumentChanged(BuildingDocument *doc)
+{
+    if (mCurrentDocument) {
+        if (isActive())
+            mCurrentDocumentStuff->deactivate();
+    }
+
+    mCurrentDocument = doc;
+    mCurrentDocumentStuff = doc ? mDocumentStuff[doc] : 0;
+
+    if (mCurrentDocument) {
+        mTabWidget->setCurrentIndex(docman()->indexOf(doc));
+        if (isActive())
+            mCurrentDocumentStuff->activate();
+    }
+}
+
+void ObjectEditMode::documentAboutToClose(int index, BuildingDocument *doc)
+{
+    Q_UNUSED(doc)
+    // At this point, the document is not in the DocumentManager's list of documents.
+    // Removing the current tab will cause another tab to be selected and
+    // the current document to change.
+    mTabWidget->removeTab(index);
+}
+
+void ObjectEditMode::currentDocumentTabChanged(int index)
+{
+    docman()->setCurrentDocument(index);
+}
+
+void ObjectEditMode::documentTabCloseRequested(int index)
+{
+    BuildingEditorWindow::instance()->documentTabCloseRequested(index);
+}
+
+void ObjectEditMode::updateActions()
+{
+}
+
+/////
+
+OrthoObjectEditMode::OrthoObjectEditMode(QObject *parent) :
+    ObjectEditMode(parent)
+{
+    setDisplayName(tr("Ortho"));
+    setIcon(QIcon(QLatin1String(":/BuildingEditor/icons/mode_ortho.png")));
+    mSettingsPrefix = QLatin1String("Ortho");
+}
+
+ObjectEditModePerDocumentStuff *OrthoObjectEditMode::createPerDocumentStuff(BuildingDocument *doc)
+{
+    return new OrthoObjectEditModePerDocumentStuff(this, doc);
+}
+
+/////
+
+IsoObjectEditMode::IsoObjectEditMode(QObject *parent) :
+    ObjectEditMode(parent)
+{
+    setDisplayName(tr("Iso"));
+    setIcon(QIcon(QLatin1String(":/BuildingEditor/icons/mode_iso.png")));
+    mSettingsPrefix = QLatin1String("Iso");
+}
+
+void IsoObjectEditMode::documentAdded(BuildingDocument *doc)
+{
+    ObjectEditMode::documentAdded(doc);
+
+    // Hack to keep iso/tile view position + scale synched.
+    emit viewAddedForDocument(doc, (BuildingIsoView*)mDocumentStuff[doc]->view());
+}
+
+ObjectEditModePerDocumentStuff *IsoObjectEditMode::createPerDocumentStuff(BuildingDocument *doc)
+{
+    return new IsoObjectEditModePerDocumentStuff(this, doc);
+}
+

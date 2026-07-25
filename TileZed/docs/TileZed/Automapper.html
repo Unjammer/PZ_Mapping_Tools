@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>TileZed Automapper</title>
+  <style>
+    body { max-width: 1080px; margin: 24px auto; padding: 0 20px; font: 15px/1.5 "Segoe UI", Arial, sans-serif; }
+    code, pre { font-family: Consolas, monospace; }
+    code { background: #eee; padding: .1em .3em; }
+    pre { overflow: auto; padding: 12px; background: #eee; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 7px 9px; border: 1px solid #aaa; text-align: left; vertical-align: top; }
+    .warning { padding: 10px 14px; border-left: 4px solid #c58a00; background: #fff4d9; }
+    @media (prefers-color-scheme: dark) {
+      body { color: #eee; background: #202225; }
+      code, pre { background: #151719; }
+      .warning { background: #493b1d; }
+    }
+  </style>
+</head>
+<body>
+<h1>TileZed Automapper</h1>
+
+<p>Automapper matches tile or object patterns in a working TMX and copies the
+corresponding output from one or more rule-map TMX files. The Automapper dock
+shows loaded files, target layers, pattern counts, map properties, warnings,
+and errors.</p>
+
+<h2>Loading rules</h2>
+<p>Save the target map first. TileZed searches beside it for
+<code>rules.txt</code>. Each non-empty line that does not begin with
+<code>#</code> or <code>//</code> names either a rule-map <code>.tmx</code> or
+another <code>.txt</code> list:</p>
+<pre><code># paths are relative to this list
+rules/roads.tmx
+rules/vegetation.txt
+C:/shared-rules/signs.tmx</code></pre>
+<p>Relative paths are resolved against the list containing them. Nested lists
+are supported. Recursive includes, duplicate rule maps, missing files, and
+unsupported extensions are reported rather than loaded repeatedly.</p>
+
+<h2>Rule-map layer names</h2>
+<table>
+<tr><th>Name</th><th>Purpose</th></tr>
+<tr><td><code>Regions</code></td><td>Defines both input and output extents. Each connected region is one pattern.</td></tr>
+<tr><td><code>RegionsInput</code></td><td>Input matching extent when it differs from output.</td></tr>
+<tr><td><code>RegionsOutput</code></td><td>Output copy extent when it differs from input.</td></tr>
+<tr><td><code>Input_Target</code></td><td>Positive pattern matched against tile layer or Object Group <code>Target</code>.</td></tr>
+<tr><td><code>InputNot_Target</code></td><td>Pattern that must not match <code>Target</code>.</td></tr>
+<tr><td><code>Output_Target</code></td><td>Tiles or objects copied to target layer/group <code>Target</code>.</td></tr>
+</table>
+<p>Prefixes are case-insensitive. The underscore is required. The part after
+it is the exact target layer name and type.</p>
+
+<h3>Indexes and alternatives</h3>
+<p>An optional index between the prefix and underscore groups conditions and
+outputs:</p>
+<pre><code>Input1_Ground
+InputNot1_Objects
+Output1_Floor
+Output1_Furniture
+
+Input2_Ground
+Output2_Floor</code></pre>
+<p>For input groups, every named target inside one index must match; matching
+any complete index is sufficient. Repeated Input or InputNot layers with the
+same index and target provide accepted or rejected alternatives.</p>
+<p>Each distinct Output index is an alternative output group. When several
+exist, Automapper chooses one randomly for each match. Give layers the same
+output index when they must be copied together.</p>
+
+<h2>Rule-map properties</h2>
+<table>
+<tr><th>Property</th><th>Meaning</th></tr>
+<tr><td><code>DeleteTiles</code></td><td>Clears affected output areas before copying output, removing results left by an older match.</td></tr>
+<tr><td><code>AutomappingRadius</code></td><td>Expands the edited region by this many tiles during interactive automapping.</td></tr>
+<tr><td><code>NoOverlappingRules</code></td><td>Prevents output regions produced by the same rule from overlapping on a target layer.</td></tr>
+</table>
+<p>Property spelling is case-insensitive. Values must convert to the required
+boolean or integer type. Unknown or invalid properties produce warnings.</p>
+
+<h2>Tile matching</h2>
+<ul>
+  <li>The target cell must be inside the target layer and not empty.</li>
+  <li>A tile in a positive input layer accepts that exact tile.</li>
+  <li>A tile in an InputNot layer rejects that exact tile.</li>
+  <li>With only positive layers, an empty rule coordinate accepts tiles not
+  used elsewhere by the positive pattern.</li>
+  <li>With positive and negative layers together, positive coordinates must
+  match an allowed tile and no negative tile may match.</li>
+</ul>
+
+<h2>Object Group matching</h2>
+<p>Input and InputNot layers may also be Object Groups. A rule object compares
+its shape, translated position, dimensions, polygon data, and custom
+properties. Name and type are compared when their rule values are non-empty.
+A rule property value of <code>*</code> means the candidate must contain that
+property but its value may be anything.</p>
+<p>All objects in a positive pattern must be found. A matching InputNot object
+pattern rejects the rule.</p>
+
+<h2>Applying and interactive mode</h2>
+<ul>
+  <li><strong>Reload</strong> rereads rules.txt, nested lists, and rule TMX files.</li>
+  <li><strong>Apply</strong> runs all loaded rules on the complete target map.</li>
+  <li><strong>Interactive</strong> reruns relevant rules when tile regions or
+  map objects are added, changed, or removed.</li>
+</ul>
+<p>Rules run in load order. The changed region produced by one rule is passed
+to following rules, allowing multi-stage pipelines. Application is stored as
+<strong>Apply AutoMap rules</strong> in the Undo stack.</p>
+
+<div class="warning">
+  Test new rule sets on a copy. Interactive mode can trigger a large pipeline
+  after a small edit, especially with a large AutomappingRadius or recursive
+  output dependencies.
+</div>
+
+<h2>Troubleshooting</h2>
+<table>
+<tr><th>Message or symptom</th><th>Check</th></tr>
+<tr><td>No rules loaded</td><td>The target TMX is saved and rules.txt is beside it.</td></tr>
+<tr><td>No input/output region layer</td><td>Add Regions, or both RegionsInput and RegionsOutput.</td></tr>
+<tr><td>Layer not recognized</td><td>Check the underscore and accepted prefix.</td></tr>
+<tr><td>Rule never matches</td><td>Verify target layer type/name, non-empty cells, input grouping, and InputNot exclusions.</td></tr>
+<tr><td>Unexpected random output</td><td>Different Output indexes are alternatives.</td></tr>
+<tr><td>Old output remains</td><td>Enable DeleteTiles in the owning rule map.</td></tr>
+</table>
+<p>A complete sample is installed under <code>examples/sewer_automap</code>.</p>
+</body>
+</html>

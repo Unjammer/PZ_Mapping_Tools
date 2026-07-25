@@ -1,0 +1,131 @@
+version = 1
+
+settings
+{
+}
+
+rule
+{
+	name = NormalTree
+	tileset = contains _trees
+	color = 38 53 22
+}
+
+rule
+{
+	name = JumboTree
+	tileset = contains jumbo
+	color = 48 63 32
+}
+
+rule
+{
+	name = Railway
+	tileset = contains _railroad
+	color = 73 58 43
+}
+
+rule
+{
+	name = Vegetation
+	tileset = startsWith vegetation
+	color = 48 73 32
+}
+
+rule
+{
+	name = Sand
+	tileset = equals blends_natural_01
+	tileRange = 0 15
+	color = 217 207 183
+}
+
+rule
+{
+	name = DarkGrass
+	tileset = equals blends_natural_01
+	tileRange = 16 31
+	color = 75 88 27
+}
+
+rule
+{
+	name = MediumGrass
+	tileset = equals blends_natural_01
+	tileRange = 32 47
+	color = 97 103 36
+}
+
+rule
+{
+	name = LightGrass
+	tileset = equals blends_natural_01
+	tileRange = 48 63
+	color = 127 120 45
+}
+
+rule
+{
+	name = Dirt
+	tileset = equals blends_natural_01
+	tileRange = 64 79
+	color = 91 63 21
+}
+
+rule
+{
+	name = DirtAndGrass
+	tileset = equals blends_natural_01
+	tileRange = 80 95
+	color = 81 53 11
+}
+
+rule
+{
+	name = Water
+	tileset = equals blends_natural_02
+	color = 108 127 131
+}
+
+rule
+{
+	name = Street
+	tileset = equals blends_street_01
+	color = 128 128 128
+}
+
+rule
+{
+	name = TilesAndStone
+	tileset = startsWith floors_exterior_tilesandstone
+	color = 142 91 86
+}
+
+rule
+{
+	name = TilesAndWood
+	tileset = startsWith floors_exterior_tilesandwood
+	color = 122 71 66
+}
+
+rule
+{
+	name = LocationAny
+	tileset = startsWith location_
+	color = 112 61 56
+}
+
+rule
+{
+	name = Farm
+	tileset = startsWith vegetation_farm
+	color = 218 165 32
+}
+
+rule
+{
+	name = Walls
+	tileset = startsWith walls_
+	color = 93 44 39
+}
+

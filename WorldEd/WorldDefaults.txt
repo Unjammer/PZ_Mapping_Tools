@@ -1,0 +1,616 @@
+version = 1
+
+enum
+{
+    name = Direction
+    values = [
+        N
+        S
+        W
+        E
+    ]
+    multi = false
+}
+
+property
+{
+    name = Direction
+    default = N
+    enum = Direction
+}
+
+property
+{
+    name = FaceDirection
+    default = true
+}
+
+template
+{
+    name = ParkingStallN
+    property
+    {
+        name = Direction
+        value = N
+    }
+}
+
+template
+{
+    name = ParkingStallS
+    property
+    {
+        name = Direction
+        value = S
+    }
+}
+
+template
+{
+    name = ParkingStallW
+    property
+    {
+        name = Direction
+        value = W
+    }
+}
+
+template
+{
+    name = ParkingStallE
+    property
+    {
+        name = Direction
+        value = E
+    }
+}
+
+objecttype
+{
+    name = TownZone
+}
+
+objecttype
+{
+    name = Forest
+}
+
+objecttype
+{
+    name = DeepForest
+}
+
+objecttype
+{
+    name = Nav
+}
+
+objecttype
+{
+    name = Vegitation
+}
+
+objecttype
+{
+    name = TrailerPark
+}
+
+objecttype
+{
+    name = Farm
+}
+
+objecttype
+{
+    name = ParkingStall
+}
+
+objecttype
+{
+    name = FarmLand
+}
+
+objectgroup
+{
+    name = ParkingStall
+    color = #ff007f
+    defaulttype = ParkingStall
+}
+
+objectgroup
+{
+    name = TownZone
+    color = #aa0000
+    defaulttype = TownZone
+}
+
+objectgroup
+{
+    name = Forest
+    color = #00aa00
+    defaulttype = Forest
+}
+
+objectgroup
+{
+    name = Nav
+    color = #55aaff
+    defaulttype = Nav
+}
+
+objectgroup
+{
+    name = DeepForest
+    color = #003500
+    defaulttype = DeepForest
+}
+
+objectgroup
+{
+    name = Vegitation
+    color = #b3b300
+    defaulttype = Vegitation
+}
+
+objectgroup
+{
+    name = TrailerPark
+    color = #f50000
+    defaulttype = TrailerPark
+}
+
+objectgroup
+{
+    name = Farm
+    color = #55ff7f
+    defaulttype = Farm
+}
+
+objectgroup
+{
+    name = FarmLand
+    color = #bcff7d
+    defaulttype = FarmLand
+}
+
+
+property
+{
+    name = WaterDirection
+    default = 0.0
+}
+
+property
+{
+    name = WaterSpeed
+    default = 0.0
+}
+
+template
+{
+    name = WaterFlowN
+    property
+    {
+        name = WaterDirection
+        value = 0
+    }
+    property
+    {
+        name = WaterSpeed
+        value = 1.0
+    }
+}
+
+template
+{
+    name = WaterFlowS
+    property
+    {
+        name = WaterDirection
+        value = 180
+    }
+    property
+    {
+        name = WaterSpeed
+        value = 1.0
+    }
+}
+
+template
+{
+    name = WaterFlowE
+    property
+    {
+        name = WaterDirection
+        value = 90
+    }
+    property
+    {
+        name = WaterSpeed
+        value = 1.0
+    }
+}
+
+template
+{
+    name = WaterFlowW
+    property
+    {
+        name = WaterDirection
+        value = 270
+    }
+    property
+    {
+        name = WaterSpeed
+        value = 1.0
+    }
+}
+
+objecttype
+{
+    name = WaterFlow
+}
+
+objectgroup
+{
+    name = WaterFlow
+    color = #0000ff
+    defaulttype = WaterFlow
+}
+
+
+
+
+property
+{
+    name = WaterGround
+    default = false
+}
+
+property
+{
+    name = WaterShore
+    default = true
+}
+
+objecttype
+{
+    name = WaterZone
+}
+
+objectgroup
+{
+    name = WaterZone
+    color = #0000ff
+    defaulttype = WaterZone
+}
+
+template
+{
+    name = WaterZone
+    property
+    {
+        name = WaterGround
+        value = false
+    }
+    property
+    {
+        name = WaterShore
+        value = true
+    }
+}
+
+
+
+
+property
+{
+    name = Female
+    default = true
+}
+
+property
+{
+    name = Outfit
+    default =
+}
+
+enum
+{
+    name = Pose
+    values = [
+        pose01
+        pose02
+        pose03
+    ]
+    multi = false
+}
+
+property
+{
+    name = Pose
+    default = pose01
+    enum = Pose
+}
+
+property
+{
+    name = Script
+    default =
+}
+
+enum
+{
+    name = Skin
+    values = [
+        White
+        Black
+    ]
+    multi = false
+}
+
+property
+{
+    name = Skin
+    default = White
+    enum = Skin
+}
+
+objecttype
+{
+    name = Mannequin
+}
+
+objectgroup
+{
+    name = Mannequin
+    color = #0000ff
+    defaulttype = Mannequin
+}
+
+
+
+enum
+{
+    name = RoomTone
+    values = [
+        Generic
+        Barn
+        Mall
+        Warehouse
+        Prison
+        Church
+        Office
+        Factory
+        MovieTheater
+        Basement
+        Bunker
+        House
+        Commercial
+    ]
+    multi = false
+}
+
+property
+{
+    name = RoomTone
+    default = Generic
+    enum = RoomTone
+}
+
+property
+{
+    name = EntireBuilding
+    default = false
+}
+
+template
+{
+    name = RoomTone
+    property
+    {
+        name = RoomTone
+        value = Generic
+    }
+    property
+    {
+        name = EntireBuilding
+        value = false
+    }
+}
+
+objecttype
+{
+    name = RoomTone
+}
+
+objectgroup
+{
+    name = RoomTone
+    color = #0000ff
+    defaulttype = RoomTone
+}
+
+
+
+enum
+{
+    name = AnimalAction
+    values = [
+        Eat
+        Sleep
+        Follow
+    ]
+    multi = false
+}
+
+enum
+{
+    name = Animal
+    values = [
+        small
+        medium
+        large
+        predator
+        deer
+        rabbit
+    ]
+    multi = false
+}
+
+property
+{
+    name = Action
+    default =
+    enum = AnimalAction
+}
+
+property
+{
+    name = AnimalType
+    default =
+    enum = Animal
+}
+
+property
+{
+    name = SpawnAnimals
+    default = true
+}
+
+property
+{
+    name = Access
+    default = 
+    description = Name of basement access file.
+}
+
+objecttype
+{
+    name = Animal
+}
+
+objectgroup
+{
+    name = Animal
+    defaulttype = Animal
+}
+
+
+
+property
+{
+    name = StairDirection
+    default = N
+    enum = Direction
+}
+
+property
+{
+    name = StairX
+    default = 0
+}
+
+property
+{
+    name = StairY
+    default = 0
+}
+
+template
+{
+    name = Basement
+    property
+    {
+        name = StairDirection
+        value = N
+    }
+    property
+    {
+        name = StairX
+        value = 0
+    }
+    property
+    {
+        name = StairY
+        value = 0
+    }
+}
+
+objecttype
+{
+    name = Basement
+}
+
+objectgroup
+{
+    name = Basement
+    defaulttype = Basement
+}
+
+
+property
+{
+    name = Rocks
+    default = false
+}
+
+template
+{
+    name = WorldGen
+    property
+    {
+        name = Rocks
+        value = false
+    }
+}
+
+objecttype
+{
+    name = WorldGen
+}
+
+objectgroup
+{
+    name = WorldGen
+    color = #ffaa00
+    defaulttype = WorldGen
+}
+
+objecttype
+{
+    name = BuildingName
+}
+
+objectgroup
+{
+    name = BuildingName
+    color = #EA3680
+    defaulttype = BuildingName
+}
+
+objecttype
+{
+    name = NoGas
+}
+
+objectgroup
+{
+    name = NoGas
+    color = #F08650
+    defaulttype = NoGas
+}
+
+objecttype
+{
+    name = Region
+}
+
+objectgroup
+{
+    name = Region
+    color = #75163F
+    defaulttype = Region
+}
+
+
