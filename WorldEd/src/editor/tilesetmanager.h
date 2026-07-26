@@ -269,6 +269,7 @@ private:
     QVector<InterruptibleThread*> mImageReaderThreads;
     QVector<TilesetImageReaderWorker*> mImageReaderWorkers;
     int mNextThreadForJob;
+    QSet<Tileset*> mLoadingTilesets;
 #endif
 
 #ifdef ZOMBOID_TILE_LAYER_NAMES

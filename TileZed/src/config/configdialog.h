@@ -34,6 +34,7 @@ public:
     
 private slots:
     void configBrowse();
+    void tilesBrowse();
     void accept();
 
 private:

@@ -20,9 +20,11 @@
 #include "../portablesettings.h"
 
 #include <QFileDialog>
+#include <QMessageBox>
 #include <QSettings>
 
 static QString KEY_CONFIG_DIR = QLatin1String("ConfigDirectory");
+static QString KEY_TILES_DIR = QLatin1String("Tilesets/TilesDirectory");
 
 ConfigDialog::ConfigDialog(QWidget *parent) :
     QDialog(parent),
@@ -31,13 +33,22 @@ ConfigDialog::ConfigDialog(QWidget *parent) :
     ui->setupUi(this);
 
     QSettings settings;
-    const QString configPath = PortableSettings::rootPath();
-    settings.setValue(KEY_CONFIG_DIR, configPath);
+    QString configPath = settings.value(
+                KEY_CONFIG_DIR,
+                PortableSettings::applicationConfigPath()).toString();
+    if (QDir::cleanPath(configPath).compare(
+                QDir::cleanPath(PortableSettings::rootPath()),
+                Qt::CaseInsensitive) == 0) {
+        configPath = PortableSettings::applicationConfigPath();
+    }
     ui->configDirectory->setText(configPath);
-    ui->configDirectory->setReadOnly(true);
-    ui->configBrowse->setEnabled(false);
+    QString tilesPath = settings.value(KEY_TILES_DIR).toString();
+    if (tilesPath.isEmpty() || !QDir(tilesPath).exists())
+        tilesPath = PortableSettings::detectTilesPath();
+    ui->tilesDirectory->setText(tilesPath);
 
     connect(ui->configBrowse, &QAbstractButton::clicked, this, &ConfigDialog::configBrowse);
+    connect(ui->tilesBrowse, &QAbstractButton::clicked, this, &ConfigDialog::tilesBrowse);
 }
 
 ConfigDialog::~ConfigDialog()
@@ -47,12 +58,50 @@ ConfigDialog::~ConfigDialog()
 
 void ConfigDialog::configBrowse()
 {
-    ui->configDirectory->setText(PortableSettings::rootPath());
+    const QString path = QFileDialog::getExistingDirectory(
+                this, tr("Choose the configuration directory"),
+                ui->configDirectory->text());
+    if (!path.isEmpty())
+        ui->configDirectory->setText(QDir::cleanPath(path));
+}
+
+void ConfigDialog::tilesBrowse()
+{
+    const QString path = QFileDialog::getExistingDirectory(
+                this, tr("Choose the Project Zomboid Tiles directory"),
+                ui->tilesDirectory->text());
+    if (!path.isEmpty())
+        ui->tilesDirectory->setText(QDir::cleanPath(path));
 }
 
 void ConfigDialog::accept()
 {
+    const QString configPath = QDir::cleanPath(
+                ui->configDirectory->text().trimmed());
+    if (configPath.isEmpty() || !QDir(configPath).exists()) {
+        QMessageBox::critical(
+                    this, tr("Invalid Configuration Directory"),
+                    tr("Choose an existing directory containing the PZTools "
+                       "configuration catalogs, such as Tilesets.txt and "
+                       "BuildingTiles.txt.\n\n%1")
+                    .arg(QDir::toNativeSeparators(configPath)));
+        return;
+    }
+
+    const QString tilesPath = QDir::cleanPath(
+                ui->tilesDirectory->text().trimmed());
+    if (!tilesPath.isEmpty() && !QDir(tilesPath).exists()) {
+        QMessageBox::critical(
+                    this, tr("Invalid Tiles Directory"),
+                    tr("The selected Project Zomboid Tiles directory does not "
+                       "exist:\n%1")
+                    .arg(QDir::toNativeSeparators(tilesPath)));
+        return;
+    }
+
     QSettings settings;
-    settings.setValue(KEY_CONFIG_DIR, PortableSettings::rootPath());
+    settings.setValue(KEY_CONFIG_DIR, configPath);
+    settings.setValue(KEY_TILES_DIR, tilesPath);
+    settings.sync();
     QDialog::accept();
 }

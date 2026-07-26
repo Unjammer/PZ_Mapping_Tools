@@ -666,7 +666,7 @@ void TileMetaInfoMgr::addTileset(Tileset *tileset)
     Q_ASSERT(mTilesetByName.contains(tileset->name()) == false);
     mTilesetByName[tileset->name()] = tileset;
     if (!mRemovedTilesets.contains(tileset))
-        TilesetManager::instance()->addReference(tileset);
+        TilesetManager::instance()->addReference(tileset, false);
     mRemovedTilesets.removeAll(tileset);
     emit tilesetAdded(tileset);
 }

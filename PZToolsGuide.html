@@ -124,6 +124,7 @@
     <li><a href="#settings">Settings, layouts and logs</a></li>
     <li><a href="#themes">Themes</a></li>
     <li><a href="#grids">300 and 256 projects</a></li>
+    <li><a href="#terrain-editor">Terrain image editor</a></li>
     <li><a href="#worlded-navigation">WorldEd navigation</a></li>
     <li><a href="#thumbnails">WorldEd thumbnails</a></li>
     <li><a href="#empty-cells">Removing empty cells</a></li>
@@ -155,6 +156,7 @@
     TileProperties.txt
     Building*.txt
     LuaTools.txt
+  Tiles/                 (optional local placement of extracted game tiles)
   docs/
   lua/
   plugins/
@@ -167,7 +169,8 @@
     <tbody>
       <tr><td><code>bin</code></td><td>Executables and Qt DLLs.</td><td>Yes, all three applications use the same runtime.</td></tr>
       <tr><td><code>config</code></td><td>Tileset, TileDef, Building and Lua tool catalogs.</td><td>Yes.</td></tr>
-      <tr><td><code>settings</code></td><td>Portable INI files and per-application state.</td><td>The directory is shared; each application keeps its own keys/files.</td></tr>
+      <tr><td><code>settings</code></td><td>Portable INI files, logs and per-application state. It is not the catalog directory.</td><td>The directory is shared; each application keeps its own keys/files.</td></tr>
+      <tr><td><code>Tiles</code></td><td>Extracted Project Zomboid tile PNGs. These are not distributed with PZTools.</td><td>Yes. It may instead be stored elsewhere and selected with <code>config.exe</code>.</td></tr>
       <tr><td><code>themes</code></td><td>External QSS stylesheets.</td><td>Yes.</td></tr>
       <tr><td><code>lua</code></td><td>TileZed mapping scripts and interactive tools.</td><td>Used by TileZed.</td></tr>
       <tr><td><code>docs</code></td><td>Offline documentation.</td><td>Yes.</td></tr>
@@ -178,6 +181,26 @@
     Do not move only one executable out of <code>bin</code>. WorldEd's
     <strong>Open in TileZed</strong> deliberately looks for the sibling
     <code>TileZed.exe</code>, and Qt also needs the DLL and plugin layout.
+  </div>
+
+  <h3>First start</h3>
+  <ol>
+    <li>Extract the complete PZTools archive to a writable directory.</li>
+    <li>Close all three editors and run <code>bin/config.exe</code>.</li>
+    <li>Leave <strong>Configuration catalogs</strong> on the packaged
+      <code>config</code> directory unless you maintain a custom catalog set.</li>
+    <li>Select the extracted Project Zomboid <strong>Tiles</strong> directory.
+      PZTools also detects a directory named <code>Tiles</code> directly beside
+      <code>config</code>.</li>
+    <li>Save, then start WorldEd, TileZed or BuildingEd.</li>
+  </ol>
+
+  <div class="note">
+    <code>config</code> contains editable application data such as
+    <code>Tilesets.txt</code> and <code>BuildingTiles.txt</code>.
+    <code>settings</code> contains generated INI files and logs. Deleting
+    <code>settings</code> resets application preferences; it must not be used
+    as the configuration-catalog directory.
   </div>
 
   <h2 id="settings">Portable settings, layouts and logs</h2>
@@ -217,6 +240,12 @@
   <p>Logs live in the portable installation instead of a user-profile directory.
   They record tileset loading, missing images, Building catalog loading, invalid
   PNG profiles, biomemap warnings and InGameMap geometry repairs.</p>
+
+  <h3>Changing shared paths</h3>
+  <p>Close WorldEd, TileZed and BuildingEd, then run
+  <code>bin/config.exe</code>. The first field selects the catalog directory;
+  the second selects the extracted game Tiles directory. The values are shared
+  by all three applications and stored in TileZed's portable INI file.</p>
 
   <h2 id="themes">External QSS themes</h2>
   <p>Built-in themes are extracted as QSS files and external themes are discovered
@@ -268,6 +297,47 @@
 
   <p>TMX 2.0 is independent from the grid choice. A map without basements may
   have no negative levels even though the file format supports them.</p>
+
+  <h2 id="terrain-editor">Terrain and vegetation image editor</h2>
+  <p>WorldEd includes a small Qt paint editor for the two source images used to
+  create a map: ground in <code>Map.png</code> and vegetation in
+  <code>Map_veg.png</code>. Open it from the WorldEd tools menu after loading a
+  world project.</p>
+
+  <div class="note">
+    The menu command is disabled while no project is loaded. The editor needs
+    the project's <code>Rules.txt</code>, grid format, bounds and map directory;
+    creating a project-independent image would make those values ambiguous.
+  </div>
+
+  <h3>Create or open an image pair</h3>
+  <ol>
+    <li>Load the destination PZW project.</li>
+    <li>Open <strong>Terrain / Vegetation Image Editor...</strong>.</li>
+    <li>Choose 300 or 256 geometry from the project, then set the cell origin,
+      width and height.</li>
+    <li>Create blank ground/vegetation layers or open existing PNG files.</li>
+    <li>Save the PNG pair and, when wanted, attach it to the current project.</li>
+  </ol>
+
+  <p>The palette contains only colors declared by <code>Rules.txt</code>. Use
+  the brush for normal painting, Fill for a contiguous region, the picker to
+  recover a color from the image, and the vegetation eraser to restore an empty
+  vegetation pixel. Zoom and the composite opacity control affect only the
+  preview. Edits participate in Undo.</p>
+
+  <h3>Procedural generation</h3>
+  <p>Terrain patches, vegetation, lakes, rivers and road networks are generated
+  over the complete image rather than one cell at a time. A river or road can
+  therefore cross a 300 × 300 or 256 × 256 cell boundary without a seam. Review
+  the generated result, paint corrections, then save it as ordinary PNG files.</p>
+
+  <div class="warning">
+    PNG dimensions must exactly match the chosen cell rectangle. Unknown
+    palette colors are not silently approximated: the error identifies the
+    color and its image coordinate. Very large allocations are rejected before
+    creation, and saving uses an atomic replacement to protect an existing PNG.
+  </div>
 
   <h2 id="worlded-navigation">WorldEd navigation and tile resolution</h2>
 
@@ -482,6 +552,18 @@
   <p>The leading icon reports <code>1x</code>, <code>2x</code>, or a custom tile
   size. The tooltip includes usage, availability, resolution and source path.</p>
 
+  <h3>Lazy image loading</h3>
+  <p>TileZed reads catalog metadata first and loads image pixels only when they
+  are needed. Opening a TMX waits for the tilesets referenced by that map;
+  unused catalog entries remain available and are loaded when selected later.
+  Lua tile lookup, named placement and replacement also wait for the requested
+  image before returning, so scripts do not need asynchronous callbacks.</p>
+
+  <p>A <code>1x</code> image is not mandatory. If only a valid <code>2x</code>
+  or custom-resolution variant exists, the resolver uses that source. An orange
+  entry means that no usable installed variant was found, not merely that
+  <code>1x</code> is absent.</p>
+
   <h3>Import Project Zomboid Tileset PNG</h3>
   <p>This function creates the minimal Project Zomboid tileset information from
   a PNG. It avoids requiring generic Tiled metadata that PZ does not use. The PNG
@@ -626,9 +708,13 @@
       <tr><td>Thumbnail does not fill the cell</td><td>Wrong project grid flag or stale pre-fix thumbnail.</td><td>Project badge, then recreate the thumbnail.</td></tr>
       <tr><td>Dock sizes reset</td><td>Wrong INI, application terminated before a save, or invalid legacy state.</td><td>Portable <code>settings</code> path and layout keys.</td></tr>
       <tr><td>Open in TileZed asks for a default application</td><td>Old executable or separated installation.</td><td>Use the current build and keep both EXEs together.</td></tr>
+      <tr><td>Terrain image editor menu is disabled</td><td>No WorldEd project is loaded.</td><td>Open or create the destination PZW first.</td></tr>
+      <tr><td>Terrain image reports an unknown color</td><td>The pixel is not declared in the project's <code>Rules.txt</code>.</td><td>Use the reported coordinate and color value to correct the image or rule.</td></tr>
       <tr><td>Biomemap rejects size</td><td>Image dimensions do not match the project's 300/256 grid.</td><td>Project badge and exact input pixel size.</td></tr>
       <tr><td>Heatmap looks too bright in B42 preview</td><td>The ×40 visualization is enabled.</td><td>Inspect raw intensity; disable preview to see 0–255 literally.</td></tr>
       <tr><td>BuildingEd appears frozen at first launch</td><td>Large tileset/Building catalog load.</td><td>Progress window and portable log.</td></tr>
+      <tr><td>BuildingEd asks for a Tiles directory</td><td>No valid extracted game Tiles path is configured.</td><td>Close the editors, run <code>bin/config.exe</code>, select Tiles, then restart.</td></tr>
+      <tr><td>Catalog changes seem to be ignored</td><td>The wrong directory was selected as Configuration catalogs.</td><td>Use packaged <code>config</code>, not <code>settings</code>.</td></tr>
       <tr><td>InGameMap export drops a polygon</td><td>Degenerate or unrepresentable geometry.</td><td>Search logs for the cell, feature index and rejection reason.</td></tr>
     </tbody>
   </table>

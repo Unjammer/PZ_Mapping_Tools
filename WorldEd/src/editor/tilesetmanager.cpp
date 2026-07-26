@@ -479,7 +479,11 @@ void TilesetManager::loadTileset(Tileset *tileset, const QString &imageSource_)
     if (QDir(imageSource_).isRelative())
         return;
 
-    if (!tileset->isLoaded() /*&& !tileset->isMissing()*/) {
+    if (tileset->isLoaded() || mLoadingTilesets.contains(tileset))
+        return;
+
+    mLoadingTilesets.insert(tileset);
+    {
         QString imageSource, imageSource2x;
         getTilesetFileName(tileset->name(), imageSource, imageSource2x);
         if (Tileset *cached = mTilesetImageCache->findMatch(tileset, imageSource, imageSource2x)) {
@@ -497,7 +501,6 @@ void TilesetManager::loadTileset(Tileset *tileset, const QString &imageSource_)
                 tileset->setImageSource2x(cached->imageSource2x());
             }
         } else if (QImageReader(imageSource2x).size().isValid()) {
-            qDebug() << "2x YES " << imageSource;
             changeTilesetSource(tileset, imageSource, false);
             tileset->setImageSource2x(imageSource2x);
             cached = mTilesetImageCache->addTileset(tileset);
@@ -512,7 +515,6 @@ void TilesetManager::loadTileset(Tileset *tileset, const QString &imageSource_)
             imageLoaded(image, cached);
 #endif
         } else if (QImageReader(imageSource).size().isValid()) {
-            qDebug() << "2x NO " << imageSource;
             changeTilesetSource(tileset, imageSource, false);
             tileset->setImageSource2x(QString());
             cached = mTilesetImageCache->addTileset(tileset);
@@ -536,6 +538,7 @@ void TilesetManager::loadTileset(Tileset *tileset, const QString &imageSource_)
             tileset->setImageSource2x(QString());
         }
     }
+    mLoadingTilesets.remove(tileset);
 }
 
 void TilesetManager::waitForTilesets(const QList<Tileset *> &tilesets, QWidget *parent,

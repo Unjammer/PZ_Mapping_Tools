@@ -644,7 +644,12 @@ int BuildingMap::defaultOrientation()
 
 bool BuildingMap::isTilesetUsed(Tileset *tileset)
 {
-    return mMap->isTilesetUsed(tileset) || mBlendMap->isTilesetUsed(tileset);
+    // Image loading is asynchronous and emits tilesetChanged while a
+    // BuildingMap can still be constructing its two maps.  Views may query
+    // usage from that signal, so do not dereference either map until it
+    // exists.
+    return (mMap && mMap->isTilesetUsed(tileset)) ||
+            (mBlendMap && mBlendMap->isTilesetUsed(tileset));
 }
 
 void BuildingMap::buildingRotated()

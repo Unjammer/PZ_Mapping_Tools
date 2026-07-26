@@ -209,13 +209,8 @@ Preferences::Preferences()
     QSettings settings(QLatin1String("TheIndieStone"), QLatin1String("BuildingEd"));
     QString KEY_TILES_DIR = QLatin1String("TilesDirectory");
     QString tilesDirectory = settings.value(KEY_TILES_DIR).toString();
-    if (tilesDirectory.isEmpty() || !QDir(tilesDirectory).exists()) {
-        tilesDirectory = PortableSettings::installRootPath() +
-                QLatin1Char('/') + QLatin1String("../Tiles");
-        if (!QDir(tilesDirectory).exists())
-            tilesDirectory = PortableSettings::installRootPath() +
-                    QLatin1Char('/') + QLatin1String("../../Tiles");
-    }
+    if (tilesDirectory.isEmpty() || !QDir(tilesDirectory).exists())
+        tilesDirectory = PortableSettings::detectTilesPath();
     if (tilesDirectory.length())
         tilesDirectory = QDir::cleanPath(tilesDirectory);
     if (!QDir(tilesDirectory).exists())
@@ -233,8 +228,17 @@ Preferences::Preferences()
     mMapsDirectory = mSettings->value(QLatin1String("Current"), QString()).toString();
     mSettings->endGroup();
 
-    mConfigDirectory = PortableSettings::rootPath();
-    mSettings->setValue(QLatin1String("ConfigDirectory"), mConfigDirectory);
+    const QString configKey = QLatin1String("ConfigDirectory");
+    mConfigDirectory = mSettings->value(
+                configKey, PortableSettings::applicationConfigPath()).toString();
+    // The first portable preview incorrectly forced catalog files into the
+    // settings directory. Migrate that value to the packaged config folder.
+    if (QDir::cleanPath(mConfigDirectory).compare(
+                QDir::cleanPath(PortableSettings::rootPath()),
+                Qt::CaseInsensitive) == 0) {
+        mConfigDirectory = PortableSettings::applicationConfigPath();
+    }
+    mSettings->setValue(configKey, mConfigDirectory);
 
     mThumbnailsDirectory = mSettings->value(QLatin1String("Thumbnails/Directory"), QString()).toString();
 

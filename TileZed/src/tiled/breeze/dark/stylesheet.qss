@@ -1870,7 +1870,6 @@ QListView::item,
 QTreeView::item
 {
     padding: 0.13em;
-    color: red; #eff0f1;
 }
 
 QTreeView::item
@@ -1893,7 +1892,6 @@ QTreeView::item:!selected:hover
 {
     background-color: rgba(61, 173, 232, 0.1);
     outline: 0;
-    color: #eff0f1;
     padding: 0.13em;
 }
 
@@ -2222,11 +2220,9 @@ QTableView
 }
 
 /*
-QAbstractItemView::item
-{
-    color: #eff0f1;
-}
-*/
+ * Item text inherits QAbstractItemView's color. Do not set color on ::item:
+ * model ForegroundRole brushes are used for status colors.
+ */
 
 QAbstractItemView::item:pressed
 {

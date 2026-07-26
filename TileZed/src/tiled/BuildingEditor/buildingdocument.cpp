@@ -29,6 +29,7 @@
 #include "buildingwriter.h"
 #include "furnituregroups.h"
 
+#include <QDebug>
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QUndoStack>
@@ -120,16 +121,21 @@ QString BuildingDocument::displayName() const
 
 BuildingDocument *BuildingDocument::read(const QString &fileName, QString &error)
 {
+    qInfo() << "Reading building" << fileName;
     BuildingReader reader;
     if (Building *building = reader.read(fileName)) {
+        qInfo() << "Building file parsed; resolving definitions and tilesets";
         reader.fix(building);
         BuildingMap::loadNeededTilesets(building);
+        qInfo() << "Required building tilesets loaded; creating document";
         BuildingDocument *doc = new BuildingDocument(building, fileName);
         if (fileName.endsWith(QLatin1String(".autosave")))
             doc->mFileName.clear();
+        qInfo() << "Building opened successfully" << fileName;
         return doc;
     }
     error = reader.errorString();
+    qWarning() << "Could not read building" << fileName << error;
     return 0;
 }
 

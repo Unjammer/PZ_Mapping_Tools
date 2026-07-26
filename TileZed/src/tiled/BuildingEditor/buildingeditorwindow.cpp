@@ -669,6 +669,9 @@ void BuildingEditorWindow::closeEvent(QCloseEvent *event)
 
 bool BuildingEditorWindow::openFile(const QString &fileName)
 {
+    if (!ensureTilesDirectoryConfigured())
+        return false;
+
     // Select existing document if this file is already open
     int documentIndex = docman()->findDocument(fileName);
     if (documentIndex != -1) {
@@ -707,6 +710,9 @@ bool BuildingEditorWindow::openFile(const QString &fileName)
 
 bool BuildingEditorWindow::openAutoSave(const QString &fileName)
 {
+    if (!ensureTilesDirectoryConfigured())
+        return false;
+
     QString error;
     if (BuildingDocument *doc = BuildingDocument::read(fileName, error)) {
         docman()->addDocument(doc);
@@ -714,6 +720,23 @@ bool BuildingEditorWindow::openAutoSave(const QString &fileName)
     }
 
     QMessageBox::warning(this, tr("Error reading building"), error);
+    return false;
+}
+
+bool BuildingEditorWindow::ensureTilesDirectoryConfigured()
+{
+    const QString tilesDirectory = Preferences::instance()->tilesDirectory();
+    if (!tilesDirectory.isEmpty() && QDir(tilesDirectory).exists())
+        return true;
+
+    qWarning() << "BuildingEd cannot open a building because the Tiles "
+                  "directory is not configured";
+    QMessageBox::warning(
+                this, tr("Tiles Directory Required"),
+                tr("BuildingEd needs the extracted Project Zomboid Tiles "
+                   "directory before it can open a building.\n\n"
+                   "Close PZTools, run config.exe, choose the Tiles directory, "
+                   "then restart BuildingEd."));
     return false;
 }
 

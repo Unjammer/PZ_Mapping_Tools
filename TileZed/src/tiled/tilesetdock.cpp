@@ -788,8 +788,9 @@ void updateTilesetListItem(QListWidgetItem *item, Tileset *tileset, Map *map)
         status = QCoreApplication::translate(
                     "TilesetDock", "used by the map and available");
     } else {
-        // No explicit brush: Qt uses the correct text color for the active theme.
-        item->setForeground(QBrush());
+        // Remove the role entirely. setForeground(QBrush()) leaves a valid empty
+        // brush that some dark QSS themes render as black.
+        item->setData(Qt::ForegroundRole, QVariant());
         status = QCoreApplication::translate(
                     "TilesetDock", "not used by the map");
     }
@@ -1014,7 +1015,7 @@ TilesetDock::TilesetDock(QWidget *parent):
     Utils::setThemeIcon(mActionTilesetUp, "go-up");
     Utils::setThemeIcon(mActionTilesetDown, "go-down");
 
-    mActionSortByName->setIcon(QIcon(QLatin1String(":/images/16x16/sort-by-name.png")));
+    mActionSortByName->setIcon(QIcon(QLatin1String(":/images/16x16/sort-by-name.svg")));
     mActionSortByName->setCheckable(true);
     mActionSortByName->setChecked(Preferences::instance()->sortTilesets());
 

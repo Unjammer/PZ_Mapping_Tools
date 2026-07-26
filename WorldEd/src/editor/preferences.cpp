@@ -219,13 +219,8 @@ Preferences::Preferences()
     QString KEY_TILES_DIR = QLatin1String("Tilesets/TilesDirectory");
     QString tilesDirectory = settings.value(KEY_TILES_DIR).toString();
 
-    if (tilesDirectory.isEmpty() || !QDir(tilesDirectory).exists()) {
-        tilesDirectory = PortableSettings::installRootPath() +
-                QLatin1Char('/') + QLatin1String("../Tiles");
-        if (!QDir(tilesDirectory).exists())
-            tilesDirectory = PortableSettings::installRootPath() +
-                    QLatin1Char('/') + QLatin1String("../../Tiles");
-    }
+    if (tilesDirectory.isEmpty() || !QDir(tilesDirectory).exists())
+        tilesDirectory = PortableSettings::detectTilesPath();
     if (tilesDirectory.length())
         tilesDirectory = QDir::cleanPath(tilesDirectory);
     if (!QDir(tilesDirectory).exists())
@@ -241,7 +236,14 @@ Preferences::Preferences()
 
     // Use the same directory as TileZed.
     QString KEY_CONFIG_PATH = QLatin1String("ConfigDirectory");
-    mConfigDirectory = PortableSettings::rootPath();
+    mConfigDirectory = settings.value(
+                KEY_CONFIG_PATH,
+                PortableSettings::applicationConfigPath()).toString();
+    if (QDir::cleanPath(mConfigDirectory).compare(
+                QDir::cleanPath(PortableSettings::rootPath()),
+                Qt::CaseInsensitive) == 0) {
+        mConfigDirectory = PortableSettings::applicationConfigPath();
+    }
     settings.setValue(KEY_CONFIG_PATH, mConfigDirectory);
 
     // Use the same directory as TileZed.

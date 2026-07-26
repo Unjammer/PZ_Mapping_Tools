@@ -156,6 +156,7 @@
     TileProperties.txt
     Building*.txt
     LuaTools.txt
+  Tiles/                 (optional local placement of extracted game tiles)
   docs/
   lua/
   plugins/
@@ -168,7 +169,8 @@
     <tbody>
       <tr><td><code>bin</code></td><td>Executables and Qt DLLs.</td><td>Yes, all three applications use the same runtime.</td></tr>
       <tr><td><code>config</code></td><td>Tileset, TileDef, Building and Lua tool catalogs.</td><td>Yes.</td></tr>
-      <tr><td><code>settings</code></td><td>Portable INI files and per-application state.</td><td>The directory is shared; each application keeps its own keys/files.</td></tr>
+      <tr><td><code>settings</code></td><td>Portable INI files, logs and per-application state. It is not the catalog directory.</td><td>The directory is shared; each application keeps its own keys/files.</td></tr>
+      <tr><td><code>Tiles</code></td><td>Extracted Project Zomboid tile PNGs. These are not distributed with PZTools.</td><td>Yes. It may instead be stored elsewhere and selected with <code>config.exe</code>.</td></tr>
       <tr><td><code>themes</code></td><td>External QSS stylesheets.</td><td>Yes.</td></tr>
       <tr><td><code>lua</code></td><td>TileZed mapping scripts and interactive tools.</td><td>Used by TileZed.</td></tr>
       <tr><td><code>docs</code></td><td>Offline documentation.</td><td>Yes.</td></tr>
@@ -179,6 +181,26 @@
     Do not move only one executable out of <code>bin</code>. WorldEd's
     <strong>Open in TileZed</strong> deliberately looks for the sibling
     <code>TileZed.exe</code>, and Qt also needs the DLL and plugin layout.
+  </div>
+
+  <h3>First start</h3>
+  <ol>
+    <li>Extract the complete PZTools archive to a writable directory.</li>
+    <li>Close all three editors and run <code>bin/config.exe</code>.</li>
+    <li>Leave <strong>Configuration catalogs</strong> on the packaged
+      <code>config</code> directory unless you maintain a custom catalog set.</li>
+    <li>Select the extracted Project Zomboid <strong>Tiles</strong> directory.
+      PZTools also detects a directory named <code>Tiles</code> directly beside
+      <code>config</code>.</li>
+    <li>Save, then start WorldEd, TileZed or BuildingEd.</li>
+  </ol>
+
+  <div class="note">
+    <code>config</code> contains editable application data such as
+    <code>Tilesets.txt</code> and <code>BuildingTiles.txt</code>.
+    <code>settings</code> contains generated INI files and logs. Deleting
+    <code>settings</code> resets application preferences; it must not be used
+    as the configuration-catalog directory.
   </div>
 
   <h2 id="settings">Portable settings, layouts and logs</h2>
@@ -218,6 +240,12 @@
   <p>Logs live in the portable installation instead of a user-profile directory.
   They record tileset loading, missing images, Building catalog loading, invalid
   PNG profiles, biomemap warnings and InGameMap geometry repairs.</p>
+
+  <h3>Changing shared paths</h3>
+  <p>Close WorldEd, TileZed and BuildingEd, then run
+  <code>bin/config.exe</code>. The first field selects the catalog directory;
+  the second selects the extracted game Tiles directory. The values are shared
+  by all three applications and stored in TileZed's portable INI file.</p>
 
   <h2 id="themes">External QSS themes</h2>
   <p>Built-in themes are extracted as QSS files and external themes are discovered
@@ -685,6 +713,8 @@
       <tr><td>Biomemap rejects size</td><td>Image dimensions do not match the project's 300/256 grid.</td><td>Project badge and exact input pixel size.</td></tr>
       <tr><td>Heatmap looks too bright in B42 preview</td><td>The ×40 visualization is enabled.</td><td>Inspect raw intensity; disable preview to see 0–255 literally.</td></tr>
       <tr><td>BuildingEd appears frozen at first launch</td><td>Large tileset/Building catalog load.</td><td>Progress window and portable log.</td></tr>
+      <tr><td>BuildingEd asks for a Tiles directory</td><td>No valid extracted game Tiles path is configured.</td><td>Close the editors, run <code>bin/config.exe</code>, select Tiles, then restart.</td></tr>
+      <tr><td>Catalog changes seem to be ignored</td><td>The wrong directory was selected as Configuration catalogs.</td><td>Use packaged <code>config</code>, not <code>settings</code>.</td></tr>
       <tr><td>InGameMap export drops a polygon</td><td>Degenerate or unrepresentable geometry.</td><td>Search logs for the cell, feature index and rejection reason.</td></tr>
     </tbody>
   </table>

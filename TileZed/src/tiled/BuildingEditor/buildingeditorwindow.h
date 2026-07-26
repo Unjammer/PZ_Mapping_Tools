@@ -216,6 +216,7 @@ public:
 
 private:
     BuildingDocumentMgr *docman() const;
+    bool ensureTilesDirectoryConfigured();
 
     void writeSettings();
     void writeWindowSettings();

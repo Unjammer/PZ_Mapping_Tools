@@ -1227,7 +1227,10 @@ void BuildingIsoScene::tilesetRemoved(Tileset *tileset)
 
 void BuildingIsoScene::tilesetChanged(Tileset *tileset)
 {
-    if (!mDocument)
+    // setDocument() assigns mDocument before BuildingToMap() has finished
+    // constructing mBuildingMap. Asynchronous image completion may emit this
+    // signal in that interval.
+    if (!mDocument || !mBuildingMap)
         return;
     if (mBuildingMap->isTilesetUsed(tileset))
         update();

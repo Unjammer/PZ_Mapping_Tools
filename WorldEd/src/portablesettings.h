@@ -53,33 +53,32 @@ inline QString rootPath()
     return installPath(QLatin1String("settings"));
 }
 
+inline QString detectTilesPath()
+{
+    QStringList candidates;
+    candidates += installPath(QLatin1String("Tiles"));
+    candidates += QDir(installRootPath()).absoluteFilePath(
+                QLatin1String("../Tiles"));
+    candidates += QDir(installRootPath()).absoluteFilePath(
+                QLatin1String("../../Tiles"));
+
+    for (const QString &candidate : candidates) {
+        const QFileInfo info(candidate);
+        if (info.exists() && info.isDir())
+            return QDir::cleanPath(info.absoluteFilePath());
+    }
+    return QString();
+}
+
 inline QString path(const QString &relativePath)
 {
     return QDir(rootPath()).filePath(relativePath);
-}
-
-inline void installDefaultConfigurationFiles()
-{
-    const QDir sourceDirectory(applicationConfigPath());
-    const QDir destinationDirectory(rootPath());
-    if (sourceDirectory.absolutePath().compare(destinationDirectory.absolutePath(),
-                                               Qt::CaseInsensitive) == 0)
-        return;
-
-    const QStringList fileNames = sourceDirectory.entryList(
-                QStringList() << QLatin1String("*.txt"), QDir::Files | QDir::Readable);
-    for (const QString &fileName : fileNames) {
-        const QString destination = destinationDirectory.filePath(fileName);
-        if (!QFile::exists(destination))
-            QFile::copy(sourceDirectory.filePath(fileName), destination);
-    }
 }
 
 inline void configure()
 {
     const QString path = rootPath();
     QDir().mkpath(path);
-    installDefaultConfigurationFiles();
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, path);
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, path);

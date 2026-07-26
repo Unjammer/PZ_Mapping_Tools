@@ -3401,7 +3401,7 @@ void ZombieHeatMapTool::deleteInstance()
 
 ZombieHeatMapTool::ZombieHeatMapTool()
     : BaseWorldSceneTool(tr("Paint Zombie Heatmap"),
-                         QIcon(QLatin1String(":/images/22x22/stock-tool-bucket-fill.png")),
+                         QIcon(QLatin1String(":/images/22x22/tool-zombie-heatmap.svg")),
                          QKeySequence())
     , mPainting(false)
     , mBrushRadius(1)
@@ -3682,7 +3682,7 @@ void BiomeMapTool::deleteInstance()
 
 BiomeMapTool::BiomeMapTool()
     : BaseWorldSceneTool(tr("Paint Biomemap Biome Layer"),
-                         QIcon(QLatin1String(":/images/22x22/stock-tool-bucket-fill.png")),
+                         QIcon(QLatin1String(":/images/22x22/tool-biome-map.svg")),
                          QKeySequence())
     , mPainting(false)
     , mBrushRadius(4)

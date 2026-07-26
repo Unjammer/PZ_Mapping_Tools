@@ -1176,6 +1176,9 @@ bool MainWindow::InitConfigFiles(QWidget *parent)
     // Read Tilesets.txt before TMXConfig.txt in case we are upgrading
     // TMXConfig.txt from VERSION0 to VERSION1.
     progress.update(tr("Reading %1...").arg(TileMetaInfoMgr::instance()->txtName()));
+    qInfo().noquote() << "Reading tileset catalog"
+                      << QDir::toNativeSeparators(
+                             TileMetaInfoMgr::instance()->txtPath());
     if (!TileMetaInfoMgr::instance()->readTxt()) {
         QMessageBox::critical(parent, tr("Tileset Configuration Error"),
                               tr("%1\n(while reading %2)")
@@ -1183,12 +1186,28 @@ bool MainWindow::InitConfigFiles(QWidget *parent)
                               .arg(TileMetaInfoMgr::instance()->txtName()));
         return false;
     }
+    qInfo() << "Loaded tileset catalog metadata:"
+            << TileMetaInfoMgr::instance()->tilesets().size() << "entries";
 
-    progress.update(tr("Updating tileset IDs..."));
-    if (!TileMetaInfoMgr::instance()->addNewTilesets()) {
-        QMessageBox::critical(parent, tr("Tileset Configuration Error"),
-                              tr("%1\n(while adding new tilesets)"));
-        return false;
+    const bool buildingEditorMode =
+            QCoreApplication::applicationName().compare(
+                QLatin1String("BuildingEd"), Qt::CaseInsensitive) == 0;
+    if (buildingEditorMode) {
+        qInfo() << "BuildingEd startup defers discovery and image loading for "
+                   "unused tilesets";
+    } else {
+        progress.update(tr("Discovering additional tilesets..."));
+        qInfo().noquote() << "Scanning for additional tilesets in"
+                          << QDir::toNativeSeparators(
+                                 TileMetaInfoMgr::instance()->tiles2xDirectory());
+        if (!TileMetaInfoMgr::instance()->addNewTilesets()) {
+            QMessageBox::critical(parent, tr("Tileset Configuration Error"),
+                                  tr("%1\n(while adding new tilesets)")
+                                  .arg(TileMetaInfoMgr::instance()->errorString()));
+            return false;
+        }
+        qInfo() << "Tileset discovery complete:"
+                << TileMetaInfoMgr::instance()->tilesets().size() << "entries";
     }
 
     progress.update(tr("Building configuration [1/4]: Reading %1...")
