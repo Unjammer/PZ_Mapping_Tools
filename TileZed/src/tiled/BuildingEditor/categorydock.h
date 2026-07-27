@@ -68,6 +68,7 @@ signals:
     
 private slots:
     void currentDocumentChanged(BuildingEditor::BuildingDocument *doc);
+    void catalogLoaded();
 
     void categoryScaleChanged(qreal scale);
     void categoryViewMousePressed();

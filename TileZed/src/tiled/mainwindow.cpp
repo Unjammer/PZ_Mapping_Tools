@@ -141,6 +141,7 @@
 #include <QMimeData>
 #include <QScrollBar>
 #include <QSessionManager>
+#include <QSet>
 #include <QTextStream>
 #include <QUndoGroup>
 #include <QUndoStack>
@@ -3695,30 +3696,45 @@ void MainWindow::initLuaTileTools()
     mLuaTileTools.clear();
 
     QList<Lua::LuaToolInfo> toolsInfo;
+    QSet<QString> loadedFiles;
 
-    // Load the user's LuaTools.txt.
-    Lua::LuaToolFile file1;
-    QString fileName = Preferences::instance()->configPath(QLatin1String("LuaTools.txt"));
-    if (QFileInfo(fileName).exists()) {
-        if (file1.read(fileName)) {
-            toolsInfo += file1.takeTools();
-//            mTxtModifiedTime1 = QFileInfo(fileName).lastModified();
-        } else {
-            QMessageBox::warning(this, tr("Error Reading LuaTools.txt"),
-                                 file1.errorString());
+    // The shared configuration directory normally is the packaged application
+    // configuration directory in portable installs.  Do not load the same
+    // LuaTools.txt twice in that case.  When the user deliberately selects a
+    // separate configuration catalog, load it first and then add the packaged
+    // tools.
+    QStringList fileNames;
+    fileNames += Preferences::instance()->configPath(
+                QLatin1String("LuaTools.txt"));
+    fileNames += QDir(Preferences::instance()->appConfigPath()).filePath(
+                QLatin1String("LuaTools.txt"));
+
+    foreach (const QString &fileName, fileNames) {
+        QFileInfo info(fileName);
+        if (!info.isFile())
+            continue;
+
+        QString identity = info.canonicalFilePath();
+        if (identity.isEmpty())
+            identity = QDir::cleanPath(info.absoluteFilePath());
+#ifdef Q_OS_WIN
+        identity = identity.toLower();
+#endif
+        if (loadedFiles.contains(identity)) {
+            qInfo() << "Skipping duplicate Lua tool catalog" << fileName;
+            continue;
         }
-    }
+        loadedFiles.insert(identity);
 
-    // Load the application's LuaTools.txt.
-    Lua::LuaToolFile file2;
-    fileName = Preferences::instance()->appConfigPath(QLatin1String("LuaTools.txt"));
-    if (QFileInfo(fileName).exists()) {
-        if (file2.read(fileName)) {
-            toolsInfo += file2.takeTools();
-//            mTxtModifiedTime2 = QFileInfo(fileName).lastModified();
+        Lua::LuaToolFile file;
+        if (file.read(fileName)) {
+            toolsInfo += file.takeTools();
         } else {
-            QMessageBox::warning(MainWindow::instance(), tr("Error Reading LuaTools.txt"),
-                                 file2.errorString());
+            QMessageBox::warning(this, tr("Lua Tool Configuration Error"),
+                                 tr("TileZed could not load the Lua tool catalog:\n"
+                                    "%1\n\n%2")
+                                 .arg(QDir::toNativeSeparators(fileName),
+                                      file.errorString()));
         }
     }
 

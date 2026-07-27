@@ -346,21 +346,31 @@ void BuildingTilesetDock::tilesetBackgroundColorChanged(const QColor &color)
 
 void BuildingTilesetDock::setTilesetList()
 {
+    const QString previousName =
+            mCurrentTileset ? mCurrentTileset->name() : QString();
     ui->tilesets->clear();
 
 #ifdef TILESET_LIST_FIXED_WIDTH
     int width = 64;
     QFontMetrics fm = ui->tilesets->fontMetrics();
 #endif
+    int selectedRow = -1;
+    int firstAvailableRow = -1;
+    int row = 0;
     foreach (Tileset *tileset, TileMetaInfoMgr::instance()->tilesets()) {
         QListWidgetItem *item = new QListWidgetItem();
         item->setText(tileset->name());
         if (tileset->isMissing())
             item->setForeground(Qt::red);
         ui->tilesets->addItem(item);
+        if (tileset->name() == previousName)
+            selectedRow = row;
+        if (firstAvailableRow < 0 && !tileset->isMissing())
+            firstAvailableRow = row;
 #ifdef TILESET_LIST_FIXED_WIDTH
         width = qMax(width, fm.horizontalAdvance(tileset->name()));
 #endif
+        ++row;
     }
 #ifdef TILESET_LIST_FIXED_WIDTH
     int sbw = ui->tilesets->verticalScrollBar()->sizeHint().width();
@@ -369,6 +379,10 @@ void BuildingTilesetDock::setTilesetList()
 #endif
 
     filterEdited(ui->filter->text());
+    if (selectedRow < 0)
+        selectedRow = firstAvailableRow;
+    if (selectedRow >= 0)
+        ui->tilesets->setCurrentRow(selectedRow);
 }
 
 void BuildingTilesetDock::setTilesList()

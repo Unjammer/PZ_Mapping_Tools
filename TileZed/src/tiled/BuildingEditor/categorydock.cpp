@@ -145,6 +145,9 @@ CategoryDock::CategoryDock(QWidget *parent) :
 
     connect(ToolManager::instance(), &ToolManager::currentToolChanged,
             this, &CategoryDock::currentToolChanged);
+    connect(FurnitureGroups::instance(),
+            &FurnitureGroups::furnitureCatalogLoaded,
+            this, &CategoryDock::catalogLoaded);
 
     /////
 
@@ -176,6 +179,50 @@ CategoryDock::CategoryDock(QWidget *parent) :
 
     connect(BuildingDocumentMgr::instance(), &BuildingDocumentMgr::currentDocumentChanged,
             this, &CategoryDock::currentDocumentChanged);
+}
+
+void CategoryDock::catalogLoaded()
+{
+    QString categoryName = mCategory ? mCategory->name() : QString();
+    QString furnitureGroupName =
+            mFurnitureGroup ? mFurnitureGroup->mLabel : QString();
+
+    QSettings &settings = BuildingPreferences::instance()->settings();
+    settings.beginGroup(QLatin1String("CategoryDock"));
+    if (categoryName.isEmpty()) {
+        categoryName = settings.value(
+                    QLatin1String("SelectedCategory")).toString();
+    }
+    if (furnitureGroupName.isEmpty()) {
+        furnitureGroupName = settings.value(
+                    QLatin1String("SelectedFurnitureGroup")).toString();
+    }
+    settings.endGroup();
+
+    setCategoryList();
+
+    int row = -1;
+    if (!furnitureGroupName.isEmpty()) {
+        const int index =
+                FurnitureGroups::instance()->indexOf(furnitureGroupName);
+        if (index >= 0)
+            row = mRowOfFirstFurnitureGroup + index;
+    }
+    if (row < 0 && !categoryName.isEmpty()) {
+        const int index =
+                BuildingTilesMgr::instance()->indexOf(categoryName);
+        if (index >= 0)
+            row = mRowOfFirstCategory + index;
+    }
+    if (row < 0 && BuildingTilesMgr::instance()->categoryCount() > 0)
+        row = mRowOfFirstCategory;
+
+    ui->categoryList->setCurrentRow(row);
+    qInfo() << "BuildingEd object-mode catalog refreshed:"
+            << BuildingTilesMgr::instance()->categoryCount()
+            << "tile categories,"
+            << FurnitureGroups::instance()->groupCount()
+            << "furniture groups";
 }
 
 void CategoryDock::currentDocumentChanged(BuildingDocument *doc)
@@ -1108,6 +1155,16 @@ bool CategoryDock::validateAllTileCategories()
 {
     bool valid = true;
     const int count = BuildingTilesMgr::instance()->categoryCount();
+    const int furnitureCount = FurnitureGroups::instance()->groupCount();
+    // HorizontalLineDelegate inserts one separator after "Used" and another
+    // after the tile categories.
+    const int expectedRows = 4 + count + furnitureCount;
+    if (ui->categoryList->count() != expectedRows) {
+        qWarning() << "BuildingEd object-mode catalog row mismatch:"
+                   << ui->categoryList->count() << "displayed,"
+                   << expectedRows << "expected";
+        valid = false;
+    }
     qInfo() << "Validating all BuildingEd tile categories:" << count;
 
     for (int index = 0; index < count; ++index) {
@@ -1134,6 +1191,30 @@ bool CategoryDock::validateAllTileCategories()
                         ? QStringLiteral("OK")
                         : QStringLiteral("FAILED"));
         valid = valid && categoryValid;
+    }
+
+    for (int index = 0; index < furnitureCount; ++index) {
+        FurnitureGroup *group = FurnitureGroups::instance()->group(index);
+        ui->categoryList->setCurrentRow(
+                    mRowOfFirstFurnitureGroup + index);
+        QCoreApplication::processEvents(
+                    QEventLoop::ExcludeUserInputEvents);
+        const bool separator = group
+                && group->mLabel.startsWith(QLatin1String("---"))
+                && group->mTiles.isEmpty();
+        const bool groupValid = mFurnitureGroup == group
+                && group != nullptr
+                && (separator || !group->mTiles.isEmpty());
+        if (!groupValid) {
+            qWarning().noquote()
+                    << QStringLiteral(
+                           "BuildingEd object-mode furniture group failed: "
+                           "%1 - %2 entries")
+                       .arg(group ? group->mLabel
+                                  : QStringLiteral("<invalid>"))
+                       .arg(group ? group->mTiles.count() : 0);
+        }
+        valid = valid && groupValid;
     }
 
     qInfo() << "BuildingEd tile-category validation"

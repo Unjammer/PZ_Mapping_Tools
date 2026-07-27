@@ -16,6 +16,8 @@
  */
 
 #include <QApplication>
+#include <QMessageBox>
+#include <QSettings>
 #include "mainwindow.h"
 #include "../firstlaunchdialog.h"
 #include "../portablesettings.h"
@@ -74,8 +76,35 @@ int main(int argc, char *argv[])
                     TileMetaInfoMgr::instance()->tilesets());
     }
 
-    if (Preferences::instance()->restoreLastSession())
-        w.openLastFiles();
+    // Mark the interactive session dirty before restoring documents.  If a
+    // malformed project or map terminates WorldEd, the next launch starts
+    // safely instead of reopening the same file in an endless crash loop.
+    QSettings sessionSettings(QSettings::IniFormat, QSettings::UserScope,
+                              QLatin1String("TheIndieStone"),
+                              QLatin1String("PZWorldEd"));
+    const QString cleanExitKey =
+            QLatin1String("Startup/PreviousSessionClosedCleanly");
+    const bool previousSessionClosedCleanly =
+            sessionSettings.value(cleanExitKey, true).toBool();
+    sessionSettings.setValue(cleanExitKey, false);
+    sessionSettings.sync();
+
+    if (Preferences::instance()->restoreLastSession()) {
+        if (previousSessionClosedCleanly) {
+            w.openLastFiles();
+        } else {
+            qWarning() << "Automatic session restore skipped after an "
+                          "unclean WorldEd shutdown.";
+            QMessageBox::warning(
+                        &w, QObject::tr("WorldEd Session Recovery"),
+                        QObject::tr(
+                            "WorldEd did not close cleanly last time.\n\n"
+                            "Automatic document restore was skipped to prevent "
+                            "a startup crash loop. Your project files were not "
+                            "changed. Open the required project manually after "
+                            "checking the latest log in settings/logs."));
+        }
+    }
 
     // Tile loading and session restoration can change dock size hints after
     // the initial restore. Reapply the persisted layout once startup is done.
@@ -86,6 +115,9 @@ int main(int argc, char *argv[])
     w.startSettingsAutoSave();
 
     int ret = a.exec();
+
+    sessionSettings.setValue(cleanExitKey, true);
+    sessionSettings.sync();
 
     DocumentManager::deleteInstance();
     ToolManager::deleteInstance();

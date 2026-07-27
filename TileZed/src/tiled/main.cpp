@@ -434,11 +434,21 @@ int main(int argc, char *argv[])
                             : QStringLiteral("FAIL: %1")
                               .arg(furnitureError));
 
-                BuildingEditor::CategoryDock *categoryDock =
-                        buildingEditor.findChild<
+                const QList<BuildingEditor::CategoryDock *> categoryDocks =
+                        buildingEditor.findChildren<
                             BuildingEditor::CategoryDock *>();
-                const bool categoriesValid = categoryDock
-                        && categoryDock->validateAllTileCategories();
+                bool categoriesValid = categoryDocks.count() == 2;
+                int categoryDockIndex = 0;
+                for (BuildingEditor::CategoryDock *categoryDock
+                     : categoryDocks) {
+                    const bool dockValid = categoryDock
+                            && categoryDock->validateAllTileCategories();
+                    qInfo() << "BuildingEd object-mode category dock"
+                            << ++categoryDockIndex << "of"
+                            << categoryDocks.count() << ":"
+                            << (dockValid ? "PASS" : "FAIL");
+                    categoriesValid = categoriesValid && dockValid;
+                }
                 const bool valid = tileModeValid
                         && templateTilesValid
                         && furnitureValid
