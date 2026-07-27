@@ -138,8 +138,6 @@ The current API keeps existing scripts working while adding:
 detect when the user and application catalog are the same file and load it only
 once.
 
-See the [Lua scripting reference](docs/TileZed/LuaScripting.html) and
-the [Automapper guide](docs/TileZed/Automapper.html).
 
 ## BuildingEd
 
@@ -193,14 +191,6 @@ PZTools/
 If the Tiles directory is moved later, use **Change Shared Paths** from WorldEd
 or TileZed. BuildingEd consumes the same shared setting.
 
-## Documentation and issue reports
-
-- [PZTools user guide](docs/TileZed/PZToolsGuide.html)
-- [Lua scripting reference](docs/TileZed/LuaScripting.html)
-- [Automapper guide](docs/TileZed/Automapper.html)
-- [Detailed fork changelog](CHANGELOG-PZTOOLS.md)
-- [Current release changes](RELEASE_CHANGELOG.md)
-
 Logs are written to `settings/logs`. A useful issue report includes:
 
 - application name and exact steps to reproduce;
@@ -246,8 +236,6 @@ executables and their matching libraries together when assembling a release.
 .
 ├── WorldEd/                 WorldEd source tree
 ├── TileZed/                 TileZed and BuildingEd source tree
-├── docs/images/             README screenshots
 ├── CHANGELOG-PZTOOLS.md     detailed differences from upstream
-├── RELEASE_CHANGELOG.md     concise current-release notes
 └── README.md
 ```
