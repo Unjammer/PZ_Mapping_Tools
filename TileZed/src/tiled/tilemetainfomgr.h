@@ -142,6 +142,7 @@ public:
     bool isEnumNorth(const QString &enumName) const;
 
 signals:
+    void tilesetCatalogLoaded();
     void tilesetAdded(Tiled::Tileset *ts);
     void tilesetAboutToBeRemoved(Tiled::Tileset *ts);
     void tilesetRemoved(Tiled::Tileset *ts);

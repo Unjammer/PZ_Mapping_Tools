@@ -26,6 +26,7 @@
 #include "buildingfloorsdialog.h"
 #include "buildingkeyvaluesdialog.h"
 #include "buildinglua.h"
+#include "buildingmap.h"
 #include "buildingobjects.h"
 #include "buildingpreferences.h"
 #include "buildingpreferencesdialog.h"
@@ -65,6 +66,8 @@
 #include "tilesetmanager.h"
 #include "utils.h"
 #include "zoomable.h"
+#include "zprogress.h"
+#include "../../portablesettings.h"
 #include "maplevel.h"
 #include "maprenderer.h"
 #include "tile.h"
@@ -726,7 +729,7 @@ bool BuildingEditorWindow::openAutoSave(const QString &fileName)
 bool BuildingEditorWindow::ensureTilesDirectoryConfigured()
 {
     const QString tilesDirectory = Preferences::instance()->tilesDirectory();
-    if (!tilesDirectory.isEmpty() && QDir(tilesDirectory).exists())
+    if (PortableSettings::isTilesPath(tilesDirectory))
         return true;
 
     qWarning() << "BuildingEd cannot open a building because the Tiles "
@@ -734,9 +737,12 @@ bool BuildingEditorWindow::ensureTilesDirectoryConfigured()
     QMessageBox::warning(
                 this, tr("Tiles Directory Required"),
                 tr("BuildingEd needs the extracted Project Zomboid Tiles "
-                   "directory before it can open a building.\n\n"
-                   "Close PZTools, run config.exe, choose the Tiles directory, "
-                   "then restart BuildingEd."));
+                   "directory before it can open a building. The directory "
+                   "must contain PNG files directly or in a non-empty 1x, 2x "
+                   "or custom subdirectory.\n\n"
+                   "Restart an editor to open PZTools Initial Setup, or choose "
+                   "the shared Tiles directory from editor preferences, then "
+                   "restart BuildingEd."));
     return false;
 }
 
@@ -766,6 +772,12 @@ bool BuildingEditorWindow::closeYerself()
 
 bool BuildingEditorWindow::Startup()
 {
+    PROGRESS progress(tr("Loading all tilesets..."), this);
+    TileMetaInfoMgr::instance()->loadTilesets(
+                QList<Tileset *>(), false, &progress);
+    TilesetManager::instance()->waitForTilesets(
+                TileMetaInfoMgr::instance()->tilesets());
+
     connect(BuildingTilesMgr::instance(), &BuildingTilesMgr::tilesetAdded,
             this, &BuildingEditorWindow::tilesetAdded);
     connect(BuildingTilesMgr::instance(), &BuildingTilesMgr::tilesetAboutToBeRemoved,
@@ -1013,6 +1025,24 @@ void BuildingEditorWindow::newBuilding()
     building->insertFloor(0, new BuildingFloor(building, 0));
 
     BuildingDocument *doc = new BuildingDocument(building, QString());
+
+    const QStringList unresolved = BuildingMap::loadNeededTilesets(building);
+    if (!unresolved.isEmpty()) {
+        const int shown = qMin(10, unresolved.count());
+        QStringList details = unresolved.mid(0, shown);
+        if (unresolved.count() > shown)
+            details += tr("... and %1 more").arg(unresolved.count() - shown);
+        QMessageBox::warning(
+                    this,
+                    tr("Building tiles unavailable"),
+                    tr("The new building references %1 tileset image(s) that "
+                       "could not be loaded. Those tiles will appear as red "
+                       "question marks.\n\n%2\n\n"
+                       "Check the shared Tiles directory in the application "
+                       "settings.")
+                    .arg(unresolved.count())
+                    .arg(details.join(QLatin1Char('\n'))));
+    }
 
     docman()->addDocument(doc);
 }
@@ -1467,7 +1497,6 @@ void BuildingEditorWindow::exportTMX()
                        QFileInfo(fileName).absolutePath());
 }
 
-#include "buildingmap.h"
 #include "exportbasementsdialog.h"
 #include "mapcomposite.h"
 #include "mapmanager.h"

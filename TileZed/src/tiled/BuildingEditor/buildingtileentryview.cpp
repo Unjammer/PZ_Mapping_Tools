@@ -30,7 +30,9 @@ using namespace Tiled::Internal;
 
 BuildingTileEntryView::BuildingTileEntryView(QWidget *parent) :
     MixedTilesetView(parent),
-    mCategoryLabels(false)
+    mCategoryLabels(false),
+    mSettingEntries(false),
+    mMissingEntryCount(0)
 {
     connect(TilesetManager::instance(), &TilesetManager::tilesetChanged,
             this, &BuildingTileEntryView::tilesetChanged);
@@ -53,15 +55,47 @@ void BuildingTileEntryView::clear()
 
 void BuildingTileEntryView::setEntries(const QList<BuildingTileEntry*> &entries, bool categoryLabels)
 {
+    // Loading a previously-unused tileset emits tilesetChanged() while this
+    // function is still resolving the category. Re-entering setEntries() for
+    // every loaded image recursively restarts the complete category and can
+    // overflow the stack for categories spanning many tilesets (Roof Caps is
+    // a common example). The active pass already picks up each loaded image.
+    if (mSettingEntries)
+        return;
+    mSettingEntries = true;
+
     QList<Tiled::Tile*> tiles;
     QList<void*> userData;
     QStringList headers;
+    mMissingEntryCount = 0;
 
     mEntries = entries;
     mEntries.detach(); // userData points to individual elements of this list
 
+    // Resolve and decode the category as one batch. Apart from avoiding one
+    // wait cycle per entry, this guarantees that a category is not displayed
+    // half-loaded when its entries span many tilesets.
+    QList<Tileset*> requiredTilesets;
+    for (BuildingTileEntry *entry : std::as_const(mEntries)) {
+        BuildingTile *displayTile = entry->displayTile();
+        if (displayTile->isNone())
+            continue;
+        Tileset *tileset = TileMetaInfoMgr::instance()->tileset(
+                    displayTile->mTilesetName);
+        if (tileset && !tileset->isLoaded() && !tileset->isMissing()
+                && !requiredTilesets.contains(tileset)) {
+            requiredTilesets += tileset;
+        }
+    }
+    if (!requiredTilesets.isEmpty()) {
+        TileMetaInfoMgr::instance()->loadTilesets(requiredTilesets, true);
+        TilesetManager::instance()->waitForTilesets(requiredTilesets);
+    }
+
     for (BuildingTileEntry* entry : std::as_const(mEntries)) {
         if (Tiled::Tile *tile = BuildingTilesMgr::instance()->tileFor(entry->displayTile())) {
+            if (tile == TilesetManager::instance()->missingTile())
+                ++mMissingEntryCount;
             tiles += tile;
             userData += entry;
             if (categoryLabels)
@@ -75,6 +109,7 @@ void BuildingTileEntryView::setEntries(const QList<BuildingTileEntry*> &entries,
     setTiles(tiles, userData, headers);
 
     mCategoryLabels = categoryLabels;
+    mSettingEntries = false;
 }
 
 QModelIndex BuildingTileEntryView::index(BuildingTileEntry *entry)
@@ -92,12 +127,16 @@ BuildingTileEntry *BuildingTileEntryView::entry(const QModelIndex &index)
 void BuildingTileEntryView::tilesetChanged(Tileset *tileset)
 {
     Q_UNUSED(tileset)
+    if (mSettingEntries)
+        return;
     setEntries(mEntries, mCategoryLabels);
 }
 
 void BuildingTileEntryView::tilesetAdded(Tileset *tileset)
 {
     Q_UNUSED(tileset)
+    if (mSettingEntries)
+        return;
     setEntries(mEntries, mCategoryLabels);
 }
 

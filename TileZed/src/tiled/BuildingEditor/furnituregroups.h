@@ -256,6 +256,7 @@ public:
     void grimeChanged(FurnitureTile *ftile);
 
 signals:
+    void furnitureCatalogLoaded();
     void furnitureLayerChanged(BuildingEditor::FurnitureTiles *ftiles);
     void furnitureTileChanged(BuildingEditor::FurnitureTile *ftile);
 

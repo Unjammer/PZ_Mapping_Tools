@@ -33,6 +33,9 @@
 #include "tile.h"
 #include "tileset.h"
 
+#include <QCoreApplication>
+#include <QDebug>
+#include <QEventLoop>
 #include <QScrollBar>
 #include <QToolBar>
 
@@ -112,11 +115,14 @@ BuildingTilesetDock::BuildingTilesetDock(QWidget *parent) :
 
     connect(TileMetaInfoMgr::instance(), &TileMetaInfoMgr::tilesetAdded,
             this, &BuildingTilesetDock::tilesetAdded);
+    connect(TileMetaInfoMgr::instance(), &TileMetaInfoMgr::tilesetCatalogLoaded,
+            this, &BuildingTilesetDock::setTilesetList);
     connect(TileMetaInfoMgr::instance(), &TileMetaInfoMgr::tilesetAboutToBeRemoved,
             this, &BuildingTilesetDock::tilesetAboutToBeRemoved);
 
     connect(TilesetManager::instance(), &TilesetManager::tilesetChanged,
-            this, &BuildingTilesetDock::tilesetChanged);
+            this, &BuildingTilesetDock::tilesetChanged,
+            Qt::QueuedConnection);
     connect(TilesetManager::instance(), &TilesetManager::tileLayerNameChanged,
             this, &BuildingTilesetDock::tileLayerNameChanged);
 
@@ -133,8 +139,93 @@ BuildingTilesetDock::~BuildingTilesetDock()
 
 void BuildingTilesetDock::firstTimeSetup()
 {
-    if (!ui->tilesets->count())
+    if (ui->tilesets->count() != TileMetaInfoMgr::instance()->tilesets().count())
         setTilesetList(); // TileMetaInfoMgr signals might have done this already.
+}
+
+bool BuildingTilesetDock::validateTilesetCatalog(QString *errorString)
+{
+    const int catalogCount = TileMetaInfoMgr::instance()->tilesets().count();
+    if (catalogCount <= 0) {
+        *errorString = tr("The tileset catalog is empty.");
+        return false;
+    }
+    if (ui->tilesets->count() != catalogCount) {
+        *errorString = tr("Tile mode displays %1 of %2 catalog tilesets.")
+                .arg(ui->tilesets->count()).arg(catalogCount);
+        return false;
+    }
+
+    int validationRow = -1;
+    QStringList failures;
+    for (int row = 0; row < catalogCount; ++row) {
+        Tileset *candidate = TileMetaInfoMgr::instance()->tileset(row);
+        if (!candidate) {
+            failures += tr("Catalog row %1 does not reference a tileset.")
+                    .arg(row);
+            continue;
+        }
+        if (candidate->isMissing())
+            continue;
+        if (validationRow < 0)
+            validationRow = row;
+        if (!candidate->isLoaded()) {
+            failures += tr("%1 was not preloaded.").arg(candidate->name());
+            continue;
+        }
+        if (candidate->tileCount() <= 0) {
+            failures += tr("%1 contains no tiles.").arg(candidate->name());
+            continue;
+        }
+        for (int tileIndex = 0; tileIndex < candidate->tileCount(); ++tileIndex) {
+            Tile *tile = candidate->tileAt(tileIndex);
+            // A fully-transparent sprite is represented by a null cropped
+            // QImage while retaining its original dimensions. This is valid
+            // for effects sheets such as Fire, Smoke and Rain. Validate the
+            // tile object and its source dimensions instead.
+            if (!tile || tile->width() <= 0 || tile->height() <= 0) {
+                failures += tr("%1 has invalid storage for tile %2.")
+                        .arg(candidate->name()).arg(tileIndex);
+                break;
+            }
+        }
+    }
+    if (!failures.isEmpty()) {
+        *errorString = tr("The preloaded tileset catalog is incomplete:\n%1")
+                .arg(failures.mid(0, 12).join(QLatin1Char('\n')));
+        return false;
+    }
+    if (validationRow < 0) {
+        *errorString = tr("No available tileset image was found in the catalog.");
+        return false;
+    }
+
+    ui->tilesets->setCurrentRow(validationRow);
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    if (!mCurrentTileset) {
+        *errorString = tr("Tile mode could not select a tileset.");
+        return false;
+    }
+
+    setTilesList();
+
+    if (mCurrentTileset->isMissing()) {
+        *errorString = tr("The selected tileset image is missing: %1")
+                .arg(mCurrentTileset->name());
+        return false;
+    }
+    if (!mCurrentTileset->isLoaded()) {
+        *errorString = tr("Tile mode did not load the selected tileset: %1")
+                .arg(mCurrentTileset->name());
+        return false;
+    }
+    if (ui->tiles->model()->rowCount() <= 0) {
+        *errorString = tr("The selected tileset has no visible tiles: %1")
+                .arg(mCurrentTileset->name());
+        return false;
+    }
+
+    return true;
 }
 
 void BuildingTilesetDock::writeSettings(QSettings &settings)
@@ -177,6 +268,7 @@ void BuildingTilesetDock::currentDocumentChanged(BuildingDocument *document)
         mDocument->disconnect(this);
 
     mDocument = document;
+    firstTimeSetup();
 
     if (mDocument) {
 
@@ -284,7 +376,8 @@ void BuildingTilesetDock::setTilesList()
     MixedTilesetModel *model = ui->tiles->model();
     model->setShowLabels(Preferences::instance()->autoSwitchLayer());
 
-    if (!mCurrentTileset || mCurrentTileset->isMissing())
+    if (!mCurrentTileset || !mCurrentTileset->isLoaded()
+            || mCurrentTileset->isMissing())
         ui->tiles->clear();
     else {
         QStringList labels;
@@ -318,10 +411,10 @@ void BuildingTilesetDock::currentTilesetChanged(int row)
         mCurrentTileset = TileMetaInfoMgr::instance()->tileset(row);
         if (mCurrentTileset && !mCurrentTileset->isLoaded() &&
                 !mCurrentTileset->isMissing()) {
+            // The normal startup path preloads the entire catalog. Keep this
+            // synchronous fallback for a catalog imported during the session.
             TileMetaInfoMgr::instance()->loadTilesets(
-                        QList<Tileset *>() << mCurrentTileset, true);
-            TilesetManager::instance()->waitForTilesets(
-                        QList<Tileset *>() << mCurrentTileset);
+                        QList<Tileset *>() << mCurrentTileset, false);
         }
     }
     setTilesList();
@@ -381,8 +474,15 @@ void BuildingTilesetDock::tilesetAboutToBeRemoved(Tileset *tileset)
 // Called when a tileset image changes or a missing tileset was found.
 void BuildingTilesetDock::tilesetChanged(Tileset *tileset)
 {
-    if (tileset == mCurrentTileset)
+    if (tileset == mCurrentTileset) {
         setTilesList();
+        if (tileset->isLoaded()) {
+            qInfo().noquote()
+                    << "BuildingEd Tile mode displayed selected tileset:"
+                    << tileset->name() << "(" << tileset->tileCount()
+                    << "tiles)";
+        }
+    }
 
     int row = TileMetaInfoMgr::instance()->indexOf(tileset);
     if (QListWidgetItem *item = ui->tilesets->item(row))

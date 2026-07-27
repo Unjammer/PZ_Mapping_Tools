@@ -339,17 +339,21 @@ Map *BuildingMap::mergedMap() const
     return map;
 }
 
-void BuildingMap::loadNeededTilesets(Building *building)
+QStringList BuildingMap::loadNeededTilesets(Building *building)
 {
     QSet<Tileset *> neededTilesets;
-    foreach (QString tilesetName, building->tilesetNames()) {
+    QStringList unresolved;
+    const QStringList requestedNames = building->tilesetNames();
+    foreach (QString tilesetName, requestedNames) {
         Tileset *tileset = TileMetaInfoMgr::instance()->tileset(tilesetName);
         if (!tileset) {
             QString source = TileMetaInfoMgr::instance()->tilesDirectory() +
                     QLatin1Char('/') + tilesetName + QLatin1String(".png");
             QFileInfo info(source);
-            if (!info.exists())
+            if (!info.exists()) {
+                unresolved += tilesetName;
                 continue;
+            }
             source = info.canonicalFilePath();
             tileset = TileMetaInfoMgr::instance()->loadTileset(source);
             if (tileset) {
@@ -365,6 +369,25 @@ void BuildingMap::loadNeededTilesets(Building *building)
         TileMetaInfoMgr::instance()->loadTilesets(needed, true);
         TilesetManager::instance()->waitForTilesets(needed);
     }
+
+    int loadedCount = 0;
+    for (Tileset *tileset : needed) {
+        if (!tileset->isLoaded() || tileset->isMissing())
+            unresolved += tileset->name();
+        else
+            ++loadedCount;
+    }
+    unresolved.removeDuplicates();
+    unresolved.sort();
+
+    qInfo() << "Building tileset resolution:"
+            << requestedNames.count() << "requested,"
+            << loadedCount << "loaded,"
+            << unresolved.count() << "unresolved";
+    if (!unresolved.isEmpty())
+        qWarning() << "Unresolved building tilesets:" << unresolved;
+
+    return unresolved;
 }
 
 // Copied from BuildingFloor::roomRegion()
@@ -644,10 +667,8 @@ int BuildingMap::defaultOrientation()
 
 bool BuildingMap::isTilesetUsed(Tileset *tileset)
 {
-    // Image loading is asynchronous and emits tilesetChanged while a
-    // BuildingMap can still be constructing its two maps.  Views may query
-    // usage from that signal, so do not dereference either map until it
-    // exists.
+    // Signals can still arrive while a BuildingMap is replacing its two maps,
+    // so do not dereference either map until it exists.
     return (mMap && mMap->isTilesetUsed(tileset)) ||
             (mBlendMap && mBlendMap->isTilesetUsed(tileset));
 }

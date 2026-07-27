@@ -2464,7 +2464,7 @@ static Tile *tileForRoad(Road *road, const QList<Tileset*> &tilesets)
 
 void MapComposite::generateRoadLayers(const QPoint &roadPos, const QList<Road *> &roads)
 {
-    QRect cellRect(roadPos, QSize(300, 300));
+    QRect cellRect(roadPos, mMap->size());
     QList<Road*> roadsInCell;
     foreach (Road *road, roads) {
         QRect roadBounds = road->bounds();

@@ -371,14 +371,6 @@ void Tileset::replaceTransparentColor(QImage &image, const QColor &transparentCo
     }
 }
 
-qint64 Tileset::imageMemoryBytes() const
-{
-    qint64 bytes = mImage.sizeInBytes();
-    for (const Tile *tile : mTiles)
-        bytes += tile->image().sizeInBytes();
-    return bytes;
-}
-
 // // // // //
 
 TilesetImageCache::~TilesetImageCache()
@@ -406,7 +398,6 @@ Tileset *TilesetImageCache::addTileset(Tileset *ts)
     }
 
     mTilesets.append(cached);
-    mLastAccess.insert(cached, ++mAccessCounter);
     invalidateLookupTables();
 
 //    qDebug() << "added tileset image " << ts->imageSource() << " to cache";
@@ -430,47 +421,10 @@ Tileset *TilesetImageCache::findMatch(Tileset *ts, const QString &imageSource, c
                 && candidate->margin() == ts->margin()
                 && candidate->transparentColor() == ts->transparentColor()) {
 //            qDebug() << "retrieved tileset image " << candidate->imageSource() << " from cache";
-            mLastAccess.insert(candidate, ++mAccessCounter);
             return candidate;
         }
     }
     return NULL;
-}
-
-qint64 TilesetImageCache::memoryBytes() const
-{
-    qint64 bytes = 0;
-    for (const Tileset *tileset : mTilesets)
-        bytes += tileset->imageMemoryBytes();
-    return bytes;
-}
-
-void TilesetImageCache::trim(Tileset *keep)
-{
-    qint64 bytes = memoryBytes();
-    bool changed = false;
-    while (bytes > mMemoryLimit) {
-        Tileset *oldest = nullptr;
-        quint64 oldestAccess = std::numeric_limits<quint64>::max();
-        for (Tileset *candidate : mTilesets) {
-            if (candidate == keep || !candidate->isLoaded())
-                continue;
-            const quint64 access = mLastAccess.value(candidate);
-            if (access < oldestAccess) {
-                oldest = candidate;
-                oldestAccess = access;
-            }
-        }
-        if (!oldest)
-            break;
-        bytes -= oldest->imageMemoryBytes();
-        mTilesets.removeAll(oldest);
-        mLastAccess.remove(oldest);
-        delete oldest;
-        changed = true;
-    }
-    if (changed)
-        invalidateLookupTables();
 }
 
 void TilesetImageCache::invalidateLookupTables()

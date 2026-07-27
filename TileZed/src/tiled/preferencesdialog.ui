@@ -436,7 +436,7 @@
           <item>
            <widget class="QLabel" name="label_4">
             <property name="text">
-             <string>This is where config files are stored.  Change it with the 'config' program.</string>
+             <string>Shared catalog directory containing Tilesets.txt, Rules.txt and Building*.txt. WorldEd, TileZed and BuildingEd use the same path from settings/PZTools.ini.</string>
             </property>
             <property name="wordWrap">
              <bool>true</bool>
@@ -455,6 +455,13 @@
               </property>
               <property name="readOnly">
                <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="sharedPathsButton">
+              <property name="text">
+               <string>Change Shared Paths...</string>
               </property>
              </widget>
             </item>

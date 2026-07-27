@@ -32,6 +32,7 @@
 
 #include <QCoreApplication>
 #include <QDebug>
+#include <QFileInfo>
 #include <QMessageBox>
 
 using namespace BuildingEditor;
@@ -408,6 +409,10 @@ bool BuildingTilesMgr::mergeTxt()
     }
 
     QString sourcePath = Tiled::Internal::Preferences::instance()->appConfigPath(txtName());
+    if (QFileInfo(userPath).canonicalFilePath()
+            == QFileInfo(sourcePath).canonicalFilePath()) {
+        return true;
+    }
     BuildingTilesFile sourceFile;
     if (!sourceFile.read(sourcePath)) {
         mError = sourceFile.errorString();

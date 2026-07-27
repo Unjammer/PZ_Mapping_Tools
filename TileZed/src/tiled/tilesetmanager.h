@@ -32,48 +32,7 @@
 #include <QSet>
 #include <QTimer>
 
-#ifdef ZOMBOID
-#include "threads.h"
-#include <QVector>
-namespace Tiled {
-class Tileset;
-}
 class QImage;
-class TilesetImageReaderWorker : public BaseWorker
-{
-    Q_OBJECT
-public:
-    TilesetImageReaderWorker(int id, InterruptibleThread *thread);
-
-    ~TilesetImageReaderWorker();
-
-    bool busy();
-
-    typedef Tiled::Tileset Tileset;
-signals:
-    void imageLoaded(Tiled::Tileset *tileset, Tiled::Tileset *fromThread);
-
-public slots:
-    void work();
-    void addJob(Tileset *tileset);
-
-private:
-    class Job {
-    public:
-        Job(Tiled::Tileset *tileset) :
-            tileset(tileset)
-        {
-        }
-
-        Tiled::Tileset *tileset;
-    };
-    QList<Job> mJobs;
-
-    int mID;
-    QMutex mJobsMutex;
-    bool mHasJobs;
-};
-#endif // ZOMBOID
 
 namespace Tiled {
 
@@ -223,7 +182,6 @@ private slots:
 
 #ifdef ZOMBOID
     void imageLoaded(QImage *image, Tiled::Tileset *tileset);
-    void imageLoaded(Tiled::Tileset *fromThread, Tiled::Tileset *tileset);
     void tilePropertiesChanged();
 #endif
 
@@ -254,10 +212,6 @@ private:
     Tileset *mNoBlendTileset;
     Tile *mNoBlendTile;
 
-    QVector<InterruptibleThread*> mImageReaderThreads;
-    QVector<TilesetImageReaderWorker*> mImageReaderWorkers;
-    int mNextThreadForJob;
-    QSet<Tileset*> mLoadingTilesets;
 #endif
 
 #ifdef ZOMBOID

@@ -54,6 +54,8 @@ public:
     QColor gridColor() const { return mGridColor; }
     int gridWidth() const { return mGridWidth; }
     int thumbnailWidth() const { return mThumbnailWidth; }
+    int terrainImageMemoryLimitMiB() const
+    { return mTerrainImageMemoryLimitMiB; }
     bool restoreLastSession() const { return mRestoreLastSession; }
     qreal roadSimplificationHighway() const { return mRoadSimplificationHighway; }
     int roadPointSpacingHighway() const { return mRoadPointSpacingHighway; }
@@ -165,6 +167,7 @@ public slots:
     void setGridColor(const QColor &gridColor);
     void setGridWidth(int width);
     void setThumbnailWidth(int width);
+    void setTerrainImageMemoryLimitMiB(int limitMiB);
     void setRestoreLastSession(bool restore);
     void setRoadSimplificationHighway(qreal tolerance);
     void setRoadPointSpacingHighway(int spacing);
@@ -203,6 +206,7 @@ private:
     QColor mGridColor;
     int mGridWidth;
     int mThumbnailWidth;
+    int mTerrainImageMemoryLimitMiB;
     bool mRestoreLastSession;
     qreal mRoadSimplificationHighway;
     int mRoadPointSpacingHighway;

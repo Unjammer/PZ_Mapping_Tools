@@ -2163,10 +2163,53 @@ bool BuildingTilesDialog::exportTilesTxt(const QString &directory)
 
 void BuildingTilesDialog::reloadFrom(const QString &directory)
 {
+    const QString furnitureName = FurnitureGroups::instance()->txtName();
+    const QString tilesName = BuildingTilesMgr::instance()->txtName();
+    BuildingFurnitureFile furnitureCheck;
+    if (!furnitureCheck.read(directory + QDir::separator() + furnitureName)) {
+        QMessageBox::warning(
+                    this, tr("Unable to Read %1").arg(furnitureName),
+                    tr("The furniture configuration could not be imported."
+                       "\n\nFile: %1\nError: %2")
+                    .arg(QDir::toNativeSeparators(
+                             directory + QDir::separator() + furnitureName),
+                         furnitureCheck.errorString()));
+        return;
+    }
+    BuildingTilesFile tilesCheck;
+    if (!tilesCheck.read(directory + QDir::separator() + tilesName)) {
+        QMessageBox::warning(
+                    this, tr("Unable to Read %1").arg(tilesName),
+                    tr("The tile-category configuration could not be imported."
+                       "\n\nFile: %1\nError: %2")
+                    .arg(QDir::toNativeSeparators(
+                             directory + QDir::separator() + tilesName),
+                         tilesCheck.errorString()));
+        return;
+    }
+    if (tilesCheck.categories().size()
+            != BuildingTilesMgr::instance()->categoryCount()) {
+        QMessageBox::warning(
+                    this, tr("Incompatible %1").arg(tilesName),
+                    tr("The imported file contains %1 tile categories, but "
+                       "the current catalog expects %2. Nothing was imported.")
+                    .arg(tilesCheck.categories().size())
+                    .arg(BuildingTilesMgr::instance()->categoryCount()));
+        return;
+    }
+
     mUndoStack->beginMacro(tr("Import Tiles and Furniture"));
-    reloadBuildingFurnitureTxt(directory);
-    reloadBuildingTilesTxt(directory);
+    const bool furnitureImported = reloadBuildingFurnitureTxt(directory);
+    const bool tilesImported = furnitureImported
+            && reloadBuildingTilesTxt(directory);
     mUndoStack->endMacro();
+    if (!furnitureImported || !tilesImported) {
+        QMessageBox::information(
+                    this, tr("Import Incomplete"),
+                    tr("The import stopped because one of the configuration "
+                       "files was invalid. Review the error above before "
+                       "trying again."));
+    }
 }
 
 bool BuildingTilesDialog::reloadBuildingFurnitureTxt(const QString &directory)
@@ -2174,7 +2217,13 @@ bool BuildingTilesDialog::reloadBuildingFurnitureTxt(const QString &directory)
     BuildingFurnitureFile file;
     const QString txtName = FurnitureGroups::instance()->txtName();
     if (!file.read(directory + QDir::separator() + txtName)) {
-        QMessageBox::warning(this, tr("Reading %1 Failed\n%2"), txtName, file.errorString());
+        QMessageBox::warning(
+                    this, tr("Unable to Read %1").arg(txtName),
+                    tr("The furniture configuration could not be imported.\n\n"
+                       "File: %1\nError: %2")
+                    .arg(QDir::toNativeSeparators(
+                             directory + QDir::separator() + txtName),
+                         file.errorString()));
         return false;
     }
     const int revision = file.getRevision();
@@ -2199,7 +2248,23 @@ bool BuildingTilesDialog::reloadBuildingTilesTxt(const QString &directory)
     BuildingTilesMgr *btm = BuildingTilesMgr::instance();
     const QString txtName = btm->txtName();
     if (!file.read(directory + QDir::separator() + txtName)) {
-        QMessageBox::warning(this, tr("Reading %1 Failed\n%2"), txtName, file.errorString());
+        QMessageBox::warning(
+                    this, tr("Unable to Read %1").arg(txtName),
+                    tr("The tile-category configuration could not be imported."
+                       "\n\nFile: %1\nError: %2")
+                    .arg(QDir::toNativeSeparators(
+                             directory + QDir::separator() + txtName),
+                         file.errorString()));
+        return false;
+    }
+    if (file.categories().size() != btm->categoryCount()) {
+        QMessageBox::warning(
+                    this, tr("Incompatible %1").arg(txtName),
+                    tr("The imported file contains %1 tile categories, but "
+                       "the current catalog expects %2. No tile categories "
+                       "were changed.")
+                    .arg(file.categories().size())
+                    .arg(btm->categoryCount()));
         return false;
     }
     const int revision = file.getRevision();

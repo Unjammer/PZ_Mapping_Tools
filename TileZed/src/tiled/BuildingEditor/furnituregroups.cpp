@@ -118,6 +118,7 @@ bool FurnitureGroups::readTxt()
     mRevision = file.getRevision();
     mSourceRevision = file.getSourceRevision();
     mGroups = file.takeGroups();
+    emit furnitureCatalogLoaded();
     return true;
 #if 0
     FurnitureTiles *tiles = new FurnitureTiles;
@@ -245,6 +246,10 @@ bool FurnitureGroups::mergeTxt()
     Q_ASSERT(userFile.getVersion() == BuildingFurnitureFile::getVersionLatest());
 
     QString sourcePath = Tiled::Internal::Preferences::instance()->appConfigPath(txtName());
+    if (QFileInfo(userPath).canonicalFilePath()
+            == QFileInfo(sourcePath).canonicalFilePath()) {
+        return true;
+    }
 
     BuildingFurnitureFile sourceFile;
     if (!sourceFile.read(sourcePath)) {

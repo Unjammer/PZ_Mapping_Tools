@@ -75,10 +75,14 @@ public:
 
     void addFeature(World *world256, InGameMapFeature *oldFeature)
     {
-        int minCellX = getMinSquareX(oldFeature) / mCellSizeNew;
-        int minCellY = getMinSquareY(oldFeature) / mCellSizeNew;
-        int maxCellX = getMaxSquareX(oldFeature) / mCellSizeNew;
-        int maxCellY = getMaxSquareY(oldFeature) / mCellSizeNew;
+        const int minCellX = int(std::floor(
+                getMinSquareX(oldFeature) / double(mCellSizeNew)));
+        const int minCellY = int(std::floor(
+                getMinSquareY(oldFeature) / double(mCellSizeNew)));
+        const int maxCellX = int(std::floor(
+                getMaxSquareX(oldFeature) / double(mCellSizeNew)));
+        const int maxCellY = int(std::floor(
+                getMaxSquareY(oldFeature) / double(mCellSizeNew)));
         for (int y = minCellY; y <= maxCellY; y++) {
             for (int x = minCellX; x <= maxCellX; x++) {
                 InGameMapCell *newCell = &world256->cellAt(x - mWorldBoundsNew.x(), y - mWorldBoundsNew.y())->inGameMap();
@@ -89,7 +93,7 @@ public:
         }
     }
 
-    int getMinSquareX(InGameMapFeature *feature)
+    double getMinSquareX(InGameMapFeature *feature)
     {
         double min = std::numeric_limits<double>::max();
         InGameMapGeometry &geometry = feature->mGeometry;
@@ -101,7 +105,7 @@ public:
         return (mWorldBoundsOld.x() + feature->cell()->x()) * mCellSizeOld + min;
     }
 
-    int getMinSquareY(InGameMapFeature *feature)
+    double getMinSquareY(InGameMapFeature *feature)
     {
         double min = std::numeric_limits<double>::max();
         InGameMapGeometry &geometry = feature->mGeometry;
@@ -113,7 +117,7 @@ public:
         return (mWorldBoundsOld.y() + feature->cell()->y()) * mCellSizeOld + min;
     }
 
-    int getMaxSquareX(InGameMapFeature *feature)
+    double getMaxSquareX(InGameMapFeature *feature)
     {
         double max = std::numeric_limits<double>::lowest();
         InGameMapGeometry &geometry = feature->mGeometry;
@@ -125,7 +129,7 @@ public:
         return (mWorldBoundsOld.x() + feature->cell()->x()) * mCellSizeOld + max;
     }
 
-    int getMaxSquareY(InGameMapFeature *feature)
+    double getMaxSquareY(InGameMapFeature *feature)
     {
         double max = std::numeric_limits<double>::lowest();
         InGameMapGeometry &geometry = feature->mGeometry;
@@ -458,15 +462,23 @@ bool InGameMapWriterBinary::writeWorld(World *world, const QString &filePath)
         // If anything above failed, the temp file should auto-remove, but not after
         // a successful save.
         tempFile.setAutoRemove(false);
-    } else if (!tempFile.copy(filePath)) {
-        d->mError = QString(QLatin1String("Error copying file!\nFrom: %1\nTo: %2\n\n%3"))
-                .arg(tempFile.fileName())
-                .arg(filePath)
-                .arg(tempFile.errorString());
-        // Try to un-rename the backup file
-        if (backupFile.exists())
-            backupFile.rename(filePath); // might fail
-        return false;
+    } else {
+        QFile destination(filePath);
+        if (destination.exists() && !destination.remove()) {
+            d->mError = QString(QLatin1String("Error replacing file!\n%1\n\n%2"))
+                    .arg(filePath).arg(destination.errorString());
+            if (backupFile.exists())
+                backupFile.rename(filePath);
+            return false;
+        }
+        if (!tempFile.copy(filePath)) {
+            d->mError = QString(QLatin1String("Error copying file!\nFrom: %1\nTo: %2\n\n%3"))
+                    .arg(tempFile.fileName()).arg(filePath)
+                    .arg(tempFile.errorString());
+            if (backupFile.exists())
+                backupFile.rename(filePath);
+            return false;
+        }
     }
 
     return true;

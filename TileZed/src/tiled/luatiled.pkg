@@ -282,6 +282,7 @@ class LuaMap @ Map
     void reloadBlends();
 
     bool write(const char *path);
+    const char *errorString();
 
     int cellX();
     int cellY();

@@ -40,6 +40,7 @@
 #include "tileset.h"
 
 #include <QDebug>
+#include <QFileInfo>
 
 using namespace BuildingEditor;
 using namespace Tiled;
@@ -369,6 +370,10 @@ bool BuildingTMX::mergeTxt()
     Q_ASSERT(userFile.version() == VERSION_LATEST);
 
     QString sourcePath = Tiled::Internal::Preferences::instance()->appConfigPath(txtName());
+    if (QFileInfo(userPath).canonicalFilePath()
+            == QFileInfo(sourcePath).canonicalFilePath()) {
+        return true;
+    }
 
     SimpleFile sourceFile;
     if (!sourceFile.read(sourcePath)) {

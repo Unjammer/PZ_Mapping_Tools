@@ -170,6 +170,11 @@ Preferences::Preferences()
                                          QColor(Qt::black).name()).toString());
     mGridWidth = qBound(1, mSettings->value(QLatin1String("GridWidth"), 1).toInt(), 10);
     mThumbnailWidth = qBound(32, mSettings->value(QLatin1String("ThumbnailWidth"), 512).toInt(), 8192);
+    mTerrainImageMemoryLimitMiB = qBound(
+                128,
+                mSettings->value(
+                    QLatin1String("TerrainImageMemoryLimitMiB"), 512).toInt(),
+                65536);
     // Reopening every cell is expensive and used to crash when a saved cell
     // could no longer be reconstructed. It remains available as an opt-in.
     mRestoreLastSession = mSettings->value(QLatin1String("RestoreLastSession"), false).toBool();
@@ -213,38 +218,21 @@ Preferences::Preferences()
     mMapsDirectory = mSettings->value(QLatin1String("Current"), QString()).toString();
     mSettings->endGroup();
 
-    // Set the default location of the Tiles Directory to the same value set
-    // in TileZed's Tilesets Dialog.
+    mTilesDirectory = PortableSettings::sharedTilesPath();
+    mSettings->remove(QLatin1String("TilesDirectory"));
+
+    // Use the same .tiles files as TileZed.
     QSettings settings(QLatin1String("TheIndieStone"), QLatin1String("TileZed"));
-    QString KEY_TILES_DIR = QLatin1String("Tilesets/TilesDirectory");
-    QString tilesDirectory = settings.value(KEY_TILES_DIR).toString();
-
-    if (tilesDirectory.isEmpty() || !QDir(tilesDirectory).exists())
-        tilesDirectory = PortableSettings::detectTilesPath();
-    if (tilesDirectory.length())
-        tilesDirectory = QDir::cleanPath(tilesDirectory);
-    if (!QDir(tilesDirectory).exists())
-        tilesDirectory.clear();
-    mTilesDirectory = mSettings->value(QLatin1String("TilesDirectory"),
-                                       tilesDirectory).toString();
-
-    // Use the same .tiles files as TileZed
     mTilePropertiesFiles = settings.value(QLatin1String("TilePropertiesFiles")).toStringList();
 
     mOpenFileDirectory = mSettings->value(QLatin1String("OpenFileDirectory")).toString();
     mWorldMapXMLFile = mSettings->value(QLatin1String("WorldMapXMLFile")).toString();
 
-    // Use the same directory as TileZed.
-    QString KEY_CONFIG_PATH = QLatin1String("ConfigDirectory");
-    mConfigDirectory = settings.value(
-                KEY_CONFIG_PATH,
-                PortableSettings::applicationConfigPath()).toString();
-    if (QDir::cleanPath(mConfigDirectory).compare(
-                QDir::cleanPath(PortableSettings::rootPath()),
-                Qt::CaseInsensitive) == 0) {
-        mConfigDirectory = PortableSettings::applicationConfigPath();
-    }
-    settings.setValue(KEY_CONFIG_PATH, mConfigDirectory);
+    mConfigDirectory = PortableSettings::sharedConfigurationPath();
+    qInfo().noquote() << "Effective shared configuration directory"
+                      << QDir::toNativeSeparators(mConfigDirectory);
+    qInfo().noquote() << "Effective Tiles directory"
+                      << QDir::toNativeSeparators(mTilesDirectory);
 
     // Use the same directory as TileZed.
     mThumbnailsDirectory = settings.value(QLatin1String("Thumbnails/Directory")).toString();
@@ -417,6 +405,18 @@ void Preferences::setThumbnailWidth(int width)
     mThumbnailWidth = width;
     mSettings->setValue(QLatin1String("Interface/ThumbnailWidth"), mThumbnailWidth);
     emit thumbnailWidthChanged(mThumbnailWidth);
+}
+
+void Preferences::setTerrainImageMemoryLimitMiB(int limitMiB)
+{
+    limitMiB = qBound(128, limitMiB, 65536);
+    if (mTerrainImageMemoryLimitMiB == limitMiB)
+        return;
+
+    mTerrainImageMemoryLimitMiB = limitMiB;
+    mSettings->setValue(
+                QLatin1String("Interface/TerrainImageMemoryLimitMiB"),
+                mTerrainImageMemoryLimitMiB);
 }
 
 void Preferences::setRestoreLastSession(bool restore)
@@ -712,10 +712,12 @@ QString Preferences::tilesDirectory() const
 
 void Preferences::setTilesDirectory(const QString &path)
 {
-    if (mTilesDirectory == path)
+    const QString normalizedPath =
+            PortableSettings::normalizedTilesPath(path);
+    if (mTilesDirectory == normalizedPath)
         return;
-    mTilesDirectory = path;
-    mSettings->setValue(QLatin1String("TilesDirectory"), path);
+    mTilesDirectory = normalizedPath;
+    PortableSettings::setSharedTilesPath(normalizedPath);
     emit tilesDirectoryChanged();
 }
 

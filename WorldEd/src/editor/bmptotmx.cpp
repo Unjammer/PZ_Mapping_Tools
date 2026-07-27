@@ -54,6 +54,21 @@
 
 using namespace Tiled;
 
+namespace {
+
+int cellSizeForImage(const QSize &imageSize, int requestedCellSize)
+{
+    if (requestedCellSize == 256 || requestedCellSize == 300)
+        return requestedCellSize;
+    if (imageSize.width() % 300 == 0 && imageSize.height() % 300 == 0)
+        return 300;
+    if (imageSize.width() % 256 == 0 && imageSize.height() % 256 == 0)
+        return 256;
+    return 0;
+}
+
+}
+
 BMPToTMX *BMPToTMX::mInstance = 0;
 
 BMPToTMX *BMPToTMX::instance()
@@ -163,7 +178,9 @@ bool BMPToTMX::generateWorld(WorldDocument *worldDoc, BMPToTMX::GenerateMode mod
     PROGRESS progress(QLatin1String("Reading BMP images"));
 
     foreach (WorldBMP *bmp, world->bmps()) {
-        BMPToTMXImages *images = getImages(bmp->filePath(), bmp->pos());
+        BMPToTMXImages *images = getImages(
+                    bmp->filePath(), bmp->pos(), QImage::Format_ARGB32,
+                    world->cellSize());
         if (!images) {
             goto errorExit;
         }
@@ -240,7 +257,7 @@ QStringList BMPToTMX::supportedImageFormats()
 }
 
 BMPToTMXImages *BMPToTMX::getImages(const QString &path, const QPoint &origin,
-                                    QImage::Format format)
+                                    QImage::Format format, int cellSize)
 {
     QFileInfo info(path);
     if (!info.exists()) {
@@ -255,13 +272,14 @@ BMPToTMXImages *BMPToTMX::getImages(const QString &path, const QPoint &origin,
         return 0;
     }
 
-    QImage image = loadImage(info.canonicalFilePath(), QString(), format);
+    QImage image = loadImage(
+                info.canonicalFilePath(), QString(), format, cellSize);
     if (image.isNull()) {
         return 0;
     }
 
     QImage imageVeg = loadImage(infoVeg.canonicalFilePath(),
-                                QLatin1String("_veg"), format);
+                                QLatin1String("_veg"), format, cellSize);
     if (imageVeg.isNull()) {
         return 0;
     }
@@ -273,16 +291,25 @@ BMPToTMXImages *BMPToTMX::getImages(const QString &path, const QPoint &origin,
         return 0;
     }
 
+    const int resolvedCellSize = cellSizeForImage(image.size(), cellSize);
+    if (resolvedCellSize == 0) {
+        mError = tr("The image dimensions are not compatible with 256 x 256 "
+                    "or 300 x 300 cells.\nCurrent size: %1 x %2 pixels.")
+                .arg(image.width()).arg(image.height());
+        return nullptr;
+    }
+
     BMPToTMXImages *images = new BMPToTMXImages;
     images->mBmp = image;
     images->mBmpVeg = imageVeg;
     images->mPath = info.canonicalFilePath();
-    images->mBounds = QRect(origin, QSize(image.width() / 300,
-                                          image.height() / 300));
+    images->mCellSize = resolvedCellSize;
+    images->mBounds = QRect(origin, QSize(image.width() / resolvedCellSize,
+                                          image.height() / resolvedCellSize));
     return images;
 }
 
-QSize BMPToTMX::validateImages(const QString &path)
+QSize BMPToTMX::validateImages(const QString &path, int cellSize)
 {
     mError.clear();
     QFileInfo info(path);
@@ -322,9 +349,16 @@ QSize BMPToTMX::validateImages(const QString &path)
         return QSize();
     }
 
-    if (image.size().width() % 300 || image.size().height() % 300) {
-        mError = tr("The images must be divisible by 300 pixels.\n"
-                    "Current size: %1 x %2 pixels.\n\n%3\n%4")
+    const int resolvedCellSize = cellSizeForImage(image.size(), cellSize);
+    if (resolvedCellSize == 0
+            || image.size().width() % resolvedCellSize
+            || image.size().height() % resolvedCellSize) {
+        const QString expected = cellSize == 256 || cellSize == 300
+                ? tr("%1 pixels").arg(cellSize)
+                : tr("either 256 or 300 pixels");
+        mError = tr("The image dimensions must be divisible by %1.\n"
+                    "Current size: %2 x %3 pixels.\n\n%4\n%5")
+                .arg(expected)
                 .arg(image.size().width()).arg(image.size().height())
                 .arg(QDir::toNativeSeparators(info.canonicalFilePath()))
                 .arg(QDir::toNativeSeparators(infoVeg.canonicalFilePath()));
@@ -484,7 +518,7 @@ void BMPToTMX::reportUnknownColors()
 }
 
 QImage BMPToTMX::loadImage(const QString &path, const QString &suffix,
-                           QImage::Format format)
+                           QImage::Format format, int cellSize)
 {
     QImage image;
     if (!image.load(path)) {
@@ -493,8 +527,16 @@ QImage BMPToTMX::loadImage(const QString &path, const QString &suffix,
         return QImage();
     }
 
-    if (image.width() % 300 || image.height() % 300) {
-        mError = tr("The image%1 size isn't divisible by 300.").arg(suffix);
+    const int resolvedCellSize = cellSizeForImage(image.size(), cellSize);
+    if (resolvedCellSize == 0
+            || image.width() % resolvedCellSize
+            || image.height() % resolvedCellSize) {
+        mError = tr("The image%1 size is not divisible by the project cell "
+                    "size (%2 pixels).")
+                .arg(suffix)
+                .arg(cellSize == 256 || cellSize == 300
+                     ? QString::number(cellSize)
+                     : tr("256 or 300"));
         return QImage();
     }
 
@@ -667,7 +709,8 @@ void BMPToTMX::AddRule(BmpRule *rule)
 
 bool BMPToTMX::WriteMap(WorldCell *cell, int bmpIndex)
 {
-    Map map(Map::LevelIsometric, 300, 300, 64, 32);
+    const int cellSize = mWorldDoc->world()->cellSize();
+    Map map(Map::LevelIsometric, cellSize, cellSize, 64, 32);
     foreach (Tiled::Tileset *ts, TileMetaInfoMgr::instance()->tilesets())
         map.addTileset(ts);
 
@@ -700,10 +743,12 @@ bool BMPToTMX::WriteMap(WorldCell *cell, int bmpIndex)
         BMPToTMXImages *images = mImages[bmpIndex];
         QImage bmp = images->mBmp;
         QImage bmpVeg = images->mBmpVeg;
-        int ix = (cell->x() - images->mBounds.x()) * 300;
-        int iy = (cell->y() - images->mBounds.y()) * 300;
-        rbmpMain.rimage() = bmp.copy(ix, iy, 300, 300).convertToFormat(QImage::Format_ARGB32);
-        rbmpVeg.rimage() = bmpVeg.copy(ix, iy, 300, 300).convertToFormat(QImage::Format_ARGB32);
+        int ix = (cell->x() - images->mBounds.x()) * cellSize;
+        int iy = (cell->y() - images->mBounds.y()) * cellSize;
+        rbmpMain.rimage() = bmp.copy(ix, iy, cellSize, cellSize)
+                .convertToFormat(QImage::Format_ARGB32);
+        rbmpVeg.rimage() = bmpVeg.copy(ix, iy, cellSize, cellSize)
+                .convertToFormat(QImage::Format_ARGB32);
 
         if (settings.warnUnknownColors) {
             const QRgb black = qRgb(0, 0, 0);
@@ -819,13 +864,22 @@ bool BMPToTMX::UpdateMap(WorldCell *cell, int bmpIndex)
     QImage bmp = images->mBmp;
     QImage bmpVeg = images->mBmpVeg;
 
-    int ix = (cell->x() - images->mBounds.x()) * 300;
-    int iy = (cell->y() - images->mBounds.y()) * 300;
+    const int cellSize = mWorldDoc->world()->cellSize();
+    if (map->width() != cellSize || map->height() != cellSize) {
+        mError = tr("The existing TMX map is %1 x %2 tiles, but this project "
+                    "uses %3 x %3 cells.\n\n%4")
+                .arg(map->width()).arg(map->height()).arg(cellSize)
+                .arg(QDir::toNativeSeparators(filePath));
+        delete map;
+        return false;
+    }
+    int ix = (cell->x() - images->mBounds.x()) * cellSize;
+    int iy = (cell->y() - images->mBounds.y()) * cellSize;
     QPainter painter(&rbmpMain.rimage());
-    painter.drawImage(0, 0, bmp, ix, iy, 300, 300);
+    painter.drawImage(0, 0, bmp, ix, iy, cellSize, cellSize);
     painter.end();
     QPainter painter2(&rbmpVeg.rimage());
-    painter2.drawImage(0, 0, bmpVeg, ix, iy, 300, 300);
+    painter2.drawImage(0, 0, bmpVeg, ix, iy, cellSize, cellSize);
     painter2.end();
 
     MapWriter writer;

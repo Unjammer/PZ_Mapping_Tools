@@ -206,39 +206,19 @@ Preferences::Preferences()
     mSettings->endGroup();
 
 #ifdef ZOMBOID
-    QSettings settings(QLatin1String("TheIndieStone"), QLatin1String("BuildingEd"));
-    QString KEY_TILES_DIR = QLatin1String("TilesDirectory");
-    QString tilesDirectory = settings.value(KEY_TILES_DIR).toString();
-    if (tilesDirectory.isEmpty() || !QDir(tilesDirectory).exists())
-        tilesDirectory = PortableSettings::detectTilesPath();
-    if (tilesDirectory.length())
-        tilesDirectory = QDir::cleanPath(tilesDirectory);
-    if (!QDir(tilesDirectory).exists())
-        tilesDirectory.clear();
-    mSettings->beginGroup(QLatin1String("Tilesets"));
-    mTilesDirectory = mSettings->value(QLatin1String("TilesDirectory"),
-                                       tilesDirectory).toString();
-    mSettings->endGroup();
-    if (tilesDirectory.length()) {
-        mSettings->setValue(QLatin1String("Tilesets/TilesDirectory"), mTilesDirectory);
-        mSettings->remove(KEY_TILES_DIR);
-    }
+    mTilesDirectory = PortableSettings::sharedTilesPath();
+    mSettings->remove(QLatin1String("Tilesets/TilesDirectory"));
 
     mSettings->beginGroup(QLatin1String("MapsDirectory"));
     mMapsDirectory = mSettings->value(QLatin1String("Current"), QString()).toString();
     mSettings->endGroup();
 
-    const QString configKey = QLatin1String("ConfigDirectory");
-    mConfigDirectory = mSettings->value(
-                configKey, PortableSettings::applicationConfigPath()).toString();
-    // The first portable preview incorrectly forced catalog files into the
-    // settings directory. Migrate that value to the packaged config folder.
-    if (QDir::cleanPath(mConfigDirectory).compare(
-                QDir::cleanPath(PortableSettings::rootPath()),
-                Qt::CaseInsensitive) == 0) {
-        mConfigDirectory = PortableSettings::applicationConfigPath();
-    }
-    mSettings->setValue(configKey, mConfigDirectory);
+    mConfigDirectory = PortableSettings::sharedConfigurationPath();
+    mSettings->remove(QLatin1String("ConfigDirectory"));
+    qInfo().noquote() << "Effective shared configuration directory"
+                      << QDir::toNativeSeparators(mConfigDirectory);
+    qInfo().noquote() << "Effective Tiles directory"
+                      << QDir::toNativeSeparators(mTilesDirectory);
 
     mThumbnailsDirectory = mSettings->value(QLatin1String("Thumbnails/Directory"), QString()).toString();
 
@@ -610,8 +590,8 @@ bool Preferences::sortTilesets() const
 
 void Preferences::setTilesDirectory(const QString &path)
 {
-    mTilesDirectory = path;
-    mSettings->setValue(QLatin1String("Tilesets/TilesDirectory"), mTilesDirectory);
+    mTilesDirectory = PortableSettings::normalizedTilesPath(path);
+    PortableSettings::setSharedTilesPath(mTilesDirectory);
     emit tilesDirectoryChanged();
 }
 

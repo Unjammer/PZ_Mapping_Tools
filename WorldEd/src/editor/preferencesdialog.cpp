@@ -20,12 +20,15 @@
 
 #include "preferences.h"
 #include "tilemetainfomgr.h"
+#include "../firstlaunchdialog.h"
+#include "../portablesettings.h"
 
 #include <QFileDialog>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStringList>
@@ -43,6 +46,22 @@ PreferencesDialog::PreferencesDialog(WorldDocument *worldDoc, QWidget *parent)
     , mRoadPointSpacingRailway(new QSpinBox(this))
 {
     ui->setupUi(this);
+    connect(ui->sharedPathsButton, &QAbstractButton::clicked,
+            this, [this]() {
+        if (!FirstLaunchDialog::configureSharedPaths(this))
+            return;
+        mTilesDirectory = PortableSettings::sharedTilesPath();
+        ui->tilesDirectory->setText(
+                    QDir::toNativeSeparators(mTilesDirectory));
+        ui->configDirectory->setText(QDir::toNativeSeparators(
+                    PortableSettings::sharedConfigurationPath()));
+        QMessageBox::information(
+                    this, tr("Shared Paths Updated"),
+                    tr("The shared paths were saved. The Tiles path will be "
+                       "applied when you confirm Preferences. Restart all "
+                       "PZTools applications to reload configuration catalogs "
+                       "from the new location."));
+    });
 
     Preferences *prefs = Preferences::instance();
 
@@ -67,6 +86,8 @@ PreferencesDialog::PreferencesDialog(WorldDocument *worldDoc, QWidget *parent)
             this, &PreferencesDialog::gridColorChanged);
     ui->gridWidth->setValue(prefs->gridWidth());
     ui->thumbnailWidth->setValue(prefs->thumbnailWidth());
+    ui->terrainImageMemoryLimit->setValue(
+                prefs->terrainImageMemoryLimitMiB());
     ui->restoreLastSession->setChecked(prefs->restoreLastSession());
 
     ui->openGL->setChecked(prefs->useOpenGL());
@@ -165,6 +186,8 @@ void PreferencesDialog::accept()
     prefs->setGridColor(mGridColor);
     prefs->setGridWidth(ui->gridWidth->value());
     prefs->setThumbnailWidth(ui->thumbnailWidth->value());
+    prefs->setTerrainImageMemoryLimitMiB(
+                ui->terrainImageMemoryLimit->value());
     prefs->setRestoreLastSession(ui->restoreLastSession->isChecked());
     prefs->setRoadSimplificationHighway(mRoadSimplificationHighway->value());
     prefs->setRoadPointSpacingHighway(mRoadPointSpacingHighway->value());

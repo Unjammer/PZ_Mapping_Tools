@@ -17,6 +17,7 @@
 
 #include <QApplication>
 #include "mainwindow.h"
+#include "../firstlaunchdialog.h"
 #include "../portablesettings.h"
 
 #ifdef ZOMBOID
@@ -25,6 +26,7 @@
 #include "preferences.h"
 #include "mapimagemanager.h"
 #include "mapmanager.h"
+#include "progress.h"
 #include "tilemetainfomgr.h"
 #include "tilesetmanager.h"
 using namespace Tiled;
@@ -42,6 +44,7 @@ int main(int argc, char *argv[])
     a.setApplicationName(QLatin1String("PZWorldEd"));
     PortableSettings::configure();
     PortableSettings::installLogging();
+    PortableSettings::prepareVersionedSettings();
 #ifdef BUILD_INFO_VERSION
     a.setApplicationVersion(QLatin1String(AS_STRING(BUILD_INFO_VERSION)));
 #else
@@ -52,6 +55,9 @@ int main(int argc, char *argv[])
     a.setAttribute(Qt::AA_DontShowIconsInMenus);
 #endif
 
+    if (!FirstLaunchDialog::ensureSharedPaths())
+        return 0;
+
     Preferences::instance()->applyTheme();
 
     MainWindow w;
@@ -60,6 +66,13 @@ int main(int argc, char *argv[])
 
     if (!w.InitConfigFiles())
         return 0;
+
+    {
+        PROGRESS progress(QObject::tr("Loading all tilesets..."), &w);
+        TileMetaInfoMgr::instance()->loadTilesets(false);
+        TilesetManager::instance()->waitForTilesets(
+                    TileMetaInfoMgr::instance()->tilesets());
+    }
 
     if (Preferences::instance()->restoreLastSession())
         w.openLastFiles();

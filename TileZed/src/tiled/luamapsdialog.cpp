@@ -174,14 +174,18 @@ bool LuaMapsDialog::processMap(const QString &mapFilePath)
         // If anything above failed, the temp file should auto-remove, but not after
         // a successful save.
         tempFile.setAutoRemove(false);
-    // QTemporaryFile::rename() doesn't work across filesystems.  Should use QSaveFile instead.
-    } else if (!tempFile.copy(mapFilePath)) {
-        backup.rename(mapFilePath);
-        QString msg = QString(QLatin1String("Error copying file!\nFrom: %1\nTo: %2"))
-                .arg(QFileInfo(tempFile).fileName())
-                .arg(info.fileName());
-        QMessageBox::critical(this, tr("Error Writing Map"), msg);
-        return false;
+    } else {
+        QFile destination(mapFilePath);
+        if (destination.exists())
+            destination.remove();
+        if (!tempFile.copy(mapFilePath)) {
+            backup.rename(mapFilePath);
+            QString msg = QString(QLatin1String("Error copying file!\nFrom: %1\nTo: %2"))
+                    .arg(QFileInfo(tempFile).fileName())
+                    .arg(info.fileName());
+            QMessageBox::critical(this, tr("Error Writing Map"), msg);
+            return false;
+        }
     }
 
     return true;

@@ -62,6 +62,7 @@ public:
     ~BuildingTilesetDock();
     
     void firstTimeSetup();
+    bool validateTilesetCatalog(QString *errorString);
 
     void writeSettings(QSettings& settings);
     void readSettings(QSettings& settings);

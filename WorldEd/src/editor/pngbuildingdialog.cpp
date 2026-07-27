@@ -73,6 +73,7 @@ void PNGBuildingDialog::accept()
 
     if (!generateWorld(mWorld)) {
         QMessageBox::warning(this, tr("PNG Generation Failed"), mError);
+        return;
     }
 
     QDialog::accept();
@@ -94,11 +95,12 @@ bool PNGBuildingDialog::generateWorld(World *world)
 
     PROGRESS progress(QLatin1String("Reading BMP images"));
 
+    const int cellSize = world->cellSize();
     if (ui->onlyTreesCheckBox->isChecked()) {
-        mImage = QImage(world->size() * 300, QImage::Format_RGBA8888);
+        mImage = QImage(world->size() * cellSize, QImage::Format_RGBA8888);
         mImage.fill(Qt::transparent);
     } else {
-        mImage = QImage(world->size() * 300, QImage::Format_RGB555);
+        mImage = QImage(world->size() * cellSize, QImage::Format_RGB555);
         mImage.fill(Qt::black);
     }
     QPainter p(&mImage);
@@ -109,12 +111,13 @@ bool PNGBuildingDialog::generateWorld(World *world)
         for (WorldBMP *bmp : world->bmps()) {
             BMPToTMXImages *images = BMPToTMX::instance()->getImages(bmp->filePath(),
                                                                      bmp->pos(),
-                                                                     QImage::Format_RGB555);
+                                                                     QImage::Format_RGB555,
+                                                                     world->cellSize());
             if (!images) {
                 mError = BMPToTMX::instance()->errorString();
                 goto errorExit;
             }
-            p.drawImage(images->mBounds.topLeft() * 300, images->mBmp);
+            p.drawImage(images->mBounds.topLeft() * cellSize, images->mBmp);
             delete images;
         }
     }
@@ -130,8 +133,13 @@ bool PNGBuildingDialog::generateWorld(World *world)
         }
     }
 
-    if (!mImage.save(ui->pngEdit->text()))
+    if (!mImage.save(ui->pngEdit->text())) {
+        mError = tr("The PNG image could not be saved.\n\nFile: %1\n"
+                    "Check that the destination is writable and that enough "
+                    "disk space is available.")
+                .arg(QDir::toNativeSeparators(ui->pngEdit->text()));
         goto errorExit;
+    }
 
     return true;
 
@@ -221,7 +229,10 @@ bool PNGBuildingDialog::generateCell(WorldCell *cell)
                     if (layerGroup->orderedCellsAt2(QPoint(x, y), vars, cells)) {
                         for (const Cell *tileCell : cells) {
                             if (waterTiles.contains(tileCell->tile)) {
-                                mImage.setPixel(cell->x() * 300 + x, cell->y() * 300 + y, waterColor);
+                                const int cellSize = cell->world()->cellSize();
+                                mImage.setPixel(cell->x() * cellSize + x,
+                                                cell->y() * cellSize + y,
+                                                waterColor);
                                 break;
                             }
                         }
@@ -253,7 +264,10 @@ bool PNGBuildingDialog::generateCell(WorldCell *cell)
                 if (layerGroup->orderedCellsAt2(QPoint(x, y), vars, cells)) {
                     foreach (const Cell *tileCell, cells) {
                         if (tilesets.contains(tileCell->tile->tileset())) {
-                            mImage.setPixel(cell->x() * 300 + x, cell->y() * 300 + y, treeColor);
+                            const int cellSize = cell->world()->cellSize();
+                            mImage.setPixel(cell->x() * cellSize + x,
+                                            cell->y() * cellSize + y,
+                                            treeColor);
                             break;
                         }
                     }
@@ -315,25 +329,20 @@ bool PNGBuildingDialog::processObjectGroup(WorldCell *cell, ObjectGroup *objectG
         y += offset.y();
 
         if (objectGroup->name().contains(QLatin1String("RoomDefs"))) {
-            if (x < 0 || y < 0 || x + w > 300 || y + h > 300) {
-                x = qBound(0, x, 300);
-                y = qBound(0, y, 300);
-#if 0
-                mError = tr("A RoomDef in cell %1,%2 overlaps cell boundaries.\nNear x,y=%3,%4")
-                        .arg(cell->x()).arg(cell->y()).arg(x).arg(y);
-                return false;
-#endif
-            }
-
-            mPainter->fillRect(cell->x() * 300 + x,
-                               cell->y() * 300 + y,
-                               w, h, mColor);
+            const int cellSize = cell->world()->cellSize();
+            const QRect clipped = QRect(x, y, w, h)
+                    .intersected(QRect(0, 0, cellSize, cellSize));
+            if (clipped.isEmpty())
+                continue;
+            mPainter->fillRect(cell->x() * cellSize + clipped.x(),
+                               cell->y() * cellSize + clipped.y(),
+                               clipped.width(), clipped.height(), mColor);
         }
     }
     return true;
 }
 
-static QPolygonF createPolylineOutline(WorldCellObject *object)
+static QPolygonF createPolylineOutline(WorldCellObject *object, int cellSize)
 {
     ClipperLib::ClipperOffset offset;
     ClipperLib::Path path;
@@ -357,7 +366,8 @@ static QPolygonF createPolylineOutline(WorldCellObject *object)
     int cellY = object->cell()->y();
     ClipperLib::Path cPath = paths.at(0);
     for (const auto &cPoint : cPath) {
-        result << QPointF(cellX * 300 + cPoint.X / (qreal) SCALE, cellY * 300.0 + cPoint.Y / (qreal) SCALE);
+        result << QPointF(cellX * cellSize + cPoint.X / qreal(SCALE),
+                          cellY * cellSize + cPoint.Y / qreal(SCALE));
     }
     return result;
 }
@@ -365,6 +375,7 @@ static QPolygonF createPolylineOutline(WorldCellObject *object)
 void PNGBuildingDialog::paintZones(World *world)
 {
     QPainter *painter = mPainter;
+    const int cellSize = world->cellSize();
     QStringList validZones;
     validZones << QLatin1String("Nav");
     for (int y = 0; y < world->height(); y++) {
@@ -381,17 +392,23 @@ void PNGBuildingDialog::paintZones(World *world)
                 painter->setBrush(QBrush(color));
                 painter->setPen(Qt::NoPen);
                 if (object->isRectangle()) {
-                    QPointF p1(cell->x() * 300.0 + object->x(), cell->y() * 300.0 + object->y());
-                    QPointF p2(cell->x() * 300.0 + (object->x() + object->width()), cell->y() * 300.0 + (object->y() + object->height()));
+                    QPointF p1(cell->x() * cellSize + object->x(),
+                               cell->y() * cellSize + object->y());
+                    QPointF p2(cell->x() * cellSize
+                               + object->x() + object->width(),
+                               cell->y() * cellSize
+                               + object->y() + object->height());
                     painter->drawRect(QRectF(p1, p2));
                 }
                 if (object->isPolyline()) {
-                    painter->drawPolygon(createPolylineOutline(object));
+                    painter->drawPolygon(
+                                createPolylineOutline(object, cellSize));
                 }
                 if (object->isPolygon()) {
                     QPolygonF poly;
                     for (WorldCellObjectPoint pt : object->points()) {
-                        poly << QPointF(cell->x() * 300.0 + pt.x, cell->y() * 300.0 + pt.y);
+                        poly << QPointF(cell->x() * cellSize + pt.x,
+                                        cell->y() * cellSize + pt.y);
                     }
                     painter->drawPolygon(poly);
                 }

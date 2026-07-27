@@ -232,8 +232,12 @@ public:
             w->writeKeyAndValue("name", obj->name());
         w->writeKeyAndValue("type", obj->type()->name());
         if (obj->geometryType() == ObjectGeometryType::INVALID) {
-            w->writeKeyAndValue("x", (obj->cell()->x() + origin.x()) * 300 + obj->x());
-            w->writeKeyAndValue("y", (obj->cell()->y() + origin.y()) * 300 + obj->y());
+            w->writeKeyAndValue(
+                        "x", (obj->cell()->x() + origin.x())
+                        * mWorld->cellSize() + obj->x());
+            w->writeKeyAndValue(
+                        "y", (obj->cell()->y() + origin.y())
+                        * mWorld->cellSize() + obj->y());
             w->writeKeyAndValue("level", obj->level());
             w->writeKeyAndValue("width", obj->width());
             w->writeKeyAndValue("height", obj->height());
@@ -263,8 +267,10 @@ public:
             w2.setSuppressNewlines(true);
             w2.writeStartTable();
             for (const auto &point : obj->points()) {
-                w2.writeValue((obj->cell()->x() + origin.x()) * 300 + point.x);
-                w2.writeValue((obj->cell()->x() + origin.x()) * 300 + point.y);
+                w2.writeValue((obj->cell()->x() + origin.x())
+                              * mWorld->cellSize() + point.x);
+                w2.writeValue((obj->cell()->y() + origin.y())
+                              * mWorld->cellSize() + point.y);
             }
             w2.writeEndTable();
             buf.close();
@@ -368,8 +374,12 @@ public:
                     w.writeKeyAndValue("name", obj->name());
                     w.writeKeyAndValue("type", obj->type()->name());
                     if (obj->geometryType() == ObjectGeometryType::INVALID) {
-                        w.writeKeyAndValue("x", (obj->cell()->x() + origin.x()) * 300 + obj->x());
-                        w.writeKeyAndValue("y", (obj->cell()->y() + origin.y()) * 300 + obj->y());
+                        w.writeKeyAndValue(
+                                    "x", (obj->cell()->x() + origin.x())
+                                    * mWorld->cellSize() + obj->x());
+                        w.writeKeyAndValue(
+                                    "y", (obj->cell()->y() + origin.y())
+                                    * mWorld->cellSize() + obj->y());
                         w.writeKeyAndValue("z", obj->level());
                         w.writeKeyAndValue("width", obj->width());
                         w.writeKeyAndValue("height", obj->height());
@@ -400,8 +410,10 @@ public:
                         w2.writeStartTable();
                         QString pointStr;
                         for (const auto &point : obj->points()) {
-                            w2.writeValue((obj->cell()->x() + origin.x()) * 300 + point.x);
-                            w2.writeValue((obj->cell()->y() + origin.y()) * 300 + point.y);
+                            w2.writeValue((obj->cell()->x() + origin.x())
+                                          * mWorld->cellSize() + point.x);
+                            w2.writeValue((obj->cell()->y() + origin.y())
+                                          * mWorld->cellSize() + point.y);
                         }
                         w2.writeEndTable();
                         buf.close();
@@ -493,8 +505,14 @@ public:
                     w.setSuppressNewlines(true);
                     w.writeKeyAndValue("name", QString());
                     w.writeKeyAndValue("type", QLatin1String("RoomTone"));
-                    w.writeKeyAndValue("x", (origin.x() + cell->x()) * 300 + lot->x() + pointInRoom.x());
-                    w.writeKeyAndValue("y", (origin.y() + cell->y()) * 300 + lot->y() + pointInRoom.y());
+                    w.writeKeyAndValue(
+                                "x", (origin.x() + cell->x())
+                                * mWorld->cellSize()
+                                + lot->x() + pointInRoom.x());
+                    w.writeKeyAndValue(
+                                "y", (origin.y() + cell->y())
+                                * mWorld->cellSize()
+                                + lot->y() + pointInRoom.y());
                     w.writeKeyAndValue("z", lot->level() + level);
                     w.writeKeyAndValue("width", 1);
                     w.writeKeyAndValue("height", 1);

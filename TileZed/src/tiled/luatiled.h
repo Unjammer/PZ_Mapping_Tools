@@ -413,6 +413,7 @@ public:
     LuaMapNoBlend *noBlend(const char *layerName);
 
     bool write(const char *path);
+    const char *errorString() const;
 
     int cellX() { return mCellX; }
     int cellY() { return mCellY; }
@@ -443,6 +444,7 @@ public:
 
     int mCellX;
     int mCellY;
+    QString mError;
 };
 
 class LuaScript

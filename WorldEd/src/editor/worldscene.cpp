@@ -987,7 +987,8 @@ void WorldScene::dragEnterEvent(QGraphicsSceneDragDropEvent *event)
                             baseName + QLatin1Char('.') + info.suffix());
             }
 
-            QSize size = BMPToTMX::instance()->validateImages(mainImagePath);
+            QSize size = BMPToTMX::instance()->validateImages(
+                        mainImagePath, world()->cellSize());
             if (size.isEmpty()) {
                 mDragBMPError = tr("The image pair could not be added.\n\n%1")
                         .arg(BMPToTMX::instance()->errorString());

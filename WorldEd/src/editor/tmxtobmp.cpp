@@ -51,6 +51,7 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
 {
     mWorldDoc = worldDoc;
     World *world = mWorldDoc->world();
+    const int cellSize = world->cellSize();
 
     const TMXToBMPSettings &settings = world->getTMXToBMPSettings();
     mDoMain = settings.doMain;
@@ -63,9 +64,20 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
 
     QMap<QImage*,QImage::Format> originalFormat;
     QMap<QImage*,QVector<QRgb>> originalColorTable;
+    const auto saveImage = [this](const QImage &image, const QString &path) {
+        if (image.save(path))
+            return true;
+        mError = tr("The image could not be saved.\n\nFile: %1\n"
+                    "Check that the destination is writable and that enough "
+                    "disk space is available.")
+                .arg(QDir::toNativeSeparators(path));
+        return false;
+    };
 
     foreach (WorldBMP *bmp, world->bmps()) {
-        BMPToTMXImages *images = BMPToTMX::instance()->getImages(bmp->filePath(), bmp->pos());
+        BMPToTMXImages *images = BMPToTMX::instance()->getImages(
+                    bmp->filePath(), bmp->pos(), QImage::Format_ARGB32,
+                    world->cellSize());
         if (!images) {
             goto errorExit;
         }
@@ -129,12 +141,15 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
         if (mDoBldg) {
             if (QFileInfo(settings.buildingsFile).exists()) {
                 mImageBldg = QImage(settings.buildingsFile);
-                if (mImageBldg.isNull() || (mImageBldg.size() != world->size() * 300)) {
+                if (mImageBldg.isNull()
+                        || mImageBldg.size() != world->size() * cellSize) {
                     mError = tr("The existing 'buildings' image file could not be loaded or is the wrong size, can't merge.");
                     goto errorExit;
                 }
             } else {
-                mImageBldg = QImage(world->size() * 300, QImage::Format_ARGB32);
+                mImageBldg = QImage(
+                            world->size() * cellSize,
+                            QImage::Format_ARGB32);
                 mImageBldg.fill(Qt::transparent);
             }
         }
@@ -147,7 +162,9 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
             mImageVeg = QImage(world->size() * 300, QImage::Format_ARGB32);
 #endif
         if (mDoBldg) {
-            mImageBldg = QImage(world->size() * 300, QImage::Format_ARGB32);
+            mImageBldg = QImage(
+                        world->size() * cellSize,
+                        QImage::Format_ARGB32);
             mImageBldg.fill(Qt::transparent);
         }
     }
@@ -194,15 +211,18 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
         if (mDoMain) {
             progress.update(QLatin1String("Saving ") + info.fileName());
             if (originalFormat[&images->mBmp] == images->mBmp.format()) {
-                images->mBmp.save(images->mPath);
+                if (!saveImage(images->mBmp, images->mPath))
+                    goto errorExit;
             } else {
                 Qt::ImageConversionFlags conversionFlags = Qt::ThresholdDither | Qt::AvoidDither;
                 if (originalColorTable.contains(&images->mBmp)) {
                     QImage image = images->mBmp.convertToFormat(originalFormat[&images->mBmp], originalColorTable[&images->mBmp], conversionFlags);
-                    image.save(images->mPath);
+                    if (!saveImage(image, images->mPath))
+                        goto errorExit;
                 } else {
                     QImage image = images->mBmp.convertToFormat(originalFormat[&images->mBmp], conversionFlags);
-                    image.save(images->mPath);
+                    if (!saveImage(image, images->mPath))
+                        goto errorExit;
                 }
             }
 //            Sleep::sleep(2);
@@ -211,16 +231,19 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
             progress.update(QLatin1String("Saving ") + info.baseName() + QLatin1String("_veg.") + info.suffix());
             QString path = info.absolutePath() + QLatin1String("/") + info.baseName() + QLatin1String("_veg.") + info.suffix();
             if (originalFormat[&images->mBmpVeg] == images->mBmpVeg.format()) {
-                images->mBmpVeg.save(path);
+                if (!saveImage(images->mBmpVeg, path))
+                    goto errorExit;
             } else {
                 if (originalColorTable.contains(&images->mBmpVeg)) {
                     Qt::ImageConversionFlags conversionFlags = Qt::ThresholdDither | Qt::AvoidDither;
                     QImage image = images->mBmpVeg.convertToFormat(originalFormat[&images->mBmpVeg], originalColorTable[&images->mBmpVeg], conversionFlags);
-                    image.save(path);
+                    if (!saveImage(image, path))
+                        goto errorExit;
                 } else {
                     Qt::ImageConversionFlags conversionFlags = Qt::ThresholdDither | Qt::AvoidDither;
                     QImage image = images->mBmpVeg.convertToFormat(originalFormat[&images->mBmpVeg], conversionFlags);
-                    image.save(path);
+                    if (!saveImage(image, path))
+                        goto errorExit;
                 }
             }
 //            Sleep::sleep(2);
@@ -239,7 +262,9 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
 #endif
     if (mDoBldg) {
         progress.update(QLatin1String("Saving buildings image"));
-        mImageBldg.save(settings.buildingsFile);
+        mBldgPainter.end();
+        if (!saveImage(mImageBldg, settings.buildingsFile))
+            goto errorExit;
 //        Sleep::sleep(2);
     }
 
@@ -254,7 +279,7 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
     // changed .tmx files, which results in the PROGRESS dialog being displayed.
     // It's a bit odd to see the PROGRESS dialog blocked behind this messagebox.
     QMessageBox::information(MainWindow::instance(),
-                             tr("TMP To BMP"), tr("Finished!"));
+                             tr("TMX To BMP"), tr("Image export completed."));
 
     return true;
 
@@ -290,21 +315,30 @@ bool TMXToBMP::generateCell(WorldCell *cell)
     if (!shouldGenerateCell(cell, bmpIndex))
         return true;
     BMPToTMXImages *images = mImages[bmpIndex];
+    const int cellSize = cell->world()->cellSize();
+    const QPoint imageCell =
+            cell->pos() - images->mBounds.topLeft();
+    const QPoint imagePixel = imageCell * cellSize;
 
     if (cell->mapFilePath().isEmpty()) {
         if (mDoMain) {
             QPainter painter(&images->mBmp);
-            painter.fillRect(cell->x() * 300, cell->y() * 300, 300, 300, Qt::black);
+            painter.fillRect(QRect(imagePixel,
+                                   QSize(cellSize, cellSize)), Qt::black);
             mModifiedImages.insert(images);
         }
         if (mDoVeg) {
             QPainter painter(&images->mBmpVeg);
             painter.setCompositionMode(QPainter::CompositionMode_Source);
-            painter.fillRect(cell->x() * 300, cell->y() * 300, 300, 300, Qt::transparent);
+            painter.fillRect(QRect(imagePixel,
+                                   QSize(cellSize, cellSize)),
+                             Qt::transparent);
             mModifiedImages.insert(images);
         }
         if (mDoBldg) {
-            mBldgPainter.fillRect(cell->x() * 300, cell->y() * 300, 300, 300, Qt::transparent);
+            mBldgPainter.fillRect(
+                        cell->x() * cellSize, cell->y() * cellSize,
+                        cellSize, cellSize, Qt::transparent);
         }
         return true;
     }
@@ -322,22 +356,30 @@ bool TMXToBMP::generateCell(WorldCell *cell)
     while (mapLoader.isLoading()) {
         qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
     }
+    if (!mapInfo->map()
+            || mapInfo->map()->width() != cellSize
+            || mapInfo->map()->height() != cellSize) {
+        mError = tr("The TMX map for cell %1,%2 is not %3 x %3 tiles.\n\n%4")
+                .arg(cell->x()).arg(cell->y()).arg(cellSize)
+                .arg(QDir::toNativeSeparators(cell->mapFilePath()));
+        return false;
+    }
 
     QRgb black = qRgba(0, 0, 0, 255);
     QRgb transparent = qRgba(0, 0, 0, 0);
 
     if (mDoMain) {
         QPainter painter(&images->mBmp);
-        painter.drawImage((cell->pos() - images->mBounds.topLeft()) * 300, mapInfo->map()->bmpMain().image());
+        painter.drawImage(imagePixel, mapInfo->map()->bmpMain().image());
         mModifiedImages.insert(images);
     }
 
     if (mDoVeg) {
         QPainter painter(&images->mBmpVeg);
-        QPoint p = (cell->pos() - images->mBounds.topLeft()) * 300;
+        const QPoint p = imagePixel;
         painter.drawImage(p, mapInfo->map()->bmpVeg().image());
-        for (int y = 0; y < 300; y++) {
-            for (int x = 0; x < 300; x++) {
+        for (int y = 0; y < cellSize; y++) {
+            for (int x = 0; x < cellSize; x++) {
                 if (images->mBmpVeg.pixel(p + QPoint(x, y)) == black)
                     images->mBmpVeg.setPixel(p + QPoint(x, y), transparent);
             }
@@ -389,7 +431,10 @@ bool TMXToBMP::doBuildings(WorldCell *cell, MapInfo *mapInfo)
         mapComposite->addMap(info, lot->pos(), lot->level());
     }
 
-    mBldgPainter.fillRect(cell->x() * 300, cell->y() * 300, 300, 300, Qt::transparent);
+    const int cellSize = cell->world()->cellSize();
+    mBldgPainter.fillRect(cell->x() * cellSize,
+                          cell->y() * cellSize,
+                          cellSize, cellSize, Qt::transparent);
 
     return processObjectGroups(cell, mapComposite);
 }
@@ -444,19 +489,15 @@ bool TMXToBMP::processObjectGroup(WorldCell *cell, ObjectGroup *objectGroup,
         y += offset.y();
 
         if (objectGroup->name().contains(QLatin1String("RoomDefs"))) {
-            if (x < 0 || y < 0 || x + w > 300 || y + h > 300) {
-                x = qBound(0, x, 300);
-                y = qBound(0, y, 300);
-#if 0
-                mError = tr("A RoomDef in cell %1,%2 overlaps cell boundaries.\nNear x,y=%3,%4")
-                        .arg(cell->x()).arg(cell->y()).arg(x).arg(y);
-                return false;
-#endif
-            }
-
-            mBldgPainter.fillRect(cell->x() * 300 + x,
-                                  cell->y() * 300 + y,
-                                  w, h, mBldgColor);
+            const int cellSize = cell->world()->cellSize();
+            const QRect clipped = QRect(x, y, w, h)
+                    .intersected(QRect(0, 0, cellSize, cellSize));
+            if (clipped.isEmpty())
+                continue;
+            mBldgPainter.fillRect(
+                        cell->x() * cellSize + clipped.x(),
+                        cell->y() * cellSize + clipped.y(),
+                        clipped.width(), clipped.height(), mBldgColor);
         }
     }
     return true;

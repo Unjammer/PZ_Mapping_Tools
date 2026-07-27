@@ -62,6 +62,7 @@ public:
 
     void readSettings(QSettings &settings);
     void writeSettings(QSettings &settings);
+    bool validateAllTileCategories();
 
 signals:
     

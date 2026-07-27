@@ -330,6 +330,10 @@ void TileEditMode::onActiveStateChanged(bool active)
     menu->clear();
 
     if (active) {
+        // BuildingEd may activate this mode before Tilesets.txt has finished
+        // loading. Refreshing here is cheap and makes reactivation self-healing.
+        mTilesetDock->firstTimeSetup();
+
         if (mCurrentDocumentStuff)
             mCurrentDocumentStuff->activate();
 
@@ -348,7 +352,6 @@ void TileEditMode::onActiveStateChanged(bool active)
         if (mFirstTimeSeen) {
             mFirstTimeSeen = false;
             mFurnitureDock->switchTo();
-            mTilesetDock->firstTimeSetup();
         }
 #endif
     } else {
@@ -359,6 +362,11 @@ void TileEditMode::onActiveStateChanged(bool active)
 
 void TileEditMode::documentAdded(BuildingDocument *doc)
 {
+    // The mode can be activated before BuildingFurniture.txt has finished
+    // loading. A new document is another safe refresh point.
+    mFurnitureDock->switchTo();
+    mTilesetDock->firstTimeSetup();
+
     mDocumentStuff[doc] = new TileEditModePerDocumentStuff(this, doc);
 
     int docIndex = BuildingDocumentMgr::instance()->indexOf(doc);

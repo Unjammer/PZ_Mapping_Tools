@@ -1,6 +1,7 @@
 #include "terrainimageeditordialog.h"
 
 #include "bmpblender.h"
+#include "preferences.h"
 #include "world.h"
 #include "worlddocument.h"
 #include "../portablesettings.h"
@@ -51,10 +52,6 @@ using namespace Tiled;
 
 namespace {
 
-const qint64 MaxWorkingImageBytes = qint64(512) * 1024 * 1024;
-const qint64 WarnWorkingImageBytes = qint64(256) * 1024 * 1024;
-const qint64 MaxHistoryBytes = qint64(512) * 1024 * 1024;
-
 qint64 workingImageBytes(const QSize &size)
 {
     // Ground, vegetation and the cached vegetation preview are ARGB32.
@@ -64,6 +61,14 @@ qint64 workingImageBytes(const QSize &size)
 qint64 imageBytes(const QImage &image)
 {
     return qint64(image.bytesPerLine()) * qint64(image.height());
+}
+
+qint64 historyBudgetBytes()
+{
+    const qint64 configuredBytes =
+            qint64(Preferences::instance()->terrainImageMemoryLimitMiB())
+            * 1024 * 1024;
+    return qMax(qint64(64) * 1024 * 1024, configuredBytes / 4);
 }
 
 QString memorySizeText(qint64 bytes)
@@ -922,6 +927,7 @@ void TerrainImageEditorDialog::undoImageEdit()
     const HistoryState previous = mUndoHistory.takeLast();
     restoreHistoryState(previous.ground, previous.vegetation);
     mRevision = previous.revision;
+    trimHistoryToBudget();
     setDirty(mRevision != mSavedRevision);
     updateHistoryActions();
     updateImageStatus();
@@ -938,11 +944,10 @@ void TerrainImageEditorDialog::redoImageEdit()
     current.label = mRedoHistory.last().label;
     current.revision = mRevision;
     mUndoHistory += current;
-    trimHistoryToBudget();
-
     const HistoryState next = mRedoHistory.takeLast();
     restoreHistoryState(next.ground, next.vegetation);
     mRevision = next.revision;
+    trimHistoryToBudget();
     setDirty(mRevision != mSavedRevision);
     updateHistoryActions();
     updateImageStatus();
@@ -973,8 +978,12 @@ void TerrainImageEditorDialog::generateTerrainPatches()
     painter.setBrush(mLayerColors[0]);
     const int radius = qMax(1, mFeatureWidth->value());
     const qint64 area = qint64(ground.width()) * ground.height();
-    const int count = qBound(1, int(area / qMax(1, radius * radius * 18)
-                                    * mDensity->value() / 100), 12000);
+    const qint64 spacing = qMax(
+                qint64(1), qint64(radius) * radius * 18);
+    const qint64 requestedCount =
+            area / spacing * mDensity->value() / 100;
+    const int count = int(qBound(qint64(1), requestedCount,
+                                 qint64(12000)));
     for (int i = 0; i < count; ++i) {
         const int r = radius + int(random.bounded(uint(radius * 3 + 1)));
         const QPoint center(int(random.bounded(uint(ground.width()))),
@@ -998,8 +1007,12 @@ void TerrainImageEditorDialog::generateVegetation()
     painter.setBrush(mLayerColors[1]);
     const int radius = qMax(1, mFeatureWidth->value());
     const qint64 area = qint64(vegetation.width()) * vegetation.height();
-    const int count = qBound(1, int(area / qMax(1, radius * radius * 14)
-                                    * mDensity->value() / 100), 16000);
+    const qint64 spacing = qMax(
+                qint64(1), qint64(radius) * radius * 14);
+    const qint64 requestedCount =
+            area / spacing * mDensity->value() / 100;
+    const int count = int(qBound(qint64(1), requestedCount,
+                                 qint64(16000)));
     for (int i = 0; i < count; ++i) {
         const int r = radius + int(random.bounded(uint(radius * 2 + 1)));
         const QPoint center(int(random.bounded(uint(vegetation.width()))),
@@ -1408,30 +1421,35 @@ bool TerrainImageEditorDialog::validateWorkingImageSize(
     }
 
     const qint64 bytes = workingImageBytes(size);
+    const qint64 maxWorkingImageBytes =
+            qint64(Preferences::instance()->terrainImageMemoryLimitMiB())
+            * 1024 * 1024;
+    const qint64 warnWorkingImageBytes = maxWorkingImageBytes / 2;
     World *world = mWorldDocument ? mWorldDocument->world() : nullptr;
     const int cellSize = world ? world->cellSize() : 300;
     const int approximateSquareCells = qMax(
-                1, int(std::sqrt(double(MaxWorkingImageBytes) / 12.0) /
+                1, int(std::sqrt(double(maxWorkingImageBytes) / 12.0) /
                        double(cellSize)));
-    if (bytes > MaxWorkingImageBytes) {
+    if (bytes > maxWorkingImageBytes) {
         QMessageBox::critical(
                     this, tr("Terrain Images Are Too Large"),
                     tr("%1 would require at least %2 while editing %3 x %4 "
                        "pixels (%5 x %6 cells).\n\n"
-                       "The editor limit is %7 to prevent WorldEd from "
-                       "running out of memory. Split the map into smaller "
-                       "images; a square image should be about %8 x %8 cells "
-                       "or less at this project's scale.")
+                       "The configured editor limit is %7. Increase "
+                       "\"Terrain image memory limit\" in WorldEd Preferences "
+                       "if this computer has enough RAM, or split the map into "
+                       "smaller images. At the current limit, a square image "
+                       "should be about %8 x %8 cells or less.")
                     .arg(operation, memorySizeText(bytes))
                     .arg(size.width()).arg(size.height())
                     .arg(size.width() / cellSize)
                     .arg(size.height() / cellSize)
-                    .arg(memorySizeText(MaxWorkingImageBytes))
+                    .arg(memorySizeText(maxWorkingImageBytes))
                     .arg(approximateSquareCells));
         return false;
     }
 
-    if (bytes > WarnWorkingImageBytes) {
+    if (bytes > warnWorkingImageBytes) {
         return QMessageBox::warning(
                     this, tr("Large Terrain Images"),
                     tr("%1 will use approximately %2 for the two images and "
@@ -1617,8 +1635,8 @@ void TerrainImageEditorDialog::endImageEdit()
     }
 
     mUndoHistory += mPendingHistory;
-    trimHistoryToBudget();
     mRedoHistory.clear();
+    trimHistoryToBudget();
     mPendingHistory = HistoryState();
     mRevision = mNextRevision++;
     setDirty(mRevision != mSavedRevision);
@@ -1631,13 +1649,23 @@ void TerrainImageEditorDialog::trimHistoryToBudget()
     qint64 bytes = 0;
     for (const HistoryState &state : mUndoHistory)
         bytes += imageBytes(state.ground) + imageBytes(state.vegetation);
+    for (const HistoryState &state : mRedoHistory)
+        bytes += imageBytes(state.ground) + imageBytes(state.vegetation);
 
-    while (mUndoHistory.size() > 1 &&
-           (mUndoHistory.size() > 8 || bytes > MaxHistoryBytes)) {
+    const qint64 budget = historyBudgetBytes();
+    while (!mUndoHistory.isEmpty()
+           && (mUndoHistory.size() > 8 || bytes > budget)) {
         const HistoryState &oldest = mUndoHistory.first();
         bytes -= imageBytes(oldest.ground) +
                 imageBytes(oldest.vegetation);
         mUndoHistory.removeFirst();
+    }
+    while (!mRedoHistory.isEmpty()
+           && (mRedoHistory.size() > 8 || bytes > budget)) {
+        const HistoryState &oldest = mRedoHistory.first();
+        bytes -= imageBytes(oldest.ground) +
+                imageBytes(oldest.vegetation);
+        mRedoHistory.removeFirst();
     }
 }
 

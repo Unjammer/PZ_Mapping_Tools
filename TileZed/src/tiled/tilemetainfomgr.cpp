@@ -26,8 +26,12 @@
 #include "tileset.h"
 
 #include <QDir>
+#include <QDebug>
+#include <QElapsedTimer>
+#include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
+#include <QSignalBlocker>
 
 using namespace Tiled;
 using namespace Tiled::Internal;
@@ -55,6 +59,8 @@ void TileMetaInfoMgr::changeTilesDirectory(const QString &path)
     for (Tileset *ts : tilesets())
         ts->setLoaded(false);
     resolveTilesets();
+    loadTilesets(QList<Tileset *>(), false);
+    TilesetManager::instance()->waitForTilesets(tilesets());
 }
 
 TileMetaInfoMgr::TileMetaInfoMgr(QObject *parent) :
@@ -149,34 +155,62 @@ bool TileMetaInfoMgr::readTxt()
         mEnums.insert(metaEnum.mName, metaEnum.mValue);
     }
 
-    for (const TilesetsTxtFile::Tileset* fileTileset : std::as_const(reader.mTilesets)) {
-        QSize tilesetSize = Tiled::getZomboidTilesetSize1x(fileTileset->mName);
-        int tileWidth = tilesetSize.width();
-        int tileHeight = tilesetSize.height();
-        Tileset *tileset = new Tileset(fileTileset->mName, tileWidth, tileHeight);
-        Tiled::setZomboidTileOffset(tileset);
+    qint64 sizeLookupNanoseconds = 0;
+    qint64 constructionNanoseconds = 0;
+    qint64 registrationNanoseconds = 0;
+    qint64 metadataNanoseconds = 0;
+    QElapsedTimer phaseTimer;
+    // BuildingEd has several catalog views connected to tilesetAdded().
+    // Rebuilding those views once for every one of the 500+ initial entries is
+    // quadratic and used to add roughly a minute to startup. The views already
+    // populate themselves once their mode/dialog is initialized, so suppress
+    // only the initial bulk-registration notifications.
+    {
+        const QSignalBlocker bulkRegistrationSignals(this);
+        for (const TilesetsTxtFile::Tileset* fileTileset : std::as_const(reader.mTilesets)) {
+            phaseTimer.restart();
+            QSize tilesetSize = Tiled::getZomboidTilesetSize1x(fileTileset->mName);
+            sizeLookupNanoseconds += phaseTimer.nsecsElapsed();
 
-        // Don't load the tilesets yet because the user might not have
-        // chosen the Tiles directory. The tilesets will be loaded when
-        // other code asks for them or when the Tiles directory is changed.
-        int width = fileTileset->mColumns * tileWidth;
-        int height = fileTileset->mRows * tileHeight;
-        QString tilesetFileName = fileTileset->mFile + QLatin1String(".png");
-        tileset->loadFromNothing(QSize(width, height), tilesetFileName);
-        Tile *missingTile = TilesetManager::instance()->missingTile();
-        for (int i = 0; i < tileset->tileCount(); i++) {
-            tileset->tileAt(i)->setImage(missingTile);
-        }
-        tileset->setMissing(true);
-        addTileset(tileset);
+            phaseTimer.restart();
+            int tileWidth = tilesetSize.width();
+            int tileHeight = tilesetSize.height();
+            Tileset *tileset = new Tileset(fileTileset->mName, tileWidth, tileHeight);
+            Tiled::setZomboidTileOffset(tileset);
 
-        TilesetMetaInfo *info = new TilesetMetaInfo;
-        for (const TilesetsTxtFile::Tile& fileTile : fileTileset->mTiles) {
-            QString coordString = QString(QLatin1String("%1,%2")).arg(fileTile.mX).arg(fileTile.mY);
-            info->mInfo[coordString].mMetaGameEnum = fileTile.mMetaEnum;
+            // Don't load the tilesets yet because the user might not have
+            // chosen the Tiles directory. The tilesets will be loaded when
+            // other code asks for them or when the Tiles directory is changed.
+            int width = fileTileset->mColumns * tileWidth;
+            int height = fileTileset->mRows * tileHeight;
+            QString tilesetFileName = fileTileset->mFile + QLatin1String(".png");
+            tileset->loadFromNothing(QSize(width, height), tilesetFileName);
+            // This is an unresolved catalog entry, not a confirmed missing image.
+            // Resolving every path and painting every placeholder here made startup
+            // take close to a minute on slower drives.
+            tileset->setMissing(false);
+            constructionNanoseconds += phaseTimer.nsecsElapsed();
+
+            phaseTimer.restart();
+            addTileset(tileset);
+            registrationNanoseconds += phaseTimer.nsecsElapsed();
+
+            phaseTimer.restart();
+            TilesetMetaInfo *info = new TilesetMetaInfo;
+            for (const TilesetsTxtFile::Tile& fileTile : fileTileset->mTiles) {
+                QString coordString = QString(QLatin1String("%1,%2")).arg(fileTile.mX).arg(fileTile.mY);
+                info->mInfo[coordString].mMetaGameEnum = fileTile.mMetaEnum;
+            }
+            mTilesetInfo[fileTileset->mName] = info;
+            metadataNanoseconds += phaseTimer.nsecsElapsed();
         }
-        mTilesetInfo[fileTileset->mName] = info;
     }
+    qInfo().noquote()
+            << "Tileset catalog registration timings (ms):"
+            << "size lookup" << sizeLookupNanoseconds / 1000000
+            << "construction" << constructionNanoseconds / 1000000
+            << "registration" << registrationNanoseconds / 1000000
+            << "metadata" << metadataNanoseconds / 1000000;
 
     for (const QString& enumName : std::as_const(mEnumNames)) {
         if (isEnumWest(enumName) || isEnumNorth(enumName)) {
@@ -195,7 +229,7 @@ bool TileMetaInfoMgr::readTxt()
     }
 
     mHasReadTxt = true;
-    resolveTilesets();
+    emit tilesetCatalogLoaded();
 
     return true;
 }
@@ -486,6 +520,13 @@ bool TileMetaInfoMgr::mergeTxt()
     QString userPath = txtPath();
 
     QString sourcePath = Tiled::Internal::Preferences::instance()->appConfigPath(txtName());
+    // In the portable layout the active catalog is also the application
+    // catalog. Merging a file with itself would make source_revision trail
+    // revision forever and rewrite the file on every startup.
+    if (QFileInfo(userPath).canonicalFilePath()
+            == QFileInfo(sourcePath).canonicalFilePath()) {
+        return true;
+    }
 
     TilesetsTxtFile sourceFileX;
     if (!sourceFileX.read(sourcePath)) {
@@ -726,6 +767,7 @@ void TileMetaInfoMgr::resolveTilesets(const QList<Tileset *> &tilesets)
 void TileMetaInfoMgr::loadTilesets(const QList<Tileset *> &tilesets,
                                    bool processEvents, PROGRESS *progress)
 {
+    Q_UNUSED(processEvents)
     QList<Tileset *> _tilesets = tilesets;
     if (_tilesets.isEmpty())
         _tilesets = this->tilesets();
@@ -746,8 +788,6 @@ void TileMetaInfoMgr::loadTilesets(const QList<Tileset *> &tilesets,
                                  .arg(current).arg(total).arg(ts->name()));
             }
             TilesetManager::instance()->loadTileset(ts, ts->imageSource());
-            if (processEvents)
-                qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
         }
     }
 }

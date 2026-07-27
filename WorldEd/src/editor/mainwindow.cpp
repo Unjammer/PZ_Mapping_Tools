@@ -119,6 +119,7 @@
 #include <QShortcut>
 #include <QSpinBox>
 #include <QTimer>
+#include <QTemporaryFile>
 #include <QToolBar>
 #include <QUndoGroup>
 #include <QUndoStack>
@@ -128,6 +129,156 @@ using namespace Tiled;
 using namespace Tiled::Internal;
 
 namespace {
+
+bool moveFile(const QString &source, const QString &destination,
+              QString *error)
+{
+    QFile file(source);
+    if (file.rename(destination))
+        return true;
+    if (error) {
+        *error = QObject::tr("Could not rename:\n%1\n\nto:\n%2\n\n%3")
+                .arg(QDir::toNativeSeparators(source),
+                     QDir::toNativeSeparators(destination),
+                     file.errorString());
+    }
+    return false;
+}
+
+bool commitFilePair(const QStringList &temporaryFiles,
+                    const QStringList &destinationFiles,
+                    QString *error)
+{
+    Q_ASSERT(temporaryFiles.size() == destinationFiles.size());
+    QStringList backupFiles;
+    QVector<bool> hadDestination;
+    for (const QString &destination : destinationFiles) {
+        const QString backup =
+                destination + QLatin1String(".pzworlded-pair-backup");
+        if (QFileInfo::exists(backup)) {
+            if (error) {
+                *error = QObject::tr(
+                            "A recovery backup from an earlier export still "
+                            "exists and was not overwritten:\n%1\n\n"
+                            "Inspect or restore that file, then rename or "
+                            "remove it before exporting again.")
+                        .arg(QDir::toNativeSeparators(backup));
+            }
+            return false;
+        }
+        backupFiles += backup;
+        hadDestination += QFileInfo::exists(destination);
+    }
+
+    int backedUp = 0;
+    for (; backedUp < destinationFiles.size(); ++backedUp) {
+        if (!hadDestination.at(backedUp))
+            continue;
+        if (!moveFile(destinationFiles.at(backedUp),
+                      backupFiles.at(backedUp), error)) {
+            for (int index = backedUp - 1; index >= 0; --index) {
+                if (hadDestination.at(index))
+                    moveFile(backupFiles.at(index),
+                             destinationFiles.at(index), nullptr);
+            }
+            return false;
+        }
+    }
+
+    int committed = 0;
+    for (; committed < temporaryFiles.size(); ++committed) {
+        if (!moveFile(temporaryFiles.at(committed),
+                      destinationFiles.at(committed), error)) {
+            for (int index = 0; index < committed; ++index)
+                QFile::remove(destinationFiles.at(index));
+            for (int index = destinationFiles.size() - 1;
+                 index >= 0; --index) {
+                if (hadDestination.at(index))
+                    moveFile(backupFiles.at(index),
+                             destinationFiles.at(index), nullptr);
+            }
+            return false;
+        }
+    }
+
+    for (int index = 0; index < backupFiles.size(); ++index) {
+        if (hadDestination.at(index)
+                && !QFile::remove(backupFiles.at(index))) {
+            qWarning() << "Could not remove completed export backup:"
+                       << backupFiles.at(index);
+        }
+    }
+    return true;
+}
+
+bool writeInGameMapFilePair(World *world, const QString &xmlFileName,
+                            QString *error)
+{
+    const QFileInfo destinationInfo(xmlFileName);
+    QDir destinationDirectory(destinationInfo.absolutePath());
+    if (!destinationDirectory.exists()) {
+        if (error) {
+            *error = QObject::tr("The destination directory does not exist:\n%1")
+                    .arg(QDir::toNativeSeparators(
+                             destinationDirectory.absolutePath()));
+        }
+        return false;
+    }
+
+    QTemporaryFile xmlTemporary(destinationDirectory.filePath(
+            QLatin1String(".pzworlded-worldmap-XXXXXX.xml")));
+    QTemporaryFile binaryTemporary(destinationDirectory.filePath(
+            QLatin1String(".pzworlded-worldmap-XXXXXX.bin")));
+    if (!xmlTemporary.open() || !binaryTemporary.open()) {
+        if (error) {
+            *error = QObject::tr(
+                        "Could not create temporary files in:\n%1\n\n%2")
+                    .arg(QDir::toNativeSeparators(
+                             destinationDirectory.absolutePath()),
+                         !xmlTemporary.errorString().isEmpty()
+                         ? xmlTemporary.errorString()
+                         : binaryTemporary.errorString());
+        }
+        return false;
+    }
+    const QString xmlTemporaryName = xmlTemporary.fileName();
+    const QString binaryTemporaryName = binaryTemporary.fileName();
+    xmlTemporary.close();
+    binaryTemporary.close();
+    xmlTemporary.remove();
+    binaryTemporary.remove();
+
+    InGameMapWriter writer;
+    if (!writer.writeWorld(world, xmlTemporaryName)) {
+        QFile::remove(xmlTemporaryName);
+        QFile::remove(binaryTemporaryName);
+        if (error) {
+            *error = QObject::tr("Could not write the XML map data.\n\n%1")
+                    .arg(writer.errorString());
+        }
+        return false;
+    }
+    InGameMapWriterBinary binaryWriter;
+    if (!binaryWriter.writeWorld(world, binaryTemporaryName)) {
+        QFile::remove(xmlTemporaryName);
+        QFile::remove(binaryTemporaryName);
+        if (error) {
+            *error = QObject::tr("Could not write the binary map data.\n\n%1")
+                    .arg(binaryWriter.errorString());
+        }
+        return false;
+    }
+
+    const bool committed = commitFilePair(
+                { xmlTemporaryName, binaryTemporaryName },
+                { xmlFileName, xmlFileName + QLatin1String(".bin") },
+                error);
+    if (!committed) {
+        QFile::remove(xmlTemporaryName);
+        QFile::remove(binaryTemporaryName);
+    }
+    return committed;
+}
 
 bool tmxContainsMapContent(const QString &filePath)
 {
@@ -1904,7 +2055,9 @@ void MainWindow::ReadWorldObjects()
 void MainWindow::addWorldObjectsFromLuaTable(Lua::LuaTable *regionsTable)
 {
     WorldDocument *worldDoc = mCurrentDocument->asWorldDocument();
-    const GenerateLotsSettings &gls = worldDoc->world()->getGenerateLotsSettings();
+    World *world = worldDoc->world();
+    const GenerateLotsSettings &gls = world->getGenerateLotsSettings();
+    const int cellSize = world->cellSize();
     worldDoc->undoStack()->beginMacro(tr("Read Objects from Lua"));
 
     for (Lua::LuaTableKeyValue *kv : std::as_const(regionsTable->kv)) {
@@ -1967,9 +2120,10 @@ void MainWindow::addWorldObjectsFromLuaTable(Lua::LuaTable *regionsTable)
                 y = bounds.y();
                 width = bounds.width();
                 height = bounds.height();
-                int cellX = x / 300 - gls.worldOrigin.x();
-                int cellY = y / 300 - gls.worldOrigin.y();
-                points.translate(-cellX * 300, -cellY * 300);
+                const int globalCellX = floorDivision(qFloor(x), cellSize);
+                const int globalCellY = floorDivision(qFloor(y), cellSize);
+                points.translate(-globalCellX * cellSize,
+                                 -globalCellY * cellSize);
             }
         } else {
             if (!objectTable->getNumber(QStringLiteral("x"), x)) {
@@ -1988,7 +2142,11 @@ void MainWindow::addWorldObjectsFromLuaTable(Lua::LuaTable *regionsTable)
         if (!objectTable->getNumber(QStringLiteral("z"), z)) {
             continue;
         }
-        WorldCell *cell = worldDoc->world()->cellAt(x / 300 - gls.worldOrigin.x(), y / 300 - gls.worldOrigin.y());
+        const int globalCellX = floorDivision(qFloor(x), cellSize);
+        const int globalCellY = floorDivision(qFloor(y), cellSize);
+        WorldCell *cell = world->cellAt(
+                    globalCellX - gls.worldOrigin.x(),
+                    globalCellY - gls.worldOrigin.y());
         if (cell == nullptr) {
             continue;
         }
@@ -2001,7 +2159,9 @@ void MainWindow::addWorldObjectsFromLuaTable(Lua::LuaTable *regionsTable)
             continue;
         }
         WorldCellObject* object = new WorldCellObject(cell, name, objectType, objectGroup,
-                                                      qreal(x - (gls.worldOrigin.x() + cell->x()) * 300), qreal(y - (gls.worldOrigin.y() + cell->y()) * 300), qreal(z),
+                                                      qreal(x - globalCellX * cellSize),
+                                                      qreal(y - globalCellY * cellSize),
+                                                      qreal(z),
                                                       qreal(width), qreal(height));
         if (geometryType != ObjectGeometryType::INVALID) {
             object->setGeometryType(geometryType);
@@ -3289,7 +3449,8 @@ void MainWindow::createInGameMapFeatureImage()
         return;
     }
     World* world = worldDoc->world();
-    QSize size(world->size() * 300);
+    const int cellSize = world->cellSize();
+    QSize size(world->size() * cellSize);
     QImage image(size.width(), size.height(), QImage::Format_ARGB32);
     image.fill(Qt::transparent);
     QPainter painter(&image);
@@ -3347,13 +3508,20 @@ void MainWindow::createInGameMapFeatureImage()
                     path2.addPolygon(hole);
                 }
                 path = path.subtracted(path2);
-                path.translate(cellX * 300, cellY * 300);
+                path.translate(cellX * cellSize, cellY * cellSize);
                 painter.fillPath(path, brush);
             }
         }
     }
     painter.end();
-    image.save(fileName);
+    if (!image.save(fileName)) {
+        QMessageBox::critical(
+                    this, tr("Unable to Save Feature Image"),
+                    tr("WorldEd could not write the PNG image.\n\nFile: %1\n"
+                       "Check that the destination is writable and that "
+                       "enough disk space is available.")
+                    .arg(QDir::toNativeSeparators(fileName)));
+    }
 }
 
 void MainWindow::writeInGameMapFeaturesXML()
@@ -3380,23 +3548,24 @@ void MainWindow::writeInGameMapFeaturesXML()
         return;
     }
 
-    QString absolutePath = QFileInfo(fileName).absoluteFilePath();
-    worldDoc->setInGameMapXMLFileName(absolutePath);
-    Preferences::instance()->setWorldMapXMLFile(absolutePath);
+    const QString absolutePath = QFileInfo(fileName).absoluteFilePath();
 
     PROGRESS progress(QStringLiteral("Writing InGameMap XML"), this);
 
-    InGameMapWriter writer;
-    if (!writer.writeWorld(worldDoc->world(), fileName)) {
-        qWarning("Failed to write InGameMap XML.");
+    QString error;
+    if (!writeInGameMapFilePair(worldDoc->world(), absolutePath, &error)) {
+        QMessageBox::critical(
+                    this, tr("Unable to Export In-Game Map"),
+                    tr("Neither output file was replaced.\n\nXML: %1\n"
+                       "Binary: %2\n\n%3")
+                    .arg(QDir::toNativeSeparators(absolutePath),
+                         QDir::toNativeSeparators(
+                             absolutePath + QLatin1String(".bin")),
+                         error));
         return;
     }
-
-    InGameMapWriterBinary writerBinary;
-    if (!writerBinary.writeWorld(worldDoc->world(), fileName + QStringLiteral(".bin"))) {
-        qWarning("Failed to write InGameMap Binary.");
-        return;
-    }
+    worldDoc->setInGameMapXMLFileName(absolutePath);
+    Preferences::instance()->setWorldMapXMLFile(absolutePath);
 }
 
 void MainWindow::overwriteInGameMapFeaturesXML()
@@ -3405,16 +3574,25 @@ void MainWindow::overwriteInGameMapFeaturesXML()
 
     PROGRESS progress(QStringLiteral("Writing InGameMap XML"), this);
 
-    InGameMapWriter writer;
-    QString fileName = worldDoc->getInGameMapXMLFileName(); // Preferences::instance()->worldMapXMLFile();
-    if (!writer.writeWorld(worldDoc->world(), fileName)) {
-        qWarning("Failed to write InGameMap XML.");
+    const QString fileName = worldDoc->getInGameMapXMLFileName();
+    if (fileName.isEmpty()) {
+        QMessageBox::warning(
+                    this, tr("No In-Game Map Export"),
+                    tr("This project has no previous in-game map export to "
+                       "overwrite. Use the export command first."));
         return;
     }
 
-    InGameMapWriterBinary writerBinary;
-    if (!writerBinary.writeWorld(worldDoc->world(), fileName + QStringLiteral(".bin"))) {
-        qWarning("Failed to write InGameMap Binary.");
+    QString error;
+    if (!writeInGameMapFilePair(worldDoc->world(), fileName, &error)) {
+        QMessageBox::critical(
+                    this, tr("Unable to Export In-Game Map"),
+                    tr("Neither output file was replaced.\n\nXML: %1\n"
+                       "Binary: %2\n\n%3")
+                    .arg(QDir::toNativeSeparators(fileName),
+                         QDir::toNativeSeparators(
+                             fileName + QLatin1String(".bin")),
+                         error));
         return;
     }
 }

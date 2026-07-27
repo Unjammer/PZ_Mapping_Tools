@@ -26,10 +26,16 @@
 #include "furnituregroups.h"
 #include "furnitureview.h"
 
+#include "tilemetainfomgr.h"
+#include "tilesetmanager.h"
 #include "zoomable.h"
+
+#include "tile.h"
+#include "tileset.h"
 
 #include <QAction>
 #include <QComboBox>
+#include <QDebug>
 #include <QHBoxLayout>
 #include <QListWidget>
 #include <QSettings>
@@ -41,7 +47,9 @@ using namespace BuildingEditor;
 BuildingFurnitureDock::BuildingFurnitureDock(QWidget *parent) :
     QDockWidget(parent),
     mGroupList(new QListWidget(this)),
-    mFurnitureView(new FurnitureView(this))
+    mFurnitureView(new FurnitureView(this)),
+    mCurrentGroup(0),
+    mCurrentTile(0)
 {
     setObjectName(QLatin1String("FurnitureDock"));
 
@@ -94,6 +102,8 @@ BuildingFurnitureDock::BuildingFurnitureDock(QWidget *parent) :
 
     connect(BuildingTilesDialog::instance(), &BuildingTilesDialog::edited,
             this, &BuildingFurnitureDock::tilesDialogEdited);
+    connect(FurnitureGroups::instance(), &FurnitureGroups::furnitureCatalogLoaded,
+            this, &BuildingFurnitureDock::setGroupsList);
 
     retranslateUi();
 }
@@ -117,6 +127,98 @@ void BuildingFurnitureDock::switchTo()
     setGroupsList();
 }
 
+bool BuildingFurnitureDock::validateFurnitureCatalog(QString *errorString)
+{
+    FurnitureGroups *catalog = FurnitureGroups::instance();
+    const int expectedGroups = catalog->groupCount();
+    if (expectedGroups <= 0) {
+        *errorString = tr("The furniture catalog is empty.");
+        return false;
+    }
+    if (mGroupList->count() != expectedGroups) {
+        *errorString = tr("Furniture mode displays %1 of %2 groups.")
+                .arg(mGroupList->count()).arg(expectedGroups);
+        return false;
+    }
+
+    int furnitureDefinitions = 0;
+    int tileReferences = 0;
+    QStringList invalidReferences;
+    for (FurnitureGroup *group : catalog->groups()) {
+        furnitureDefinitions += group->mTiles.count();
+        for (FurnitureTiles *furniture : group->mTiles) {
+            for (FurnitureTile *orientation : furniture->tiles()) {
+                if (!orientation)
+                    continue;
+                for (BuildingTile *buildingTile : orientation->tiles()) {
+                    if (!buildingTile || buildingTile->isNone())
+                        continue;
+                    ++tileReferences;
+                    Tiled::Tileset *tileset =
+                            Tiled::Internal::TileMetaInfoMgr::instance()
+                            ->tileset(buildingTile->mTilesetName);
+                    // Tilesets.txt dimensions may lag behind newer PNGs.
+                    // Validate an index only after that image has been loaded
+                    // and its real dimensions are known.
+                    if (!tileset || buildingTile->mIndex < 0
+                            || (tileset->isLoaded()
+                                && buildingTile->mIndex
+                                   >= tileset->tileCount())) {
+                        invalidReferences += buildingTile->name();
+                    }
+                }
+            }
+        }
+    }
+    if (!invalidReferences.isEmpty()) {
+        invalidReferences.removeDuplicates();
+        qWarning().noquote()
+                << tr("Furniture catalog contains %1 unavailable tile "
+                      "references; first: %2. These entries will use the "
+                      "missing-tile placeholder until matching game tiles "
+                      "are installed.")
+                   .arg(invalidReferences.count())
+                   .arg(invalidReferences.first());
+    }
+
+    mGroupList->setCurrentRow(0);
+    if (!mCurrentGroup || mFurnitureView->model()->rowCount() <= 0) {
+        *errorString = tr("The first furniture group has no visible entries.");
+        return false;
+    }
+
+    // Rendering the first non-empty orientation verifies that the preloaded
+    // catalog can supply usable furniture images.
+    for (FurnitureTiles *furniture : mCurrentGroup->mTiles) {
+        for (FurnitureTile *orientation : furniture->tiles()) {
+            if (!orientation || orientation->isEmpty())
+                continue;
+            for (BuildingTile *buildingTile : orientation->tiles()) {
+                if (!buildingTile || buildingTile->isNone())
+                    continue;
+                Tiled::Tile *tile =
+                        BuildingTilesMgr::instance()->tileFor(buildingTile);
+                if (!tile
+                        || tile == Tiled::Internal::TilesetManager::instance()
+                           ->missingTile()
+                        || tile->image().isNull()) {
+                    *errorString = tr("Furniture tile could not be loaded: %1")
+                            .arg(buildingTile->name());
+                    return false;
+                }
+            }
+            qInfo() << "Validated furniture catalog:"
+                    << expectedGroups << "groups,"
+                    << furnitureDefinitions << "definitions,"
+                    << tileReferences << "tile references";
+            return true;
+        }
+    }
+
+    *errorString = tr("The first furniture group contains no tile images.");
+    return false;
+}
+
 void BuildingFurnitureDock::changeEvent(QEvent *e)
 {
     QDockWidget::changeEvent(e);
@@ -136,9 +238,15 @@ void BuildingFurnitureDock::retranslateUi()
 
 void BuildingFurnitureDock::setGroupsList()
 {
+    FurnitureGroup *previousGroup = mCurrentGroup;
     mGroupList->clear();
     foreach (FurnitureGroup *group, FurnitureGroups::instance()->groups())
         mGroupList->addItem(group->mLabel);
+
+    int row = FurnitureGroups::instance()->indexOf(previousGroup);
+    if (row < 0 && mGroupList->count() > 0)
+        row = 0;
+    mGroupList->setCurrentRow(row);
 }
 
 void BuildingFurnitureDock::setFurnitureList()

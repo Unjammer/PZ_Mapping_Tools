@@ -25,16 +25,34 @@
 #include "languagemanager.h"
 #include "preferences.h"
 #include "tiledapplication.h"
+#include "../firstlaunchdialog.h"
 #include "../portablesettings.h"
 #ifdef ZOMBOID
+#include "BuildingEditor/building.h"
+#include "BuildingEditor/buildingdocument.h"
+#include "BuildingEditor/buildingdocumentmgr.h"
 #include "BuildingEditor/buildingeditorwindow.h"
+#include "BuildingEditor/buildingfloor.h"
+#include "BuildingEditor/buildingfurnituredock.h"
+#include "BuildingEditor/buildingmap.h"
+#include "BuildingEditor/buildingtemplates.h"
+#include "BuildingEditor/buildingtiles.h"
+#include "BuildingEditor/buildingtilesetdock.h"
+#include "BuildingEditor/categorydock.h"
+#include "BuildingEditor/furnituregroups.h"
+#include "tilemetainfomgr.h"
+#include "tilesetmanager.h"
 #include "worlded/worldedmgr.h"
 #include "zprogress.h"
+#include "tile.h"
+#include "tileset.h"
 #include <QFileInfo>
 #include <QMessageBox>
+#include <QSet>
 #endif
 
 #include <QDebug>
+#include <QEventLoop>
 #include <QIcon>
 #include <QTimer>
 #include <QtPlugin>
@@ -56,6 +74,120 @@ bool gStartupBlockRendering = true;
 
 namespace {
 
+#ifdef ZOMBOID
+static void addEntryTiles(QSet<BuildingEditor::BuildingTile *> &tiles,
+                          BuildingEditor::BuildingTileEntry *entry)
+{
+    if (!entry || entry->isNone())
+        return;
+    for (BuildingEditor::BuildingTile *tile : entry->mTiles) {
+        if (tile && !tile->isNone())
+            tiles += tile;
+    }
+}
+
+static bool validateBuildingTemplateTiles(BuildingEditor::Building *building,
+                                          QString *errorString)
+{
+    QSet<BuildingEditor::BuildingTile *> buildingTiles;
+    for (BuildingEditor::BuildingTileEntry *entry : building->tiles())
+        addEntryTiles(buildingTiles, entry);
+    for (BuildingEditor::Room *room : building->rooms()) {
+        for (BuildingEditor::BuildingTileEntry *entry : room->tiles())
+            addEntryTiles(buildingTiles, entry);
+    }
+    for (BuildingEditor::BuildingTileEntry *entry : building->usedTiles())
+        addEntryTiles(buildingTiles, entry);
+    for (BuildingEditor::FurnitureTiles *furniture : building->usedFurniture()) {
+        for (BuildingEditor::FurnitureTile *orientation : furniture->tiles()) {
+            if (!orientation)
+                continue;
+            for (BuildingEditor::BuildingTile *tile : orientation->tiles()) {
+                if (tile && !tile->isNone())
+                    buildingTiles += tile;
+            }
+        }
+    }
+
+    for (BuildingEditor::BuildingTile *buildingTile : buildingTiles) {
+        Tiled::Tileset *tileset = TileMetaInfoMgr::instance()
+                ->tileset(buildingTile->mTilesetName);
+        if (!tileset) {
+            *errorString = QStringLiteral("Unknown tileset: %1")
+                    .arg(buildingTile->mTilesetName);
+            return false;
+        }
+        if (tileset->isMissing()) {
+            *errorString = QStringLiteral("Missing tileset image: %1")
+                    .arg(buildingTile->mTilesetName);
+            return false;
+        }
+        if (!tileset->isLoaded()) {
+            *errorString = QStringLiteral(
+                        "Required template tileset was not loaded: %1")
+                    .arg(buildingTile->mTilesetName);
+            return false;
+        }
+        if (buildingTile->mIndex < 0
+                || buildingTile->mIndex >= tileset->tileCount()) {
+            *errorString = QStringLiteral("Invalid template tile: %1")
+                    .arg(buildingTile->name());
+            return false;
+        }
+        Tiled::Tile *tile = tileset->tileAt(buildingTile->mIndex);
+        if (!tile || tile == TilesetManager::instance()->missingTile()
+                || tile->image().isNull()) {
+            *errorString = QStringLiteral("Template tile has no image: %1")
+                    .arg(buildingTile->name());
+            return false;
+        }
+    }
+
+    qInfo() << "Validated building template:"
+            << buildingTiles.count() << "tile references";
+    return true;
+}
+
+static bool validateAllBuildingTemplates(QString *errorString)
+{
+    BuildingEditor::BuildingTemplates *templates =
+            BuildingEditor::BuildingTemplates::instance();
+    for (int index = 0; index < templates->templateCount(); ++index) {
+        BuildingEditor::BuildingTemplate *buildingTemplate =
+                templates->templateAt(index);
+        BuildingEditor::Building *building =
+                new BuildingEditor::Building(17, 23, buildingTemplate);
+        building->insertFloor(
+                    0, new BuildingEditor::BuildingFloor(building, 0));
+
+        const QStringList unresolved =
+                BuildingEditor::BuildingMap::loadNeededTilesets(building);
+        if (!unresolved.isEmpty()) {
+            *errorString = QStringLiteral(
+                        "Template \"%1\" requires unavailable tilesets: %2")
+                    .arg(buildingTemplate->name())
+                    .arg(unresolved.join(QStringLiteral(", ")));
+            delete building;
+            return false;
+        }
+
+        QString templateError;
+        if (!validateBuildingTemplateTiles(building, &templateError)) {
+            *errorString = QStringLiteral("Template \"%1\": %2")
+                    .arg(buildingTemplate->name())
+                    .arg(templateError);
+            delete building;
+            return false;
+        }
+        delete building;
+    }
+
+    qInfo() << "Validated all building templates:"
+            << templates->templateCount();
+    return true;
+}
+#endif
+
 class CommandLineHandler : public CommandLineParser
 {
 public:
@@ -64,11 +196,13 @@ public:
     bool quit;
     bool showedVersion;
     bool disableOpenGL;
+    bool validateBuildingCategories;
 
 private:
     void showVersion();
     void justQuit();
     void setDisableOpenGL();
+    void setValidateBuildingCategories();
 
     // Convenience wrapper around registerOption
     template <void (CommandLineHandler::*memberFunction)()>
@@ -90,6 +224,7 @@ CommandLineHandler::CommandLineHandler()
     : quit(false)
     , showedVersion(false)
     , disableOpenGL(false)
+    , validateBuildingCategories(false)
 {
     option<&CommandLineHandler::showVersion>(
                 QLatin1Char('v'),
@@ -106,6 +241,11 @@ CommandLineHandler::CommandLineHandler()
                 QChar(),
                 QLatin1String("--disable-opengl"),
                 QLatin1String("Disable hardware accelerated rendering"));
+
+    option<&CommandLineHandler::setValidateBuildingCategories>(
+                QChar(),
+                QLatin1String("--validate-building-categories"),
+                QLatin1String("Load and validate every BuildingEd tile category"));
 }
 
 void CommandLineHandler::showVersion()
@@ -126,6 +266,11 @@ void CommandLineHandler::justQuit()
 void CommandLineHandler::setDisableOpenGL()
 {
     disableOpenGL = true;
+}
+
+void CommandLineHandler::setValidateBuildingCategories()
+{
+    validateBuildingCategories = true;
 }
 
 #if !defined(QT_NO_DEBUG) && defined(ZOMBOID) && defined(_MSC_VER)
@@ -179,6 +324,7 @@ int main(int argc, char *argv[])
 #endif
     PortableSettings::configure();
     PortableSettings::installLogging();
+    PortableSettings::prepareVersionedSettings();
 #ifdef BUILD_INFO_VERSION
     a.setApplicationVersion(QLatin1String(AS_STRING(BUILD_INFO_VERSION)));
 #else
@@ -198,6 +344,8 @@ int main(int argc, char *argv[])
         return 0;
     if (commandLine.quit)
         return 0;
+    if (!FirstLaunchDialog::ensureSharedPaths())
+        return 0;
     if (commandLine.disableOpenGL)
         Preferences::instance()->setUseOpenGL(false);
 
@@ -216,6 +364,89 @@ int main(int argc, char *argv[])
                     !buildingEditor.Startup()) {
                 buildingEditor.close();
                 QCoreApplication::quit();
+                return;
+            }
+
+            if (commandLine.validateBuildingCategories) {
+                BuildingEditor::BuildingTemplate *buildingTemplate = nullptr;
+                BuildingEditor::BuildingTemplates *templates =
+                        BuildingEditor::BuildingTemplates::instance();
+                if (templates->templateCount() > 0) {
+                    buildingTemplate = templates->templateAt(
+                                templates->templateCount() / 2);
+                }
+                BuildingEditor::Building *building =
+                        new BuildingEditor::Building(
+                            17, 23, buildingTemplate);
+                building->insertFloor(
+                            0, new BuildingEditor::BuildingFloor(
+                                building, 0));
+                BuildingEditor::BuildingDocument *document =
+                        new BuildingEditor::BuildingDocument(
+                            building, QString());
+                BuildingEditor::BuildingDocumentMgr::instance()
+                        ->addDocument(document);
+                QCoreApplication::processEvents(
+                            QEventLoop::ExcludeUserInputEvents);
+                qInfo().noquote()
+                        << "BuildingEd category validation document:"
+                        << "17x23, template="
+                        << (buildingTemplate
+                            ? buildingTemplate->name()
+                            : QStringLiteral("<default>"));
+
+                QString templateTilesError;
+                const bool templateTilesValid =
+                        validateAllBuildingTemplates(
+                            &templateTilesError);
+                qInfo().noquote()
+                        << "BuildingEd all-template tile validation:"
+                        << (templateTilesValid
+                            ? QStringLiteral("PASS")
+                            : QStringLiteral("FAIL: %1")
+                              .arg(templateTilesError));
+
+                BuildingEditor::BuildingTilesetDock *tilesetDock =
+                        buildingEditor.findChild<
+                            BuildingEditor::BuildingTilesetDock *>();
+                QString tileModeError;
+                const bool tileModeValid = tilesetDock
+                        && tilesetDock->validateTilesetCatalog(
+                            &tileModeError);
+                qInfo().noquote()
+                        << "BuildingEd Tile mode validation:"
+                        << (tileModeValid
+                            ? QStringLiteral("PASS")
+                            : QStringLiteral("FAIL: %1")
+                              .arg(tileModeError));
+
+                BuildingEditor::BuildingFurnitureDock *furnitureDock =
+                        buildingEditor.findChild<
+                            BuildingEditor::BuildingFurnitureDock *>();
+                QString furnitureError;
+                const bool furnitureValid = furnitureDock
+                        && furnitureDock->validateFurnitureCatalog(
+                            &furnitureError);
+                qInfo().noquote()
+                        << "BuildingEd Furniture validation:"
+                        << (furnitureValid
+                            ? QStringLiteral("PASS")
+                            : QStringLiteral("FAIL: %1")
+                              .arg(furnitureError));
+
+                BuildingEditor::CategoryDock *categoryDock =
+                        buildingEditor.findChild<
+                            BuildingEditor::CategoryDock *>();
+                const bool categoriesValid = categoryDock
+                        && categoryDock->validateAllTileCategories();
+                const bool valid = tileModeValid
+                        && templateTilesValid
+                        && furnitureValid
+                        && categoriesValid;
+                qInfo() << "BuildingEd category validation result:"
+                        << (valid ? "PASS" : "FAIL");
+                buildingEditor.close();
+                QCoreApplication::exit(valid ? 0 : 2);
                 return;
             }
 
@@ -254,6 +485,14 @@ int main(int argc, char *argv[])
 
     if (!w.InitConfigFiles())
         return 0;
+
+    {
+        PROGRESS progress(QObject::tr("Loading all tilesets..."), &w);
+        TileMetaInfoMgr::instance()->loadTilesets(
+                    QList<Tiled::Tileset *>(), false, &progress);
+        TilesetManager::instance()->waitForTilesets(
+                    TileMetaInfoMgr::instance()->tilesets());
+    }
 
     foreach (QString f, Preferences::instance()->worldedFiles()) {
         if (f.isEmpty())

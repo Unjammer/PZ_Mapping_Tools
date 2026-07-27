@@ -6,6 +6,7 @@
 #include <QDebug>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSettings>
@@ -15,6 +16,8 @@
 #include <cstdlib>
 
 namespace PortableSettings {
+
+static const int SETTINGS_SCHEMA_VERSION = 2;
 
 inline QString executableDirectoryPath()
 {
@@ -53,6 +56,76 @@ inline QString rootPath()
     return installPath(QLatin1String("settings"));
 }
 
+inline bool isConfigurationPath(const QString &candidate)
+{
+    const QFileInfo directoryInfo(candidate);
+    if (!directoryInfo.exists() || !directoryInfo.isDir())
+        return false;
+
+    // Portable settings are never a configuration-catalog directory, even if
+    // an early preview copied stale catalogs there.
+    if (directoryInfo.fileName().compare(
+                QLatin1String("settings"), Qt::CaseInsensitive) == 0) {
+        return false;
+    }
+
+    const QDir directory(candidate);
+    const QStringList requiredCatalogs = {
+        QLatin1String("Tilesets.txt"),
+        QLatin1String("TMXConfig.txt"),
+        QLatin1String("BuildingTiles.txt"),
+        QLatin1String("BuildingFurniture.txt"),
+        QLatin1String("BuildingTemplates.txt")
+    };
+    for (const QString &fileName : requiredCatalogs) {
+        if (!QFileInfo(directory.filePath(fileName)).isFile())
+            return false;
+    }
+    return true;
+}
+
+inline QString validatedConfigurationPath(const QString &candidate)
+{
+    const QString cleaned = QDir::cleanPath(candidate);
+    if (isConfigurationPath(cleaned))
+        return cleaned;
+    return QDir::cleanPath(applicationConfigPath());
+}
+
+inline QString sharedSettingsFilePath()
+{
+    return QDir(rootPath()).filePath(QLatin1String("PZTools.ini"));
+}
+
+inline QString sharedConfigurationPath()
+{
+    QSettings shared(sharedSettingsFilePath(), QSettings::IniFormat);
+    const QString configured = shared.value(
+                QLatin1String("Paths/ConfigDirectory"),
+                applicationConfigPath()).toString();
+    const QString validated = validatedConfigurationPath(configured);
+    if (QDir::cleanPath(configured).compare(
+                validated, Qt::CaseInsensitive) != 0) {
+        qWarning().noquote() << "Ignoring invalid shared configuration directory"
+                             << QDir::toNativeSeparators(configured)
+                             << "- using"
+                             << QDir::toNativeSeparators(validated);
+    }
+    shared.setValue(QLatin1String("Paths/ConfigDirectory"), validated);
+    return validated;
+}
+
+inline void setSharedConfigurationPath(const QString &directory)
+{
+    QSettings shared(sharedSettingsFilePath(), QSettings::IniFormat);
+    shared.setValue(QLatin1String("Paths/ConfigDirectory"),
+                    QDir::cleanPath(directory));
+    shared.sync();
+}
+
+inline QString normalizedTilesPath(const QString &candidate);
+inline bool isTilesPath(const QString &candidate);
+
 inline QString detectTilesPath()
 {
     QStringList candidates;
@@ -64,10 +137,156 @@ inline QString detectTilesPath()
 
     for (const QString &candidate : candidates) {
         const QFileInfo info(candidate);
-        if (info.exists() && info.isDir())
-            return QDir::cleanPath(info.absoluteFilePath());
+        if (info.exists() && info.isDir() && isTilesPath(candidate))
+            return normalizedTilesPath(info.absoluteFilePath());
     }
     return QString();
+}
+
+inline QString normalizedTilesPath(const QString &candidate)
+{
+    if (candidate.trimmed().isEmpty())
+        return QString();
+    QDir directory(QDir::cleanPath(candidate));
+    const QString name = directory.dirName();
+    const bool scaleDirectory =
+            name.compare(QLatin1String("1x"), Qt::CaseInsensitive) == 0
+            || name.compare(QLatin1String("2x"), Qt::CaseInsensitive) == 0
+            || name.compare(QLatin1String("custom"), Qt::CaseInsensitive) == 0;
+    if (scaleDirectory)
+        directory.cdUp();
+    return QDir::cleanPath(directory.absolutePath());
+}
+
+inline bool isTilesPath(const QString &candidate)
+{
+    const QDir directory(normalizedTilesPath(candidate));
+    if (candidate.trimmed().isEmpty() || !directory.exists())
+        return false;
+    const QStringList filters = { QLatin1String("*.png") };
+    const QStringList scaleDirectories = {
+        QLatin1String("1x"), QLatin1String("2x"),
+        QLatin1String("custom")
+    };
+    for (const QString &scale : scaleDirectories) {
+        const QDir scaled(directory.filePath(scale));
+        if (scaled.exists()
+                && !scaled.entryList(filters, QDir::Files).isEmpty()) {
+            return true;
+        }
+    }
+    return !directory.entryList(filters, QDir::Files).isEmpty();
+}
+
+inline QString sharedTilesPath()
+{
+    QSettings shared(sharedSettingsFilePath(), QSettings::IniFormat);
+    QString configured =
+            shared.value(QLatin1String("Paths/TilesDirectory")).toString();
+    if (!configured.isEmpty())
+        configured = normalizedTilesPath(configured);
+    if (!isTilesPath(configured))
+        configured = detectTilesPath();
+    if (!configured.isEmpty())
+        shared.setValue(QLatin1String("Paths/TilesDirectory"), configured);
+    return configured;
+}
+
+inline void setSharedTilesPath(const QString &directory)
+{
+    QSettings shared(sharedSettingsFilePath(), QSettings::IniFormat);
+    shared.setValue(QLatin1String("Paths/TilesDirectory"),
+                    normalizedTilesPath(directory));
+    shared.sync();
+}
+
+inline void prepareNamedApplicationSettings(const QString &applicationName)
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope,
+                       QLatin1String("TheIndieStone"), applicationName);
+    const QString versionKey =
+            QLatin1String("General/PZToolsSettingsSchema");
+    const int storedVersion = settings.value(versionKey, 0).toInt();
+    if (storedVersion != SETTINGS_SCHEMA_VERSION) {
+        settings.clear();
+        settings.setValue(versionKey, SETTINGS_SCHEMA_VERSION);
+        settings.sync();
+    }
+}
+
+inline void migrateLegacySharedPaths()
+{
+    QSettings shared(sharedSettingsFilePath(), QSettings::IniFormat);
+
+    QString configuration =
+            shared.value(QLatin1String("Paths/ConfigDirectory")).toString();
+    QString tiles =
+            shared.value(QLatin1String("Paths/TilesDirectory")).toString();
+
+    QSettings tileZed(QSettings::IniFormat, QSettings::UserScope,
+                      QLatin1String("TheIndieStone"),
+                      QLatin1String("TileZed"));
+    QSettings worldEd(QSettings::IniFormat, QSettings::UserScope,
+                      QLatin1String("TheIndieStone"),
+                      QLatin1String("PZWorldEd"));
+
+    if (!isConfigurationPath(configuration)) {
+        const QString candidates[] = {
+            tileZed.value(QLatin1String("ConfigDirectory")).toString(),
+            worldEd.value(QLatin1String("ConfigDirectory")).toString()
+        };
+        for (const QString &candidate : candidates) {
+            if (isConfigurationPath(candidate)) {
+                configuration = QDir::cleanPath(candidate);
+                shared.setValue(QLatin1String("Paths/ConfigDirectory"),
+                                configuration);
+                break;
+            }
+        }
+    }
+
+    if (!isTilesPath(tiles)) {
+        const QString candidates[] = {
+            tileZed.value(
+                QLatin1String("Tilesets/TilesDirectory")).toString(),
+            tileZed.value(QLatin1String("TilesDirectory")).toString(),
+            worldEd.value(QLatin1String("TilesDirectory")).toString()
+        };
+        for (const QString &candidate : candidates) {
+            if (isTilesPath(candidate)) {
+                tiles = QDir::cleanPath(candidate);
+                shared.setValue(QLatin1String("Paths/TilesDirectory"), tiles);
+                break;
+            }
+        }
+    }
+    shared.sync();
+}
+
+inline void prepareVersionedSettings()
+{
+    // Reset only application-specific state when the schema changes. Shared
+    // paths live in PZTools.ini and are preserved independently.
+    migrateLegacySharedPaths();
+    prepareNamedApplicationSettings(QCoreApplication::applicationName());
+
+    QSettings shared(sharedSettingsFilePath(), QSettings::IniFormat);
+    const QString configPath =
+            shared.value(QLatin1String("Paths/ConfigDirectory")).toString();
+    const QString tilesPath =
+            shared.value(QLatin1String("Paths/TilesDirectory")).toString();
+    const int storedVersion =
+            shared.value(QLatin1String("General/SettingsSchema"), 0).toInt();
+    if (storedVersion != SETTINGS_SCHEMA_VERSION) {
+        shared.clear();
+        if (!configPath.isEmpty())
+            shared.setValue(QLatin1String("Paths/ConfigDirectory"), configPath);
+        if (!tilesPath.isEmpty())
+            shared.setValue(QLatin1String("Paths/TilesDirectory"), tilesPath);
+        shared.setValue(QLatin1String("General/SettingsSchema"),
+                        SETTINGS_SCHEMA_VERSION);
+        shared.sync();
+    }
 }
 
 inline QString path(const QString &relativePath)
@@ -156,6 +375,16 @@ inline QString installLogging()
     }
     if (applicationName.isEmpty())
         applicationName = QStringLiteral("application");
+
+    QDir logs(logDirectory);
+    const QFileInfoList previousLogs = logs.entryInfoList(
+                QStringList() << QStringLiteral("%1-*.log").arg(applicationName),
+                QDir::Files, QDir::Time);
+    static const int MAX_LOG_FILES_PER_APPLICATION = 20;
+    for (int index = MAX_LOG_FILES_PER_APPLICATION - 1;
+         index < previousLogs.size(); ++index) {
+        QFile::remove(previousLogs.at(index).absoluteFilePath());
+    }
 
     const QString fileName = QStringLiteral("%1-%2-%3.log")
             .arg(applicationName)

@@ -63,6 +63,7 @@ RCC_DIR = .rcc
 OBJECTS_DIR = .obj
 
 SOURCES += main.cpp\
+    ../firstlaunchdialog.cpp \
     biomemapgeneratordialog.cpp \
     biomemapitem.cpp \
     biomemapimageprocessor.cpp \
@@ -193,6 +194,7 @@ SOURCES += main.cpp\
     waterflow.cpp
 
 HEADERS  += mainwindow.h \
+    ../firstlaunchdialog.h \
     ../portablesettings.h \
     biomemapgeneratordialog.h \
     biomemapitem.h \

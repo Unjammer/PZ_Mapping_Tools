@@ -41,6 +41,7 @@ public:
     QImage mBmp;
     QImage mBmpVeg;
     QRect mBounds; // cells covered
+    int mCellSize = 300;
 };
 
 class BMPToTMX : public QObject
@@ -63,8 +64,9 @@ public:
     static QStringList supportedImageFormats();
 
     BMPToTMXImages *getImages(const QString &path, const QPoint &origin,
-                              QImage::Format format = QImage::Format_ARGB32);
-    QSize validateImages(const QString &path);
+                              QImage::Format format = QImage::Format_ARGB32,
+                              int cellSize = 0);
+    QSize validateImages(const QString &path, int cellSize = 0);
 
     void assignMapsToCells(WorldDocument *worldDoc, GenerateMode mode);
 
@@ -76,7 +78,8 @@ private:
     bool shouldGenerateCell(WorldCell *cell, int &bmpIndex);
 
     QImage loadImage(const QString &path, const QString &suffix = QString(),
-                     QImage::Format format = QImage::Format_ARGB32);
+                     QImage::Format format = QImage::Format_ARGB32,
+                     int cellSize = 0);
     bool LoadBaseXML();
     bool LoadRules();
     bool LoadBlends();

@@ -37,6 +37,7 @@
 #include "tolua.h"
 
 #include <QElapsedTimer>
+#include <QDir>
 #include <QFileInfo>
 #include <QHash>
 #include <QString>
@@ -815,8 +816,14 @@ static bool parseTileName(const QString &tileName, QString &tilesetName, int &in
 
 static void ensureTilesetLoadedForLua(Tileset *tileset)
 {
-    if (!tileset || tileset->isLoaded() || tileset->isMissing())
+    if (!tileset || tileset->isLoaded())
         return;
+    // A relative source is an unresolved catalog entry, not a confirmed
+    // missing tileset. TilesetManager resolves that one entry on demand.
+    if (tileset->isMissing()
+            && !QDir(tileset->imageSource()).isRelative()) {
+        return;
+    }
 
     QList<Tileset *> requested;
     requested += tileset;
@@ -1179,6 +1186,13 @@ LuaMapNoBlend *LuaMap::noBlend(const char *layerName)
 
 bool LuaMap::write(const char *path)
 {
+    mError.clear();
+    const QString filePath = QString::fromUtf8(path ? path : "");
+    if (filePath.isEmpty()) {
+        mError = QStringLiteral("No output file was specified.");
+        return false;
+    }
+
     QScopedPointer<Map> map(mClone->clone());
     Q_ASSERT(map->layerCount() == 0);
     foreach (LuaLayer *ll, mLayers) {
@@ -1198,11 +1212,18 @@ bool LuaMap::write(const char *path)
     }
 
     Internal::TmxMapWriter writer;
-    if (!writer.write(map.data(), QString::fromLatin1(path))) {
-        // mError = write.errorString();
+    if (!writer.write(map.data(), filePath)) {
+        mError = writer.errorString();
+        if (mError.isEmpty())
+            mError = QStringLiteral("The TMX writer did not report a reason.");
         return false;
     }
     return true;
+}
+
+const char *LuaMap::errorString() const
+{
+    return cstring(mError);
 }
 
 /////
@@ -1467,7 +1488,11 @@ LuaObjectGroup::LuaObjectGroup(const char *name, int x, int y, int width, int he
 
 LuaObjectGroup::~LuaObjectGroup()
 {
-    qDeleteAll(mObjects);
+    QSet<LuaMapObject *> ownedObjects(
+                mObjects.begin(), mObjects.end());
+    for (LuaMapObject *object : mRemovedObjects)
+        ownedObjects += object;
+    qDeleteAll(ownedObjects);
 }
 
 void LuaObjectGroup::cloned()

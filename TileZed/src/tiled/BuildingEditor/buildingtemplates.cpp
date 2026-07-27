@@ -651,6 +651,10 @@ bool BuildingTemplates::mergeTxt()
     }
 
     QString sourcePath = Tiled::Internal::Preferences::instance()->appConfigPath(txtName());
+    if (QFileInfo(userPath).canonicalFilePath()
+            == QFileInfo(sourcePath).canonicalFilePath()) {
+        return true;
+    }
 
     SimpleFile sourceFile;
     if (!sourceFile.read(sourcePath)) {

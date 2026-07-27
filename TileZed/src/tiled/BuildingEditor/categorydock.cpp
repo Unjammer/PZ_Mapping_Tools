@@ -38,7 +38,9 @@
 
 #include <QAction>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDebug>
+#include <QEventLoop>
 #include <QHBoxLayout>
 #include <QListWidget>
 #include <QMenu>
@@ -1100,6 +1102,43 @@ void CategoryDock::writeSettings(QSettings &settings)
     BuildingEditorWindow::instance()->saveSplitterSizes(ui->categorySplitter);
     settings.endGroup();
 
+}
+
+bool CategoryDock::validateAllTileCategories()
+{
+    bool valid = true;
+    const int count = BuildingTilesMgr::instance()->categoryCount();
+    qInfo() << "Validating all BuildingEd tile categories:" << count;
+
+    for (int index = 0; index < count; ++index) {
+        BuildingTileCategory *category =
+                BuildingTilesMgr::instance()->category(index);
+        ui->categoryList->setCurrentRow(mRowOfFirstCategory + index);
+        if (mCategory != category)
+            categorySelectionChanged();
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+
+        const int expected = category->entryCount()
+                + (category->canAssignNone() ? 1 : 0);
+        const int displayed = ui->tilesetView->entryCount();
+        const int missing = ui->tilesetView->missingEntryCount();
+        const bool categoryValid = displayed == expected && missing == 0;
+        qInfo().noquote()
+                << QStringLiteral("BuildingEd category validation: %1 - "
+                                  "%2/%3 entries, %4 missing [%5]")
+                   .arg(category->label())
+                   .arg(displayed)
+                   .arg(expected)
+                   .arg(missing)
+                   .arg(categoryValid
+                        ? QStringLiteral("OK")
+                        : QStringLiteral("FAILED"));
+        valid = valid && categoryValid;
+    }
+
+    qInfo() << "BuildingEd tile-category validation"
+            << (valid ? "completed successfully" : "failed");
+    return valid;
 }
 
 void CategoryDock::scrollToNow(int which, const QModelIndex &index)

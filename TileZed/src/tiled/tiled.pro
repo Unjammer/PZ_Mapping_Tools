@@ -114,6 +114,7 @@ SOURCES += aboutdialog.cpp \
     layerdock.cpp \
     layermodel.cpp \
     luatable.cpp \
+    ../firstlaunchdialog.cpp \
     main.cpp \
     mainwindow.cpp \
     mapdocumentactionhandler.cpp \
@@ -299,6 +300,7 @@ SOURCES += aboutdialog.cpp \
     BuildingEditor/roofhiding.cpp
 
 HEADERS += aboutdialog.h \
+    ../firstlaunchdialog.h \
     ../portablesettings.h \
     BuildingEditor/attributeeditmode.h \
     BuildingEditor/attributeeditmode_p.h \

@@ -35,6 +35,8 @@ public:
 
     QModelIndex index(BuildingTileEntry *entry);
     BuildingTileEntry *entry(const QModelIndex &index);
+    int entryCount() const { return mEntries.size(); }
+    int missingEntryCount() const { return mMissingEntryCount; }
 
     typedef Tiled::Tileset Tileset;
 private slots:
@@ -46,6 +48,8 @@ private slots:
 private:
     QList<BuildingTileEntry*> mEntries;
     bool mCategoryLabels;
+    bool mSettingEntries;
+    int mMissingEntryCount;
 };
 
 } // namespace BuildingEditor

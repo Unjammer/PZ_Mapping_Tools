@@ -59,6 +59,8 @@ void TileMetaInfoMgr::changeTilesDirectory(const QString &path)
     for (Tileset *ts : tilesets())
         ts->setLoaded(false);
     resolveTilesets();
+    loadTilesets(QList<Tileset *>(), false);
+    TilesetManager::instance()->waitForTilesets(tilesets());
 }
 
 TileMetaInfoMgr::TileMetaInfoMgr(QObject *parent) :
@@ -167,11 +169,10 @@ bool TileMetaInfoMgr::readTxt()
         int height = fileTileset->mRows * tileHeight;
         QString tilesetFileName = fileTileset->mFile + QLatin1String(".png");
         tileset->loadFromNothing(QSize(width, height), tilesetFileName);
-        Tile *missingTile = TilesetManager::instance()->missingTile();
-        for (int i = 0; i < tileset->tileCount(); i++) {
-            tileset->tileAt(i)->setImage(missingTile);
-        }
-        tileset->setMissing(true);
+        // This is an unresolved catalog entry, not a confirmed missing image.
+        // Resolving every path and painting every placeholder here made startup
+        // take close to a minute on slower drives.
+        tileset->setMissing(false);
         addTileset(tileset);
 
         TilesetMetaInfo *info = new TilesetMetaInfo;
@@ -199,7 +200,6 @@ bool TileMetaInfoMgr::readTxt()
     }
 
     mHasReadTxt = true;
-    resolveTilesets();
 
     return true;
 }
@@ -712,17 +712,15 @@ void TileMetaInfoMgr::resolveTilesets(const QList<Tileset *> &tilesets)
 
 void TileMetaInfoMgr::loadTilesets(const QList<Tileset *> &tilesets, bool processEvents)
 {
+    Q_UNUSED(processEvents)
     QList<Tileset *> _tilesets = tilesets;
     if (_tilesets.isEmpty())
         _tilesets = this->tilesets();
     resolveTilesets(_tilesets);
 
     foreach (Tileset *ts, _tilesets) {
-        if (!ts->isLoaded() && !ts->isMissing()) {
+        if (!ts->isLoaded() && !ts->isMissing())
             TilesetManager::instance()->loadTileset(ts, ts->imageSource());
-            if (processEvents)
-                qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
-        }
     }
 }
 

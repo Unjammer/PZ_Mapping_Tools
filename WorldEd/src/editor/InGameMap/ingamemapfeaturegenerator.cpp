@@ -917,7 +917,7 @@ static void douglas_peucker(std::vector<DPPoint> &geom, size_t start, size_t n, 
     }
 }
 
-static void simplifyPolygon(ClipperLib::Path& nodes)
+static void simplifyPolygon(ClipperLib::Path& nodes, int cellSize)
 {
     // Simplification of the polygon using Ramer-Douglas-Peucker algorithm
     std::vector<DPPoint> points;
@@ -929,7 +929,8 @@ static void simplifyPolygon(ClipperLib::Path& nodes)
         bool necessary = i == 0 || i == nodes.size() - 1;
 
         // Keep points on cell borders
-        if (node.X == 0 || node.X == 300 || node.Y == 0 || node.Y == 300)
+        if (node.X == 0 || node.X == cellSize
+                || node.Y == 0 || node.Y == cellSize)
             necessary = true;
 
         if (i - lastNecessary >= DI)
@@ -1066,7 +1067,7 @@ bool InGameMapFeatureGenerator::doWater(WorldCell *cell, MapInfo *mapInfo)
 
     for (pzPolygon *poly : allPolygons) {
         ClipperLib::Path simple = poly->outer;
-        simplifyPolygon(simple);
+        simplifyPolygon(simple, bounds.width());
         if (!validateGeneratedPolygon(simple, cell, QStringLiteral("water"),
                                       QStringLiteral("outer"),
                                       mCleanedPolygonCount, mRejectedPolygonCount))
@@ -1084,7 +1085,7 @@ bool InGameMapFeatureGenerator::doWater(WorldCell *cell, MapInfo *mapInfo)
         if (poly->inner.empty() == false) {
             for (auto& hole : poly->inner) {
                 simple = hole;
-                simplifyPolygon(simple);
+                simplifyPolygon(simple, bounds.width());
                 if (!validateGeneratedPolygon(simple, cell,
                                               QStringLiteral("water"),
                                               QStringLiteral("hole"),
@@ -1303,8 +1304,6 @@ bool InGameMapFeatureGenerator::doRoads(WorldCell *worldCell, MapInfo *mapInfo)
     return true;
 }
 
-#include <array>
-
 bool InGameMapFeatureGenerator::doTrees(WorldCell *cell, MapInfo *mapInfo)
 {
     // Remove all "natural=forest" features
@@ -1348,10 +1347,10 @@ bool InGameMapFeatureGenerator::doTrees(WorldCell *cell, MapInfo *mapInfo)
         return false;
     };
 
-    std::array<bool, 300 * 300> trees;
+    QVector<bool> trees(bounds.width() * bounds.height());
     for (int y = 0; y < bounds.height(); y++) {
         for (int x = 0; x < bounds.width(); x++) {
-            trees[x + y * 300] = isTreeAt(x, y);
+            trees[x + y * bounds.width()] = isTreeAt(x, y);
         }
     }
 
@@ -1361,7 +1360,8 @@ bool InGameMapFeatureGenerator::doTrees(WorldCell *cell, MapInfo *mapInfo)
             for (int x = _x - 4; x < _x + 4; x++) {
                 if (x == _x && y == _y)
                     continue;
-                if (bounds.contains(x, y) && trees[x + y * 300]) {
+                if (bounds.contains(x, y)
+                        && trees[x + y * bounds.width()]) {
                     box |= { x, y, 1, 1 };
                 }
             }
@@ -1376,7 +1376,7 @@ bool InGameMapFeatureGenerator::doTrees(WorldCell *cell, MapInfo *mapInfo)
     QHash<quint64, QRect> treeBoxes;
     for (int y = 0; y < bounds.height(); y++) {
         for (int x = 0; x < bounds.width(); x++) {
-            if (trees[x + y * 300]) {
+            if (trees[x + y * bounds.width()]) {
                 QRect box = getTreesNear(x, y);
                 if (box.size() != QSize(1, 1)) {
                     box.adjust(-1, -1, 1, 1);
@@ -1427,7 +1427,7 @@ bool InGameMapFeatureGenerator::doTrees(WorldCell *cell, MapInfo *mapInfo)
 
     for (pzPolygon *poly : allPolygons) {
         ClipperLib::Path simple = poly->outer;
-        simplifyPolygon(simple);
+        simplifyPolygon(simple, bounds.width());
         if (!validateGeneratedPolygon(simple, cell, QStringLiteral("forest"),
                                       QStringLiteral("outer"),
                                       mCleanedPolygonCount, mRejectedPolygonCount)) {
@@ -1462,7 +1462,7 @@ bool InGameMapFeatureGenerator::doTrees(WorldCell *cell, MapInfo *mapInfo)
 #if 1
             for (auto& hole : poly->inner) {
                 simple = hole;
-                simplifyPolygon(simple);
+                simplifyPolygon(simple, bounds.width());
                 if (!validateGeneratedPolygon(simple, cell,
                                               QStringLiteral("forest"),
                                               QStringLiteral("hole"),
@@ -1493,7 +1493,7 @@ bool InGameMapFeatureGenerator::doTrees(WorldCell *cell, MapInfo *mapInfo)
             feature->mGeometry.mType = QStringLiteral("Polygon");
             InGameMapCoordinates coords;
             simple = hole;
-            simplifyPolygon(simple);
+            simplifyPolygon(simple, bounds.width());
             for (auto& point : simple) {
                 coords += InGameMapPoint(point.X, point.Y);
             }

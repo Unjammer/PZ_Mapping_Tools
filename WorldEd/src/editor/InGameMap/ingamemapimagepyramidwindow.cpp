@@ -51,10 +51,13 @@ InGameMapImagePyramidWindow::InGameMapImagePyramidWindow(QWidget *parent) :
             world = doc->asCellDocument()->world();
         }
         auto settings = world->getGenerateLotsSettings();
-        ui->xMin->setValue(settings.worldOrigin.x() * 300);
-        ui->yMin->setValue(settings.worldOrigin.y() * 300);
-        ui->xMax->setValue((settings.worldOrigin.x() + world->width()) * 300);
-        ui->yMax->setValue((settings.worldOrigin.y() + world->height()) * 300);
+        const int cellSize = world->cellSize();
+        ui->xMin->setValue(settings.worldOrigin.x() * cellSize);
+        ui->yMin->setValue(settings.worldOrigin.y() * cellSize);
+        ui->xMax->setValue(
+                    (settings.worldOrigin.x() + world->width()) * cellSize);
+        ui->yMax->setValue(
+                    (settings.worldOrigin.y() + world->height()) * cellSize);
     }
 }
 

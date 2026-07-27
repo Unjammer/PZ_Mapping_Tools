@@ -25,6 +25,8 @@
 #include "objecttypesmodel.h"
 #include "preferences.h"
 #include "utils.h"
+#include "../firstlaunchdialog.h"
+#include "../portablesettings.h"
 
 #include <QColorDialog>
 #include <QFileDialog>
@@ -101,6 +103,18 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) :
     mLanguages(LanguageManager::instance()->availableLanguages())
 {
     mUi->setupUi(this);
+    connect(mUi->sharedPathsButton, &QAbstractButton::clicked,
+            this, [this]() {
+        if (!FirstLaunchDialog::configureSharedPaths(this))
+            return;
+        mUi->configDirectory->setText(QDir::toNativeSeparators(
+                    PortableSettings::sharedConfigurationPath()));
+        QMessageBox::information(
+                    this, tr("Shared Paths Updated"),
+                    tr("The shared configuration and Tiles paths were saved. "
+                       "Restart TileZed and BuildingEd so every catalog is "
+                       "reloaded from the new location."));
+    });
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
 #ifndef QT_NO_OPENGL

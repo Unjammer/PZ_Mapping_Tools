@@ -1193,8 +1193,8 @@ bool MainWindow::InitConfigFiles(QWidget *parent)
             QCoreApplication::applicationName().compare(
                 QLatin1String("BuildingEd"), Qt::CaseInsensitive) == 0;
     if (buildingEditorMode) {
-        qInfo() << "BuildingEd startup defers discovery and image loading for "
-                   "unused tilesets";
+        qInfo() << "BuildingEd will preload every tileset listed in the "
+                   "shared catalog";
     } else {
         progress.update(tr("Discovering additional tilesets..."));
         qInfo().noquote() << "Scanning for additional tilesets in"

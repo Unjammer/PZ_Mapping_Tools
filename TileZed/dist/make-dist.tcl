@@ -96,7 +96,6 @@ proc createFile {DEST name contents} {
 
 puts ---Toplevel---
 copyFile {C:\Programming\TileZed} $DEST $REDIST
-copyFile $BIN $DEST config.exe
 copyFile $BIN $DEST TileZed.exe
 copyFile $BIN $DEST tiled.dll
 copyFile $BIN $DEST tmxviewer.exe
