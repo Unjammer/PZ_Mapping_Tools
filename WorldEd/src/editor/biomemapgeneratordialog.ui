@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>580</width>
-    <height>410</height>
+    <height>610</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -70,8 +70,14 @@
     <widget class="QGroupBox" name="zoneSourceGroup">
      <property name="title"><string>Foraging zones (green channel)</string></property>
      <layout class="QVBoxLayout" name="zoneSourceLayout">
+      <item><widget class="QLabel" name="zoneStorageDescription">
+       <property name="text">
+        <string>&lt;b&gt;Stored in the green channel:&lt;/b&gt; Vegitation, DeepForest, Forest, TownZone, Farm, FarmLand and TrailerPark. The game deliberately ignores these seven types in objects.lua.&lt;br/&gt;&lt;b&gt;Keep in objects.lua:&lt;/b&gt; every other vector object or zone type, including vehicle zones, geometries, WorldGen and WaterZone.</string>
+       </property>
+       <property name="wordWrap"><bool>true</bool></property>
+      </widget></item>
       <item><widget class="QRadioButton" name="zonesFromWorld">
-       <property name="text"><string>Rasterize zone objects from the current WorldEd project</string></property>
+       <property name="text"><string>Rasterize only those seven zone types from the current WorldEd project</string></property>
        <property name="checked"><bool>true</bool></property>
       </widget></item>
       <item><layout class="QHBoxLayout" name="zonePngLayout">
@@ -107,6 +113,43 @@
        </widget>
       </item>
      </layout>
+   </widget>
+  </item>
+   <item>
+    <widget class="QGroupBox" name="fallbackGroup">
+     <property name="title">
+      <string>Base biomemap directory (optional, recommended for 300 x 300 overlays)</string>
+     </property>
+     <layout class="QVBoxLayout" name="fallbackLayout">
+      <item>
+       <widget class="QLabel" name="fallbackDescription">
+        <property name="text">
+         <string>Boundary tiles are merged over matching biomemap_X_Y.png files from this directory. This preserves Vanilla data outside a legacy project's 300-pixel bounds.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="fallbackPathLayout">
+        <item>
+         <widget class="QLineEdit" name="fallbackDirectory">
+          <property name="placeholderText">
+           <string>For example: ProjectZomboid/media/maps/Muldraugh, KY/maps</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QToolButton" name="browseFallbackDirectory">
+          <property name="text">
+           <string>...</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
@@ -118,7 +161,7 @@
       <item>
        <widget class="QLabel" name="worldOriginDescription">
         <property name="text">
-         <string>The world origin determines the coordinates in generated tile names.</string>
+         <string>The origin uses this project's grid (300 or 256). Generated biomemap names are always aligned to the B42 256 x 256 grid.</string>
         </property>
         <property name="wordWrap">
          <bool>true</bool>

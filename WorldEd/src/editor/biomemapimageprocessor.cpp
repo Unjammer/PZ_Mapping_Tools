@@ -33,7 +33,7 @@ QColor BiomeMapImageProcessor::displayColor(int value)
 const QSet<int> &BiomeMapImageProcessor::knownValues()
 {
     static const QSet<int> values = {
-        0, 59, 64, 79, 96, 102, 115, 128, 141, 153, 179, 192,
+        0, 59, 64, 79, 96, 102, 115, 128, 141, 153, 171, 179, 192,
         204, 217, 230, 243, 254, 255
     };
     return values;

@@ -19,6 +19,7 @@
 #include <QRadioButton>
 
 #include <algorithm>
+#include <cmath>
 
 static QString valuesText(const QSet<int> &values)
 {
@@ -45,16 +46,19 @@ static QString colorsText(const QSet<QRgb> &colors)
 static int zoneId(const QString &type)
 {
     static const QHash<QString, int> ids = {
-        {QStringLiteral("water"), 0}, {QStringLiteral("forest"), 59},
-        {QStringLiteral("foragingnav"), 64}, {QStringLiteral("nav"), 64},
+        {QStringLiteral("forest"), 59},
         {QStringLiteral("trailerpark"), 102}, {QStringLiteral("townzone"), 115},
         {QStringLiteral("farm"), 128}, {QStringLiteral("farmland"), 141},
-        {QStringLiteral("phforest"), 153}, {QStringLiteral("prforest"), 179},
-        {QStringLiteral("farmmixforest"), 192}, {QStringLiteral("farmforest"), 204},
-        {QStringLiteral("birchforest"), 217}, {QStringLiteral("birchmixforest"), 230},
-        {QStringLiteral("organicforest"), 243}, {QStringLiteral("deepforest"), 255}
+        {QStringLiteral("vegitation"), 171},
+        {QStringLiteral("deepforest"), 255}
     };
     return ids.value(type.toLower(), -1);
+}
+
+static void appendUnique(QStringList *values, const QString &value)
+{
+    if (values && !values->contains(value, Qt::CaseInsensitive))
+        *values += value;
 }
 
 BiomeMapGeneratorDialog::BiomeMapGeneratorDialog(World *world, QWidget *parent)
@@ -92,6 +96,8 @@ BiomeMapGeneratorDialog::BiomeMapGeneratorDialog(World *world, QWidget *parent)
             this, &BiomeMapGeneratorDialog::updateZoneSource);
     connect(ui->browseOutputDirectory, &QToolButton::clicked,
             this, &BiomeMapGeneratorDialog::browseOutputDirectory);
+    connect(ui->browseFallbackDirectory, &QToolButton::clicked,
+            this, &BiomeMapGeneratorDialog::browseFallbackDirectory);
     connect(ui->buttonBox, &QDialogButtonBox::accepted,
             this, &BiomeMapGeneratorDialog::generate);
     connect(ui->buttonBox, &QDialogButtonBox::rejected,
@@ -159,6 +165,17 @@ void BiomeMapGeneratorDialog::browseOutputDirectory()
         ui->outputDirectory->setText(QDir::toNativeSeparators(directory));
 }
 
+void BiomeMapGeneratorDialog::browseFallbackDirectory()
+{
+    const QString directory = QFileDialog::getExistingDirectory(
+                this, tr("Select Base Biomemap Directory"),
+                ui->fallbackDirectory->text().trimmed().isEmpty()
+                    ? ui->outputDirectory->text().trimmed()
+                    : ui->fallbackDirectory->text().trimmed());
+    if (!directory.isEmpty())
+        ui->fallbackDirectory->setText(QDir::toNativeSeparators(directory));
+}
+
 void BiomeMapGeneratorDialog::generate()
 {
     const QString mainImagePath = ui->mainImagePath->text().trimmed();
@@ -216,9 +233,11 @@ void BiomeMapGeneratorDialog::generate()
     QSet<QRgb> unknownColors;
     const QImage biomeLayer = BiomeMapImageProcessor::createBiomeLayer(
                 mainImage, vegetationImage, &unknownColors);
-    QStringList unknownZoneTypes;
+    QStringList rasterizedZoneTypes;
+    QStringList objectsLuaTypes;
     const QImage zoneLayer = ui->zonesFromWorld->isChecked()
-            ? createZoneLayer(mainImage.size(), &unknownZoneTypes)
+            ? createZoneLayer(mainImage.size(), &rasterizedZoneTypes,
+                              &objectsLuaTypes)
             : QImage(zoneImagePath);
     if (zoneLayer.isNull() || zoneLayer.size() != mainImage.size()) {
         QMessageBox::warning(this, tr("Invalid Zone Layer"),
@@ -235,9 +254,6 @@ void BiomeMapGeneratorDialog::generate()
                        "biome ID. Repaint them with a supported terrain or "
                        "vegetation color to avoid unintended biome IDs.")
                 .arg(colorsText(unknownColors));
-    if (!unknownZoneTypes.isEmpty())
-        warnings += tr("WorldEd zone types with no biomemap ID were ignored: %1")
-                .arg(unknownZoneTypes.join(QLatin1String(", ")));
     if (!analysis.unknownBiomeValues.isEmpty())
         warnings += tr("Unknown biome IDs in the red layer: %1")
                 .arg(valuesText(analysis.unknownBiomeValues));
@@ -290,9 +306,12 @@ void BiomeMapGeneratorDialog::generate()
 
     int tileCount = 0;
     QString failedFile;
+    QStringList neutralFallbackTiles;
     if (!saveTiles(biomeMap, outputDirectory.absolutePath(),
-                   ui->xOrigin->value(), ui->yOrigin->value(),
-                   &tileCount, &failedFile)) {
+                   ui->fallbackDirectory->text().trimmed(),
+                   QPoint(ui->xOrigin->value(), ui->yOrigin->value()),
+                   projectCellSize, &tileCount, &failedFile,
+                   &neutralFallbackTiles)) {
         QMessageBox::warning(this, tr("Save Failed"),
                              tr("Could not save tile %1.")
                              .arg(QDir::toNativeSeparators(failedFile)));
@@ -300,21 +319,50 @@ void BiomeMapGeneratorDialog::generate()
     }
 
     mGeneratedBiomeMapFile = QDir::cleanPath(biomeMapFile);
-    QMessageBox::information(
-                this, tr("Biome Map Generated"),
-                tr("Saved biome.png and %1 map tile(s) in:\n%2")
-                .arg(tileCount)
-                .arg(QDir::toNativeSeparators(outputDirectory.absolutePath())));
+    QString resultMessage = tr("Saved biome.png and %1 complete 256 x 256 map tile(s) in:\n%2")
+            .arg(tileCount)
+            .arg(QDir::toNativeSeparators(outputDirectory.absolutePath()));
+    if (ui->zonesFromWorld->isChecked()) {
+        resultMessage += tr("\n\nGreen-channel zone types rasterized from this "
+                            "project:\n%1")
+                .arg(rasterizedZoneTypes.isEmpty()
+                     ? tr("(none found)")
+                     : rasterizedZoneTypes.join(QLatin1String(", ")));
+        resultMessage += tr("\n\nVector object types excluded from the image; "
+                            "export these through objects.lua:\n%1")
+                .arg(objectsLuaTypes.isEmpty()
+                     ? tr("(none found)")
+                     : objectsLuaTypes.join(QLatin1String(", ")));
+    } else {
+        resultMessage += tr("\n\nThe selected PNG supplied the green channel. "
+                            "Vegitation, DeepForest, Forest, TownZone, Farm, "
+                            "FarmLand and TrailerPark belong in that image. "
+                            "Export every other vector zone/object type through "
+                            "objects.lua.");
+    }
+    if (!neutralFallbackTiles.isEmpty()) {
+        resultMessage += tr("\n\n%1 boundary tile(s) had no full-size base tile. "
+                            "Their uncovered pixels were filled with neutral "
+                            "ForagingNav data (red 64, green 64):\n%2\n\n"
+                            "For a map over Vanilla, select the Vanilla maps "
+                            "directory as the base and generate again.")
+                .arg(neutralFallbackTiles.size())
+                .arg(neutralFallbackTiles.join(QLatin1String(", ")));
+    }
+    QMessageBox::information(this, tr("Biome Map Generated"), resultMessage);
     accept();
 }
 
-QImage BiomeMapGeneratorDialog::createZoneLayer(const QSize &size,
-                                                QStringList *unknownTypes) const
+QImage BiomeMapGeneratorDialog::createZoneLayer(
+        const QSize &size, QStringList *rasterizedTypes,
+        QStringList *objectsLuaTypes) const
 {
     if (!mWorld || size != mWorld->size() * mWorld->cellSize())
         return QImage();
-    if (unknownTypes)
-        unknownTypes->clear();
+    if (rasterizedTypes)
+        rasterizedTypes->clear();
+    if (objectsLuaTypes)
+        objectsLuaTypes->clear();
 
     QImage image(size, QImage::Format_ARGB32);
     image.fill(qRgb(64, 64, 64));
@@ -329,10 +377,10 @@ QImage BiomeMapGeneratorDialog::createZoneLayer(const QSize &size,
             const QString type = object->type()->name();
             const int id = zoneId(type);
             if (id < 0) {
-                if (unknownTypes && !unknownTypes->contains(type))
-                    *unknownTypes += type;
+                appendUnique(objectsLuaTypes, type);
                 continue;
             }
+            appendUnique(rasterizedTypes, type);
             const QColor color(id, id, id);
             painter.setBrush(color);
             painter.setPen(Qt::NoPen);
@@ -355,35 +403,87 @@ QImage BiomeMapGeneratorDialog::createZoneLayer(const QSize &size,
         }
     }
     painter.end();
-    if (unknownTypes)
-        unknownTypes->sort();
+    if (rasterizedTypes)
+        rasterizedTypes->sort(Qt::CaseInsensitive);
+    if (objectsLuaTypes)
+        objectsLuaTypes->sort(Qt::CaseInsensitive);
     return image;
 }
 
 bool BiomeMapGeneratorDialog::saveTiles(const QImage &image,
                                         const QString &outputDirectory,
-                                        int startX, int startY,
+                                        const QString &fallbackDirectory,
+                                        const QPoint &projectOrigin,
+                                        int projectCellSize,
                                         int *tileCount,
-                                        QString *failedFile) const
+                                        QString *failedFile,
+                                        QStringList *neutralFallbackTiles) const
 {
     const int tileSize = 256;
-    const int tilesX = (image.width() + tileSize - 1) / tileSize;
-    const int tilesY = (image.height() + tileSize - 1) / tileSize;
     const QDir outputDir(outputDirectory);
+    const QDir fallbackDir(fallbackDirectory);
+    const QPoint sourceWorldOrigin(projectOrigin.x() * projectCellSize,
+                                   projectOrigin.y() * projectCellSize);
+    const QRect sourceWorldRect(sourceWorldOrigin, image.size());
+    const int firstTileX = int(std::floor(sourceWorldRect.left()
+                                          / double(tileSize)));
+    const int firstTileY = int(std::floor(sourceWorldRect.top()
+                                          / double(tileSize)));
+    const int lastTileX = int(std::floor(sourceWorldRect.right()
+                                         / double(tileSize)));
+    const int lastTileY = int(std::floor(sourceWorldRect.bottom()
+                                         / double(tileSize)));
 
     if (tileCount)
         *tileCount = 0;
+    if (neutralFallbackTiles)
+        neutralFallbackTiles->clear();
 
-    for (int y = 0; y < tilesY; ++y) {
-        for (int x = 0; x < tilesX; ++x) {
-            const int sourceX = x * tileSize;
-            const int sourceY = y * tileSize;
-            const QImage tile = image.copy(sourceX, sourceY, tileSize, tileSize);
-
+    for (int tileY = firstTileY; tileY <= lastTileY; ++tileY) {
+        for (int tileX = firstTileX; tileX <= lastTileX; ++tileX) {
             const QString fileName = QStringLiteral("biomemap_%1_%2.png")
-                    .arg(startX + x)
-                    .arg(startY + y);
+                    .arg(tileX)
+                    .arg(tileY);
             const QString filePath = outputDir.filePath(fileName);
+            const QRect tileWorldRect(tileX * tileSize, tileY * tileSize,
+                                      tileSize, tileSize);
+            const QRect coveredWorldRect =
+                    tileWorldRect.intersected(sourceWorldRect);
+
+            QImage tile(tileSize, tileSize, QImage::Format_ARGB32);
+            bool hasBaseTile = false;
+            QString baseFilePath;
+            if (!fallbackDirectory.isEmpty())
+                baseFilePath = fallbackDir.filePath(fileName);
+            if ((baseFilePath.isEmpty() || !QFileInfo::exists(baseFilePath))
+                    && QFileInfo::exists(filePath)) {
+                baseFilePath = filePath;
+            }
+            if (!baseFilePath.isEmpty()) {
+                const QImage baseTile(baseFilePath);
+                if (!baseTile.isNull()
+                        && baseTile.size() == QSize(tileSize, tileSize)) {
+                    tile = baseTile.convertToFormat(QImage::Format_ARGB32);
+                    hasBaseTile = true;
+                }
+            }
+            if (!hasBaseTile)
+                tile.fill(qRgba(64, 64, 0, 255));
+
+            if (coveredWorldRect != tileWorldRect && !hasBaseTile
+                    && neutralFallbackTiles) {
+                *neutralFallbackTiles += fileName;
+            }
+
+            const QRect sourceRect =
+                    coveredWorldRect.translated(-sourceWorldOrigin);
+            const QPoint destination =
+                    coveredWorldRect.topLeft() - tileWorldRect.topLeft();
+            QPainter painter(&tile);
+            painter.setCompositionMode(QPainter::CompositionMode_Source);
+            painter.drawImage(destination, image, sourceRect);
+            painter.end();
+
             if (!tile.save(filePath, "PNG")) {
                 if (failedFile)
                     *failedFile = filePath;

@@ -46,6 +46,7 @@ public:
     CreateObjectTool(CreationMode mode, QObject *parent = 0);
     ~CreateObjectTool();
 
+    void activate(MapScene *scene);
     void deactivate(MapScene *scene);
 
     void mouseEntered();
@@ -63,7 +64,11 @@ public slots:
      */
     void setTile(Tiled::Tile *tile) { mTile = tile; }
 
+protected slots:
+    void updateEnabledState();
+
 private:
+    void editObjectPreset();
     void startNewMapObject(const QPointF &pos, ObjectGroup *objectGroup);
     MapObject *clearNewMapObjectItem();
     void cancelNewMapObject();
@@ -75,6 +80,8 @@ private:
     MapObjectItem *mOverlayPolygonItem;
     Tile *mTile;
     CreationMode mMode;
+    QString mObjectName;
+    QString mObjectType;
 };
 
 } // namespace Internal

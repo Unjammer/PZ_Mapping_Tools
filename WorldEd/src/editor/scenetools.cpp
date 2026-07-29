@@ -43,15 +43,21 @@
 #include "maprenderer.h"
 
 #include <QApplication>
+#include <QComboBox>
 #include <QDebug>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QFileInfo>
+#include <QFormLayout>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsView>
 #include <QKeyEvent>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
 #include <QProcess>
+#include <QSettings>
 #include <QStatusBar>
 #include <QtMath>
 #include <QUndoStack>
@@ -188,6 +194,79 @@ CreateObjectTool::CreateObjectTool()
 {
 }
 
+void CreateObjectTool::activate()
+{
+    if (!mScene)
+        return;
+
+    WorldObjectGroup *group = mScene->document()->currentObjectGroup();
+    QSettings settings;
+    mObjectName = settings.value(
+                QLatin1String("ObjectCreation/Name")).toString();
+    mObjectTypeName = settings.value(
+                QLatin1String("ObjectCreation/Type")).toString();
+
+    const QList<WorldCellObject*> selected =
+            mScene->document()->selectedObjects();
+    if (selected.size() == 1) {
+        if (!selected.first()->name().isEmpty())
+            mObjectName = selected.first()->name();
+        if (selected.first()->type()
+                && !selected.first()->type()->isNull()) {
+            mObjectTypeName = selected.first()->type()->name();
+        }
+    }
+
+    if (group) {
+        if (mObjectName.isEmpty())
+            mObjectName = group->name();
+        if ((mObjectTypeName.isEmpty()
+             || !mScene->world()->objectTypes().contains(mObjectTypeName))
+                && group->type()) {
+            mObjectTypeName = group->type()->name();
+        }
+    }
+
+    editObjectPreset();
+}
+
+void CreateObjectTool::editObjectPreset()
+{
+    QDialog dialog(MainWindow::instance());
+    dialog.setWindowTitle(tr("New Object Defaults"));
+
+    QFormLayout layout(&dialog);
+    QLineEdit nameEdit(mObjectName, &dialog);
+    QComboBox typeCombo(&dialog);
+    QStringList typeNames = mScene->world()->objectTypes().names();
+    typeNames.removeAll(QString());
+    typeCombo.addItems(typeNames);
+    const int typeIndex = typeCombo.findText(mObjectTypeName);
+    if (typeIndex >= 0)
+        typeCombo.setCurrentIndex(typeIndex);
+
+    layout.addRow(tr("Name:"), &nameEdit);
+    layout.addRow(tr("Type:"), &typeCombo);
+    QDialogButtonBox buttons(QDialogButtonBox::Ok
+                             | QDialogButtonBox::Cancel,
+                             Qt::Horizontal, &dialog);
+    layout.addRow(&buttons);
+    connect(&buttons, &QDialogButtonBox::accepted,
+            &dialog, &QDialog::accept);
+    connect(&buttons, &QDialogButtonBox::rejected,
+            &dialog, &QDialog::reject);
+
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    mObjectName = nameEdit.text().trimmed();
+    mObjectTypeName = typeCombo.currentText();
+    QSettings settings;
+    settings.setValue(QLatin1String("ObjectCreation/Name"), mObjectName);
+    settings.setValue(QLatin1String("ObjectCreation/Type"),
+                      mObjectTypeName);
+}
+
 void CreateObjectTool::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {    
     if (event->button() == Qt::LeftButton) {
@@ -258,12 +337,10 @@ void CreateObjectTool::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         else {
             WorldCellObject *obj = mItem->object();
             finishNewMapObject();
-#if 1
-            if (!(event->modifiers() & Qt::ControlModifier)) {
-                ToolManager::instance()->selectTool(SelectMoveObjectTool::instance());
-                mScene->document()->setSelectedObjects(QList<WorldCellObject*>() << obj);
-            }
-#endif
+            // Keep Create Object active so several zones can be drawn in
+            // succession. The new object remains selected for feedback.
+            mScene->document()->setSelectedObjects(
+                        QList<WorldCellObject*>() << obj);
         }
         event->accept();
     }
@@ -273,8 +350,15 @@ void CreateObjectTool::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 void CreateObjectTool::startNewMapObject(const QPointF &pos)
 {
     WorldObjectGroup *og = mScene->document()->currentObjectGroup();
+    ObjectType *objectType =
+            mScene->world()->objectTypes().find(mObjectTypeName);
+    if (!objectType)
+        objectType = og->type();
+    QString objectName = mObjectName;
+    if (objectName.isEmpty() && objectType)
+        objectName = objectType->name();
     WorldCellObject *obj = new WorldCellObject(mScene->cell(),
-                                               QString(), og->type(), og,
+                                               objectName, objectType, og,
                                                pos.x(), pos.y(),
                                                mScene->document()->currentLevel(),
                                                MIN_OBJECT_SIZE, MIN_OBJECT_SIZE);
@@ -3282,12 +3366,17 @@ void WorldCellTool::showContextMenu(const QPointF &scenePos, const QPoint &scree
                     }
                 }
                 if (action == recreateThumbnailAction) {
-                    if (!item2->wantsImages())
-                        item2->thumbnailsAreGo();
-                    if (MapImageManager::instance()->recreateMapImage(item2->mapFilePath()))
+                    // Queue the forced render before enabling the display.
+                    // Otherwise thumbnailsAreGo() first starts a cached-image
+                    // read (or an automatic render), and the explicit rebuild
+                    // is needlessly queued behind that first operation.
+                    if (MapImageManager::instance()->recreateMapImage(item2->mapFilePath())) {
                         ++recreated;
-                    else
+                        if (!item2->wantsImages())
+                            item2->thumbnailsAreGo();
+                    } else {
                         ++failed;
+                    }
                 }
             }
         }
@@ -3305,9 +3394,9 @@ void WorldCellTool::showContextMenu(const QPointF &scenePos, const QPoint &scree
             }
         }
         if (action == recreateThumbnailAction) {
-            if (!item->wantsImages())
-                item->thumbnailsAreGo();
             const bool queued = MapImageManager::instance()->recreateMapImage(item->mapFilePath());
+            if (queued && !item->wantsImages())
+                item->thumbnailsAreGo();
             MainWindow::instance()->statusBar()->showMessage(
                         queued ? tr("Thumbnail recreation queued for this cell.")
                                : tr("Thumbnail recreation failed: %1")

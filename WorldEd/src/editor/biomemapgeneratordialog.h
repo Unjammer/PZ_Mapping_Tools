@@ -27,14 +27,19 @@ private slots:
     void browseZoneImage();
     void updateZoneSource();
     void browseOutputDirectory();
+    void browseFallbackDirectory();
     void generate();
 
 private:
     QString initialInputDirectory() const;
     bool saveTiles(const QImage &image, const QString &outputDirectory,
-                   int startX, int startY, int *tileCount,
-                   QString *failedFile) const;
-    QImage createZoneLayer(const QSize &size, QStringList *unknownTypes) const;
+                   const QString &fallbackDirectory,
+                   const QPoint &projectOrigin, int projectCellSize,
+                   int *tileCount, QString *failedFile,
+                   QStringList *neutralFallbackTiles) const;
+    QImage createZoneLayer(const QSize &size,
+                           QStringList *rasterizedTypes,
+                           QStringList *objectsLuaTypes) const;
 
     Ui::BiomeMapGeneratorDialog *ui;
     World *mWorld;

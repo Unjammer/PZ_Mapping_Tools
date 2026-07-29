@@ -27,6 +27,8 @@
 #include "minimap.h"
 #endif
 
+class QPainter;
+
 namespace Tiled {
 namespace Internal {
 
@@ -75,6 +77,7 @@ protected:
 #ifdef ZOMBOID
     void resizeEvent(QResizeEvent *event);
     void scrollContentsBy(int dx, int dy);
+    void drawForeground(QPainter *painter, const QRectF &rect) override;
 #endif
 
 private slots:
@@ -90,9 +93,12 @@ private:
     bool mHandScrolling;
     Zoomable *mZoomable;
 #ifdef ZOMBOID
+    void drawProjectGridBadge(QPainter *painter);
+
     MiniMap *mMiniMap;
     MiniMapItem *mMiniMapItem;
     bool mFixedMiniMap = false;
+    QRect mProjectGridBadgeRect;
 #endif
 };
 

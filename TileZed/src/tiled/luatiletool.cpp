@@ -936,9 +936,11 @@ void LuaTileTool::indicateDistance(int x1, int y1, int x2, int y2)
         if (!mDistanceIndicators[d]) {
             mDistanceIndicators[d] = new DistanceIndicator(dir);
             mDistanceIndicators[d]->setVisible(false);
+            mDistanceIndicators[d]->setZValue(10001);
         }
         mDistanceIndicators[d]->setRenderer(mapDocument()->renderer());
-        mDistanceIndicators[d]->setInfo(QPoint(x1, y1), dist);
+        mDistanceIndicators[d]->setInfo(
+                    QPoint(x1, y1), dist, mapDocument()->currentLevel());
         if (!mDistanceIndicators[d]->isVisible()) {
             mScene->addItem(mDistanceIndicators[d]);
             mDistanceIndicators[d]->show();
@@ -1155,22 +1157,23 @@ DistanceIndicator::DistanceIndicator(DistanceIndicator::Dir direction, QGraphics
     QGraphicsItem(parent),
     mDirection(direction),
     mRenderer(0),
+    mLevel(0),
     mTextItem(new UnscaledLabelItem(this))
 {
 }
 
-void DistanceIndicator::setInfo(const QPoint &tilePos, int dist)
+void DistanceIndicator::setInfo(const QPoint &tilePos, int dist, int level)
 {
     prepareGeometryChange();
     mTilePos = tilePos;
     mDistance = dist;
+    mLevel = level;
 
     mTextItem->setText(QString::number(dist));
-    int level = 0;
-    QPointF centerW = mRenderer->tileToPixelCoords(mTilePos.x() - 0.5, mTilePos.y() + 0.5, level);
-    QPointF centerN = mRenderer->tileToPixelCoords(mTilePos.x() + 0.5, mTilePos.y() - 0.5, level);
-    QPointF centerE = mRenderer->tileToPixelCoords(mTilePos.x() + 1.5, mTilePos.y() + 0.5, level);
-    QPointF centerS = mRenderer->tileToPixelCoords(mTilePos.x() + 0.5, mTilePos.y() + 1.5, level);
+    QPointF centerW = mRenderer->tileToPixelCoords(mTilePos.x() - 0.5, mTilePos.y() + 0.5, mLevel);
+    QPointF centerN = mRenderer->tileToPixelCoords(mTilePos.x() + 0.5, mTilePos.y() - 0.5, mLevel);
+    QPointF centerE = mRenderer->tileToPixelCoords(mTilePos.x() + 1.5, mTilePos.y() + 0.5, mLevel);
+    QPointF centerS = mRenderer->tileToPixelCoords(mTilePos.x() + 0.5, mTilePos.y() + 1.5, mLevel);
     QPointF pos;
     switch (mDirection) {
     case West: pos = centerW; break;
@@ -1195,15 +1198,14 @@ void DistanceIndicator::paint(QPainter *painter, const QStyleOptionGraphicsItem 
 {
     if (!mRenderer) return;
 
-    int level = 0;
-    QPointF topLeft = mRenderer->tileToPixelCoords(mTilePos.x(), mTilePos.y(), level);
-    QPointF topRight = mRenderer->tileToPixelCoords(mTilePos.x() + 1, mTilePos.y(), level);
-    QPointF bottomRight = mRenderer->tileToPixelCoords(mTilePos.x() + 1, mTilePos.y() + 1, level);
-    QPointF bottomLeft = mRenderer->tileToPixelCoords(mTilePos.x(), mTilePos.y() + 1, level);
-    QPointF centerW = mRenderer->tileToPixelCoords(mTilePos.x() - 0.5, mTilePos.y() + 0.5, level);
-    QPointF centerN = mRenderer->tileToPixelCoords(mTilePos.x() + 0.5, mTilePos.y() - 0.5, level);
-    QPointF centerE = mRenderer->tileToPixelCoords(mTilePos.x() + 1.5, mTilePos.y() + 0.5, level);
-    QPointF centerS = mRenderer->tileToPixelCoords(mTilePos.x() + 0.5, mTilePos.y() + 1.5, level);
+    QPointF topLeft = mRenderer->tileToPixelCoords(mTilePos.x(), mTilePos.y(), mLevel);
+    QPointF topRight = mRenderer->tileToPixelCoords(mTilePos.x() + 1, mTilePos.y(), mLevel);
+    QPointF bottomRight = mRenderer->tileToPixelCoords(mTilePos.x() + 1, mTilePos.y() + 1, mLevel);
+    QPointF bottomLeft = mRenderer->tileToPixelCoords(mTilePos.x(), mTilePos.y() + 1, mLevel);
+    QPointF centerW = mRenderer->tileToPixelCoords(mTilePos.x() - 0.5, mTilePos.y() + 0.5, mLevel);
+    QPointF centerN = mRenderer->tileToPixelCoords(mTilePos.x() + 0.5, mTilePos.y() - 0.5, mLevel);
+    QPointF centerE = mRenderer->tileToPixelCoords(mTilePos.x() + 1.5, mTilePos.y() + 0.5, mLevel);
+    QPointF centerS = mRenderer->tileToPixelCoords(mTilePos.x() + 0.5, mTilePos.y() + 1.5, mLevel);
 
     QPolygonF poly;
     switch (mDirection) {

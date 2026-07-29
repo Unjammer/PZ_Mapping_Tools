@@ -25,12 +25,15 @@
 #include "zoomable.h"
 #ifdef ZOMBOID
 #include "mainwindow.h"
+#include "map.h"
+#include "mapdocument.h"
 #include "maprenderer.h"
 #include "tilelayerspanel.h"
 #endif
 
 #include <QApplication>
 #include <QCursor>
+#include <QPainter>
 #include <QWheelEvent>
 #include <QScrollBar>
 
@@ -341,9 +344,73 @@ void MapView::resizeEvent(QResizeEvent *event)
 
 void MapView::scrollContentsBy(int dx, int dy)
 {
+    QRegion badgeDirtyRegion;
+    if (!mProjectGridBadgeRect.isEmpty()) {
+        badgeDirtyRegion += mProjectGridBadgeRect;
+        badgeDirtyRegion += mProjectGridBadgeRect.translated(dx, dy);
+    }
+
     QGraphicsView::scrollContentsBy(dx, dy);
+    if (!badgeDirtyRegion.isEmpty())
+        viewport()->update(badgeDirtyRegion);
     if (mMiniMap)
         mMiniMap->viewRectChanged();
+}
+
+void MapView::drawForeground(QPainter *painter, const QRectF &rect)
+{
+    QGraphicsView::drawForeground(painter, rect);
+    drawProjectGridBadge(painter);
+}
+
+void MapView::drawProjectGridBadge(QPainter *painter)
+{
+    if (!painter || !mapScene() || !mapScene()->mapDocument()
+            || !mapScene()->mapDocument()->map()) {
+        mProjectGridBadgeRect = QRect();
+        return;
+    }
+
+    const QSize mapSize = mapScene()->mapDocument()->map()->size();
+    if (mapSize != QSize(256, 256) && mapSize != QSize(300, 300)) {
+        mProjectGridBadgeRect = QRect();
+        return;
+    }
+
+    const bool legacy = mapSize == QSize(300, 300);
+    const QString text = legacy
+            ? tr("PROJECT GRID  ·  300 × 300  ·  LEGACY")
+            : tr("PROJECT GRID  ·  256 × 256  ·  NATIVE");
+
+    painter->save();
+    painter->resetTransform();
+    painter->setClipping(false);
+    painter->setRenderHint(QPainter::Antialiasing, true);
+
+    QFont badgeFont = font();
+    badgeFont.setBold(true);
+    badgeFont.setPointSizeF(qMax(8.0, badgeFont.pointSizeF()));
+    painter->setFont(badgeFont);
+
+    const QFontMetrics metrics(badgeFont);
+    const int horizontalPadding = 11;
+    const int verticalPadding = 6;
+    const QSize badgeSize(metrics.horizontalAdvance(text) + horizontalPadding * 2,
+                          metrics.height() + verticalPadding * 2);
+    const QRect badgeRect(QPoint(viewport()->width() - badgeSize.width() - 12, 12),
+                          badgeSize);
+    mProjectGridBadgeRect = badgeRect.adjusted(-2, -2, 2, 2);
+
+    QColor background = palette().color(QPalette::Window);
+    background.setAlpha(235);
+    const QColor accent = legacy ? QColor(220, 140, 40) : QColor(35, 155, 125);
+
+    painter->setPen(QPen(accent, 2));
+    painter->setBrush(background);
+    painter->drawRoundedRect(badgeRect, 5, 5);
+    painter->setPen(palette().color(QPalette::WindowText));
+    painter->drawText(badgeRect, Qt::AlignCenter, text);
+    painter->restore();
 }
 
 #endif // ZOMBOID

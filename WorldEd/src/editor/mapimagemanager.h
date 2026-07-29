@@ -19,6 +19,7 @@
 #define MAPIMAGEMANAGER_H
 
 #include <QFileInfo>
+#include <QHash>
 #include <QImage>
 #include <QMap>
 #include <QObject>
@@ -98,25 +99,27 @@ public:
 
 signals:
     void mapNeeded(MapImage *mapImage);
-    void imageRendered(MapImageData data, MapImage *mapImage);
+    void imageRendered(MapImageData data, MapImage *mapImage,
+                       bool imageSaved, QString imageFileName);
     void jobDone(MapComposite *mapComposite);
 
 public slots:
     void work();
-    void addJob(MapImage *mapImage);
+    void addJob(MapImage *mapImage, const QString &imageFileName);
     void mapLoaded(MapComposite *mapComposite);
     void mapFailedToLoad();
-    void resume(MapImage *mapImage);
+    void resume(MapImage *mapImage, const QString &imageFileName);
 
 private:
     MapImageData generateMapImage(MapComposite *mapComposite);
 
     class Job {
     public:
-        Job(MapImage *mapImage);
+        Job(MapImage *mapImage, const QString &imageFileName);
 
         MapComposite *mapComposite;
         MapImage *mapImage;
+        QString imageFileName;
     };
     QList<Job> mJobs;
 };
@@ -277,7 +280,8 @@ private slots:
     void imageLoadedByThread(QImage *image, MapImage *mapImage);
 
     void renderThreadNeedsMap(MapImage *mapImage);
-    void imageRenderedByThread(MapImageData imgData, MapImage *mapImage);
+    void imageRenderedByThread(MapImageData imgData, MapImage *mapImage,
+                               bool imageSaved, QString imageFileName);
     void renderJobDone(MapComposite *mapComposite);
 
     void mapLoaded(MapInfo *mapInfo);
@@ -290,6 +294,13 @@ private:
     MapImageManager();
     ~MapImageManager();
 
+    void beginRenderMapPreparation(MapImageRenderWorker *worker,
+                                   MapImage *mapImage);
+    void processLoadedMapForPreparation(MapImageRenderWorker *worker,
+                                        MapInfo *mapInfo);
+    void finishRenderMapPreparation(MapImageRenderWorker *worker);
+    void failRenderMapPreparation(MapImageRenderWorker *worker);
+    void queueRenderJob(MapImage *mapImage);
     QFileInfo imageFileInfo(const QString &mapFilePath);
     QFileInfo imageDataFileInfo(const QFileInfo &imageFileInfo);
     bool scheduleMapImageRebuild(MapImage *mapImage);
@@ -302,15 +313,27 @@ private:
     QVector<MapImageReaderWorker*> mImageReaderWorkers;
     int mNextThreadForJob;
 
-    InterruptibleThread *mImageRenderThread;
-    MapImageRenderWorker *mImageRenderWorker;
-    MapImage *mExpectMapImage;
-    QList<MapInfo*> mExpectSubMaps;
+    struct ActiveRender
+    {
+        MapImageRenderWorker *worker;
+        InterruptibleThread *thread;
+        MapImage *mapImage;
+    };
+    struct RenderPreparation
+    {
+        MapImage *mapImage;
+        QSet<MapInfo*> pendingMaps;
+        QSet<MapInfo*> discoveredMaps;
 #ifdef WORLDED
-    QList<MapInfo*> mReferencedMaps;
+        QList<MapInfo*> referencedMaps;
 #endif
-    MapComposite *mRenderMapComposite;
+    };
 
+    QVector<InterruptibleThread*> mImageRenderThreads;
+    QVector<MapImageRenderWorker*> mImageRenderWorkers;
+    int mNextRenderWorker;
+    QHash<MapComposite*, ActiveRender> mActiveRenders;
+    QHash<MapImageRenderWorker*, RenderPreparation> mRenderPreparations;
     friend class MapImageManagerDeferral;
     void deferThreadResults(bool defer);
     int mDeferralDepth;

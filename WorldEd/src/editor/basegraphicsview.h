@@ -138,6 +138,7 @@ protected:
     bool mMousePressed;
     QTimer mScrollTimer;
     int mScrollDirection;
+    mutable QRect mProjectGridBadgeRect;
     int mScrollMagnitude;
     BaseGraphicsScene *mScene;
     MiniMap *mMiniMap;

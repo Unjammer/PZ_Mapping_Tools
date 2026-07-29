@@ -446,13 +446,20 @@ void MapDocument::addLayer(Layer::Type layerType)
     int level = currentLevel();
     MapLevel *mapLevel = mMap->mapLevelForZ(level);
     if (mapLevel->layerCount(layerType) == 0) {
-        int count = 0;
-        for (MapLevel *mapLevel2 : mMap->mapLevels()) {
-            if (mapLevel2 == mapLevel) {
-                index = count;
-                break;
+        if (layerType == Layer::ObjectGroupType
+                && !mapLevel->layers().isEmpty()) {
+            // Object tools expect their layer above the visual layers of the
+            // selected level so newly-created objects remain visible.
+            index = mMap->layers().indexOf(mapLevel->layers().last()) + 1;
+        } else {
+            int count = 0;
+            for (MapLevel *mapLevel2 : mMap->mapLevels()) {
+                if (mapLevel2 == mapLevel) {
+                    index = count;
+                    break;
+                }
+                count += mapLevel2->layerCount();
             }
-            count += mapLevel2->layerCount();
         }
     } else {
         Layer *layer = mapLevel->layers(layerType).last();

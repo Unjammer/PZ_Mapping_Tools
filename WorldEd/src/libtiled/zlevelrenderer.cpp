@@ -37,6 +37,7 @@
 
 #include <cmath>
 
+#include <QMutex>
 #include <QPainterPath>
 
 using namespace Tiled;
@@ -213,6 +214,26 @@ void ZLevelRenderer::drawGrid(QPainter *painter, const QRectF &rect, QColor grid
 
 static Tile *g_invisible_tile = nullptr;
 static Tile *g_missing_tile = nullptr;
+static QMutex g_placeholderTileMutex;
+
+static Tile *placeholderTile(bool invisible)
+{
+    QMutexLocker locker(&g_placeholderTileMutex);
+    Tile *&tile = invisible ? g_invisible_tile : g_missing_tile;
+    if (tile)
+        return tile;
+
+    Tileset *tileset = new Tileset(
+                invisible ? QLatin1String("INVISIBLE")
+                          : QLatin1String("MISSING"),
+                64, 128);
+    const QString imagePath = invisible
+            ? QLatin1String(":/images/invisible-tile.png")
+            : QLatin1String(":/images/missing-tile.png");
+    if (tileset->loadFromImage(QImage(imagePath), imagePath))
+        tile = tileset->tileAt(0);
+    return tile;
+}
 
 void ZLevelRenderer::drawTileLayer(QPainter *painter,
                                       const TileLayer *layer,
@@ -466,25 +487,13 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
                         if (tile->properties().contains(QLatin1String("invisible"))) {
                             if (isShowInvisibleTiles() == false)
                                 continue;
-                            if (g_invisible_tile == nullptr) {
-                                Tileset *ts = new Tileset(QLatin1String("INVISIBLE"), 64, 128);
-                                if (ts->loadFromImage(QImage(QLatin1String(":/images/invisible-tile.png")), QLatin1String(":/images/invisible-tile.png"))) {
-                                    g_invisible_tile = ts->tileAt(0);
-                                }
-                            }
-                            if (g_invisible_tile)
-                                tile = g_invisible_tile;
+                            if (Tile *placeholder = placeholderTile(true))
+                                tile = placeholder;
 
                         }
                         if (tile->image().isNull()) {
-                            if (g_missing_tile == nullptr) {
-                                Tileset *ts = new Tileset(QLatin1String("MISSING"), 64, 128);
-                                if (ts->loadFromImage(QImage(QLatin1String(":/images/missing-tile.png")), QLatin1String(":/images/missing-tile.png"))) {
-                                    g_missing_tile = ts->tileAt(0);
-                                }
-                            }
-                            if (g_missing_tile)
-                                tile = g_missing_tile;
+                            if (Tile *placeholder = placeholderTile(false))
+                                tile = placeholder;
                         }
                         QImage img = tile->image();
                         const QPoint offset = tile->tileset()->tileOffset() + tile->offset();

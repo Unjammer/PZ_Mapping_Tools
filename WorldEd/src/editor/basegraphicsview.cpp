@@ -102,6 +102,7 @@ void BaseGraphicsView::drawProjectGridBadge(QPainter *painter, int cellSize) con
                           metrics.height() + verticalPadding * 2);
     const QRect badgeRect(QPoint(viewport()->width() - badgeSize.width() - 12, 12),
                           badgeSize);
+    mProjectGridBadgeRect = badgeRect.adjusted(-2, -2, 2, 2);
 
     QColor background = palette().color(QPalette::Window);
     background.setAlpha(235);
@@ -372,7 +373,15 @@ void BaseGraphicsView::setScene(BaseGraphicsScene *scene)
 
 void BaseGraphicsView::scrollContentsBy(int dx, int dy)
 {
+    QRegion badgeDirtyRegion;
+    if (!mProjectGridBadgeRect.isEmpty()) {
+        badgeDirtyRegion += mProjectGridBadgeRect;
+        badgeDirtyRegion += mProjectGridBadgeRect.translated(dx, dy);
+    }
+
     QGraphicsView::scrollContentsBy(dx, dy);
+    if (!badgeDirtyRegion.isEmpty())
+        viewport()->update(badgeDirtyRegion);
     mMiniMap->viewRectChanged();
 }
 

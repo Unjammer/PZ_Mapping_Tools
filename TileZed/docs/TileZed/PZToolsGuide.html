@@ -437,6 +437,39 @@
   after a Zone-to-PNG workflow or when another program generated the zone layer.
   Both produce the same kind of green-channel data.</p>
 
+  <h3>In-game map stacking and Vanilla fallback</h3>
+  <p>Project Zomboid loads the selected map folder together with the folders
+  listed by its <code>lots=</code> entry. Biomemap files follow that same
+  priority. If the selected mod map contains
+  <code>maps/biomemap_X_Y.png</code>, that file is used for those exact
+  coordinates. If it does not, the game can fall back to the matching file
+  supplied by a lower-priority dependency such as
+  <code>Muldraugh, KY</code>.</p>
+
+  <div class="warning">
+    A biomemap file covers one complete 256 x 256 B42 tile. Supplying a modded
+    file replaces both biome and foraging-channel data for that whole tile; it
+    is not clipped to the mod's buildings or WorldEd zone shapes. Export every
+    overlapping tile that needs different data, and omit a tile only when the
+    Vanilla fallback is intentionally correct.
+  </div>
+
+  <p>This is especially important for legacy 300 x 300 projects: their source
+  bounds cross the B42 256-pixel boundaries. The generator aligns the source in
+  world-square coordinates and always writes complete 256 x 256 files. Select
+  the Vanilla <code>maps</code> directory as the optional base biomemap
+  directory to preserve data in the uncovered parts of boundary files. Without
+  a base file, those uncovered pixels use neutral ForagingNav data and are
+  reported after generation.</p>
+
+  <p>The red channel stores biome IDs. The green channel stores foraging-zone
+  IDs. File selection and Vanilla fallback happen for the complete 256 x 256
+  image; after that selection, the game requests zone values on its 8 x 8 chunk
+  grid. It does not perform a second Vanilla fallback for uncovered chunks
+  inside a selected mod image. WorldEd zone objects are an authoring source for
+  the green channel; after generation, the game consumes the exported biomemap
+  PNG files rather than the PZW objects.</p>
+
   <h3>Dimension validation</h3>
   <p>The input must cover the project using its own cell size. A legacy project
   expects multiples of 300; a native project expects multiples of 256. The

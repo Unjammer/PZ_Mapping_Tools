@@ -63,8 +63,7 @@ MapImageManager *MapImageManager::mInstance = NULL;
 
 MapImageManager::MapImageManager() :
     QObject(),
-    mExpectMapImage(0),
-    mRenderMapComposite(0),
+    mNextRenderWorker(0),
     mDeferralDepth(0),
     mDeferralQueued(false)
 {
@@ -80,20 +79,28 @@ MapImageManager::MapImageManager() :
         mImageReaderThreads[i]->start();
     }
 
-    mImageRenderThread = new InterruptibleThread;
-    mImageRenderWorker = new MapImageRenderWorker(mImageRenderThread);
-    mImageRenderWorker->moveToThread(mImageRenderThread);
-    connect(mImageRenderWorker, &MapImageRenderWorker::mapNeeded,
-            this, &MapImageManager::renderThreadNeedsMap);
     qRegisterMetaType<MapImageData>("MapImageData");
     qRegisterMetaType<MapImage*>("MapImage*");
     qRegisterMetaType<MapComposite*>("MapComposite*");
-    connect(mImageRenderWorker,
-            &MapImageRenderWorker::imageRendered,
-            this, &MapImageManager::imageRenderedByThread);
-    connect(mImageRenderWorker, &MapImageRenderWorker::jobDone,
-            this, &MapImageManager::renderJobDone);
-    mImageRenderThread->start();
+
+    const int renderThreadCount =
+            qBound(1, QThread::idealThreadCount() - 1, 4);
+    mImageRenderThreads.resize(renderThreadCount);
+    mImageRenderWorkers.resize(renderThreadCount);
+    for (int i = 0; i < renderThreadCount; ++i) {
+        mImageRenderThreads[i] = new InterruptibleThread;
+        mImageRenderWorkers[i] =
+                new MapImageRenderWorker(mImageRenderThreads[i]);
+        mImageRenderWorkers[i]->moveToThread(mImageRenderThreads[i]);
+        connect(mImageRenderWorkers[i], &MapImageRenderWorker::mapNeeded,
+                this, &MapImageManager::renderThreadNeedsMap);
+        connect(mImageRenderWorkers[i],
+                &MapImageRenderWorker::imageRendered,
+                this, &MapImageManager::imageRenderedByThread);
+        connect(mImageRenderWorkers[i], &MapImageRenderWorker::jobDone,
+                this, &MapImageManager::renderJobDone);
+        mImageRenderThreads[i]->start();
+    }
 
     connect(MapManager::instance(), &MapManager::mapAboutToChange,
             this, &MapImageManager::mapAboutToChange);
@@ -117,11 +124,13 @@ MapImageManager::~MapImageManager()
         delete mImageReaderThreads[i];
     }
 
-    mImageRenderThread->interrupt();
-    mImageRenderThread->quit();
-    mImageRenderThread->wait();
-    delete mImageRenderWorker;
-    delete mImageRenderThread;
+    for (int i = 0; i < mImageRenderThreads.size(); ++i) {
+        mImageRenderThreads[i]->interrupt();
+        mImageRenderThreads[i]->quit();
+        mImageRenderThreads[i]->wait();
+        delete mImageRenderWorkers[i];
+        delete mImageRenderThreads[i];
+    }
 }
 
 MapImageManager *MapImageManager::instance()
@@ -197,9 +206,7 @@ MapImage *MapImageManager::getMapImage(const QString &mapName, const QString &re
             mNextThreadForJob = (mNextThreadForJob + 1) % mImageReaderWorkers.size();
         }
         if (data.threadRender) {
-            QMetaObject::invokeMethod(mImageRenderWorker,
-                                      "addJob", Qt::QueuedConnection,
-                                      Q_ARG(MapImage*,mapImage));
+            queueRenderJob(mapImage);
         }
     }
 
@@ -229,10 +236,34 @@ bool MapImageManager::recreateMapImage(const QString &mapName, const QString &re
         return false;
     }
 
-    MapImage *mapImage = getMapImage(mapName, relativeTo);
+    MapImage *mapImage = mMapImages.value(mapFilePath, nullptr);
     if (!mapImage) {
-        qWarning() << "Cannot recreate thumbnail for" << mapFilePath << errorString();
-        return false;
+        // An explicit rebuild must not begin by loading the old cached PNG.
+        // Create the lightweight display placeholder and queue the requested
+        // render directly.  This also prevents a cache miss from rendering
+        // the same TMX twice (automatic render followed by forced render).
+        ImageData data = generateMapImage(mapFilePath, true);
+        MapInfo *mapInfo = MapManager::instance()->mapInfo(mapFilePath);
+        if (!data.valid || !data.threadRender || !mapInfo) {
+            if (mError.isEmpty())
+                mError = tr("Unable to prepare the thumbnail renderer for %1")
+                        .arg(mapFilePath);
+            qWarning() << "Cannot recreate thumbnail for" << mapFilePath
+                       << mError;
+            return false;
+        }
+
+        paintDummyImage(data, mapInfo);
+        mapImage = new MapImage(data.image, data.scale,
+                                data.levelZeroBounds, data.mapSize,
+                                data.tileSize, mapInfo);
+        mapImage->mLoaded = false;
+        mapImage->mSources += mapInfo;
+        mMapImages.insert(mapFilePath, mapImage);
+        queueRenderJob(mapImage);
+        qInfo() << "Recreating thumbnail at width" << thumbnailImageWidth()
+                << "for" << mapFilePath;
+        return true;
     }
 
     if (!mapImage->mLoaded) {
@@ -265,13 +296,25 @@ bool MapImageManager::scheduleMapImageRebuild(MapImage *mapImage)
     mapImage->mSources.clear();
     mapImage->mSources += mapImage->mapInfo();
     mapImage->mLoaded = false;
-    QMetaObject::invokeMethod(mImageRenderWorker,
-                              "addJob", Qt::QueuedConnection,
-                              Q_ARG(MapImage*,mapImage));
+    queueRenderJob(mapImage);
     emit mapImageChanged(mapImage);
     qInfo() << "Recreating thumbnail at width" << thumbnailImageWidth()
             << "for" << mapImage->mapInfo()->path();
     return true;
+}
+
+void MapImageManager::queueRenderJob(MapImage *mapImage)
+{
+    Q_ASSERT(!mImageRenderWorkers.isEmpty());
+    MapImageRenderWorker *worker =
+            mImageRenderWorkers.at(mNextRenderWorker);
+    mNextRenderWorker =
+            (mNextRenderWorker + 1) % mImageRenderWorkers.size();
+    const QString imageFileName =
+            imageFileInfo(mapImage->mapInfo()->path()).absoluteFilePath();
+    QMetaObject::invokeMethod(worker, "addJob", Qt::QueuedConnection,
+                              Q_ARG(MapImage*, mapImage),
+                              Q_ARG(QString, imageFileName));
 }
 
 MapImage *MapImageManager::getZombieSpawnImage(const QString &imageName, const QString &relativeTo)
@@ -625,34 +668,32 @@ void MapImageManager::writeImageData(const QFileInfo &imageDataFileInfo, const M
 
 void MapImageManager::mapAboutToChange(MapInfo *mapInfo)
 {
-    if (!mRenderMapComposite)
-        return;
-    // Caution: mRenderMapComposite is being used right now by the render thread.
-    foreach (MapComposite *mc, mRenderMapComposite->maps()) {
-        if (mc->mapInfo() == mapInfo) {
-            mImageRenderThread->interrupt(true);
-            MapImage *mapImage = mMapImages[mRenderMapComposite->mapInfo()->path()];
-            Q_ASSERT(mapImage);
-            mapImage->mLoaded = false;
-            break;
+    for (auto it = mActiveRenders.begin(); it != mActiveRenders.end(); ++it) {
+        for (MapComposite *composite : it.key()->maps()) {
+            if (composite->mapInfo() == mapInfo) {
+                it.value().thread->interrupt(true);
+                it.value().mapImage->mLoaded = false;
+                break;
+            }
         }
     }
 }
 
 void MapImageManager::mapChanged(MapInfo *mapInfo)
 {
-    if (!mRenderMapComposite)
-        return;
-    // Caution: mRenderMapComposite is being used right now by the render thread.
-    foreach (MapComposite *mc, mRenderMapComposite->maps()) {
-        if (mc->mapInfo() == mapInfo) {
-            MapImage *mapImage = mMapImages[mRenderMapComposite->mapInfo()->path()];
-            Q_ASSERT(mapImage);
-            mImageRenderThread->resume();
-            QMetaObject::invokeMethod(mImageRenderWorker,
+    for (auto it = mActiveRenders.begin(); it != mActiveRenders.end(); ++it) {
+        for (MapComposite *composite : it.key()->maps()) {
+            if (composite->mapInfo() == mapInfo) {
+                it.value().thread->resume();
+                QMetaObject::invokeMethod(it.value().worker,
                                       "resume", Qt::QueuedConnection,
-                                      Q_ARG(MapImage*,mapImage));
-            break;
+                                      Q_ARG(MapImage*, it.value().mapImage),
+                                      Q_ARG(QString,
+                                            imageFileInfo(it.value().mapImage
+                                                          ->mapInfo()->path())
+                                            .absoluteFilePath()));
+                break;
+            }
         }
     }
 }
@@ -694,30 +735,46 @@ void MapImageManager::imageLoadedByThread(QImage *image, MapImage *mapImage)
 
 void MapImageManager::renderThreadNeedsMap(MapImage *mapImage)
 {
+    MapImageRenderWorker *worker =
+            qobject_cast<MapImageRenderWorker*>(sender());
+    Q_ASSERT(worker);
+    if (!worker)
+        return;
+
+    Q_ASSERT(!mRenderPreparations.contains(worker));
+    if (mRenderPreparations.contains(worker))
+        return;
+    beginRenderMapPreparation(worker, mapImage);
+}
+
+void MapImageManager::beginRenderMapPreparation(
+        MapImageRenderWorker *worker, MapImage *mapImage)
+{
+    RenderPreparation preparation;
+    preparation.mapImage = mapImage;
+    mRenderPreparations.insert(worker, preparation);
+
     bool asynch = true;
-    Q_ASSERT(mExpectMapImage == 0);
     MapInfo *mapInfo = MapManager::instance()->loadMap(mapImage->mapInfo()->path(),
                                                        QString(), asynch,
                                                        MapManager::PriorityLow);
     if (!mapInfo) {
-        // The map file went away since MapImage's MapInfo was created.
-        QMetaObject::invokeMethod(mImageRenderWorker,
-                                  "mapFailedToLoad", Qt::QueuedConnection);
-        emit mapImageFailedToLoad(mapImage);
-        mForceRebuildAfterLoad.remove(mapImage);
+        failRenderMapPreparation(worker);
         return;
     }
-    mExpectMapImage = mapImage;
-    mExpectSubMaps.clear();
-#ifdef WORLDED
-    mReferencedMaps.clear();
-#endif
+
+    RenderPreparation &active = mRenderPreparations[worker];
+    active.discoveredMaps.insert(mapInfo);
+    active.pendingMaps.insert(mapInfo);
     Q_ASSERT(mapInfo == mapImage->mapInfo());
     if (!mapInfo->isLoading())
-        mapLoaded(mapInfo);
+        processLoadedMapForPreparation(worker, mapInfo);
 }
 
-void MapImageManager::imageRenderedByThread(MapImageData imgData, MapImage *mapImage)
+void MapImageManager::imageRenderedByThread(MapImageData imgData,
+                                            MapImage *mapImage,
+                                            bool imageSaved,
+                                            QString imageFileName)
 {
     noise() << "imageRenderedByThread" << mapImage->mapInfo()->path();
 
@@ -740,10 +797,9 @@ void MapImageManager::imageRenderedByThread(MapImageData imgData, MapImage *mapI
     data.mapSize = imgData.mapSize;
     data.tileSize = imgData.tileSize;
 
-    QFileInfo imageInfo = imageFileInfo(mapImage->mapInfo()->path());
+    QFileInfo imageInfo(imageFileName);
     QFileInfo imageDataInfo = imageDataFileInfo(imageInfo);
-    if (imageInfo.absoluteFilePath().isEmpty() ||
-            !data.image.save(imageInfo.absoluteFilePath())) {
+    if (imageInfo.absoluteFilePath().isEmpty() || !imageSaved) {
         mError = tr("Unable to write thumbnail image %1")
                 .arg(imageInfo.absoluteFilePath());
         qWarning() << mError;
@@ -766,8 +822,8 @@ void MapImageManager::imageRenderedByThread(MapImageData imgData, MapImage *mapI
 
 void MapImageManager::renderJobDone(MapComposite *mapComposite)
 {
-    Q_ASSERT(mapComposite == mRenderMapComposite);
-    mRenderMapComposite = 0;
+    Q_ASSERT(mActiveRenders.contains(mapComposite));
+    mActiveRenders.remove(mapComposite);
     delete mapComposite;
 }
 
@@ -790,110 +846,138 @@ QStringList getSubMapFileNames(const MapInfo *mapInfo)
 
 void MapImageManager::mapLoaded(MapInfo *mapInfo)
 {
-    if (!mExpectMapImage)
-        return;
+    const QList<MapImageRenderWorker*> workers = mRenderPreparations.keys();
+    for (MapImageRenderWorker *worker : workers) {
+        const auto it = mRenderPreparations.constFind(worker);
+        if (it != mRenderPreparations.constEnd()
+                && it->pendingMaps.contains(mapInfo)) {
+            processLoadedMapForPreparation(worker, mapInfo);
+        }
+    }
+}
 
-    if (mExpectMapImage->mapInfo() == mapInfo) {
-#ifdef WORLDED
-        MapManager::instance()->addReferenceToMap(mapInfo), mReferencedMaps += mapInfo;
-#endif
-        foreach (const QString &path, getSubMapFileNames(mapInfo)) {
-            bool async = true;
-            if (MapInfo *subMapInfo = MapManager::instance()->loadMap(path, QString(), async,
-                                                                      MapManager::PriorityLow)) {
-                if (!mExpectSubMaps.contains(subMapInfo)) {
-                    if (subMapInfo->isLoading())
-                        mExpectSubMaps += subMapInfo;
-#ifdef WORLDED
-                    else
-                        MapManager::instance()->addReferenceToMap(subMapInfo), mReferencedMaps += subMapInfo;
-#endif
-                }
-            }
+void MapImageManager::processLoadedMapForPreparation(
+        MapImageRenderWorker *worker, MapInfo *mapInfo)
+{
+    QList<MapInfo*> loadedMaps;
+    loadedMaps += mapInfo;
+
+    while (!loadedMaps.isEmpty()) {
+        MapInfo *loadedMap = loadedMaps.takeFirst();
+        auto it = mRenderPreparations.find(worker);
+        if (it == mRenderPreparations.end()
+                || !it->pendingMaps.remove(loadedMap)) {
+            continue;
         }
-    } else if (mExpectSubMaps.contains(mapInfo)) {
+
 #ifdef WORLDED
-        MapManager::instance()->addReferenceToMap(mapInfo), mReferencedMaps += mapInfo;
+        MapManager::instance()->addReferenceToMap(loadedMap);
+        it->referencedMaps += loadedMap;
 #endif
-        mExpectSubMaps.removeAll(mapInfo);
-        foreach (const QString &path, getSubMapFileNames(mapInfo)) {
+
+        const QStringList subMapPaths = getSubMapFileNames(loadedMap);
+        for (const QString &path : subMapPaths) {
             bool async = true;
-            if (MapInfo *subMapInfo = MapManager::instance()->loadMap(
-                        path, QString(), async, MapManager::PriorityLow)) {
-                if (!mExpectSubMaps.contains(subMapInfo)) {
-                    if (subMapInfo->isLoading())
-                        mExpectSubMaps += subMapInfo;
-#ifdef WORLDED
-                    else
-                        MapManager::instance()->addReferenceToMap(subMapInfo), mReferencedMaps += subMapInfo;
-#endif
-                }
-            }
+            MapInfo *subMapInfo = MapManager::instance()->loadMap(
+                        path, QString(), async, MapManager::PriorityLow);
+            if (!subMapInfo)
+                continue;
+
+            it = mRenderPreparations.find(worker);
+            if (it == mRenderPreparations.end())
+                return;
+            if (it->discoveredMaps.contains(subMapInfo))
+                continue;
+
+            it->discoveredMaps.insert(subMapInfo);
+            it->pendingMaps.insert(subMapInfo);
+            if (!subMapInfo->isLoading())
+                loadedMaps += subMapInfo;
         }
-        mapInfo = mExpectMapImage->mapInfo();
-    } else {
-        return;
     }
 
-    if (mExpectSubMaps.size())
-        return;
+    const auto it = mRenderPreparations.constFind(worker);
+    if (it != mRenderPreparations.constEnd() && it->pendingMaps.isEmpty())
+        finishRenderMapPreparation(worker);
+}
 
-    mExpectMapImage = 0;
+void MapImageManager::finishRenderMapPreparation(
+        MapImageRenderWorker *renderWorker)
+{
+    Q_ASSERT(mRenderPreparations.contains(renderWorker));
+    const RenderPreparation preparation =
+            mRenderPreparations.take(renderWorker);
+    MapImage *renderMapImage = preparation.mapImage;
+    MapInfo *mapInfo = renderMapImage->mapInfo();
 
-    mRenderMapComposite = new MapComposite(mapInfo);
-    Q_ASSERT(mRenderMapComposite->waitingForMapsToLoad() == false);
+    MapComposite *renderComposite = new MapComposite(mapInfo);
+    Q_ASSERT(renderComposite->waitingForMapsToLoad() == false);
 #ifdef WORLDED
     // Now that mapComposite is referencing the maps...
-    foreach (MapInfo *mapInfo, mReferencedMaps)
-        MapManager::instance()->removeReferenceToMap(mapInfo);
+    for (MapInfo *referencedMap : preparation.referencedMaps)
+        MapManager::instance()->removeReferenceToMap(referencedMap);
 #endif
-    // Wait for TilesetManager's threads to finish loading the tilesets.
-    // FIXME: this shouldn't block the gui.
-#if 1
-    QList<Tileset*> usedTilesets = mRenderMapComposite->usedTilesets();
-    usedTilesets.removeAll(TilesetManager::instance()->missingTileset());
-    TilesetManager::instance()->waitForTilesets(usedTilesets);
-#else
-    QSet<Tileset*> usedTilesets;
-    foreach (MapComposite *mc, mRenderMapComposite->maps())
-        usedTilesets += mc->map()->usedTilesets();
-    usedTilesets.remove(TilesetManager::instance()->missingTileset());
-    TilesetManager::instance()->waitForTilesets(usedTilesets.toList());
-#endif
+    // MapManager loads the tilesets actually used by each map before it emits
+    // mapLoaded().  Re-scanning every layer here and calling waitForTilesets()
+    // a second time only duplicated work on the GUI thread; it did not make
+    // the worker-side render safer.
 
     // BmpBlender sends a signal to the MapComposite when it has finished
     // blending.  That needs to happen in the render thread.
-    Q_ASSERT(mRenderMapComposite->bmpBlender()->parent() == mRenderMapComposite);
-    mRenderMapComposite->moveToThread(mImageRenderThread);
+    Q_ASSERT(renderComposite->bmpBlender()->parent() == renderComposite);
+    InterruptibleThread *renderThread = renderWorker->workerThread();
+    mActiveRenders.insert(renderComposite,
+                          ActiveRender{renderWorker, renderThread,
+                                       renderMapImage});
+    renderComposite->moveToThread(renderThread);
 
-    QMetaObject::invokeMethod(mImageRenderWorker,
+    QMetaObject::invokeMethod(renderWorker,
                               "mapLoaded", Qt::QueuedConnection,
-                              Q_ARG(MapComposite*,mRenderMapComposite));
+                              Q_ARG(MapComposite*, renderComposite));
+}
+
+void MapImageManager::failRenderMapPreparation(
+        MapImageRenderWorker *renderWorker)
+{
+    const auto it = mRenderPreparations.find(renderWorker);
+    if (it == mRenderPreparations.end())
+        return;
+
+    const RenderPreparation preparation = it.value();
+    mRenderPreparations.erase(it);
+#ifdef WORLDED
+    for (MapInfo *referencedMap : preparation.referencedMaps)
+        MapManager::instance()->removeReferenceToMap(referencedMap);
+#endif
+
+    MapImage *mapImage = preparation.mapImage;
+    mForceRebuildAfterLoad.remove(mapImage);
+    mapImage->mImage.fill(Qt::transparent);
+    mapImage->mLoaded = true;
+    QMetaObject::invokeMethod(renderWorker,
+                              "mapFailedToLoad", Qt::QueuedConnection);
+    emit mapImageFailedToLoad(mapImage);
 }
 
 void MapImageManager::mapFailedToLoad(MapInfo *mapInfo)
 {
-    // Failing to load a submap of the one we want to paint doesn't stop us
-    // creating the map image.
-    if (mExpectSubMaps.contains(mapInfo))
-        mExpectSubMaps.removeAll(mapInfo);
+    const QList<MapImageRenderWorker*> workers = mRenderPreparations.keys();
+    for (MapImageRenderWorker *worker : workers) {
+        auto it = mRenderPreparations.find(worker);
+        if (it == mRenderPreparations.end()
+                || !it->pendingMaps.contains(mapInfo)) {
+            continue;
+        }
 
-    // The render thread was waiting for a map to load, but that failed.
-    // Tell the render thread to continue on with the next job.
-    if (mExpectMapImage && (mapInfo == mExpectMapImage->mapInfo())) {
-#ifdef WORLDED
-        foreach (MapInfo *mapInfo, mReferencedMaps)
-            MapManager::instance()->removeReferenceToMap(mapInfo);
-        mReferencedMaps.clear();
-#endif
-        MapImage *mapImage = mExpectMapImage;
-        mForceRebuildAfterLoad.remove(mapImage);
-        mapImage->mImage.fill(Qt::transparent);
-        mapImage->mLoaded = true; // FIXME: delete bogus MapImage???
-        mExpectMapImage = 0;
-        QMetaObject::invokeMethod(mImageRenderWorker,
-                                  "mapFailedToLoad", Qt::QueuedConnection);
-        emit mapImageFailedToLoad(mapImage);
+        if (it->mapImage->mapInfo() == mapInfo) {
+            failRenderMapPreparation(worker);
+            continue;
+        }
+
+        // A missing sub-map doesn't prevent the root map from being painted.
+        it->pendingMaps.remove(mapInfo);
+        if (it->pendingMaps.isEmpty())
+            finishRenderMapPreparation(worker);
     }
 }
 
@@ -1153,18 +1237,24 @@ void MapImageRenderWorker::work()
         MapImageData data = generateMapImage(job.mapComposite);
         noise() << "MapImageRenderWorker" << (aborted() ? "aborted" : "finished") << job.mapImage->mapInfo()->path();
 
+        bool imageSaved = false;
+        if (data.valid() && !job.imageFileName.isEmpty())
+            imageSaved = data.image.save(job.imageFileName);
+
         emit jobDone(job.mapComposite); // main thread needs to delete this
 
         if (data.valid())
-            emit imageRendered(data, job.mapImage);
+            emit imageRendered(data, job.mapImage,
+                               imageSaved, job.imageFileName);
     }
 }
 
-void MapImageRenderWorker::addJob(MapImage *mapImage)
+void MapImageRenderWorker::addJob(MapImage *mapImage,
+                                  const QString &imageFileName)
 {
     IN_WORKER_THREAD
 
-    mJobs += Job(mapImage);
+    mJobs += Job(mapImage, imageFileName);
     scheduleWork();
 }
 
@@ -1199,11 +1289,12 @@ void MapImageRenderWorker::mapFailedToLoad()
     scheduleWork();
 }
 
-void MapImageRenderWorker::resume(MapImage *mapImage)
+void MapImageRenderWorker::resume(MapImage *mapImage,
+                                  const QString &imageFileName)
 {
     IN_WORKER_THREAD
 
-    mJobs.prepend(Job(mapImage));
+    mJobs.prepend(Job(mapImage, imageFileName));
     scheduleWork();
 }
 
@@ -1319,8 +1410,10 @@ MapImageData MapImageRenderWorker::generateMapImage(MapComposite *mapComposite)
     return data;
 }
 
-MapImageRenderWorker::Job::Job(MapImage *mapImage) :
+MapImageRenderWorker::Job::Job(MapImage *mapImage,
+                               const QString &imageFileName) :
     mapComposite(0),
-    mapImage(mapImage)
+    mapImage(mapImage),
+    imageFileName(imageFileName)
 {
 }

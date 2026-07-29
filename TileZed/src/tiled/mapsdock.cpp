@@ -362,7 +362,7 @@ MapsView::MapsView(MainWindow *mainWindow, QWidget *parent)
     , mMainWindow(mainWindow)
 {
     setRootIsDecorated(false);
-    setHeaderHidden(true);
+    setHeaderHidden(false);
     setItemsExpandable(false);
     setUniformRowHeights(true);
     setDragEnabled(true);
@@ -385,9 +385,9 @@ MapsView::MapsView(MainWindow *mainWindow, QWidget *parent)
     setModel(model);
 
     QHeaderView* hHeader = header();
-    hHeader->hideSection(1); // Size
+    hHeader->showSection(1); // Size
     hHeader->hideSection(2);
-    hHeader->hideSection(3);
+    hHeader->showSection(3); // Last modified
 
     setRootIndex(model->index(mapsDir.absolutePath()));
     
@@ -395,9 +395,11 @@ MapsView::MapsView(MainWindow *mainWindow, QWidget *parent)
 #if QT_VERSION >= 0x050000
     header()->setSectionResizeMode(0, QHeaderView::Stretch);
     header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
 #else
     header()->setResizeMode(0, QHeaderView::Stretch);
     header()->setResizeMode(1, QHeaderView::ResizeToContents);
+    header()->setResizeMode(3, QHeaderView::ResizeToContents);
 #endif
 
     connect(this, &QAbstractItemView::activated, this, &MapsView::onActivated);
@@ -405,7 +407,7 @@ MapsView::MapsView(MainWindow *mainWindow, QWidget *parent)
 
 QSize MapsView::sizeHint() const
 {
-    return QSize(130, 100);
+    return QSize(360, 140);
 }
 
 void MapsView::mousePressEvent(QMouseEvent *event)

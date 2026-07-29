@@ -51,6 +51,7 @@
 #include <QSaveFile>
 #include <QStatusBar>
 #include <QStyleOptionGraphicsItem>
+#include <QThread>
 #include <QUrl>
 
 const int WorldScene::ZVALUE_CELLITEM = 1;
@@ -138,13 +139,14 @@ WorldScene::WorldScene(WorldDocument *worldDoc, QObject *parent)
     setSceneRect(mGridItem->boundingRect());
     mCoordItem->updateBoundingRect();
 
+    Preferences *prefs = Preferences::instance();
     foreach (QString path, world()->otherWorlds()) {
         WorldReader reader;
         World *otherWorld = reader.readWorld(path);
         if (otherWorld) {
-            Preferences *prefs = Preferences::instance();
             OtherWorld *_otherWorld = new OtherWorld();
             _otherWorld->mWorld = otherWorld;
+            _otherWorld->mFileName = path;
             _otherWorld->mCellItems.resize(otherWorld->width() * otherWorld->height());
             mOtherWorlds += _otherWorld;
 
@@ -166,9 +168,12 @@ WorldScene::WorldScene(WorldDocument *worldDoc, QObject *parent)
                     addItem(item);
                     item->setZValue(ZVALUE_CELLITEM); // below mGridItem
                     _otherWorld->mCellItems[y * otherWorld->width() + x] = item;
-                    if (Preferences::instance()->loadAllWorldThumbnails()) {
+                    if (prefs->showWorldThumbnails()
+                            && prefs->loadAllWorldThumbnails()) {
                         _otherWorld->mPendingThumbnails += item;
-                    } else if (visibleCells.contains(ThumbnailCell(cell->x(), cell->y()))) {
+                    } else if (prefs->showWorldThumbnails()
+                               && visibleCells.contains(
+                                   ThumbnailCell(cell->x(), cell->y()))) {
                         _otherWorld->mPendingThumbnails += item;
                     }
                 }
@@ -190,9 +195,12 @@ WorldScene::WorldScene(WorldDocument *worldDoc, QObject *parent)
             addItem(item);
             item->setZValue(ZVALUE_CELLITEM); // below mGridItem
             mCellItems[y * world()->width() + x] = item;
-            if (Preferences::instance()->loadAllWorldThumbnails()) {
+            if (prefs->showWorldThumbnails()
+                    && prefs->loadAllWorldThumbnails()) {
                 mPendingThumbnails += item;
-            } else if (visibleCells.contains(ThumbnailCell(cell->x(), cell->y()))) {
+            } else if (prefs->showWorldThumbnails()
+                       && visibleCells.contains(
+                           ThumbnailCell(cell->x(), cell->y()))) {
                 mPendingThumbnails += item;
             }
         }
@@ -205,7 +213,6 @@ WorldScene::WorldScene(WorldDocument *worldDoc, QObject *parent)
         mRoadItems += item;
     }
 
-    Preferences *prefs = Preferences::instance();
     mGridItem->setVisible(prefs->showWorldGrid());
     mCoordItem->setVisible(prefs->showCoordinates());
     connect(prefs, &Preferences::showWorldGridChanged, this, &WorldScene::setShowGrid);
@@ -224,6 +231,8 @@ WorldScene::WorldScene(WorldDocument *worldDoc, QObject *parent)
     connect(prefs, &Preferences::showOtherWorldsChanged, this, &WorldScene::setShowOtherWorlds);
     connect(prefs, &Preferences::loadAllWorldThumbnailsChanged,
             this, &WorldScene::loadAllWorldThumbnailsChanged);
+    connect(prefs, &Preferences::showWorldThumbnailsChanged,
+            this, &WorldScene::showWorldThumbnailsChanged);
 
     mPasteCellsTool = PasteCellsTool::instance();
 
@@ -251,8 +260,12 @@ WorldScene::WorldScene(WorldDocument *worldDoc, QObject *parent)
 
     connect(MapImageManager::instance(), &MapImageManager::mapImageChanged,
             this, &WorldScene::mapImageChanged);
+    connect(MapImageManager::instance(),
+            &MapImageManager::mapImageFailedToLoad,
+            this, &WorldScene::mapImageChanged);
 
-    if (Preferences::instance()->loadAllWorldThumbnails()) {
+    if (prefs->showWorldThumbnails()
+            && prefs->loadAllWorldThumbnails()) {
         PROGRESS_HIDER hider;
         LoadThumbnailsDialog dialog(this, MainWindow::instance());
         dialog.show();
@@ -843,6 +856,8 @@ void WorldScene::mapImageChanged(MapImage *mapImage)
 
 void WorldScene::loadAllWorldThumbnailsChanged(bool thumbs)
 {
+    thumbs = thumbs && Preferences::instance()->showWorldThumbnails();
+
     foreach (OtherWorld *otherWorld, mOtherWorlds) {
         otherWorld->mPendingThumbnails.clear();
         foreach (OtherWorldCellItem *item, otherWorld->mCellItems) {
@@ -873,30 +888,74 @@ void WorldScene::loadAllWorldThumbnailsChanged(bool thumbs)
     }
 }
 
+void WorldScene::showWorldThumbnailsChanged(bool show)
+{
+    mPendingThumbnails.clear();
+    for (OtherWorld *otherWorld : std::as_const(mOtherWorlds))
+        otherWorld->mPendingThumbnails.clear();
+
+    if (!show) {
+        update();
+        return;
+    }
+
+    if (Preferences::instance()->loadAllWorldThumbnails()) {
+        loadAllWorldThumbnailsChanged(true);
+        return;
+    }
+
+    QSet<ThumbnailCell> visibleCells;
+    ThumbnailSettingsMgr::instance().visibleCells(
+                worldDocument()->fileName(), visibleCells);
+    for (WorldCellItem *item : std::as_const(mCellItems)) {
+        const QPoint pos = item->cell()->pos();
+        if (visibleCells.contains(ThumbnailCell(pos.x(), pos.y())))
+            mPendingThumbnails += item;
+    }
+
+    for (OtherWorld *otherWorld : std::as_const(mOtherWorlds)) {
+        ThumbnailSettingsMgr::instance().visibleCells(
+                    otherWorld->mFileName, visibleCells);
+        for (OtherWorldCellItem *item : std::as_const(otherWorld->mCellItems)) {
+            const QPoint pos = item->cell()->pos();
+            if (visibleCells.contains(ThumbnailCell(pos.x(), pos.y())))
+                otherWorld->mPendingThumbnails += item;
+        }
+    }
+
+    handlePendingThumbnails();
+    update();
+}
+
 void WorldScene::handlePendingThumbnails()
 {
-    if (mPendingThumbnails.size()) {
-        WorldCellItem *item = mPendingThumbnails.first();
+    int availableSlots =
+            qBound(1, QThread::idealThreadCount() - 1, 4);
+
+    for (int i = 0;
+         i < mPendingThumbnails.size() && availableSlots > 0;) {
+        WorldCellItem *item = mPendingThumbnails.at(i);
         WorldCellItem::ThumbnailStatus status = item->thumbnailsAreGo();
-        if (status != WorldCellItem::ThumbnailStatus::Loading) {
-            mPendingThumbnails.takeFirst();
-            if (mPendingThumbnails.size()) {
-                QMetaObject::invokeMethod(this, "handlePendingThumbnails",
-                                          Qt::QueuedConnection);
-            }
+        if (status == WorldCellItem::ThumbnailStatus::Loading) {
+            --availableSlots;
+            ++i;
+        } else {
+            mPendingThumbnails.removeAt(i);
         }
     }
 
     for (OtherWorld *otherWorld : std::as_const(mOtherWorlds)) {
-        if (otherWorld->mPendingThumbnails.size()) {
-            OtherWorldCellItem *item = otherWorld->mPendingThumbnails.first();
+        for (int i = 0;
+             i < otherWorld->mPendingThumbnails.size()
+             && availableSlots > 0;) {
+            OtherWorldCellItem *item =
+                    otherWorld->mPendingThumbnails.at(i);
             WorldCellItem::ThumbnailStatus status = item->thumbnailsAreGo();
-            if (status != WorldCellItem::ThumbnailStatus::Loading) {
-                otherWorld->mPendingThumbnails.takeFirst();
-                if (otherWorld->mPendingThumbnails.size()) {
-                    QMetaObject::invokeMethod(this, "handlePendingThumbnails",
-                                              Qt::QueuedConnection);
-                }
+            if (status == WorldCellItem::ThumbnailStatus::Loading) {
+                --availableSlots;
+                ++i;
+            } else {
+                otherWorld->mPendingThumbnails.removeAt(i);
             }
         }
     }
@@ -1526,8 +1585,10 @@ WorldCellItem::ThumbnailStatus WorldCellItem::thumbnailsAreGo()
 {
     if (mMapImage && mMapImage->isLoaded())
         return ThumbnailStatus::Loaded;
-    mWantsImages = true;
-    cellContentsChanged();
+    if (!mWantsImages) {
+        mWantsImages = true;
+        cellContentsChanged();
+    }
     if (mMapImage && mMapImage->isLoaded())
         return ThumbnailStatus::Loaded;
     return (mMapImage != nullptr) ? ThumbnailStatus::Loading : ThumbnailStatus::Missing;
@@ -1691,8 +1752,10 @@ WorldCellItem::ThumbnailStatus OtherWorldCellItem::thumbnailsAreGo()
 {
     if (mMapImage && mMapImage->isLoaded())
         return WorldCellItem::ThumbnailStatus::Loaded;
-    mWantsImages = true;
-    cellContentsChanged();
+    if (!mWantsImages) {
+        mWantsImages = true;
+        cellContentsChanged();
+    }
     if (mMapImage && mMapImage->isLoaded())
         return WorldCellItem::ThumbnailStatus::Loaded;
     return (mMapImage != nullptr) ? WorldCellItem::ThumbnailStatus::Loading : WorldCellItem::ThumbnailStatus::Missing;

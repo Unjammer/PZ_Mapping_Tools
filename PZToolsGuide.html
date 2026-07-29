@@ -169,8 +169,8 @@
     <tbody>
       <tr><td><code>bin</code></td><td>Executables and Qt DLLs.</td><td>Yes, all three applications use the same runtime.</td></tr>
       <tr><td><code>config</code></td><td>Tileset, TileDef, Building and Lua tool catalogs.</td><td>Yes.</td></tr>
-      <tr><td><code>settings</code></td><td>Portable INI files, logs and per-application state. It is not the catalog directory.</td><td>The directory is shared; each application keeps its own keys/files.</td></tr>
-      <tr><td><code>Tiles</code></td><td>Extracted Project Zomboid tile PNGs. These are not distributed with PZTools.</td><td>Yes. It may instead be stored elsewhere and selected with <code>config.exe</code>.</td></tr>
+      <tr><td><code>settings</code></td><td>The shared <code>PZTools.ini</code>, portable application INI files and logs. It is not the catalog directory.</td><td>The directory and paths are shared; each application keeps its own UI state.</td></tr>
+      <tr><td><code>Tiles</code></td><td>Extracted Project Zomboid tile PNGs. These are not distributed with PZTools.</td><td>Yes. It may instead be stored elsewhere and selected in the initial setup assistant or editor preferences.</td></tr>
       <tr><td><code>themes</code></td><td>External QSS stylesheets.</td><td>Yes.</td></tr>
       <tr><td><code>lua</code></td><td>TileZed mapping scripts and interactive tools.</td><td>Used by TileZed.</td></tr>
       <tr><td><code>docs</code></td><td>Offline documentation.</td><td>Yes.</td></tr>
@@ -186,21 +186,23 @@
   <h3>First start</h3>
   <ol>
     <li>Extract the complete PZTools archive to a writable directory.</li>
-    <li>Close all three editors and run <code>bin/config.exe</code>.</li>
+    <li>Start WorldEd, TileZed or BuildingEd. The initial setup assistant opens
+      automatically if no valid Tiles directory is detected.</li>
     <li>Leave <strong>Configuration catalogs</strong> on the packaged
       <code>config</code> directory unless you maintain a custom catalog set.</li>
     <li>Select the extracted Project Zomboid <strong>Tiles</strong> directory.
       PZTools also detects a directory named <code>Tiles</code> directly beside
       <code>config</code>.</li>
-    <li>Save, then start WorldEd, TileZed or BuildingEd.</li>
+    <li>Confirm once. All three applications immediately share the paths.</li>
   </ol>
 
   <div class="note">
     <code>config</code> contains editable application data such as
     <code>Tilesets.txt</code> and <code>BuildingTiles.txt</code>.
-    <code>settings</code> contains generated INI files and logs. Deleting
-    <code>settings</code> resets application preferences; it must not be used
-    as the configuration-catalog directory.
+    <code>settings</code> contains <code>PZTools.ini</code>, application INI
+    files and logs. Deleting application INI files resets their preferences;
+    shared paths remain in <code>PZTools.ini</code>. The directory must not be
+    used as the configuration-catalog directory.
   </div>
 
   <h2 id="settings">Portable settings, layouts and logs</h2>
@@ -242,10 +244,12 @@
   PNG profiles, biomemap warnings and InGameMap geometry repairs.</p>
 
   <h3>Changing shared paths</h3>
-  <p>Close WorldEd, TileZed and BuildingEd, then run
-  <code>bin/config.exe</code>. The first field selects the catalog directory;
-  the second selects the extracted game Tiles directory. The values are shared
-  by all three applications and stored in TileZed's portable INI file.</p>
+  <p>The initial setup assistant stores the catalog and extracted game Tiles
+  paths in <code>settings/PZTools.ini</code>. The Tiles directory can also be
+  changed from an editor's preferences or TileZed's Tilesets dialog. Restart
+  open editors after changing a shared path so their catalogs are reloaded.
+  Selecting <code>1x</code>, <code>2x</code> or <code>custom</code> directly is
+  normalized automatically to the parent Tiles directory.</p>
 
   <h2 id="themes">External QSS themes</h2>
   <p>Built-in themes are extracted as QSS files and external themes are discovered
@@ -325,6 +329,12 @@
   recover a color from the image, and the vegetation eraser to restore an empty
   vegetation pixel. Zoom and the composite opacity control affect only the
   preview. Edits participate in Undo.</p>
+
+  <p>WorldEd estimates memory for the ground image, vegetation image and
+  composite preview before allocating them. The default limit is 512 MiB.
+  High-memory workstations can raise <strong>Terrain image memory limit</strong>
+  in Preferences up to 64 GiB. Undo history requires additional memory, so use
+  a value comfortably below the machine's available RAM.</p>
 
   <h3>Procedural generation</h3>
   <p>Terrain patches, vegetation, lakes, rivers and road networks are generated
@@ -416,16 +426,62 @@
     <tbody>
       <tr><td><code>Map.png</code></td><td>Base biome source</td><td>Required.</td></tr>
       <tr><td><code>Map_veg.png</code></td><td>Vegetation contribution to biome classification</td><td>Required; it is not copied as the output green channel.</td></tr>
-      <tr><td>WorldEd Zone objects</td><td>Foraging-zone IDs in the output green channel</td><td>Rasterized from the current project.</td></tr>
+      <tr><td>Seven Biomemap Zone types</td><td>Foraging-zone IDs in the output green channel</td><td>Rasterized from the current project.</td></tr>
       <tr><td>Zone PNG</td><td>Alternative exact green-channel IDs</td><td>Grayscale or green-channel values; must match Map.png dimensions.</td></tr>
     </tbody>
   </table>
 
   <h3>Zone-source choices</h3>
-  <p><strong>Rasterize zone objects</strong> is convenient when the PZW contains
-  authoritative zones. <strong>Read exact zone IDs from PNG</strong> is useful
-  after a Zone-to-PNG workflow or when another program generated the zone layer.
-  Both produce the same kind of green-channel data.</p>
+  <p><strong>Rasterize zone objects</strong> reads only
+  <code>Vegitation</code>, <code>DeepForest</code>, <code>Forest</code>,
+  <code>TownZone</code>, <code>Farm</code>, <code>FarmLand</code>, and
+  <code>TrailerPark</code>. These are the seven types that the game's
+  <code>metazoneHandler</code> deliberately ignores in
+  <code>objects.lua</code> because their data is expected in the Biomemap green
+  channel. <strong>Read exact zone IDs from PNG</strong> supplies that same
+  channel from an external image.</p>
+
+  <div class="warning">
+    Do not move other WorldEd objects into the Biomemap. Vehicle zones,
+    geometries, WorldGen, <code>WaterZone</code>, and every other vector
+    zone/object type must still be exported through <code>objects.lua</code>.
+    The generator excludes them from the image and reports the actual project
+    types assigned to each path after generation.
+  </div>
+
+  <h3>In-game map stacking and Vanilla fallback</h3>
+  <p>Project Zomboid loads the selected map folder together with the folders
+  listed by its <code>lots=</code> entry. Biomemap files follow that same
+  priority. If the selected mod map contains
+  <code>maps/biomemap_X_Y.png</code>, that file is used for those exact
+  coordinates. If it does not, the game can fall back to the matching file
+  supplied by a lower-priority dependency such as
+  <code>Muldraugh, KY</code>.</p>
+
+  <div class="warning">
+    A biomemap file covers one complete 256 x 256 B42 tile. Supplying a modded
+    file replaces both biome and foraging-channel data for that whole tile; it
+    is not clipped to the mod's buildings or WorldEd zone shapes. Export every
+    overlapping tile that needs different data, and omit a tile only when the
+    Vanilla fallback is intentionally correct.
+  </div>
+
+  <p>This is especially important for legacy 300 x 300 projects: their source
+  bounds cross the B42 256-pixel boundaries. The generator aligns the source in
+  world-square coordinates and always writes complete 256 x 256 files. Select
+  the Vanilla <code>maps</code> directory as the optional base biomemap
+  directory to preserve data in the uncovered parts of boundary files. Without
+  a base file, those uncovered pixels use neutral ForagingNav data and are
+  reported after generation.</p>
+
+  <p>The red channel stores biome IDs. The green channel stores foraging-zone
+  IDs. File selection and Vanilla fallback happen for the complete 256 x 256
+  image; after that selection, the game requests zone values on its 8 x 8 chunk
+  grid. It does not perform a second Vanilla fallback for uncovered chunks
+  inside a selected mod image. The seven Biomemap-managed WorldEd zone types
+  are an authoring source for the green channel; after generation, the game
+  consumes those values from the exported PNG files. All other vector objects
+  continue to come from <code>objects.lua</code>.</p>
 
   <h3>Dimension validation</h3>
   <p>The input must cover the project using its own cell size. A legacy project
@@ -434,9 +490,10 @@
   biome and zone data.</p>
 
   <h3>Warnings</h3>
-  <p>Unknown source colors preserve their red byte and are listed. Zone types
-  without a known biomemap ID are ignored and reported. Treat these warnings as
-  data-review items rather than image-decoding failures.</p>
+  <p>Unknown source colors preserve their red byte and are listed. Invalid
+  green-channel IDs stop generation. WorldEd types outside the seven
+  Biomemap-managed zones are intentionally excluded from the image and listed
+  as <code>objects.lua</code> types rather than reported as errors.</p>
 
   <h2 id="heatmap">Zombie Heatmap editor</h2>
   <p>First enable <strong>View &gt; ZombieMap</strong>. The painting tool remains
@@ -552,12 +609,13 @@
   <p>The leading icon reports <code>1x</code>, <code>2x</code>, or a custom tile
   size. The tooltip includes usage, availability, resolution and source path.</p>
 
-  <h3>Lazy image loading</h3>
-  <p>TileZed reads catalog metadata first and loads image pixels only when they
-  are needed. Opening a TMX waits for the tilesets referenced by that map;
-  unused catalog entries remain available and are loaded when selected later.
-  Lua tile lookup, named placement and replacement also wait for the requested
-  image before returning, so scripts do not need asynchronous callbacks.</p>
+  <h3>Complete startup preload</h3>
+  <p>TileZed and BuildingEd decode every available catalog tileset image during
+  startup and keep the images in memory for the session. Maps, palettes and Lua
+  scripts therefore see one stable, complete catalog without background image
+  loading or asynchronous callbacks. The first window may take longer to become
+  ready on a large Tiles installation; the progress display and log show the
+  exact loaded, missing and pending totals.</p>
 
   <p>A <code>1x</code> image is not mandatory. If only a valid <code>2x</code>
   or custom-resolution variant exists, the resolver uses that source. An orange
@@ -680,8 +738,8 @@
   Building catalogs in the portable suite.</p>
 
   <h3>Startup progress</h3>
-  <p>On first launch or after changing the Tiles directory, BuildingEd may need
-  to read many tilesets and the following catalogs:</p>
+  <p>At startup, and after changing the Tiles directory, BuildingEd reads all
+  available tilesets and the following catalogs:</p>
   <ul>
     <li><code>BuildingFurniture.txt</code>;</li>
     <li><code>BuildingTemplates.txt</code>;</li>
@@ -713,7 +771,7 @@
       <tr><td>Biomemap rejects size</td><td>Image dimensions do not match the project's 300/256 grid.</td><td>Project badge and exact input pixel size.</td></tr>
       <tr><td>Heatmap looks too bright in B42 preview</td><td>The ×40 visualization is enabled.</td><td>Inspect raw intensity; disable preview to see 0–255 literally.</td></tr>
       <tr><td>BuildingEd appears frozen at first launch</td><td>Large tileset/Building catalog load.</td><td>Progress window and portable log.</td></tr>
-      <tr><td>BuildingEd asks for a Tiles directory</td><td>No valid extracted game Tiles path is configured.</td><td>Close the editors, run <code>bin/config.exe</code>, select Tiles, then restart.</td></tr>
+      <tr><td>BuildingEd asks for a Tiles directory</td><td>No valid extracted game Tiles path is configured.</td><td>Restart an editor to open initial setup, or select Tiles from editor preferences, then restart BuildingEd.</td></tr>
       <tr><td>Catalog changes seem to be ignored</td><td>The wrong directory was selected as Configuration catalogs.</td><td>Use packaged <code>config</code>, not <code>settings</code>.</td></tr>
       <tr><td>InGameMap export drops a polygon</td><td>Degenerate or unrepresentable geometry.</td><td>Search logs for the cell, feature index and rejection reason.</td></tr>
     </tbody>

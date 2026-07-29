@@ -209,6 +209,9 @@ end</code></pre>
       <code>0_Floor</code>, <code>8_RoomDefs</code>, or
       <code>-1_Floor</code>. <code>layer:name()</code> returns the unprefixed
       name; <code>layer:nameWithPrefix()</code> returns the lookup name.</li>
+    <li>The complete available tileset catalog is loaded before scripts can
+      run. Tile lookup, placement, deletion and replacement are synchronous
+      and require no callbacks.</li>
     <li>Batch changes are collected and then applied through TileZed. Do not
       call <code>map:write()</code> to overwrite the current map; that function
       is intended for writing a separate map or a map created in Lua.</li>
@@ -718,13 +721,16 @@ app:invoke("exportBinary")</code></pre>
         <td><code>tile("tileset_name_id")</code></td>
         <td>A Tile or <code>nil</code>.</td>
         <td>The final underscore separates the numeric ID, so tileset names may
-        themselves contain underscores. Leading zeroes in the ID are accepted.</td>
+        themselves contain underscores. Leading zeroes in the ID are accepted.
+        The tileset must be present in the preloaded catalog.</td>
       </tr>
       <tr>
         <td><code>tile(tilesetName, id)</code></td>
         <td>A Tile or <code>nil</code>.</td>
         <td>Useful when the name and ID are already separate. The tileset must
-        be available to the map wrapper.</td>
+        be known to the map/catalog and available in the preloaded catalog. A
+        <code>1x</code> image is not required when a usable <code>2x</code> or
+        custom variant exists.</td>
       </tr>
       <tr>
         <td><code>tile:id()</code></td>

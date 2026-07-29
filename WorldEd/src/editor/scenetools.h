@@ -183,6 +183,7 @@ public:
     static CreateObjectTool *instance();
     static void deleteInstance();
 
+    void activate() override;
     virtual void mousePressEvent(QGraphicsSceneMouseEvent *event);
     virtual void mouseMoveEvent(QGraphicsSceneMouseEvent *event);
     virtual void mouseReleaseEvent(QGraphicsSceneMouseEvent *event);
@@ -202,6 +203,7 @@ private:
     explicit CreateObjectTool();
     ~CreateObjectTool() {}
 
+    void editObjectPreset();
     void startNewMapObject(const QPointF &pos);
     WorldCellObject *clearNewMapObjectItem();
     void cancelNewMapObject();
@@ -212,6 +214,8 @@ private:
     QPointF mStartScenePos;
     QPointF mAnchorPos;
     ObjectItem *mItem;
+    QString mObjectName;
+    QString mObjectTypeName;
     static CreateObjectTool *mInstance;
 };
 

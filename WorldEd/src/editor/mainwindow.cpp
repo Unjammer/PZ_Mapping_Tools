@@ -3351,10 +3351,13 @@ bool MainWindow::canRemoveEmptyBorderCells() const
 {
     WorldDocument *worldDoc = mCurrentDocument
             ? mCurrentDocument->asWorldDocument() : nullptr;
-    if (!worldDoc)
-        return false;
-    const QRect retained = retainedWorldBounds(worldDoc);
-    return !retained.isEmpty() && retained != worldDoc->world()->bounds();
+    // This method is called while menus are being constructed.  Determining
+    // the exact retained bounds opens every TMX in the world and made a
+    // right-click take minutes on large projects.  Keep menu-state checks
+    // constant-time; removeEmptyBorderCells() performs the authoritative
+    // scan only after the user actually chooses the action.
+    return worldDoc && worldDoc->world()
+            && worldDoc->world()->width() * worldDoc->world()->height() > 1;
 }
 
 void MainWindow::removeEmptyBorderCells()
@@ -3646,10 +3649,24 @@ void MainWindow::writeSettings()
     writeWindowSettings();
 
     mSettings.beginGroup(QLatin1String("openFiles"));
-    mSettings.remove(QLatin1String(""));
-    if (mCurrentDocument)
-        mSettings.setValue(QLatin1String("lastActive"),
-                           docman()->indexOf(mCurrentDocument));
+    const auto setValueIfChanged =
+            [this](const QString &key, const QVariant &value) {
+        if (!mSettings.contains(key) || mSettings.value(key) != value) {
+            mSettings.setValue(key, value);
+        }
+    };
+    const auto removeIfPresent = [this](const QString &key) {
+        if (mSettings.contains(key)) {
+            mSettings.remove(key);
+        }
+    };
+
+    if (mCurrentDocument) {
+        setValueIfChanged(QLatin1String("lastActive"),
+                          docman()->indexOf(mCurrentDocument));
+    } else {
+        removeIfPresent(QLatin1String("lastActive"));
+    }
 
     int i = 0;
     foreach (Document *doc, docman()->documents()) {
@@ -3661,31 +3678,43 @@ void MainWindow::writeSettings()
         }
         mSettings.beginGroup(QString::number(i)); // openFiles/N/...
 
-        mSettings.setValue(QLatin1String("file"), doc->fileName());
+        setValueIfChanged(QLatin1String("file"), doc->fileName());
 
-        mSettings.setValue(QLatin1String("scale"),
-                           QString::number(view->zoomable()->scale()));
+        setValueIfChanged(QLatin1String("scale"),
+                          QString::number(view->zoomable()->scale()));
 
         QPointF centerScenePos = view->mapToScene(view->viewport()->width() / 2,
                                                   view->viewport()->height() / 2);
-        mSettings.setValue(QLatin1String("scrollX"),
-                           QString::number(int(centerScenePos.x())));
-        mSettings.setValue(QLatin1String("scrollY"),
-                           QString::number(int(centerScenePos.y())));
+        setValueIfChanged(QLatin1String("scrollX"),
+                          QString::number(int(centerScenePos.x())));
+        setValueIfChanged(QLatin1String("scrollY"),
+                          QString::number(int(centerScenePos.y())));
 
         if (CellDocument *cellDoc = doc->asCellDocument()) {
-            mSettings.setValue(QLatin1String("cellX"), QString::number(cellDoc->cell()->x()));
-            mSettings.setValue(QLatin1String("cellY"), QString::number(cellDoc->cell()->y()));
+            setValueIfChanged(QLatin1String("cellX"),
+                              QString::number(cellDoc->cell()->x()));
+            setValueIfChanged(QLatin1String("cellY"),
+                              QString::number(cellDoc->cell()->y()));
             const int currentLayerIndex = cellDoc->currentLayerIndex();
-            mSettings.setValue(QLatin1String("currentLayer"), QString::number(currentLayerIndex));
+            setValueIfChanged(QLatin1String("currentLayer"),
+                              QString::number(currentLayerIndex));
         } else {
+            removeIfPresent(QLatin1String("cellX"));
+            removeIfPresent(QLatin1String("cellY"));
+            removeIfPresent(QLatin1String("currentLayer"));
         }
         mSettings.endGroup();
         ++i;
     }
 
-    mSettings.setValue(QLatin1String("count"), i);
+    foreach (const QString &group, mSettings.childGroups()) {
+        bool isDocumentGroup = false;
+        const int documentIndex = group.toInt(&isDocumentGroup);
+        if (isDocumentGroup && documentIndex >= i)
+            mSettings.remove(group);
+    }
 
+    setValueIfChanged(QLatin1String("count"), i);
     mSettings.endGroup();
     mSettings.sync();
 }
@@ -3708,22 +3737,27 @@ void MainWindow::generateInGameMapRoadFeatures()
 void MainWindow::writeWindowSettings()
 {
     mSettings.beginGroup(QLatin1String("MainWindow"));
-    mSettings.setValue(QLatin1String("geometry"), saveGeometry());
-    mSettings.setValue(QLatin1String("state"), saveState());
+    const auto setValueIfChanged =
+            [this](const QString &key, const QVariant &value) {
+        if (!mSettings.contains(key) || mSettings.value(key) != value) {
+            mSettings.setValue(key, value);
+        }
+    };
+    setValueIfChanged(QLatin1String("geometry"), saveGeometry());
+    setValueIfChanged(QLatin1String("state"), saveState());
     QDockWidget *leftTopDock = visibleDockInTabGroup(this, mObjectsDock);
     QDockWidget *leftBottomDock = visibleDockInTabGroup(this, mSearchDock);
     QDockWidget *rightTopDock = visibleDockInTabGroup(this, mPropertiesDock);
     QDockWidget *rightBottomDock = visibleDockInTabGroup(this, mUndoDock);
     const int leftWidth = qMax(leftTopDock->width(), leftBottomDock->width());
     const int rightWidth = qMax(rightTopDock->width(), rightBottomDock->width());
-    mSettings.setValue(QLatin1String("leftDockWidth"), leftWidth);
-    mSettings.setValue(QLatin1String("rightDockWidth"), rightWidth);
-    mSettings.setValue(QLatin1String("leftTopDockHeight"), leftTopDock->height());
-    mSettings.setValue(QLatin1String("leftBottomDockHeight"), leftBottomDock->height());
-    mSettings.setValue(QLatin1String("rightTopDockHeight"), rightTopDock->height());
-    mSettings.setValue(QLatin1String("rightBottomDockHeight"), rightBottomDock->height());
+    setValueIfChanged(QLatin1String("leftDockWidth"), leftWidth);
+    setValueIfChanged(QLatin1String("rightDockWidth"), rightWidth);
+    setValueIfChanged(QLatin1String("leftTopDockHeight"), leftTopDock->height());
+    setValueIfChanged(QLatin1String("leftBottomDockHeight"), leftBottomDock->height());
+    setValueIfChanged(QLatin1String("rightTopDockHeight"), rightTopDock->height());
+    setValueIfChanged(QLatin1String("rightBottomDockHeight"), rightBottomDock->height());
     mSettings.endGroup();
-    mSettings.sync();
 }
 
 void MainWindow::readSettings()

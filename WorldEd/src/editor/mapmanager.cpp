@@ -783,6 +783,8 @@ void MapManager::mapLoadedByThread(Map *map, MapInfo *mapInfo)
     // temporary objects.  Besides fixing the missing-tile placeholders, this
     // avoids keeping a second full catalog alive for every loaded cell.
     int relinkedTilesets = 0;
+    int incompatibleTilesets = 0;
+    QStringList incompatibleNames;
     const QList<Tileset *> embeddedTilesets = map->tilesets();
     for (Tileset *embedded : embeddedTilesets) {
         Tileset *catalog =
@@ -795,13 +797,9 @@ void MapManager::mapLoadedByThread(Map *map, MapInfo *mapInfo)
                 && catalog->tileHeight() == embedded->tileHeight()
                 && catalog->tileCount() >= embedded->tileCount();
         if (!compatible) {
-            qWarning() << "Keeping embedded tileset because the catalog entry "
-                          "is incompatible:"
-                       << embedded->name()
-                       << "embedded" << embedded->tileWidth()
-                       << embedded->tileHeight() << embedded->tileCount()
-                       << "catalog" << catalog->tileWidth()
-                       << catalog->tileHeight() << catalog->tileCount();
+            ++incompatibleTilesets;
+            if (incompatibleNames.size() < 8)
+                incompatibleNames += embedded->name();
             continue;
         }
 
@@ -812,6 +810,11 @@ void MapManager::mapLoadedByThread(Map *map, MapInfo *mapInfo)
     if (relinkedTilesets > 0) {
         qInfo() << "Relinked embedded TMX tilesets to the shared catalog:"
                 << relinkedTilesets << mapInfo->path();
+    }
+    if (incompatibleTilesets > 0) {
+        qInfo() << "Kept incompatible embedded TMX tilesets:"
+                << incompatibleTilesets << mapInfo->path()
+                << "examples" << incompatibleNames;
     }
 
     Tile *invisibleTile = TilesetManager::instance()->invisibleTile();

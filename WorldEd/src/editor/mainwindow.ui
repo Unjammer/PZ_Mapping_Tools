@@ -861,7 +861,7 @@
     <string>Generate Biome Map...</string>
    </property>
    <property name="toolTip">
-     <string>Compose exact red biome IDs and green foraging-zone IDs into 256x256 biomemap tiles</string>
+     <string>Compose red biome IDs and the seven Biomemap-managed zone types into 256x256 tiles; other vector zones remain in objects.lua</string>
    </property>
   </action>
   <action name="actionTerrainImageEditor">

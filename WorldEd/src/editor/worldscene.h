@@ -455,6 +455,7 @@ public:
     QRect adjustedBounds(World *world) const;
 
     World *mWorld;
+    QString mFileName;
     QList<WorldBMPItem*> mBMPItems;
     QVector<OtherWorldCellItem*> mCellItems;
     QList<OtherWorldCellItem*> mPendingThumbnails;
@@ -576,6 +577,7 @@ public slots:
     void mapImageChanged(MapImage *mapImage);
 
     void loadAllWorldThumbnailsChanged(bool thumbs);
+    void showWorldThumbnailsChanged(bool show);
     void handlePendingThumbnails();
 
 protected:

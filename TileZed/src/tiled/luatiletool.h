@@ -202,7 +202,7 @@ public:
 
     DistanceIndicator(Dir direction, QGraphicsItem *parent = 0);
 
-    void setInfo(const QPoint &tilePos, int dist);
+    void setInfo(const QPoint &tilePos, int dist, int level);
     void setRenderer(Tiled::MapRenderer *renderer);
 
     QRectF boundingRect() const;
@@ -211,6 +211,7 @@ public:
     Dir mDirection;
     QPoint mTilePos;
     int mDistance;
+    int mLevel;
     Tiled::MapRenderer *mRenderer;
     UnscaledLabelItem *mTextItem;
 };
