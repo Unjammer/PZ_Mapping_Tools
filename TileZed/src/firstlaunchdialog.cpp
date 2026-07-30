@@ -140,7 +140,8 @@ void FirstLaunchDialog::updateAcceptButton()
 void FirstLaunchDialog::saveAndAccept()
 {
     const QString configuration =
-            QDir::cleanPath(mConfigurationPath->text().trimmed());
+            PortableSettings::normalizedConfigurationPath(
+                mConfigurationPath->text().trimmed());
     const QString tiles = PortableSettings::normalizedTilesPath(
                 mTilesPath->text().trimmed());
     if (!PortableSettings::isConfigurationPath(configuration)

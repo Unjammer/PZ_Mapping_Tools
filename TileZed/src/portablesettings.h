@@ -56,7 +56,7 @@ inline QString rootPath()
     return installPath(QLatin1String("settings"));
 }
 
-inline bool isConfigurationPath(const QString &candidate)
+inline bool containsConfigurationCatalogs(const QString &candidate)
 {
     const QFileInfo directoryInfo(candidate);
     if (!directoryInfo.exists() || !directoryInfo.isDir())
@@ -84,9 +84,31 @@ inline bool isConfigurationPath(const QString &candidate)
     return true;
 }
 
+inline QString normalizedConfigurationPath(const QString &candidate)
+{
+    if (candidate.trimmed().isEmpty())
+        return QString();
+
+    const QString cleaned = QDir::cleanPath(candidate);
+    if (containsConfigurationCatalogs(cleaned))
+        return cleaned;
+
+    const QString nested =
+            QDir(cleaned).filePath(QLatin1String("config"));
+    if (containsConfigurationCatalogs(nested))
+        return QDir::cleanPath(nested);
+    return cleaned;
+}
+
+inline bool isConfigurationPath(const QString &candidate)
+{
+    return containsConfigurationCatalogs(
+                normalizedConfigurationPath(candidate));
+}
+
 inline QString validatedConfigurationPath(const QString &candidate)
 {
-    const QString cleaned = QDir::cleanPath(candidate);
+    const QString cleaned = normalizedConfigurationPath(candidate);
     if (isConfigurationPath(cleaned))
         return cleaned;
     return QDir::cleanPath(applicationConfigPath());
@@ -119,7 +141,7 @@ inline void setSharedConfigurationPath(const QString &directory)
 {
     QSettings shared(sharedSettingsFilePath(), QSettings::IniFormat);
     shared.setValue(QLatin1String("Paths/ConfigDirectory"),
-                    QDir::cleanPath(directory));
+                    normalizedConfigurationPath(directory));
     shared.sync();
 }
 
@@ -155,6 +177,29 @@ inline QString normalizedTilesPath(const QString &candidate)
             || name.compare(QLatin1String("custom"), Qt::CaseInsensitive) == 0;
     if (scaleDirectory)
         directory.cdUp();
+
+    const QStringList filters = { QLatin1String("*.png") };
+    auto containsTiles = [&filters](const QDir &root) {
+        if (!root.entryList(filters, QDir::Files).isEmpty())
+            return true;
+        const QStringList scales = {
+            QLatin1String("1x"), QLatin1String("2x"),
+            QLatin1String("custom")
+        };
+        for (const QString &scale : scales) {
+            const QDir scaled(root.filePath(scale));
+            if (scaled.exists()
+                    && !scaled.entryList(filters, QDir::Files).isEmpty())
+                return true;
+        }
+        return false;
+    };
+
+    if (!containsTiles(directory)) {
+        const QDir nested(directory.filePath(QLatin1String("Tiles")));
+        if (nested.exists() && containsTiles(nested))
+            directory = nested;
+    }
     return QDir::cleanPath(directory.absolutePath());
 }
 

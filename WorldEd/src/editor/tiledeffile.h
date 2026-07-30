@@ -137,6 +137,8 @@ public:
 
     QList<TileDefTileset*> takeTilesets();
 
+    int mergePropertiesFrom(const TileDefFile &overlay);
+
     QStringList tilesetNames() const
     { return mTilesetByName.keys(); }
 

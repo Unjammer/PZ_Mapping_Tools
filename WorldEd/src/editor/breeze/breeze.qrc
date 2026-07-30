@@ -122,5 +122,6 @@
         <file>dark-blue/vseptoolbar.svg</file>
         <file>dark-blue/window_close.svg</file>
         <file>dark/stylesheet.qss</file>
+        <file>mapping-discord/stylesheet.qss</file>
     </qresource>
 </RCC>

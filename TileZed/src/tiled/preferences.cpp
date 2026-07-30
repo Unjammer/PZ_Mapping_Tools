@@ -49,13 +49,16 @@ struct BuiltInTheme
     const char *displayName;
     const char *fileName;
     const char *resourcePath;
+    const char *baseResourcePath;
 };
 
 const BuiltInTheme builtInThemes[] = {
-    { "Breeze (Dark)", "Breeze-Dark.qss", ":breeze/dark/stylesheet.qss" },
-    { "Breeze (Dark Blue)", "Breeze-Dark-Blue.qss", ":breeze/dark-blue/stylesheet.qss" },
-    { "QDarkStyle (Dark)", "QDarkStyle-Dark.qss", ":qdarkstyle/dark/darkstyle.qss" },
-    { "QDarkStyle (Light)", "QDarkStyle-Light.qss", ":qdarkstyle/light/lightstyle.qss" }
+    { "Breeze (Dark)", "Breeze-Dark.qss", ":breeze/dark/stylesheet.qss", 0 },
+    { "Breeze (Dark Blue)", "Breeze-Dark-Blue.qss", ":breeze/dark-blue/stylesheet.qss", 0 },
+    { "QDarkStyle (Dark)", "QDarkStyle-Dark.qss", ":qdarkstyle/dark/darkstyle.qss", 0 },
+    { "QDarkStyle (Light)", "QDarkStyle-Light.qss", ":qdarkstyle/light/lightstyle.qss", 0 },
+    { "Mapping Discord (B42)", "Mapping-Discord-B42.qss",
+      ":breeze/mapping-discord/stylesheet.qss", ":breeze/dark/stylesheet.qss" }
 };
 
 QString themesDirectoryPath()
@@ -90,6 +93,69 @@ bool isBuiltInThemeFile(const QString &fileName)
     return false;
 }
 
+QString readStyleSheet(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return QString();
+
+    QTextStream stream(&file);
+    stream.setCodec("UTF-8");
+    return stream.readAll();
+}
+
+QString mappingDiscordPalette(QString styleSheet)
+{
+    struct ColorReplacement
+    {
+        const char *source;
+        const char *destination;
+    };
+
+    const ColorReplacement replacements[] = {
+        { "#eff0f1", "#eef2ef" },
+        { "#31363b", "#141c17" },
+        { "#2c3034", "#101712" },
+        { "#1d2023", "#0a0f0c" },
+        { "#76797c", "#4a5c50" },
+        { "#626568", "#2d3c32" },
+        { "#3daee9", "#65c981" },
+        { "#2a79a3", "#4e8f61" },
+        { "#2f88b7", "#59ad72" },
+        { "#334e5e", "#24452f" },
+        { "#454545", "#46544a" },
+        { "#454a4f", "#243229" },
+        { "#b0b0b0", "#9da9a1" },
+        { "#ffffff", "#eef2ef" }
+    };
+
+    for (const ColorReplacement &replacement : replacements) {
+        styleSheet.replace(QLatin1String(replacement.source),
+                           QLatin1String(replacement.destination),
+                           Qt::CaseInsensitive);
+    }
+    return styleSheet;
+}
+
+QString builtInThemeStyleSheet(const QString &displayName)
+{
+    for (const BuiltInTheme &theme : builtInThemes) {
+        if (displayName != QLatin1String(theme.displayName))
+            continue;
+
+        QString styleSheet;
+        if (theme.baseResourcePath) {
+            styleSheet = readStyleSheet(QLatin1String(theme.baseResourcePath));
+            if (displayName == QLatin1String("Mapping Discord (B42)"))
+                styleSheet = mappingDiscordPalette(styleSheet);
+            styleSheet += QLatin1Char('\n');
+        }
+        styleSheet += readStyleSheet(QLatin1String(theme.resourcePath));
+        return styleSheet;
+    }
+    return QString();
+}
+
 void ensureBuiltInThemesExtracted()
 {
     const QString directoryPath = themesDirectoryPath();
@@ -102,14 +168,14 @@ void ensureBuiltInThemesExtracted()
         if (QFileInfo::exists(destinationPath))
             continue;
 
-        QFile source(QLatin1String(theme.resourcePath));
-        if (!source.open(QIODevice::ReadOnly))
+        const QString styleSheet = builtInThemeStyleSheet(QLatin1String(theme.displayName));
+        if (styleSheet.isEmpty())
             continue;
 
         QSaveFile destination(destinationPath);
         if (!destination.open(QIODevice::WriteOnly))
             continue;
-        destination.write(source.readAll());
+        destination.write(styleSheet.toUtf8());
         destination.commit();
     }
 }
@@ -225,18 +291,54 @@ Preferences::Preferences()
     mWorldEdFiles = mSettings->value(QLatin1String("WorldEd/ProjectFile")).toStringList();
     mTilePropertiesFiles = mSettings->value(QLatin1String("TilePropertiesFiles")).toStringList();
 
-    bool bHasNewTileDefinitions = false;
-    for (const QString &f : mTilePropertiesFiles) {
-        if (f.isEmpty())
-            continue;
-        if (f.contains(QLatin1String("newtiledefinitions.tiles"), Qt::CaseInsensitive)) {
-            bHasNewTileDefinitions = true;
+    // Mirror B42.20's built-in tiledef order. This matters for property patch
+    // files and also makes the erosion, overlays, cache, and real Jumbo
+    // definitions available to BuildingEd without manual preference edits.
+    const QStringList builtInTileDefs = {
+        QStringLiteral("newtiledefinitions.tiles"),
+        QStringLiteral("tiledefinitions_erosion.tiles"),
+        QStringLiteral("tiledefinitions_overlays.tiles"),
+        QStringLiteral("tiledefinitions_b42chunkcaching.tiles"),
+        QStringLiteral("tiledefinitions_noiseworks.patch.tiles"),
+        QStringLiteral("jumbo_trees_big.tiles"),
+        QStringLiteral("jumbo_trees.tiles")
+    };
+    QStringList orderedTileDefs;
+    for (const QString &builtInName : builtInTileDefs) {
+        QString path;
+        for (const QString &configuredPath : qAsConst(mTilePropertiesFiles)) {
+            if (QFileInfo(configuredPath).fileName().compare(
+                        builtInName, Qt::CaseInsensitive) == 0) {
+                path = configuredPath;
+                break;
+            }
         }
+        if (path.isEmpty() && !mTilesDirectory.isEmpty()) {
+            const QFileInfo candidate(QDir(mTilesDirectory).filePath(
+                                          builtInName));
+            if (candidate.exists())
+                path = candidate.canonicalFilePath();
+        }
+        if (!path.isEmpty())
+            orderedTileDefs += QDir::toNativeSeparators(path);
     }
-    if ((bHasNewTileDefinitions == false) && (mTilesDirectory.isEmpty() == false)) {
-        QFileInfo fileInfo(mTilesDirectory + QLatin1String("/newtiledefinitions.tiles"));
-        mTilePropertiesFiles += QDir::toNativeSeparators(fileInfo.canonicalFilePath());
-        mSettings->setValue(QLatin1String("TilePropertiesFiles"), mTilePropertiesFiles);
+    for (const QString &configuredPath : qAsConst(mTilePropertiesFiles)) {
+        bool isBuiltIn = false;
+        for (const QString &builtInName : builtInTileDefs) {
+            if (QFileInfo(configuredPath).fileName().compare(
+                        builtInName, Qt::CaseInsensitive) == 0) {
+                isBuiltIn = true;
+                break;
+            }
+        }
+        if (!isBuiltIn && !configuredPath.isEmpty()
+                && !orderedTileDefs.contains(configuredPath))
+            orderedTileDefs += configuredPath;
+    }
+    if (mTilePropertiesFiles != orderedTileDefs) {
+        mTilePropertiesFiles = orderedTileDefs;
+        mSettings->setValue(QLatin1String("TilePropertiesFiles"),
+                            mTilePropertiesFiles);
     }
 #endif
 #ifndef ZOMBOID // do this in TilesetManager constructor to avoid infinite loop
@@ -788,7 +890,8 @@ QStringList Preferences::availableThemes() const
            << QStringLiteral("Breeze (Dark)")
            << QStringLiteral("Breeze (Dark Blue)")
            << QStringLiteral("QDarkStyle (Dark)")
-           << QStringLiteral("QDarkStyle (Light)");
+           << QStringLiteral("QDarkStyle (Light)")
+           << QStringLiteral("Mapping Discord (B42)");
 
     QStringList externalThemes;
     const QString applicationDirectory = PortableSettings::installRootPath();
@@ -825,11 +928,18 @@ void Preferences::applyTheme() const
         qApp->setStyleSheet(QString());
         return;
     }
+    QString styleSheet;
+    bool styleSheetLoaded = false;
     QString resource = builtInThemeResource(mTheme);
     if (!resource.isEmpty()) {
         const QString localPath = builtInThemePath(mTheme);
-        if (QFileInfo::exists(localPath))
+        if (QFileInfo::exists(localPath)) {
             resource = localPath;
+        } else {
+            styleSheet = builtInThemeStyleSheet(mTheme);
+            styleSheetLoaded = !styleSheet.isEmpty();
+            resource.clear();
+        }
     } else {
         const QString applicationDirectory = PortableSettings::installRootPath();
         const QStringList themeDirectories = {
@@ -850,18 +960,16 @@ void Preferences::applyTheme() const
                 break;
         }
     }
-    if (resource.isEmpty()) {
+    if (resource.isEmpty() && !styleSheetLoaded) {
         qApp->setStyleSheet(QString());
         return;
     }
-    QFile theme_file(resource);
-    if (theme_file.open(QFile::ReadOnly | QFile::Text)) {
-        QTextStream ts(&theme_file);
-        ts.setCodec("UTF-8");
-        qApp->setStyleSheet(ts.readAll());
-    } else {
-        qApp->setStyleSheet(QString());
+
+    if (!resource.isEmpty()) {
+        styleSheet = readStyleSheet(resource);
+        styleSheetLoaded = !styleSheet.isEmpty();
     }
+    qApp->setStyleSheet(styleSheetLoaded ? styleSheet : QString());
 }
 
 #endif // ZOMBOID

@@ -59,8 +59,8 @@ void TileMetaInfoMgr::changeTilesDirectory(const QString &path)
     for (Tileset *ts : tilesets())
         ts->setLoaded(false);
     resolveTilesets();
-    loadTilesets(QList<Tileset *>(), false);
-    TilesetManager::instance()->waitForTilesets(tilesets());
+    TilesetManager::instance()->waitForTilesets(
+                tilesets(), MainWindow::instance());
 }
 
 TileMetaInfoMgr::TileMetaInfoMgr(QObject *parent) :
@@ -71,6 +71,7 @@ TileMetaInfoMgr::TileMetaInfoMgr(QObject *parent) :
 {
     connect(TilesetManager::instance(), &TilesetManager::tilesetChanged,
             this, &TileMetaInfoMgr::tilesetChanged);
+    TilesetManager::instance()->tilesetDirectoryChanged();
 }
 
 TileMetaInfoMgr::~TileMetaInfoMgr()
@@ -536,9 +537,69 @@ bool TileMetaInfoMgr::mergeTxt()
 
 bool TileMetaInfoMgr::addNewTilesets()
 {
-    QDir dir(tiles2xDirectory());
-    if (!dir.exists())
-        return true;
+    return rebuildTilesetsTxt(nullptr, nullptr, false);
+}
+
+bool TileMetaInfoMgr::rebuildTilesetsTxt(int *addedCountResult,
+                                         int *updatedCountResult,
+                                         bool updateExisting)
+{
+    struct ImageCandidate {
+        ImageCandidate() = default;
+        ImageCandidate(const QString &imagePath, int imageScale)
+            : path(imagePath)
+            , scale(imageScale)
+        {
+        }
+
+        QString path;
+        int scale = 1;
+    };
+
+    QMap<QString, ImageCandidate> images;
+    auto scanDirectory = [&images](const QString &path, int scale,
+                                   bool scanChildren) {
+        QDir directory(path);
+        if (!directory.exists())
+            return;
+
+        const QStringList filters = { QLatin1String("*.png") };
+        const QFileInfoList files = directory.entryInfoList(
+                    filters, QDir::Files, QDir::Name);
+        for (const QFileInfo &file : files) {
+            const QString name = file.completeBaseName();
+            if (!images.contains(name) || scale > images.value(name).scale)
+                images.insert(
+                            name,
+                            ImageCandidate(file.absoluteFilePath(), scale));
+        }
+
+        if (scanChildren) {
+            const QFileInfoList children = directory.entryInfoList(
+                        QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+            for (const QFileInfo &child : children) {
+                QDir childDirectory(child.absoluteFilePath());
+                const QFileInfoList childFiles = childDirectory.entryInfoList(
+                            filters, QDir::Files, QDir::Name);
+                for (const QFileInfo &file : childFiles) {
+                    const QString name = file.completeBaseName();
+                    if (!images.contains(name)
+                            || scale > images.value(name).scale) {
+                        images.insert(
+                                    name,
+                                    ImageCandidate(
+                                        file.absoluteFilePath(), scale));
+                    }
+                }
+            }
+        }
+    };
+
+    const QString rootPath = tilesDirectory();
+    scanDirectory(rootPath, 1, false);
+    scanDirectory(QDir(rootPath).filePath(QLatin1String("1x")), 1, true);
+    scanDirectory(tiles2xDirectory(), 2, true);
+    scanDirectory(QDir(rootPath).filePath(QLatin1String("custom")), 1, true);
 
     TilesetsTxtFile catalog;
     if (!catalog.read(txtPath())) {
@@ -546,66 +607,77 @@ bool TileMetaInfoMgr::addNewTilesets()
         return false;
     }
 
-    QSet<QString> catalogNames;
-    for (const TilesetsTxtFile::Tileset *tileset : qAsConst(catalog.mTilesets))
-        catalogNames.insert(tileset->mName);
-
-    dir.setFilter(QDir::Files);
-    dir.setSorting(QDir::Name);
-    QStringList nameFilters;
-    foreach (QByteArray format, QImageReader::supportedImageFormats())
-        nameFilters += QLatin1String("*.") + QString::fromLatin1(format);
+    QMap<QString, TilesetsTxtFile::Tileset *> catalogByName;
+    for (TilesetsTxtFile::Tileset *tileset : qAsConst(catalog.mTilesets))
+        catalogByName.insert(tileset->mName, tileset);
 
     int addedCount = 0;
-    QFileInfoList fileInfoList = dir.entryInfoList(nameFilters);
-    foreach (QFileInfo fileInfo, fileInfoList) {
-        QString tilesetName = fileInfo.completeBaseName();
-        if (mTilesetByName.contains(tilesetName))
+    int updatedCount = 0;
+    for (auto it = images.constBegin(); it != images.constEnd(); ++it) {
+        QImageReader reader(it.value().path);
+        const QSize imageSize = reader.size();
+        if (!imageSize.isValid())
             continue;
-        QImageReader ir(fileInfo.absoluteFilePath());
-        if (!ir.size().isValid())
-            continue;
-        QSize tilesetSize = Tiled::getZomboidTilesetSize1x(tilesetName);
-        int tileWidth = tilesetSize.width();
-        int tileHeight = tilesetSize.height();
-        int columns = ir.size().width() / (tileWidth * 2);
-        int rows = ir.size().height() / (tileHeight * 2);
-        Tileset *tileset = new Tileset(tilesetName, tileWidth, tileHeight);
-        Tiled::setZomboidTileOffset(tileset);
-        tileset->loadFromNothing(QSize(columns * tileWidth, rows * tileHeight), fileInfo.fileName());
-        Tile *missingTile = TilesetManager::instance()->missingTile();
-        for (int i = 0; i < tileset->tileCount(); i++)
-            tileset->tileAt(i)->setImage(missingTile);
-        tileset->setMissing(true);
-        addTileset(tileset);
-        TilesetMetaInfo *info = new TilesetMetaInfo;
-        mTilesetInfo[tilesetName] = info;
 
-        if (!catalogNames.contains(tilesetName)) {
-            TilesetsTxtFile::Tileset *fileTileset = new TilesetsTxtFile::Tileset;
-            fileTileset->mName = tilesetName;
-            fileTileset->mFile = tilesetName;
+        const QSize tileSize = Tiled::getZomboidTilesetSize1x(it.key());
+        const int columns =
+                imageSize.width() / (tileSize.width() * it.value().scale);
+        const int rows =
+                imageSize.height() / (tileSize.height() * it.value().scale);
+        if (columns < 1 || rows < 1)
+            continue;
+
+        TilesetsTxtFile::Tileset *fileTileset =
+                catalogByName.value(it.key(), nullptr);
+        if (!fileTileset) {
+            fileTileset = new TilesetsTxtFile::Tileset;
+            fileTileset->mName = it.key();
+            fileTileset->mFile = it.key();
             fileTileset->mColumns = columns;
             fileTileset->mRows = rows;
             catalog.mTilesets.append(fileTileset);
-            catalogNames.insert(tilesetName);
+            catalogByName.insert(it.key(), fileTileset);
             ++addedCount;
+        } else if (updateExisting
+                   && (fileTileset->mColumns != columns
+                       || fileTileset->mRows != rows)) {
+            fileTileset->mColumns = columns;
+            fileTileset->mRows = rows;
+            ++updatedCount;
+        }
+
+        if (!mTilesetByName.contains(it.key())) {
+            Tileset *tileset = new Tileset(
+                        it.key(), tileSize.width(), tileSize.height());
+            Tiled::setZomboidTileOffset(tileset);
+            tileset->loadFromNothing(
+                        QSize(columns * tileSize.width(),
+                              rows * tileSize.height()),
+                        it.key() + QLatin1String(".png"));
+            tileset->setMissing(false);
+            addTileset(tileset);
+            mTilesetInfo[it.key()] = new TilesetMetaInfo;
         }
     }
 
-    if (addedCount > 0) {
-        const int newRevision = mRevision + 1;
+    if (addedCount > 0 || updatedCount > 0) {
+        const int newRevision = qMax(mRevision, catalog.mRevision) + 1;
         if (!catalog.write(txtPath(), newRevision, mSourceRevision,
                            catalog.mTilesets, catalog.mEnums)) {
             mError = catalog.errorString();
             return false;
         }
         mRevision = newRevision;
-        qInfo() << "Tilesets.txt updated:"
-                << addedCount << "new tilesets,"
+        qInfo() << "Tilesets.txt rebuilt:"
+                << addedCount << "added,"
+                << updatedCount << "resized,"
                 << catalog.mTilesets.size() << "total, revision" << mRevision;
     }
 
+    if (addedCountResult)
+        *addedCountResult = addedCount;
+    if (updatedCountResult)
+        *updatedCountResult = updatedCount;
     return true;
 }
 

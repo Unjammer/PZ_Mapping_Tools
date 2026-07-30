@@ -97,6 +97,17 @@ bool TileDefFile::read(const QString &fileName)
 
     int numTilesets;
     in >> numTilesets;
+    const bool gameVersion1 = version == VERSION1;
+    const bool primaryDefinitions = QFileInfo(fileName).fileName().compare(
+                QLatin1String("newtiledefinitions.tiles"),
+                Qt::CaseInsensitive) == 0;
+    const int maxTilesets = primaryDefinitions ? 1024 : 512;
+    const int maxTiles = primaryDefinitions ? 1024 : 512;
+    if (gameVersion1 && (numTilesets < 0 || numTilesets > maxTilesets)) {
+        mError = tr("Invalid number of tilesets %1 (expected 0-%2).\n%3")
+                .arg(numTilesets).arg(maxTilesets).arg(fileName);
+        return false;
+    }
     for (int i = 0; i < numTilesets; i++) {
         TileDefTileset *ts = new TileDefTileset;
         ts->mName = ReadString(in);
@@ -111,6 +122,18 @@ bool TileDefFile::read(const QString &fileName)
 
         qint32 tileCount;
         in >> tileCount;
+        const qint64 imageTileCount = qint64(columns) * qint64(rows);
+        if (columns < 0 || rows < 0 || imageTileCount > 1024 * 1024
+                || tileCount < 0 || tileCount > imageTileCount
+                || (gameVersion1 && (id < 1 || id > maxTilesets
+                                     || tileCount > maxTiles))) {
+            mError = tr("Invalid dimensions, ID, or tile count in tileset "
+                        "\"%1\" (%2x%3, ID %4, %5 tiles).\n%6")
+                    .arg(ts->mName).arg(columns).arg(rows).arg(id)
+                    .arg(tileCount).arg(fileName);
+            delete ts;
+            return false;
+        }
 
         ts->mColumns = columns;
         ts->mRows = rows;
@@ -235,6 +258,30 @@ QList<TileDefTileset *> TileDefFile::takeTilesets()
     mTilesets.clear();
     mTilesetByName.clear();
     return tilesets;
+}
+
+int TileDefFile::mergePropertiesFrom(const TileDefFile &overlay)
+{
+    int mergedTiles = 0;
+    for (TileDefTileset *overlayTileset : overlay.tilesets()) {
+        TileDefTileset *baseTileset = tileset(overlayTileset->mName);
+        if (!baseTileset)
+            continue;
+        const int count = qMin(baseTileset->mTiles.size(),
+                               overlayTileset->mTiles.size());
+        for (int i = 0; i < count; ++i) {
+            TileDefTile *overlayTile = overlayTileset->mTiles.at(i);
+            if (overlayTile->mProperties.isEmpty())
+                continue;
+            TileDefTile *baseTile = baseTileset->mTiles.at(i);
+            for (auto it = overlayTile->mProperties.cbegin();
+                 it != overlayTile->mProperties.cend(); ++it) {
+                baseTile->mProperties[it.key()] = it.value();
+            }
+            ++mergedTiles;
+        }
+    }
+    return mergedTiles;
 }
 
 /////

@@ -1787,6 +1787,17 @@ void TileDefWatcher::check()
     for (TileDefWatcherFile *watcherFile : qAsConst(mFiles)) {
         watcherFile->check(*mWatcher);
     }
+    // The game treats *.patch.tiles as property overlays on sprites loaded by
+    // earlier files; it does not create a second tileset with that name.
+    for (int i = 0; i < mFiles.size(); ++i) {
+        TileDefWatcherFile *patch = mFiles.at(i);
+        if (!patch->mFilePath.endsWith(QLatin1String(".patch.tiles"),
+                                       Qt::CaseInsensitive))
+            continue;
+        for (int j = 0; j < i; ++j)
+            mFiles.at(j)->mTileDefFile->mergePropertiesFrom(
+                        *patch->mTileDefFile);
+    }
 }
 
 TileDefTileset *TileDefWatcher::tileset(const QString &tilesetName)

@@ -27,6 +27,7 @@
 
 #include <QDebug>
 #include <QDir>
+#include <QMap>
 
 using namespace Navigate;
 
@@ -135,7 +136,31 @@ bool IsoGridSquare256::loadTileDefFiles(const GenerateLotsSettings &settings, QS
 
     QDir dir(settings.tileDefFolder);
     QStringList filters(QLatin1String("*.tiles"));
-    QStringList files = dir.entryList(filters, QDir::Files, QDir::Name);
+    const QStringList discovered = dir.entryList(filters, QDir::Files,
+                                                  QDir::Name);
+    QMap<QString,QString> fileByLowerName;
+    for (const QString &fileName : discovered)
+        fileByLowerName[fileName.toLower()] = fileName;
+
+    // Match IsoWorld.LoadTileDefinitions() ordering in B42.20.  Remaining
+    // files (normally mod tiledefs) follow deterministically afterwards.
+    const QStringList runtimeOrder = {
+        QStringLiteral("newtiledefinitions.tiles"),
+        QStringLiteral("tiledefinitions_erosion.tiles"),
+        QStringLiteral("tiledefinitions_overlays.tiles"),
+        QStringLiteral("tiledefinitions_b42chunkcaching.tiles"),
+        QStringLiteral("tiledefinitions_noiseworks.patch.tiles"),
+        QStringLiteral("jumbo_trees_big.tiles"),
+        QStringLiteral("jumbo_trees.tiles")
+    };
+    QStringList files;
+    for (const QString &runtimeName : runtimeOrder) {
+        const QString actualName = fileByLowerName.take(runtimeName);
+        if (!actualName.isEmpty())
+            files += actualName;
+    }
+    files += fileByLowerName.values();
+
     foreach (QString fileName, files) {
         if (fileName.endsWith(QLatin1String("_4.tiles")))
             continue;
@@ -145,6 +170,16 @@ bool IsoGridSquare256::loadTileDefFiles(const GenerateLotsSettings &settings, QS
             return false;
         }
         qDebug() << "read " << fileName;
+        if (fileName.endsWith(QLatin1String(".patch.tiles"),
+                              Qt::CaseInsensitive)) {
+            int patchedTiles = 0;
+            for (TileDefFile *baseFile : qAsConst(mTileDefFiles))
+                patchedTiles += baseFile->mergePropertiesFrom(*tdefFile);
+            qDebug() << "applied" << fileName << "to" << patchedTiles
+                     << "existing tiles";
+            delete tdefFile;
+            continue;
+        }
         mTileDefFiles += tdefFile;
     }
     return true;

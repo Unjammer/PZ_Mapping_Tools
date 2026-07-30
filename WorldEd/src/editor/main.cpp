@@ -69,12 +69,8 @@ int main(int argc, char *argv[])
     if (!w.InitConfigFiles())
         return 0;
 
-    {
-        PROGRESS progress(QObject::tr("Loading all tilesets..."), &w);
-        TileMetaInfoMgr::instance()->loadTilesets(false);
-        TilesetManager::instance()->waitForTilesets(
-                    TileMetaInfoMgr::instance()->tilesets());
-    }
+    TilesetManager::instance()->waitForTilesets(
+                TileMetaInfoMgr::instance()->tilesets(), &w);
 
     // Mark the interactive session dirty before restoring documents.  If a
     // malformed project or map terminates WorldEd, the next launch starts

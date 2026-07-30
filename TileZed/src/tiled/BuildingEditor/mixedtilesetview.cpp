@@ -833,7 +833,8 @@ void MixedTilesetModel::setTiles(const QList<Tile *> &tiles,
 
     mTiles = tiles;
     mUserData = userData;
-    mTileset = tiles.isEmpty() ? nullptr : tiles.first()->tileset();
+    mTileset = tiles.isEmpty() || hasMultipleTilesets(tiles)
+            ? nullptr : tiles.first()->tileset();
     mTileToItem.clear();
     mUserDataToItem.clear();
     mTileItemsByIndex.clear();
@@ -864,9 +865,6 @@ void MixedTilesetModel::setTiles(const QList<Tile *> &tiles,
             mTileToItem[tile] = item; // may not be unique!
         if (!mUserDataToItem.contains(item->mUserData))
             mUserDataToItem[item->mUserData] = item; // may not be unique!
-        if (mTileset != nullptr && tile->tileset() != mTileset) {
-            mTileset = nullptr;
-        }
         index++;
     }
 
@@ -1096,6 +1094,17 @@ void MixedTilesetModel::setColumnCount(int count)
     beginResetModel();
     mColumnCount = count;
     endResetModel();
+}
+
+bool MixedTilesetModel::hasMultipleTilesets(const QList<Tile *> &tiles) const
+{
+    if (tiles.size() < 2)
+        return false;
+    for (int i = 1; i < tiles.size(); ++i) {
+        if (tiles.at(i)->tileset() != tiles.first()->tileset())
+            return true;
+    }
+    return false;
 }
 
 MixedTilesetModel::Item *MixedTilesetModel::toItem(const QModelIndex &index) const

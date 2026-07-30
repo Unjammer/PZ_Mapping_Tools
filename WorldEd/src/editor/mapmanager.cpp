@@ -782,6 +782,17 @@ void MapManager::mapLoadedByThread(Map *map, MapInfo *mapInfo)
     // Relink by the stable PZ tileset name before registering or loading the
     // temporary objects.  Besides fixing the missing-tile placeholders, this
     // avoids keeping a second full catalog alive for every loaded cell.
+    const QSet<Tileset *> usedEmbeddedTilesets = map->usedTilesets();
+    int discardedUnusedTilesets = 0;
+    for (int index = map->tilesets().size() - 1; index >= 0; --index) {
+        Tileset *embedded = map->tilesets().at(index);
+        if (usedEmbeddedTilesets.contains(embedded))
+            continue;
+        map->removeTilesetAt(index);
+        delete embedded;
+        ++discardedUnusedTilesets;
+    }
+
     int relinkedTilesets = 0;
     int incompatibleTilesets = 0;
     QStringList incompatibleNames;
@@ -810,6 +821,10 @@ void MapManager::mapLoadedByThread(Map *map, MapInfo *mapInfo)
     if (relinkedTilesets > 0) {
         qInfo() << "Relinked embedded TMX tilesets to the shared catalog:"
                 << relinkedTilesets << mapInfo->path();
+    }
+    if (discardedUnusedTilesets > 0) {
+        qInfo() << "Discarded unused embedded TMX tilesets:"
+                << discardedUnusedTilesets << mapInfo->path();
     }
     if (incompatibleTilesets > 0) {
         qInfo() << "Kept incompatible embedded TMX tilesets:"

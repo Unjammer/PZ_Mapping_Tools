@@ -190,6 +190,7 @@ signals:
 
 private slots:
     void fileChanged(const QString &path);
+    void directoryChanged(const QString &path);
     void fileChangedTimeout();
 
 #ifdef ZOMBOID
@@ -243,6 +244,8 @@ private:
     QMap<Tileset*, int> mTilesets;
     FileSystemWatcher *mWatcher;
     QSet<QString> mChangedFiles;
+    QSet<QString> mChangedDirectories;
+    QStringList mWatchedTilesetDirectories;
     QTimer mChangedFilesTimer;
     bool mReloadTilesetsOnChange;
     QMap<QString,TilesetPaths> mTilesetPaths;

@@ -7,16 +7,24 @@ BiomeMapImageProcessor::palette()
 {
     static const QList<PaletteEntry> entries = {
         { 0,   QStringLiteral("Water"),           QColor(0, 138, 255) },
+        { 59,  QStringLiteral("Clay Shore"),      QColor(59, 95, 59) },
         { 64,  QStringLiteral("Foraging Nav"),    QColor(100, 100, 100) },
+        { 79,  QStringLiteral("Clay Lake"),       QColor(79, 105, 79) },
+        { 96,  QStringLiteral("Random Deep Forest"), QColor(96, 70, 35) },
         { 102, QStringLiteral("Trailer Park"),    QColor(210, 200, 160) },
         { 115, QStringLiteral("Town Zone"),       QColor(165, 160, 140) },
         { 128, QStringLiteral("Farm"),             QColor(255, 128, 0) },
         { 141, QStringLiteral("Farmland"),         QColor(120, 70, 20) },
         { 153, QStringLiteral("PH Forest"),        QColor(64, 0, 0) },
-        { 171, QStringLiteral("Vegetation"),       QColor(145, 135, 60) },
+        { 171, QStringLiteral("Forced Redbud Jumbo XXL (map override)"), QColor(145, 135, 60) },
+        { 179, QStringLiteral("PR Forest"),        QColor(90, 32, 24) },
         { 192, QStringLiteral("Farm Mix Forest"),  QColor(255, 0, 255) },
         { 204, QStringLiteral("Farm Forest"),      QColor(0, 255, 0) },
-        { 255, QStringLiteral("Deep Forest"),      QColor(127, 0, 0) }
+        { 217, QStringLiteral("Birch Forest"),     QColor(200, 217, 170) },
+        { 230, QStringLiteral("Birch Mix Forest"), QColor(150, 190, 130) },
+        { 243, QStringLiteral("Organic Forest"),   QColor(45, 100, 45) },
+        { 254, QStringLiteral("Dirt / Foraging Nav"), QColor(110, 80, 55) },
+        { 255, QStringLiteral("Primary / Deep Forest"), QColor(127, 0, 0) }
     };
     return entries;
 }
@@ -52,6 +60,8 @@ QImage BiomeMapImageProcessor::createBiomeLayer(const QImage &mainImage,
         {qRgb(100, 100, 100), 64},
         {qRgb(120, 120, 120), 115},
         {qRgb(165, 160, 140), 115},
+        // Biome 171 is intentionally map-specific in B42.20. It is enabled
+        // by WorldGenOverride.lua and deterministically places a redbud XXL.
         {qRgb(145, 135, 60), 171},
         {qRgb(145, 135, 61), 171},
         {qRgb(90, 100, 35), 171},

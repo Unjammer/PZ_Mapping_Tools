@@ -3668,6 +3668,356 @@ room
     color = #083270
 }
 
+room
+{
+    internal = agriworkerdorm
+    label = agriworkerdorm
+    color = #A6AD28
+}
+
+room
+{
+    internal = bagstore
+    label = bagstore
+    color = #533178
+}
+
+room
+{
+    internal = bagworkshop
+    label = bagworkshop
+    color = #6B3089
+}
+
+room
+{
+    internal = barbecuestore
+    label = barbecuestore
+    color = #4869D2
+}
+
+room
+{
+    internal = blacksmith
+    label = blacksmith
+    color = #B6D694
+}
+
+room
+{
+    internal = campworkerdorm
+    label = campworkerdorm
+    color = #2B478A
+}
+
+room
+{
+    internal = carpentryworkshop
+    label = carpentryworkshop
+    color = #60BB2A
+}
+
+room
+{
+    internal = cdstore
+    label = cdstore
+    color = #482938
+}
+
+room
+{
+    internal = clockrepair
+    label = clockrepair
+    color = #A4804D
+}
+
+room
+{
+    internal = clockrepairworkshop
+    label = clockrepairworkshop
+    color = #8A6071
+}
+
+room
+{
+    internal = clothingstore
+    label = clothingstore
+    color = #5D8A5E
+}
+
+room
+{
+    internal = cobbler
+    label = cobbler
+    color = #648F2F
+}
+
+room
+{
+    internal = derelict_steelfactory
+    label = derelict_steelfactory
+    color = #D4B07E
+}
+
+room
+{
+    internal = electronicstore
+    label = electronicstore
+    color = #CB3C58
+}
+
+room
+{
+    internal = elementaryschool
+    label = elementaryschool
+    color = #70C46B
+}
+
+room
+{
+    internal = florist
+    label = florist
+    color = #69C25B
+}
+
+room
+{
+    internal = furnitureworkshop
+    label = furnitureworkshop
+    color = #618F4B
+}
+
+room
+{
+    internal = garage_ranger
+    label = garage_ranger
+    color = #C5894C
+}
+
+room
+{
+    internal = glassmakingworkshop
+    label = glassmakingworkshop
+    color = #47342A
+}
+
+room
+{
+    internal = hoarder
+    label = hoarder
+    color = #647D67
+}
+
+room
+{
+    internal = hoarderbedroom
+    label = hoarderbedroom
+    color = #8DB14D
+}
+
+room
+{
+    internal = hoarderkitchen
+    label = hoarderkitchen
+    color = #3E556E
+}
+
+room
+{
+    internal = hoarderoffice
+    label = hoarderoffice
+    color = #ABD2BF
+}
+
+room
+{
+    internal = hunterstorage
+    label = hunterstorage
+    color = #4C5E81
+}
+
+room
+{
+    internal = juicestand
+    label = juicestand
+    color = #CB6DAD
+}
+
+room
+{
+    internal = knappingworkshop
+    label = knappingworkshop
+    color = #A2A791
+}
+
+room
+{
+    internal = laundryshirts
+    label = laundryshirts
+    color = #9D2E5A
+}
+
+room
+{
+    internal = laundrysuits
+    label = laundrysuits
+    color = #8185B4
+}
+
+room
+{
+    internal = leatherworkshop
+    label = leatherworkshop
+    color = #3C5F7F
+}
+
+room
+{
+    internal = masonrystore
+    label = masonrystore
+    color = #D05663
+}
+
+room
+{
+    internal = metalfabrication
+    label = metalfabrication
+    color = #635553
+}
+
+room
+{
+    internal = metalfabricationstorage
+    label = metalfabricationstorage
+    color = #5C99B6
+}
+
+room
+{
+    internal = musicschool
+    label = musicschool
+    color = #B7BA81
+}
+
+room
+{
+    internal = outdoorsupply
+    label = outdoorsupply
+    color = #2D2A4A
+}
+
+room
+{
+    internal = outdoorsupply_storage
+    label = outdoorsupply_storage
+    color = #6A5C61
+}
+
+room
+{
+    internal = policelibrary
+    label = policelibrary
+    color = #715CB1
+}
+
+room
+{
+    internal = potteryworkshop
+    label = potteryworkshop
+    color = #4B2D57
+}
+
+room
+{
+    internal = prisonerbelongings
+    label = prisonerbelongings
+    color = #3AB2A8
+}
+
+room
+{
+    internal = prisonlaundry
+    label = prisonlaundry
+    color = #928AD3
+}
+
+room
+{
+    internal = rangerhall
+    label = rangerhall
+    color = #809271
+}
+
+room
+{
+    internal = rangerlocker
+    label = rangerlocker
+    color = #775673
+}
+
+room
+{
+    internal = rangeroffice
+    label = rangeroffice
+    color = #7956A7
+}
+
+room
+{
+    internal = rangerstorage
+    label = rangerstorage
+    color = #4C7C9B
+}
+
+room
+{
+    internal = sunroom
+    label = sunroom
+    color = #3D42B7
+}
+
+room
+{
+    internal = swatlocker
+    label = swatlocker
+    color = #78593F
+}
+
+room
+{
+    internal = tailoringstore
+    label = tailoringstore
+    color = #312F68
+}
+
+room
+{
+    internal = tailoringworkshop
+    label = tailoringworkshop
+    color = #C1A1AC
+}
+
+room
+{
+    internal = upholsteryworkshop
+    label = upholsteryworkshop
+    color = #658860
+}
+
+room
+{
+    internal = waterstorage
+    label = waterstorage
+    color = #A93148
+}
+
+room
+{
+    internal = whittlerworkshop
+    label = whittlerworkshop
+    color = #7532B7
+}
+
 
 
 

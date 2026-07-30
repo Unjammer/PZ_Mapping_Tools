@@ -25,11 +25,13 @@
 #include <QGraphicsItem>
 #include <QImage>
 #include <QPair>
+#include <QPointer>
 #include <QPolygonF>
 
 class BaseWorldSceneTool;
 class MapImage;
 class MapInfo;
+class LoadThumbnailsDialog;
 class PasteCellsTool;
 class Road;
 class World;
@@ -600,6 +602,8 @@ private:
     QVector<WorldCellItem*> mSelectedCellItems;
     QVector<WorldCellItem*> mCellItems;
     QList<WorldCellItem*> mPendingThumbnails;
+    QPointer<LoadThumbnailsDialog> mLoadThumbnailsDialog;
+    int mThumbnailLoadTotal = 0;
     PasteCellsTool *mPasteCellsTool;
     BaseWorldSceneTool *mActiveTool;
     DragMapImageItem *mDragMapImageItem;
@@ -613,6 +617,10 @@ private:
     BiomeMapItem *mBiomeMapItem;
     bool mBMPToolActive;
     bool mDoubleClick;
+
+    int pendingThumbnailCount() const;
+    void startThumbnailProgress();
+    void updateThumbnailProgress();
 
     QList<OtherWorld*> mOtherWorlds;
 };

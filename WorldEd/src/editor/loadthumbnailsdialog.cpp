@@ -26,6 +26,7 @@ LoadThumbnailsDialog::LoadThumbnailsDialog(WorldScene *scene, QWidget *parent) :
     mScene(scene)
 {
     ui->setupUi(this);
+    setModal(false);
     connect(ui->pushButton, &QPushButton::clicked, this, &LoadThumbnailsDialog::cancelLoading);
 }
 

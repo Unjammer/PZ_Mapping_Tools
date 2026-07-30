@@ -96,6 +96,8 @@ TilesetManager::TilesetManager():
 
     connect(mWatcher, &FileSystemWatcher::fileChanged,
             this, &TilesetManager::fileChanged);
+    connect(mWatcher, &FileSystemWatcher::directoryChanged,
+            this, &TilesetManager::directoryChanged);
 
     mChangedFilesTimer.setInterval(500);
     mChangedFilesTimer.setSingleShot(true);
@@ -228,6 +230,34 @@ void TilesetManager::setReloadTilesetsOnChange(bool enabled)
     // TODO: Clear the file system watcher when disabled
 }
 
+void TilesetManager::tilesetDirectoryChanged()
+{
+    if (!mWatchedTilesetDirectories.isEmpty())
+        mWatcher->removePaths(mWatchedTilesetDirectories);
+    mWatchedTilesetDirectories.clear();
+
+    QStringList directories = {
+        Preferences::instance()->tilesDirectory(),
+        Preferences::instance()->tiles2xDirectory()
+    };
+    const QStringList roots = directories;
+    for (const QString &path : roots) {
+        const QDir directory(path);
+        const QFileInfoList children = directory.entryInfoList(
+                    QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QFileInfo &child : children)
+            directories += child.absoluteFilePath();
+    }
+    directories.removeAll(QString());
+    directories.removeDuplicates();
+    for (const QString &path : std::as_const(directories)) {
+        if (QDir(path).exists()) {
+            mWatcher->addPath(path);
+            mWatchedTilesetDirectories += path;
+        }
+    }
+}
+
 bool TilesetManager::getTilesetFileName(const QString &tilesetName, QString &path1x, QString &path2x)
 {
     QString tiles1xDir = Preferences::instance()->tilesDirectory();
@@ -291,9 +321,32 @@ void TilesetManager::fileChanged(const QString &path)
     mChangedFilesTimer.start();
 }
 
+void TilesetManager::directoryChanged(const QString &path)
+{
+    mChangedDirectories.insert(path);
+    mChangedFilesTimer.start();
+}
+
 void TilesetManager::fileChangedTimeout()
 {
 #ifdef ZOMBOID
+    if (!mChangedDirectories.isEmpty()) {
+        qInfo() << "Tiles directory changed:" << mChangedDirectories;
+        if (!TileMetaInfoMgr::instance()->addNewTilesets()) {
+            qWarning().noquote()
+                    << "Unable to discover new tilesets:"
+                    << TileMetaInfoMgr::instance()->errorString();
+        }
+        TileMetaInfoMgr::instance()->resolveTilesets();
+        for (Tileset *tileset
+             : TileMetaInfoMgr::instance()->tilesets()) {
+            if (!tileset->isLoaded() && !tileset->isMissing())
+                loadTileset(tileset, tileset->imageSource());
+        }
+        mChangedDirectories.clear();
+        tilesetDirectoryChanged();
+    }
+
     qDebug() << "fileChangedTimeout " << mChangedFiles;
     foreach (Tileset *tileset, mTilesetImageCache->mTilesets) {
         QString fileName = tileset->imageSource2x().isEmpty() ? tileset->imageSource() : tileset->imageSource2x();

@@ -3775,7 +3775,7 @@ BiomeMapTool::BiomeMapTool()
                          QKeySequence())
     , mPainting(false)
     , mBrushRadius(4)
-    , mBiomeValue(171)
+    , mBiomeValue(255)
     , mCursorItem(new QGraphicsPolygonItem())
 {
     mCursorItem->setZValue(2001);

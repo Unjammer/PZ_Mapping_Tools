@@ -39,6 +39,28 @@ property
 
 property
 {
+    Type = Integer
+    Name = Connected pushable X offset
+    ShortName = connectX
+    Min = -128
+    Max = 128
+    Default = 0
+    ToolTip = <p><b>Engine key:</b> connectX</p><p>Signed X offset used by CellLoader to link adjacent IsoPushableObject sprites into one multi-tile pushable. Set only on pushable-object tiles that belong to such a group.</p>
+}
+
+property
+{
+    Type = Integer
+    Name = Connected pushable Y offset
+    ShortName = connectY
+    Min = -128
+    Max = 128
+    Default = 0
+    ToolTip = <p><b>Engine key:</b> connectY</p><p>Signed Y offset used by CellLoader to link adjacent IsoPushableObject sprites into one multi-tile pushable. Set only on pushable-object tiles that belong to such a group.</p>
+}
+
+property
+{
     Type = Boolean
     Name = Countertop
     ShortName =

@@ -539,6 +539,50 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->actionClipboard, &QAction::triggered, this, &MainWindow::showClipboard);
 
     connect(ui->actionPreferences, &QAction::triggered, this, &MainWindow::preferencesDialog);
+    QAction *rebuildTilesetsAction =
+            new QAction(tr("Update Tilesets.txt from Tiles PNGs..."), this);
+    ui->editMenu->insertAction(ui->actionPreferences,
+                               rebuildTilesetsAction);
+    ui->editMenu->insertSeparator(ui->actionPreferences);
+    connect(rebuildTilesetsAction, &QAction::triggered, this, [this]() {
+        const QString catalogPath =
+                TileMetaInfoMgr::instance()->txtPath();
+        if (QMessageBox::question(
+                    this, tr("Update Tilesets.txt"),
+                    tr("Scan the configured Tiles directory and add new PNG "
+                       "sheets to:\n%1\n\nExisting tile meta-enums are "
+                       "preserved. Changed sheet dimensions are updated and "
+                       "the previous catalog is kept as Tilesets.txt.bak.")
+                    .arg(QDir::toNativeSeparators(catalogPath)))
+                != QMessageBox::Yes) {
+            return;
+        }
+
+        PROGRESS progress(tr("Scanning Tiles PNG sheets..."), this);
+        int added = 0;
+        int updated = 0;
+        if (!TileMetaInfoMgr::instance()->rebuildTilesetsTxt(
+                    &added, &updated)) {
+            QMessageBox::critical(
+                        this, tr("Tilesets.txt Update Failed"),
+                        TileMetaInfoMgr::instance()->errorString());
+            return;
+        }
+
+        progress.release();
+        TilesetManager::instance()->tilesetDirectoryChanged();
+        TilesetManager::instance()->waitForTilesets(
+                    TileMetaInfoMgr::instance()->tilesets(), this);
+        QMessageBox::information(
+                    this, tr("Tilesets.txt Updated"),
+                    tr("%1 new sheet(s) added; %2 existing size(s) updated."
+                       "\n\n%3")
+                    .arg(added).arg(updated)
+                    .arg(updated > 0
+                         ? tr("Restart the PZTools applications before "
+                              "editing maps that use resized sheets.")
+                         : tr("The catalog and live tileset list are current.")));
+    });
     connect(ui->actionKeyboardShortcuts, &QAction::triggered, this, &MainWindow::keyboardShortcuts);
 
     connect(ui->actionResizeWorld, &QAction::triggered, this, &MainWindow::resizeWorld);

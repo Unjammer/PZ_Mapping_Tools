@@ -1039,7 +1039,10 @@ bool LotFilesWorker256::generateCell()
 
     generateBuildingObjects(mapWidth, mapHeight);
 
-    generateJumboTrees(combinedMaps);
+    // Native B42 maps use WorldGen + biomemap definitions for jumbo trees.
+    // Keep the fake-jumbo randomizer only for legacy 300x300 projects.
+    if (mWorldDoc->world()->gridFormat() != WorldGridFormat::Native256)
+        generateJumboTrees(combinedMaps);
 
     generateHeaderAux(cell256X, cell256Y);
 

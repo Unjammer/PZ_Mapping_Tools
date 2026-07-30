@@ -103,6 +103,9 @@ public:
     { return mError; }
 
     bool addNewTilesets();
+    bool rebuildTilesetsTxt(int *addedCount = nullptr,
+                            int *updatedCount = nullptr,
+                            bool updateExisting = true);
 
     Tileset *loadTileset(const QString &source);
     bool loadTilesetImage(Tileset *ts, const QString &source);

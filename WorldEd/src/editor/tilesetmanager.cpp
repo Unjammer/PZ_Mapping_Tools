@@ -36,6 +36,7 @@
 #include <QDir>
 #include <QImageReader>
 #include <QMetaType>
+#include <QScopedPointer>
 #include <QStringList>
 #endif
 
@@ -98,6 +99,8 @@ TilesetManager::TilesetManager():
 
     connect(mWatcher, &FileSystemWatcher::fileChanged,
             this, &TilesetManager::fileChanged);
+    connect(mWatcher, &FileSystemWatcher::directoryChanged,
+            this, &TilesetManager::directoryChanged);
 
     mChangedFilesTimer.setInterval(500);
     mChangedFilesTimer.setSingleShot(true);
@@ -233,6 +236,30 @@ void TilesetManager::setReloadTilesetsOnChange(bool enabled)
 void TilesetManager::tilesetDirectoryChanged()
 {
     mTilesetPaths.clear();
+
+    if (!mWatchedTilesetDirectories.isEmpty())
+        mWatcher->removePaths(mWatchedTilesetDirectories);
+    mWatchedTilesetDirectories.clear();
+
+    const QString rootPath = Preferences::instance()->tilesDirectory();
+    const QString path2x = Preferences::instance()->tiles2xDirectory();
+    QStringList directories = { rootPath, path2x };
+    const QStringList roots = directories;
+    for (const QString &path : roots) {
+        const QDir directory(path);
+        const QFileInfoList children = directory.entryInfoList(
+                    QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QFileInfo &child : children)
+            directories += child.absoluteFilePath();
+    }
+    directories.removeAll(QString());
+    directories.removeDuplicates();
+    for (const QString &path : std::as_const(directories)) {
+        if (QDir(path).exists()) {
+            mWatcher->addPath(path);
+            mWatchedTilesetDirectories += path;
+        }
+    }
 }
 
 bool TilesetManager::getTilesetFileName(const QString &tilesetName, QString &path1x, QString &path2x)
@@ -318,9 +345,38 @@ void TilesetManager::fileChanged(const QString &path)
     mChangedFilesTimer.start();
 }
 
+void TilesetManager::directoryChanged(const QString &path)
+{
+    mChangedDirectories.insert(path);
+    mChangedFilesTimer.start();
+}
+
 void TilesetManager::fileChangedTimeout()
 {
 #ifdef ZOMBOID
+    if (!mChangedDirectories.isEmpty()) {
+        qInfo() << "Tiles directory changed:" << mChangedDirectories;
+        mTilesetPaths.clear();
+
+        if (!TileMetaInfoMgr::instance()->addNewTilesets()) {
+            qWarning().noquote()
+                    << "Unable to update Tilesets.txt after a Tiles "
+                       "directory change:"
+                    << TileMetaInfoMgr::instance()->errorString();
+        }
+
+        for (Tileset *tileset
+             : TileMetaInfoMgr::instance()->tilesets()) {
+            if (tileset->isLoaded() && !tileset->isMissing())
+                continue;
+            tileset->setLoaded(false);
+            tileset->setMissing(false);
+            loadTileset(tileset, tileset->imageSource());
+        }
+        mChangedDirectories.clear();
+        tilesetDirectoryChanged();
+    }
+
     qDebug() << "fileChangedTimeout " << mChangedFiles;
     foreach (Tileset *tileset, mTilesetImageCache->mTilesets) {
         QString fileName = tileset->imageSource2x().isEmpty() ? tileset->imageSource() : tileset->imageSource2x();
@@ -501,12 +557,25 @@ void TilesetManager::loadTileset(Tileset *tileset, const QString &imageSource_)
 void TilesetManager::waitForTilesets(const QList<Tileset *> &tilesets, QWidget *parent,
                                      int expectedTotal)
 {
-    Q_UNUSED(parent)
-    Q_UNUSED(expectedTotal)
     QList<Tileset *> requested = tilesets;
     if (requested.isEmpty())
         requested = TileMetaInfoMgr::instance()->tilesets();
+
+    const int total = expectedTotal >= 0 ? expectedTotal : requested.size();
+    QScopedPointer<PROGRESS> progress;
+    if (parent) {
+        progress.reset(new PROGRESS(
+                           tr("Loading tilesets 0 / %1...").arg(total),
+                           parent));
+    }
+
+    int current = qMax(0, total - requested.size());
     for (Tileset *tileset : requested) {
+        if (progress) {
+            progress->update(
+                        tr("Loading tilesets %1 / %2: %3")
+                        .arg(++current).arg(total).arg(tileset->name()));
+        }
         if (!tileset->isLoaded() && !tileset->isMissing())
             loadTileset(tileset, tileset->imageSource());
     }

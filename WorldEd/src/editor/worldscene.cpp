@@ -266,15 +266,7 @@ WorldScene::WorldScene(WorldDocument *worldDoc, QObject *parent)
 
     if (prefs->showWorldThumbnails()
             && prefs->loadAllWorldThumbnails()) {
-        PROGRESS_HIDER hider;
-        LoadThumbnailsDialog dialog(this, MainWindow::instance());
-        dialog.show();
-        int numThumbnails = mPendingThumbnails.size();
-        handlePendingThumbnails();
-        while (mPendingThumbnails.isEmpty() == false) {
-            dialog.setPrompt(QStringLiteral("Loading thumbnails %1 / %2").arg(numThumbnails - mPendingThumbnails.size()).arg(numThumbnails));
-            qApp->processEvents(QEventLoop::AllEvents);
-        }
+        startThumbnailProgress();
     } else {
         handlePendingThumbnails();
     }
@@ -417,6 +409,11 @@ void WorldScene::pasteCellsFromClipboard()
 void WorldScene::cancelLoadingThumbnails()
 {
     mPendingThumbnails.clear();
+    for (OtherWorld *otherWorld : std::as_const(mOtherWorlds))
+        otherWorld->mPendingThumbnails.clear();
+    if (mLoadThumbnailsDialog)
+        mLoadThumbnailsDialog->close();
+    mThumbnailLoadTotal = 0;
 }
 
 void WorldScene::worldAboutToResize(const QSize &newSize)
@@ -873,14 +870,7 @@ void WorldScene::loadAllWorldThumbnailsChanged(bool thumbs)
         for (WorldCellItem *item : std::as_const(mCellItems)) {
             mPendingThumbnails += item;
         }
-        LoadThumbnailsDialog dialog(this, MainWindow::instance());
-        dialog.show();
-        int numThumbnails = mPendingThumbnails.size();
-        handlePendingThumbnails();
-        while (mPendingThumbnails.isEmpty() == false) {
-            dialog.setPrompt(QStringLiteral("Loading thumbnails %1 / %2").arg(numThumbnails - mPendingThumbnails.size()).arg(numThumbnails));
-            qApp->processEvents(QEventLoop::AllEvents);
-        }
+        startThumbnailProgress();
     } else {
         for (WorldCellItem *item : std::as_const(mCellItems)) {
             item->thumbnailsAreFail();
@@ -958,6 +948,51 @@ void WorldScene::handlePendingThumbnails()
                 otherWorld->mPendingThumbnails.removeAt(i);
             }
         }
+    }
+
+    updateThumbnailProgress();
+}
+
+int WorldScene::pendingThumbnailCount() const
+{
+    int count = mPendingThumbnails.size();
+    for (OtherWorld *otherWorld : mOtherWorlds)
+        count += otherWorld->mPendingThumbnails.size();
+    return count;
+}
+
+void WorldScene::startThumbnailProgress()
+{
+    mThumbnailLoadTotal = pendingThumbnailCount();
+    if (mThumbnailLoadTotal <= 0) {
+        handlePendingThumbnails();
+        return;
+    }
+
+    if (mLoadThumbnailsDialog)
+        mLoadThumbnailsDialog->close();
+
+    mLoadThumbnailsDialog =
+            new LoadThumbnailsDialog(this, MainWindow::instance());
+    mLoadThumbnailsDialog->setAttribute(Qt::WA_DeleteOnClose);
+    mLoadThumbnailsDialog->setModal(false);
+    mLoadThumbnailsDialog->show();
+    handlePendingThumbnails();
+}
+
+void WorldScene::updateThumbnailProgress()
+{
+    if (!mLoadThumbnailsDialog)
+        return;
+
+    const int pending = pendingThumbnailCount();
+    const int completed = qMax(0, mThumbnailLoadTotal - pending);
+    mLoadThumbnailsDialog->setPrompt(
+                tr("Loading thumbnails %1 / %2")
+                .arg(completed).arg(mThumbnailLoadTotal));
+    if (pending == 0) {
+        mLoadThumbnailsDialog->close();
+        mThumbnailLoadTotal = 0;
     }
 }
 
@@ -1260,6 +1295,7 @@ void BaseCellItem::paintThumbnails(QPainter *painter) const
             painter->drawImage(target, lotImage.mMapImage->image(), source);
         }
     }
+
 }
 
 void BaseCellItem::updateCellImage()

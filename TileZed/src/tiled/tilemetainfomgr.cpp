@@ -56,6 +56,7 @@ void TileMetaInfoMgr::deleteInstance()
 void TileMetaInfoMgr::changeTilesDirectory(const QString &path)
 {
     Preferences::instance()->setTilesDirectory(path); // must be done before loading tilesets
+    TilesetManager::instance()->tilesetDirectoryChanged();
     for (Tileset *ts : tilesets())
         ts->setLoaded(false);
     resolveTilesets();
@@ -71,6 +72,7 @@ TileMetaInfoMgr::TileMetaInfoMgr(QObject *parent) :
 {
     connect(TilesetManager::instance(), &TilesetManager::tilesetChanged,
             this, &TileMetaInfoMgr::tilesetChanged);
+    TilesetManager::instance()->tilesetDirectoryChanged();
 }
 
 TileMetaInfoMgr::~TileMetaInfoMgr()
