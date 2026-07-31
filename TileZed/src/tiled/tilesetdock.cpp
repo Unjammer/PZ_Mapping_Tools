@@ -1219,6 +1219,16 @@ void TilesetDock::currentTilesetChanged(int row)
     if (mMapDocument && (row >= 0))
         mCurrentTileset = mTilesets[row];
 
+    // Maps may declare the complete tileset catalogue while using only a
+    // handful of sheets. Keep map opening fast and load an otherwise-unused
+    // sheet only when the user explicitly selects it in the tileset dock.
+    if (mCurrentTileset && !mCurrentTileset->isLoaded()) {
+        TilesetManager *manager = TilesetManager::instance();
+        manager->loadTileset(mCurrentTileset,
+                             mCurrentTileset->imageSource());
+        manager->waitForTilesets(QList<Tileset *>() << mCurrentTileset);
+    }
+
     setTilesetList();
     updateCurrentTiles();
     updateActions();

@@ -276,7 +276,10 @@ Preferences::Preferences()
     mLoadAllWorldThumbnails = mSettings->value(QLatin1String("LoadAllWorldThumbnails"), false).toBool();
     mShowWorldThumbnails = mSettings->value(QLatin1String("ShowWorldThumbnails"), true).toBool();
     mShowAdjacentMaps = mSettings->value(QLatin1String("ShowAdjacentMaps"), true).toBool();
-    mShowInvisibleTiles = mSettings->value(QLatin1String("ShowInvisibleTiles"), true).toBool();
+    // Invisible helper tiles can cover an otherwise healthy map with their
+    // wireframe placeholder. Keep them available from View, but do not enable
+    // them automatically for a new portable installation.
+    mShowInvisibleTiles = mSettings->value(QLatin1String("ShowInvisibleTiles"), false).toBool();
     mTheme = mSettings->value(QLatin1String("Theme"), QLatin1String("Default")).toString();
     mSettings->endGroup();
 

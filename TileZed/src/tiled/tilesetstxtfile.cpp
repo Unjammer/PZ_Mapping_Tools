@@ -239,20 +239,19 @@ void TilesetsTxtFile::Tileset::fromTileset(Tiled::Tileset *tileset)
     mName = tileset->name();
     mFile = tileset->fileName();
     mColumns = tileset->columnCount();
-    mRows = tileset->tileCount() / tileset->columnCount();
-    if (tileset->isLoaded()) {
-        mColumns = tileset->columnCountForWidth(tileset->imageWidth());
-        mRows = tileset->imageHeight() / (tileset->imageSource2x().isEmpty() ? 128 : (128 * 2));
-    }
+    mRows = mColumns > 0 ? tileset->tileCount() / mColumns : 0;
     mTiles.clear();
+
+    if (mColumns <= 0)
+        return;
 
     for (int i = 0; i < tileset->tileCount(); i++) {
         Tiled::Tile *tile = tileset->tileAt(i);
         QString metaEnum = Tiled::Internal::TileMetaInfoMgr::instance()->tileEnum(tile);
         if (!metaEnum.isEmpty()) {
             Tile txtTile;
-            txtTile.mX = i % tileset->columnCount();
-            txtTile.mY = i / tileset->columnCount();
+            txtTile.mX = i % mColumns;
+            txtTile.mY = i / mColumns;
             txtTile.mMetaEnum = metaEnum;
             setTile(txtTile);
         }

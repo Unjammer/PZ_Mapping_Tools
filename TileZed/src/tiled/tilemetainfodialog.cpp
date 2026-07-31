@@ -33,6 +33,7 @@
 #include "map.h"
 #include "tileset.h"
 
+#include <QDebug>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
@@ -330,13 +331,19 @@ void TileMetaInfoDialog::addTileset()
 
     foreach (QString f, dialog.fileNames()) {
         QFileInfo info(f);
+        qInfo() << "Adding global tileset from" << info.absoluteFilePath();
         if (Tiled::Tileset *ts = TileMetaInfoMgr::instance()->loadTileset(f/*info.canonicalFilePath()*/)) {
             QString name = info.completeBaseName();
-            // Replace any current tileset with the same name as an existing one.
-            // This will NOT replace the meta-info for the old tileset, it will
-            // be used by the new tileset as well.
-            if (Tileset *old = TileMetaInfoMgr::instance()->tileset(name))
-                mUndoStack->push(new RemoveGlobalTileset(this, old));
+            // The directory watcher can register a newly copied PNG while
+            // AddTilesetsDialog is still open. Replacing that live global
+            // object would invalidate pointers held by BuildingEd and the
+            // overlay tools. Treat it as an already-completed add instead.
+            if (TileMetaInfoMgr::instance()->tileset(name)) {
+                qInfo() << "Tileset was already registered while the add "
+                           "dialog was open:" << name;
+                delete ts;
+                continue;
+            }
             mUndoStack->push(new AddGlobalTileset(this, ts));
         } else {
             QMessageBox::warning(this, tr("Tileset Metadata Error"),

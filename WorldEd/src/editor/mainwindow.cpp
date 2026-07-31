@@ -1431,11 +1431,16 @@ bool MainWindow::InitConfigFiles()
         return false;
     }
 
-    if (!TileMetaInfoMgr::instance()->addNewTilesets()) {
+    if (!TileMetaInfoMgr::instance()->addNewTilesets(false)) {
         QMessageBox::critical(this, tr("Tileset Configuration Error"),
-                              tr("%1\n(while adding new tilesets)"));
+                              tr("%1\n(while discovering new tilesets)")
+                              .arg(TileMetaInfoMgr::instance()->errorString()));
         return false;
     }
+    TileMetaInfoMgr::instance()->resolveTilesets(
+                TileMetaInfoMgr::instance()->tilesets());
+    qInfo() << "WorldEd registered the complete tileset catalog; "
+               "PNG sheets will be decoded on demand";
 
     if (!BuildingTMX::instance()->readTxt()) {
         QMessageBox::critical(this, tr("Building Configuration Error"),

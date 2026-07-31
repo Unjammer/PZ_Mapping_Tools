@@ -385,12 +385,22 @@ void WorldDocument::editCell(int x, int y)
 {
     DocumentManager *docman = DocumentManager::instance();
     WorldCell *cell = world()->cellAt(x, y);
+    if (!cell) {
+        qWarning() << "Cannot edit cell outside the world:" << x << y;
+        return;
+    }
     if (CellDocument *cellDoc = docman->findDocument(cell)) {
         docman->setCurrentDocument(cellDoc);
         return;
     }
+    qInfo() << "Opening WorldEd cell:" << x << y
+            << cell->mapFilePath();
     CellDocument *cellDoc = new CellDocument(this, cell);
     docman->addDocument(cellDoc);
+    if (docman->failedToAdd())
+        qWarning() << "WorldEd cell failed to open:" << x << y;
+    else
+        qInfo() << "WorldEd cell opened successfully:" << x << y;
 }
 
 void WorldDocument::resizeWorld(const QSize &newSize)

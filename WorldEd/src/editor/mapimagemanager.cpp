@@ -34,6 +34,7 @@
 #include "staggeredrenderer.h"
 #include "tilelayer.h"
 #include "tilesetmanager.h"
+#include "tilesetimagelock.h"
 #include "zlevelrenderer.h"
 
 #include <QDataStream>
@@ -44,6 +45,7 @@
 #include <QImageReader>
 #include <QMessageBox>
 #include <QPainterPath>
+#include <QReadLocker>
 
 #ifdef QT_NO_DEBUG
 inline QNoDebug noise() { return QNoDebug(); }
@@ -595,7 +597,7 @@ MapImageManager::ImageData MapImageManager::generateZombieSpawnImage(const QStri
 #endif // WORLDED
 
 #define IMAGE_DATA_MAGIC 0xB15B00B5
-#define IMAGE_DATA_VERSION 4
+#define IMAGE_DATA_VERSION 5
 
 MapImageManager::ImageData MapImageManager::readImageData(const QFileInfo &imageDataFileInfo)
 {
@@ -1300,6 +1302,7 @@ void MapImageRenderWorker::resume(MapImage *mapImage,
 
 MapImageData MapImageRenderWorker::generateMapImage(MapComposite *mapComposite)
 {
+    QReadLocker imageReadLock(&tilesetImageLock());
     Map *map = mapComposite->map();
 
     MapRenderer *renderer = NULL;

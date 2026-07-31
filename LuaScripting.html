@@ -2,1270 +2,177 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lua scripting in TileZed</title>
+  <title>Lua scripting in BuildingEd</title>
   <style>
-    :root {
-      color-scheme: light dark;
-      --page: #f5f6f8;
-      --panel: #ffffff;
-      --text: #20242a;
-      --muted: #59616c;
-      --border: #cdd2d9;
-      --accent: #b31c2c;
-      --code: #f0f2f5;
-      --note: #eef5ff;
-      --warn: #fff4dd;
-    }
+    body { max-width: 1050px; margin: 24px auto; padding: 0 20px; font: 15px/1.5 "Segoe UI", Arial, sans-serif; }
+    code, pre { font-family: Consolas, monospace; }
+    code { background: #eee; padding: .1em .3em; }
+    pre { overflow: auto; padding: 12px; background: #eee; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 7px 9px; border: 1px solid #aaa; text-align: left; vertical-align: top; }
+    .note { padding: 10px 14px; border-left: 4px solid #477fc0; background: #edf5ff; }
+    .warning { padding: 10px 14px; border-left: 4px solid #c58a00; background: #fff4d9; }
     @media (prefers-color-scheme: dark) {
-      :root {
-        --page: #1b1d20;
-        --panel: #24272b;
-        --text: #eeeeee;
-        --muted: #b8bec7;
-        --border: #4b5058;
-        --accent: #ff6675;
-        --code: #181a1d;
-        --note: #1f3045;
-        --warn: #4b3a18;
-      }
-    }
-    body {
-      max-width: 1120px;
-      margin: 0 auto;
-      padding: 24px;
-      color: var(--text);
-      background: var(--page);
-      font: 15px/1.55 "Segoe UI", Arial, sans-serif;
-    }
-    h1, h2, h3 { line-height: 1.2; }
-    h1 { margin-top: 0; }
-    h2 {
-      margin-top: 2em;
-      padding-bottom: .25em;
-      border-bottom: 1px solid var(--border);
-    }
-    h3 { margin-top: 1.5em; }
-    a { color: var(--accent); }
-    code, pre { font-family: Consolas, "Courier New", monospace; }
-    code {
-      padding: .08em .3em;
-      border-radius: 3px;
-      background: var(--code);
-    }
-    pre {
-      overflow: auto;
-      padding: 14px 16px;
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      background: var(--code);
-      tab-size: 4;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: var(--panel);
-    }
-    th, td {
-      padding: 8px 10px;
-      border: 1px solid var(--border);
-      text-align: left;
-      vertical-align: top;
-    }
-    th { white-space: nowrap; }
-    .note, .warning {
-      margin: 1em 0;
-      padding: 10px 14px;
-      border-left: 4px solid #4488cc;
-      background: var(--note);
-    }
-    .warning {
-      border-left-color: #d59100;
-      background: var(--warn);
-    }
-    .api {
-      margin: .35em 0;
-      padding: .6em .8em;
-      border-left: 3px solid var(--border);
-      background: var(--panel);
-    }
-    .api code { font-weight: 600; }
-    .muted { color: var(--muted); }
-    .toc {
-      columns: 2 280px;
-      padding: 14px 30px;
-      border: 1px solid var(--border);
-      background: var(--panel);
+      body { color: #eee; background: #202225; }
+      code, pre { background: #151719; }
+      .note { background: #213247; }
+      .warning { background: #493b1d; }
     }
   </style>
 </head>
 <body>
-  <h1>Lua scripting in TileZed</h1>
+<h1>Lua scripting in BuildingEd</h1>
 
-  <p>TileZed embeds Lua 5.2.1 for map editing and mapping automation. This is
-  an editor API: it does <strong>not</strong> execute Project Zomboid gameplay
-  scripts and it is not the API exposed by the game.</p>
+<p>BuildingEd embeds Lua 5.2 for editor automation. Choose
+<strong>Building &gt; Run Lua Script...</strong>, or open
+<strong>Building &gt; Lua Console</strong>. F5 reruns the last BuildingEd
+script while the console is in BuildingEd mode.</p>
 
-  <p>BuildingEd has a separate transactional API and global
-  <code>building</code> object. See the
-  <a href="../BuildingEd/LuaScripting.html">BuildingEd Lua scripting
-  reference</a>.</p>
+<div class="note">
+  The global <code>building</code> is a transactional view of the current
+  document. A successful script is committed as one Undo operation. A syntax
+  error, runtime error, or user cancellation changes nothing in the document.
+  The current API version is <code>building.apiVersion == 3</code>.
+</div>
 
-  <div class="note">
-    The authoritative binding is <code>src/tiled/luatiled.pkg</code>. The
-    ready-to-run examples installed in the <code>lua</code> directory use only
-    functions exposed by that binding.
-  </div>
+<p>The global <code>scriptDirectory</code> contains the absolute directory of
+the running script. API indexes and coordinates are zero-based. Lua list tables
+returned by the API are iterated normally with <code>ipairs()</code>.</p>
 
-  <h2 id="contents">Contents</h2>
-  <ul class="toc">
-    <li><a href="#execution">Execution modes</a></li>
-    <li><a href="#first-script">Your first script</a></li>
-    <li><a href="#rules">Important rules</a></li>
-    <li><a href="#examples">Examples</a></li>
-    <li><a href="#interactive-tools">Interactive tools</a></li>
-    <li><a href="#api-map">Map</a></li>
-    <li><a href="#api-layer">Layer and TileLayer</a></li>
-    <li><a href="#api-app">Application actions</a></li>
-    <li><a href="#api-objects">ObjectGroup and MapObject</a></li>
-    <li><a href="#api-bmp">MapBmp and rules</a></li>
-    <li><a href="#api-basic">Tile, Color, Region and Rect</a></li>
-    <li><a href="#api-tool">TileTool</a></li>
-    <li><a href="#api-perlin">Perlin</a></li>
-    <li><a href="#behavior">Detailed function behavior</a></li>
-    <li><a href="#errors">Errors and cancellation</a></li>
-  </ul>
+<h2>Quick inspection</h2>
+<pre><code>print(building:width(), building:height())
 
-  <h2 id="execution">Execution modes</h2>
-  <table>
-    <thead>
-      <tr><th>Mode</th><th>How to run it</th><th>Globals</th><th>Saving</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Current map</td>
-        <td><strong>Tools &gt; Lua Console &gt; Run Script</strong></td>
-        <td><code>map</code>, <code>app</code>, <code>scriptDirectory</code></td>
-        <td>Changes are added to the current TileZed undo stack.</td>
-      </tr>
-      <tr>
-        <td>TMX directory</td>
-        <td><strong>Lua Console &gt; Run In Directory</strong></td>
-        <td><code>map</code>, <code>app</code>, <code>scriptDirectory</code></td>
-        <td>Selected TMX files are rewritten only when changed. Enable backups.</td>
-      </tr>
-      <tr>
-        <td>WorldEd world</td>
-        <td><strong>Lua Console &gt; Run On World</strong></td>
-        <td><code>map</code>, <code>app</code>, <code>scriptDirectory</code></td>
-        <td>Existing TMX cells in the selected PZW are processed. Enable backups.</td>
-      </tr>
-      <tr>
-        <td>Interactive tool</td>
-        <td>Declare a tool in <code>LuaTools.txt</code>, then select it in TileZed.</td>
-        <td><code>map</code>, <code>self</code>, <code>scriptDirectory</code></td>
-        <td>The tool calls <code>self:applyChanges("Undo label")</code>.</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <p><code>scriptDirectory</code> is the absolute directory containing the
-  running script. Use it to include a companion file:</p>
-
-  <pre><code>dofile(scriptDirectory .. "/shared-functions.lua")</code></pre>
-
-  <p>When a TMX belongs to a loaded WorldEd project,
-  <code>map:cellX()</code> and <code>map:cellY()</code> return its absolute
-  world-cell coordinates. They return <code>-1</code> when that context is not
-  available.</p>
-
-  <h2 id="first-script">Your first script</h2>
-  <p>Save this as UTF-8, open a map, and run it from the Lua Console:</p>
-
-  <pre><code>print(("Map: %d x %d tiles, levels %d to %d")
-    :format(map:width(), map:height(), map:minLevel(), map:maxLevel()))
-
-print(("World cell: %d,%d"):format(map:cellX(), map:cellY()))
-
-for index = 0, map:layerCount() - 1 do
-    local layer = map:layerAt(index)
-    print(("[%d] %s (%s)")
-        :format(index, layer:nameWithPrefix(), layer:type()))
-end</code></pre>
-
-  <p>The installed file <code>lua/example-inspect-map.lua</code> contains a
-  longer read-only version.</p>
-
-  <h2 id="rules">Important rules</h2>
-  <ul>
-    <li>Tile coordinates and API collection indexes are zero-based. Lua tables
-      returned as lists are still iterated normally with <code>ipairs()</code>,
-      starting at one.</li>
-    <li><code>layerAt(0)</code>, <code>tilesetAt(0)</code>, and
-      <code>objectAt(0)</code> access the first element.</li>
-    <li>Always test lookup results. A missing layer, tileset, tile or rule
-      returns <code>nil</code>.</li>
-    <li>Layer lookups use the level-prefixed name, for example
-      <code>0_Floor</code>, <code>8_RoomDefs</code>, or
-      <code>-1_Floor</code>. <code>layer:name()</code> returns the unprefixed
-      name; <code>layer:nameWithPrefix()</code> returns the lookup name.</li>
-    <li>The complete available tileset catalog is loaded before scripts can
-      run. Tile lookup, placement, deletion and replacement are synchronous
-      and require no callbacks.</li>
-    <li>Batch changes are collected and then applied through TileZed. Do not
-      call <code>map:write()</code> to overwrite the current map; that function
-      is intended for writing a separate map or a map created in Lua.</li>
-    <li>Run scripts that modify many TMX files on a copy first and keep the
-      batch backup option enabled.</li>
-    <li>Use UTF-8 for scripts, paths, object names and custom properties.</li>
-  </ul>
-
-  <h2 id="examples">Batch examples</h2>
-
-  <h3>Inspect tilesets and used tiles</h3>
-  <pre><code>for index = 0, map:tilesetCount() - 1 do
-    local tileset = map:tilesetAt(index)
-    print(("tileset[%d] = %s"):format(index, tileset:name()))
+for floorIndex = 0, building:floorCount() - 1 do
+    local level = building:floorLevel(floorIndex)
+    print("level", level, "objects", building:objectCount(level))
 end
 
-local floor = map:tileLayer("0_Floor")
-if floor then
-    local tile = floor:tileAt(10, 20)
-    if tile then
-        print(("10,20 = %s_%d")
-            :format(tile:tileset():name(), tile:id()))
-    end
+for roomIndex = 0, building:roomCount() - 1 do
+    print(roomIndex, building:roomName(roomIndex))
 end</code></pre>
 
-  <h3>Fill the current selection</h3>
-  <pre><code>local layer = assert(map:tileLayer("0_Floor"), "Missing layer 0_Floor")
-local tile = assert(
-    map:tile("floors_interior_tilesandwood_01_0"),
-    "Edit TILE_NAME in the script: this tile is not loaded")
-local selection = map:tileSelection()
+<h2>Rooms</h2>
+<pre><code>local level = building:currentLevel()
+local roomIndex = 0
+building:setRoom(level, 5, 8, roomIndex)
+building:fillRoom(level, 10, 10, 4, 3, roomIndex)
+building:setRoom(level, 5, 8, -1) -- erase assignment</code></pre>
 
-if selection:isEmpty() then
-    error("Select one or more tiles before running this script")
-end
+<table>
+<tr><th>Function</th><th>Result or effect</th></tr>
+<tr><td><code>roomCount()</code></td><td>Number of room definitions.</td></tr>
+<tr><td><code>roomName(index)</code></td><td>Display name of a room.</td></tr>
+<tr><td><code>roomInternalName(index)</code></td><td>Internal PZ room name.</td></tr>
+<tr><td><code>roomAt(level,x,y)</code></td><td>Room index, or -1 for no room.</td></tr>
+<tr><td><code>setRoom(level,x,y,index)</code></td><td>Assigns one cell in the transaction.</td></tr>
+<tr><td><code>fillRoom(level,x,y,w,h,index)</code></td><td>Assigns a complete rectangle.</td></tr>
+</table>
 
-layer:fill(selection, tile)
-print(("Filled %d selection rectangle(s)"):format(selection:rectCount()))</code></pre>
+<h2>Floors and objects</h2>
+<table>
+<tr><th>Function</th><th>Result or effect</th></tr>
+<tr><td><code>floorCount()</code></td><td>Number of building floors.</td></tr>
+<tr><td><code>floorLevel(index)</code></td><td>Level represented by a zero-based floor index.</td></tr>
+<tr><td><code>currentLevel()</code></td><td>Level selected in BuildingEd.</td></tr>
+<tr><td><code>objectCount(level)</code></td><td>Current transactional object count.</td></tr>
+<tr><td><code>objectType(level,index)</code></td><td>Door, Window, Stairs, Furniture, Roof, Wall, or Object.</td></tr>
+<tr><td><code>objectX(level,index)</code>, <code>objectY(level,index)</code></td><td>Transactional object position.</td></tr>
+<tr><td><code>objectDirection(level,index)</code></td><td>Direction string used by BuildingEd.</td></tr>
+<tr><td><code>moveObject(level,index,x,y)</code></td><td>Moves an object after validating its bounds.</td></tr>
+<tr><td><code>removeObject(level,index)</code></td><td>Removes an object. Later indexes reflect the removal.</td></tr>
+<tr><td><code>furnitureGroupNames()</code></td><td>One-based list of furniture-catalog group names.</td></tr>
+<tr><td><code>furnitureCount(group)</code></td><td>Number of definitions in a group. The group is a name or zero-based index.</td></tr>
+<tr><td><code>furnitureOrientations(group,index)</code></td><td>Available explicit orientations for one furniture definition.</td></tr>
+<tr><td><code>furnitureSize(group,index,orientation)</code></td><td>Returns width and height of the resolved orientation.</td></tr>
+<tr><td><code>furnitureTileAt(group,index,orientation,x,y)</code></td><td>Tile name at a local furniture coordinate, or an empty string.</td></tr>
+<tr><td><code>findFurniture(tileName)</code></td><td>Returns every catalog match with group, indexes, orientation, local coordinates and layer.</td></tr>
+<tr><td><code>placeFurniture(level,x,y,group,index,orientation)</code></td><td>Stages a catalog-backed FurnitureObject and returns its transactional object index.</td></tr>
+</table>
 
-  <p>A configurable version is installed as
-  <code>lua/example-fill-selection.lua</code>.</p>
+<div class="warning">
+  If removing multiple objects, iterate indexes from the end toward zero.
+</div>
 
-  <h3>Create a RoomDefs layer and object</h3>
-  <pre><code>local layerName = "8_RoomDefs"
-local roomDefs = map:objectLayer(layerName)
-
-if not roomDefs then
-    roomDefs = map:newObjectLayer(layerName)
-    map:addLayer(roomDefs)
-    print("Created " .. layerName)
-end
-
-local room = MapObject:new("example_room", "RoomDef", 20, 20, 12, 8)
-room:setProperty("usage", "documentation example")
-roomDefs:addObject(room)
-
-print(("RoomDefs now contains %d object(s)"):format(roomDefs:objectCount()))</code></pre>
-
-  <p>See <code>lua/example-roomdefs.lua</code> for a version that first checks
-  whether the example object already exists.</p>
-
-  <h3>List and update object properties</h3>
-  <pre><code>local zones = map:objectLayer("0_Zones")
-if zones then
-    for _, object in ipairs(zones:objects()) do
-        print(object:name(), object:type(), object:shape())
-        for _, propertyName in ipairs(object:propertyNames()) do
-            print("  " .. propertyName .. " = " .. object:property(propertyName))
-        end
-
-        if object:type() == "TownZone" then
-            object:setProperty("reviewed", "true")
-        end
-    end
+<p>Furniture additions are part of API version 3 and participate in the same
+all-or-nothing undo transaction as the other mutations. This example converts
+one tile at map position <code>x,y</code> using the first catalog match:</p>
+<pre><code>local matches = building:findFurniture(tileName)
+local match = matches[1]
+if match then
+    local objectX = x - match.localX
+    local objectY = y - match.localY
+    building:placeFurniture(level, objectX, objectY,
+        match.groupIndex, match.furnitureIndex, match.orientation)
 end</code></pre>
 
-  <h3>Paint an exact BMP color</h3>
-  <pre><code>local mainBmp = map:bmp(0) -- 0 = Map.png, 1 = Map_veg.png
-local oldColor = rgb(128, 64, 32)
-local newColor = rgb(130, 66, 34)
+<h2>User-tile and grime layers</h2>
+<p>These functions access the per-floor string tile grids used for grime and
+user-tile overrides. Structural floors, walls, doors and furniture remain
+generated from rooms and BuildingEd objects; these functions intentionally do
+not overwrite that generated structure.</p>
+<pre><code>local level = building:currentLevel()
+for _, layer in ipairs(building:userLayerNames(level)) do print(layer) end
+print(building:tileAt(level, "FloorGrime", 3, 4))
+building:placeTile(level, "FloorGrime", 3, 4, "floors_overlay_01_12")
+building:replaceTile(level, "FloorGrime", 3, 4,
+    "floors_overlay_01_12", "floors_overlay_01_13")
+building:deleteTile(level, "FloorGrime", 3, 4)</code></pre>
 
-for y = 0, map:height() - 1 do
-    for x = 0, map:width() - 1 do
-        if mainBmp:pixel(x, y) == oldColor.pixel then
-            mainBmp:setPixel(x, y, newColor)
-        end
-    end
-end</code></pre>
+<table>
+<tr><th>Function</th><th>Result or effect</th></tr>
+<tr><td><code>userLayerNames(level)</code></td><td>One-based list of existing grid names.</td></tr>
+<tr><td><code>userTileAt(level,layer,x,y)</code></td><td>Tile name or an empty string.</td></tr>
+<tr><td><code>setUserTile(level,layer,x,y,tileName)</code></td><td>Records one override and creates the named grid when needed.</td></tr>
+<tr><td><code>tileAt(level,layer,x,y)</code></td><td>Alias returning the exact tile name or an empty string.</td></tr>
+<tr><td><code>placeTile(level,layer,x,y,tileName)</code></td><td>Validates and places one known tile; creates the layer when needed.</td></tr>
+<tr><td><code>deleteTile(level,layer,x,y[,tileName])</code></td><td>Deletes by position. With a name, deletion occurs only on an exact match. Returns a boolean.</td></tr>
+<tr><td><code>deleteTilesByName(level,layer,tileName)</code></td><td>Deletes all exact matches in one layer and returns the count.</td></tr>
+<tr><td><code>replaceTile(level,layer,x,y,oldName,newName)</code></td><td>Conditionally replaces one position and returns a boolean.</td></tr>
+<tr><td><code>replaceTilesByName(level,layer,oldName,newName)</code></td><td>Replaces every exact match in one layer and returns the count.</td></tr>
+</table>
 
-  <h2 id="interactive-tools">Interactive tools</h2>
-  <p>An interactive tool is loaded from an entry in the application or user
-  <code>LuaTools.txt</code>:</p>
-
-  <pre><code>tool
-{
-    label = Example Painter
-    icon = tool-example.png
-    script = tool-example.lua
-    dialog-title = Example Painter
-}</code></pre>
-
-  <p>The script may define these callbacks:</p>
-  <div class="api"><code>activate()</code> — tool selected.</div>
-  <div class="api"><code>deactivate()</code> — tool deselected.</div>
-  <div class="api"><code>mouseMoved(buttons, x, y, modifiers)</code></div>
-  <div class="api"><code>mousePressed(buttons, x, y, modifiers)</code></div>
-  <div class="api"><code>mouseReleased(buttons, x, y, modifiers)</code></div>
-  <div class="api"><code>modifiersChanged(modifiers)</code></div>
-  <div class="api"><code>options()</code> and
-    <code>setOption(name, value)</code> — optional tool-dialog integration.</div>
-
-  <p><code>buttons.left</code>, <code>buttons.right</code>,
-  <code>modifiers.alt</code>, <code>modifiers.control</code>, and
-  <code>modifiers.shift</code> are true when active. Mouse coordinates are
-  floating-point tile coordinates at the current level.</p>
-
-  <pre><code>local tileName = "floors_interior_tilesandwood_01_0"
-
-function activate()
-    self:setCursorType(TileTool.EdgeTool)
-end
-
-function mouseMoved(buttons, x, y, modifiers)
-    self:clearToolTiles()
-    local tile = map:tile(tileName)
-    local layer = self:currentLayer()
-    if tile and layer then
-        local point = Region:new()
-        point:unite(math.floor(x), math.floor(y), 1, 1)
-        self:setToolTile(layer:nameWithPrefix(), point, tile)
-    end
-end
-
-function mouseReleased(buttons, x, y, modifiers)
-    if buttons.left then
-        local layer = self:currentLayer()
-        local tile = map:tile(tileName)
-        if layer and tile then
-            layer:setTile(math.floor(x), math.floor(y), tile)
-            self:applyChanges("Example Painter")
-        end
-    end
-end</code></pre>
-
-  <p>The shipped tools <code>tool-edge.lua</code>,
-  <code>tool-curb.lua</code>, <code>tool-fence.lua</code>, and
-  <code>tool-parking-stall.lua</code> are complete examples with preview,
-  dragging, cancellation and undo.</p>
-
-  <h2 id="api-map">API reference: Map</h2>
-  <p class="muted">In batch scripts the global <code>map</code> wraps the
-  current TMX. Collections accessed by index are zero-based.</p>
-
-  <div class="api"><code>Map:new(orientation, width, height [, tileWidth = 64 [, tileHeight = 32]])</code></div>
-  <div class="api"><code>orientation()</code> — one of
-    <code>Map.Unknown</code>, <code>Map.Orthogonal</code>,
-    <code>Map.Isometric</code>, <code>Map.LevelIsometric</code>,
-    <code>Map.Staggered</code>.</div>
-  <div class="api"><code>width()</code>, <code>height()</code>,
-    <code>minLevel()</code>, <code>maxLevel()</code></div>
-  <div class="api"><code>cellX()</code>, <code>cellY()</code> — absolute
-    WorldEd cell coordinates, or <code>-1</code>.</div>
-  <div class="api"><code>layerCount()</code>,
-    <code>layerAt(index)</code>, <code>layer(prefixedName)</code></div>
-  <div class="api"><code>tileLayer(prefixedName)</code>,
-    <code>tileLayerAt(level, baseName)</code>,
-    <code>objectLayer(prefixedName)</code></div>
-  <div class="api"><code>newTileLayer(prefixedName)</code>,
-    <code>newObjectLayer(prefixedName)</code></div>
-  <div class="api"><code>addLayer(layer)</code>,
-    <code>insertLayer(index, layer)</code>,
-    <code>removeLayer(index)</code></div>
-  <div class="api"><code>tilesetCount()</code>,
-    <code>tileset(name)</code>, <code>tilesetAt(index)</code>,
-    <code>addTileset(tileset)</code></div>
-  <div class="api"><code>tile("tileset_name_id")</code>,
-    <code>tile(tilesetName, id)</code>, <code>noneTile()</code></div>
-  <div class="api"><code>replaceTilesByName("from_name_id;to_name_id;...")</code>
-    — replaces pairs across tile layers and loads required known tilesets.</div>
-  <div class="api"><code>clearTilesByName(tileName)</code> clears every
-    matching occurrence in all tile layers and returns the number changed.</div>
-  <div class="api"><code>replaceTileByName(oldTileName, newTileName)</code>
-    replaces every occurrence in all tile layers and returns the number
-    changed. An empty destination clears matching tiles.</div>
-  <div class="api"><code>tileSelection()</code>,
-    <code>setTileSelection(region)</code></div>
-  <div class="api"><code>bmp(0)</code> returns Map.png data;
-    <code>bmp(1)</code> returns Map_veg.png data.</div>
-  <div class="api"><code>alias(name)</code>,
-    <code>rules()</code>, <code>ruleCount()</code>,
-    <code>ruleAt(index)</code>, <code>rule(label)</code></div>
-  <div class="api"><code>blends()</code>, <code>blendLayers()</code>,
-    <code>isBlendTile(tile)</code></div>
-  <div class="api"><code>noBlend(layerName)</code>,
-    <code>reloadRules()</code>, <code>reloadBlends()</code></div>
-  <div class="api"><code>write(path)</code> — writes a separate TMX and returns
-    true on success.</div>
-
-  <h2 id="api-layer">API reference: Layer and TileLayer</h2>
-  <h3>Layer</h3>
-  <div class="api"><code>name()</code>, <code>nameWithPrefix()</code>,
-    <code>type()</code></div>
-  <div class="api"><code>asTileLayer()</code>,
-    <code>asObjectGroup()</code> — return <code>nil</code> for the wrong type.</div>
-
-  <h3>TileLayer</h3>
-  <div class="api"><code>TileLayer:new(name, x, y, width, height)</code></div>
-  <div class="api"><code>level()</code></div>
-  <div class="api"><code>tileAt(x, y)</code>,
-    <code>setTile(x, y, tile)</code>, <code>clearTile(x, y)</code></div>
-  <div class="api"><code>tileNameAt(x, y)</code> returns the complete
-    <code>tileset_name_id</code>, or an empty string.</div>
-  <div class="api"><code>setTileByName(x, y, tileName)</code> places a
-    named tile, loading its known tileset if required, and returns success.</div>
-  <div class="api"><code>clearTileByName(x, y, tileName)</code> clears the
-    coordinate only when the current tile has that exact name.</div>
-  <div class="api"><code>replaceTileByNameAt(x, y, oldTileName, newTileName)</code>
-    conditionally replaces one coordinate. An empty destination clears it.</div>
-  <div class="api"><code>erase(x, y, width, height)</code>,
-    <code>erase(rect)</code>, <code>erase(region)</code>,
-    <code>erase()</code></div>
-  <div class="api"><code>fill(x, y, width, height, tile)</code>,
-    <code>fill(rect, tile)</code>, <code>fill(region, tile)</code>,
-    <code>fill(tile)</code></div>
-  <div class="api"><code>replaceTile(oldTile, newTile)</code> — returns true
-    when at least one tile was replaced.</div>
-
-  <h2 id="api-app">API reference: application actions</h2>
-  <p>The global <code>app</code> requests existing TileZed Qt actions.
-  Requests run only after the script succeeds and its map transaction has
-  entered the Undo stack.</p>
-  <div class="api"><code>app:availableActions()</code> returns
-    <code>save</code>, <code>saveAs</code>, <code>export</code>,
-    <code>exportBinary</code>, <code>convertToLot</code>,
-    <code>mapProperties</code>, <code>launchBuildingEd</code>, and
-    <code>launchWorldEd</code>.</div>
-  <div class="api"><code>app:invoke(actionName)</code> queues one
-    whitelisted action. Dialog-based actions open their normal Qt dialog.</div>
-  <pre><code>local floor = assert(map:tileLayerAt(0, "Floor"))
-assert(floor:setTileByName(10, 20, "floors_interior_tilesandwood_01_0"))
+<h2>Qt application actions</h2>
+<p>The global <code>app</code> queues existing BuildingEd actions. They execute
+only after the script succeeds and its transactional edits enter the Undo
+stack.</p>
+<table>
+<tr><th>Function</th><th>Result or effect</th></tr>
+<tr><td><code>app:availableActions()</code></td><td>Returns <code>save</code>, <code>saveAs</code>, <code>exportTMX</code>, <code>exportBinary</code>, <code>buildingProperties</code>, <code>rooms</code>, <code>floors</code>, and <code>tiles</code>.</td></tr>
+<tr><td><code>app:invoke(actionName)</code></td><td>Queues a whitelisted action; dialog actions open the normal Qt window.</td></tr>
+</table>
+<pre><code>app:invoke("exportTMX")
 app:invoke("exportBinary")</code></pre>
-  <div class="warning">Lua does not expose arbitrary QObject construction,
-    widget ownership, signals, or slots. Use the explicit action list.
-    In-game map feature generation is a WorldEd operation, not a TileZed
-    action. Avoid dialog actions in directory/world batch scripts because the
-    request is executed once for every processed map.</div>
+<div class="warning">
+  Arbitrary QObject construction, widget ownership, signals and slots are not
+  exposed. In-game map feature generation belongs to WorldEd and cannot be
+  invoked on a BuildingEd document.
+</div>
 
-  <h2 id="api-objects">API reference: ObjectGroup and MapObject</h2>
-  <h3>ObjectGroup</h3>
-  <div class="api"><code>ObjectGroup:new(name, x, y, width, height)</code></div>
-  <div class="api"><code>color()</code>, <code>setColor(color)</code></div>
-  <div class="api"><code>objects()</code>, <code>objectCount()</code>,
-    <code>objectAt(index)</code></div>
-  <div class="api"><code>addObject(object)</code>,
-    <code>removeObject(object)</code></div>
+<h2>Properties and selections</h2>
+<table>
+<tr><th>Function</th><th>Result or effect</th></tr>
+<tr><td><code>property(name)</code></td><td>String value or nil.</td></tr>
+<tr><td><code>propertyNames()</code></td><td>Sorted one-based list.</td></tr>
+<tr><td><code>setProperty(name,value)</code></td><td>Creates or replaces a property.</td></tr>
+<tr><td><code>removeProperty(name)</code></td><td>Removes a property.</td></tr>
+<tr><td><code>setRoomSelection(x,y,w,h)</code></td><td>Changes the room selection.</td></tr>
+<tr><td><code>clearRoomSelection()</code></td><td>Clears the room selection.</td></tr>
+<tr><td><code>setTileSelection(x,y,w,h)</code></td><td>Changes the tile selection.</td></tr>
+<tr><td><code>clearTileSelection()</code></td><td>Clears the tile selection.</td></tr>
+</table>
 
-  <h3>MapObject</h3>
-  <div class="api"><code>MapObject:new(name, type, x, y, width, height)</code></div>
-  <div class="api"><code>name()</code>, <code>setName(name)</code>,
-    <code>type()</code>, <code>setType(type)</code></div>
-  <div class="api"><code>bounds()</code>,
-    <code>setBounds(x, y, width, height)</code></div>
-  <div class="api"><code>shape()</code> — <code>"rectangle"</code>,
-    <code>"polygon"</code>, or <code>"polyline"</code>.</div>
-  <div class="api"><code>property(name)</code>,
-    <code>setProperty(name, value)</code>,
-    <code>removeProperty(name)</code>,
-    <code>propertyNames()</code></div>
+<h2>Errors, cancellation, and trust</h2>
+<p>Invalid levels, indexes, coordinates, rectangles, or object destinations
+raise a Lua error. Long scripts process UI events every 10,000 Lua
+instructions and can be cancelled from the progress dialog.</p>
+<p>BuildingEd currently opens Lua's standard libraries, including file and OS
+functions. Run only scripts you trust. These are editor scripts, not Project
+Zomboid gameplay scripts.</p>
 
-  <div class="warning">
-    The current Lua constructor creates rectangular objects. Existing polygon
-    and polyline objects can be inspected, named, typed, moved, resized and
-    given properties, but the binding does not expose their vertex arrays.
-  </div>
-
-  <h2 id="api-bmp">API reference: BMP data and rules</h2>
-  <h3>MapBmp</h3>
-  <div class="api"><code>pixel(x, y)</code> — packed RGB integer;
-    compare it with <code>rgb(r,g,b).pixel</code>.</div>
-  <div class="api"><code>setPixel(x, y, color)</code>,
-    <code>rand(x, y)</code></div>
-  <div class="api"><code>erase(x, y, width, height)</code>,
-    <code>erase(rect)</code>, <code>erase(region)</code>,
-    <code>erase()</code></div>
-  <div class="api"><code>fill(x, y, width, height, color)</code>,
-    <code>fill(rect, color)</code>, <code>fill(region, color)</code>,
-    <code>fill(color)</code></div>
-  <div class="api"><code>replace(oldColor, newColor)</code></div>
-
-  <h3>BmpAlias</h3>
-  <div class="api"><code>tiles()</code></div>
-
-  <h3>BmpRule</h3>
-  <div class="api"><code>label()</code>, <code>bmpIndex()</code>,
-    <code>color()</code>, <code>tiles()</code>, <code>layer()</code>,
-    <code>condition()</code></div>
-
-  <h3>BmpBlend</h3>
-  <div class="api"><code>layer()</code>, <code>mainTile()</code>,
-    <code>blendTile()</code>, <code>direction()</code>,
-    <code>exclude()</code></div>
-  <p>Directions are <code>BmpBlend.Unknown</code>, <code>N</code>,
-  <code>S</code>, <code>E</code>, <code>W</code>, <code>NW</code>,
-  <code>NE</code>, <code>SW</code>, and <code>SE</code>.</p>
-
-  <h3>MapNoBlend</h3>
-  <div class="api"><code>get(x, y)</code>,
-    <code>set(x, y, boolean)</code>, <code>set(region, boolean)</code></div>
-
-  <h2 id="api-basic">API reference: basic types</h2>
-  <h3>Tile and Tileset</h3>
-  <div class="api"><code>tile:id()</code>, <code>tile:tileset()</code>,
-    <code>tileset:name()</code></div>
-
-  <h3>Color</h3>
-  <div class="api"><code>Color:new()</code>,
-    <code>Color:new(r, g, b)</code>, <code>rgb(r, g, b)</code></div>
-  <div class="api">Fields: <code>r</code>, <code>g</code>, <code>b</code>,
-    <code>pixel</code>.</div>
-
-  <h3>Region</h3>
-  <div class="api"><code>Region:new()</code>, <code>boundingRect()</code>,
-    <code>rects()</code>, <code>rectCount()</code>,
-    <code>isEmpty()</code></div>
-  <div class="api"><code>unite(x, y, w, h)</code>,
-    <code>unite(rect)</code>, <code>unite(region)</code></div>
-  <div class="api"><code>intersect(x, y, w, h)</code>,
-    <code>intersect(rect)</code>, <code>intersect(region)</code>,
-    <code>intersected(rectOrRegion)</code></div>
-  <div class="api"><code>translated(dx, dy)</code>; region operators
-    <code>+</code> and <code>-</code> are also bound.</div>
-
-  <h3>Rect</h3>
-  <div class="api"><code>Rect:new(x, y, width, height)</code></div>
-  <div class="api"><code>x()</code>, <code>y()</code>,
-    <code>width()</code>, <code>height()</code>,
-    <code>left()</code>, <code>right()</code>,
-    <code>top()</code>, <code>bottom()</code></div>
-  <div class="api"><code>translate(dx, dy)</code>,
-    <code>translated(dx, dy)</code>, <code>intersects(other)</code></div>
-
-  <h2 id="api-tool">API reference: TileTool</h2>
-  <p>The global <code>self</code> in an interactive tool is a TileTool.</p>
-  <div class="api"><code>setCursorType(TileTool.None | TileTool.CurbTool | TileTool.EdgeTool)</code></div>
-  <div class="api"><code>currentLayer()</code>,
-    <code>applyChanges(undoText)</code>,
-    <code>dragged()</code></div>
-  <div class="api"><code>angle(x1, y1, x2, y2)</code></div>
-  <div class="api"><code>clearToolTiles()</code>,
-    <code>setToolTile(layerName, x, y, tile)</code>,
-    <code>setToolTile(layerName, region, tile)</code></div>
-  <div class="api"><code>clearToolNoBlends()</code>,
-    <code>setToolNoBlend(layerName, region, boolean)</code></div>
-  <div class="api"><code>clearDistanceIndicators()</code>,
-    <code>indicateDistance(x1, y1, x2, y2)</code></div>
-
-  <h2 id="api-perlin">API reference: Perlin</h2>
-  <div class="api"><code>Perlin:new()</code>,
-    <code>perlin(x, y, z)</code> — returns deterministic 3D Perlin noise.</div>
-  <p>See <code>lua/perlin_trees.lua</code> for a complete map-editing example.</p>
-
-  <h2 id="behavior">Detailed function behavior</h2>
-  <p>This section complements the signature list with return values, side
-  effects and practical limitations. “Recorded change” means that a current-map
-  batch script will place the change on TileZed's Undo stack after the script
-  completes. Interactive tools must additionally call
-  <code>self:applyChanges()</code>.</p>
-
-  <h3>Map construction, identity and dimensions</h3>
-  <table>
-    <thead><tr><th>Function</th><th>Returns / effect</th><th>Usage notes</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>Map:new(orientation, width, height, tileWidth, tileHeight)</code></td>
-        <td>A new in-memory map.</td>
-        <td>Use this only when generating a separate TMX. The global
-        <code>map</code> already wraps the current document.</td>
-      </tr>
-      <tr>
-        <td><code>orientation()</code></td>
-        <td>A <code>Map.*</code> enum.</td>
-        <td>PZ maps normally use level-isometric geometry. Do not change
-        coordinate assumptions based only on the visual camera.</td>
-      </tr>
-      <tr>
-        <td><code>width()</code>, <code>height()</code></td>
-        <td>Map dimensions in tiles.</td>
-        <td>Valid tile/BMP coordinates range from zero through
-        <code>width - 1</code> and <code>height - 1</code>.</td>
-      </tr>
-      <tr>
-        <td><code>minLevel()</code>, <code>maxLevel()</code></td>
-        <td>The lowest and highest level found among layers.</td>
-        <td>Both return zero for a map containing no layer outside level 0.
-        Negative values identify basements.</td>
-      </tr>
-      <tr>
-        <td><code>cellX()</code>, <code>cellY()</code></td>
-        <td>Absolute WorldEd cell coordinates, or <code>-1</code>.</td>
-        <td>Coordinates are available when TileZed can associate the TMX with a
-        loaded WorldEd project. A standalone TMX has no world-cell identity.</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>Layer lookup and structure</h3>
-  <table>
-    <thead><tr><th>Function</th><th>Returns / effect</th><th>Usage notes</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>layerCount()</code></td>
-        <td>Number of map layers.</td>
-        <td>Use <code>0 .. layerCount()-1</code> with
-        <code>layerAt()</code>.</td>
-      </tr>
-      <tr>
-        <td><code>layerAt(index)</code></td>
-        <td>A Layer, or <code>nil</code> outside the valid range.</td>
-        <td>The index is zero-based and follows the map's layer order.</td>
-      </tr>
-      <tr>
-        <td><code>layer(name)</code></td>
-        <td>Any layer matching the exact level-prefixed name.</td>
-        <td>Use names such as <code>0_Floor</code>,
-        <code>8_RoomDefs</code> and <code>-1_Walls</code>.</td>
-      </tr>
-      <tr>
-        <td><code>tileLayer(name)</code>, <code>objectLayer(name)</code></td>
-        <td>The requested typed layer, or <code>nil</code>.</td>
-        <td>These combine an exact lookup with a type check and are preferable
-        to calling <code>asTileLayer()</code> manually.</td>
-      </tr>
-      <tr>
-        <td><code>newTileLayer(name)</code>,
-        <code>newObjectLayer(name)</code></td>
-        <td>A detached new layer sized to the current map.</td>
-        <td>A numeric prefix is parsed as its level. The returned layer is not
-        part of the map until passed to <code>addLayer()</code> or
-        <code>insertLayer()</code>.</td>
-      </tr>
-      <tr>
-        <td><code>addLayer(layer)</code></td>
-        <td>Appends a detached or previously removed layer.</td>
-        <td>Adding the same layer object twice is ignored.</td>
-      </tr>
-      <tr>
-        <td><code>insertLayer(index, layer)</code></td>
-        <td>Inserts a layer and records a structural change.</td>
-        <td>The index is clamped to the valid insertion range, so a negative
-        index becomes the first position and a large index becomes the end.</td>
-      </tr>
-      <tr>
-        <td><code>removeLayer(index)</code></td>
-        <td>Removes the indexed layer and records a structural change.</td>
-        <td>An invalid index is ignored. Resolve the index immediately before
-        removal because earlier removals shift later indexes.</td>
-      </tr>
-      <tr>
-        <td><code>layer:name()</code></td>
-        <td>The base name without its level prefix.</td>
-        <td>A level-8 RoomDefs layer normally returns
-        <code>RoomDefs</code>.</td>
-      </tr>
-      <tr>
-        <td><code>layer:nameWithPrefix()</code></td>
-        <td>The canonical lookup name.</td>
-        <td>Prefer this value when comparing layers or passing a layer name to
-        another API function.</td>
-      </tr>
-      <tr>
-        <td><code>layer:type()</code></td>
-        <td>The layer type name.</td>
-        <td>Use the typed conversion functions for logic; the type string is
-        most useful for reports and diagnostics.</td>
-      </tr>
-      <tr>
-        <td><code>asTileLayer()</code>, <code>asObjectGroup()</code></td>
-        <td>A typed wrapper or <code>nil</code>.</td>
-        <td>These never convert a layer; they only test its existing type.</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>Tilesets and tile identity</h3>
-  <table>
-    <thead><tr><th>Function</th><th>Returns / effect</th><th>Usage notes</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>tilesetCount()</code>,
-        <code>tilesetAt(index)</code></td>
-        <td>The map's referenced tileset count and a zero-based lookup.</td>
-        <td>This reports tilesets attached to the TMX wrapper, not every entry
-        in the global <code>Tilesets.txt</code> catalog.</td>
-      </tr>
-      <tr>
-        <td><code>tileset(name)</code></td>
-        <td>The exact named Tileset or <code>nil</code>.</td>
-        <td>Names are case-sensitive in the current binding. This is important
-        for future Linux compatibility.</td>
-      </tr>
-      <tr>
-        <td><code>addTileset(tileset)</code></td>
-        <td>Adds a tileset reference to the in-memory map.</td>
-        <td>Passing a tileset already attached to the map is ignored.</td>
-      </tr>
-      <tr>
-        <td><code>tile("tileset_name_id")</code></td>
-        <td>A Tile or <code>nil</code>.</td>
-        <td>The final underscore separates the numeric ID, so tileset names may
-        themselves contain underscores. Leading zeroes in the ID are accepted.
-        The tileset must be present in the preloaded catalog.</td>
-      </tr>
-      <tr>
-        <td><code>tile(tilesetName, id)</code></td>
-        <td>A Tile or <code>nil</code>.</td>
-        <td>Useful when the name and ID are already separate. The tileset must
-        be known to the map/catalog and available in the preloaded catalog. A
-        <code>1x</code> image is not required when a usable <code>2x</code> or
-        custom variant exists.</td>
-      </tr>
-      <tr>
-        <td><code>tile:id()</code></td>
-        <td>Numeric ID within the tile's tileset.</td>
-        <td>This is not a globally unique ID; combine it with
-        <code>tile:tileset():name()</code>.</td>
-      </tr>
-      <tr>
-        <td><code>tile:tileset()</code>,
-        <code>tileset:name()</code></td>
-        <td>The owning Tileset and its name.</td>
-        <td>These are read-only identity helpers.</td>
-      </tr>
-      <tr>
-        <td><code>noneTile()</code></td>
-        <td>The editor's special empty-tile sentinel.</td>
-        <td>Passing it to <code>setTile()</code> or a fill operation clears the
-        cell. <code>clearTile()</code> is clearer for a single coordinate.</td>
-      </tr>
-      <tr>
-        <td><code>replaceTilesByName(pairs)</code></td>
-        <td>Replaces semicolon-separated from/to pairs across all tile layers.</td>
-        <td>Example:
-        <code>"old_set_3;new_set_9;old_set_4;new_set_10"</code>.
-        The complete string must contain an even number of valid names. The
-        legacy function does not return an error object, so verify results.</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>TileLayer editing</h3>
-  <table>
-    <thead><tr><th>Function</th><th>Returns / effect</th><th>Usage notes</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>level()</code></td>
-        <td>The layer's integer level.</td>
-        <td>Basement layers return negative values.</td>
-      </tr>
-      <tr>
-        <td><code>tileAt(x, y)</code></td>
-        <td>The Tile at a coordinate, or <code>nil</code>.</td>
-        <td><code>nil</code> may mean either an empty cell or an out-of-bounds
-        coordinate; validate coordinates when that distinction matters.</td>
-      </tr>
-      <tr>
-        <td><code>setTile(x, y, tile)</code></td>
-        <td>Records one changed tile.</td>
-        <td>Out-of-bounds writes are ignored. The special
-        <code>noneTile()</code> sentinel is converted to an empty cell.</td>
-      </tr>
-      <tr>
-        <td><code>clearTile(x, y)</code></td>
-        <td>Records one tile deletion.</td>
-        <td>Equivalent to setting an empty tile, but more explicit.</td>
-      </tr>
-      <tr>
-        <td><code>erase(...)</code></td>
-        <td>Clears a rectangle, Region or complete layer.</td>
-        <td>Input areas are clipped to the layer. The no-argument form can
-        create a very large Undo change.</td>
-      </tr>
-      <tr>
-        <td><code>fill(..., tile)</code></td>
-        <td>Fills a rectangle, Region or complete layer.</td>
-        <td>Region fills operate on every rectangle in the Region. Prefer a
-        selected Region when only part of a layer should change.</td>
-      </tr>
-      <tr>
-        <td><code>replaceTile(oldTile, newTile)</code></td>
-        <td>Returns true if at least one cell was replaced.</td>
-        <td>Only this TileLayer is scanned. Use
-        <code>noneTile()</code> as the new value to erase matches.</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>Selection and integer geometry</h3>
-  <table>
-    <thead><tr><th>Function</th><th>Returns / effect</th><th>Usage notes</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>tileSelection()</code></td>
-        <td>A copy of the current TileZed selection as a Region.</td>
-        <td>It may contain multiple disjoint rectangles.</td>
-      </tr>
-      <tr>
-        <td><code>setTileSelection(region)</code></td>
-        <td>Records a new editor selection.</td>
-        <td>This changes selection state, not tile content.</td>
-      </tr>
-      <tr>
-        <td><code>Region:new()</code></td>
-        <td>An empty integer region.</td>
-        <td>Add rectangles with <code>unite()</code>.</td>
-      </tr>
-      <tr>
-        <td><code>boundingRect()</code></td>
-        <td>The smallest Rect covering the Region.</td>
-        <td>The bounding rectangle may include holes or space between disjoint
-        rectangles; use <code>rects()</code> for exact coverage.</td>
-      </tr>
-      <tr>
-        <td><code>rects()</code>, <code>rectCount()</code></td>
-        <td>A one-based Lua list of component Rects and its count.</td>
-        <td>Iterate the returned list with <code>ipairs()</code>.</td>
-      </tr>
-      <tr>
-        <td><code>isEmpty()</code></td>
-        <td>True when the Region contains no coordinate.</td>
-        <td>Check this before a selection-based destructive edit.</td>
-      </tr>
-      <tr>
-        <td><code>unite(...)</code></td>
-        <td>Mutates the Region by adding an area.</td>
-        <td>Overlapping rectangles are normalized by Qt's region engine.</td>
-      </tr>
-      <tr>
-        <td><code>intersect(...)</code></td>
-        <td>Mutates the Region, retaining only common area.</td>
-        <td>Use this to clip a selection to safe map bounds.</td>
-      </tr>
-      <tr>
-        <td><code>intersected(...)</code></td>
-        <td>A new Region; the original is unchanged.</td>
-        <td>Choose this form when the source Region is needed later.</td>
-      </tr>
-      <tr>
-        <td><code>translated(dx, dy)</code></td>
-        <td>A shifted copy of the Region.</td>
-        <td>Coordinates remain integers.</td>
-      </tr>
-      <tr>
-        <td><code>Rect:new(x, y, w, h)</code></td>
-        <td>An integer rectangle.</td>
-        <td>A non-positive width or height represents no useful tile area.</td>
-      </tr>
-      <tr>
-        <td><code>x/y/width/height</code></td>
-        <td>Rectangle origin and size.</td>
-        <td>The origin is the top-left tile coordinate.</td>
-      </tr>
-      <tr>
-        <td><code>left/right/top/bottom</code></td>
-        <td>Inclusive Qt rectangle edges.</td>
-        <td>For a width of 10, <code>right()</code> is
-        <code>left() + 9</code>.</td>
-      </tr>
-      <tr>
-        <td><code>translate(dx, dy)</code></td>
-        <td>Mutates the Rect.</td>
-        <td><code>translated()</code> returns a shifted copy instead.</td>
-      </tr>
-      <tr>
-        <td><code>intersects(other)</code></td>
-        <td>True when two Rects share at least one cell.</td>
-        <td>Touching just outside an inclusive edge is not an intersection.</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>Object Groups, RoomDefs and zone-like objects</h3>
-  <table>
-    <thead><tr><th>Function</th><th>Returns / effect</th><th>Usage notes</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>ObjectGroup:new(name, x, y, w, h)</code></td>
-        <td>A detached Object Group.</td>
-        <td><code>map:newObjectLayer()</code> is usually easier because it uses
-        the current map dimensions and parses a level prefix.</td>
-      </tr>
-      <tr>
-        <td><code>color()</code>, <code>setColor(color)</code></td>
-        <td>Reads or records the Object Group display color.</td>
-        <td>This is editor metadata; it does not change object types or gameplay
-        semantics.</td>
-      </tr>
-      <tr>
-        <td><code>objects()</code></td>
-        <td>A one-based Lua list of current MapObjects.</td>
-        <td>The list includes newly added objects and excludes objects removed
-        earlier in the same script.</td>
-      </tr>
-      <tr>
-        <td><code>objectCount()</code>,
-        <code>objectAt(index)</code></td>
-        <td>Count and zero-based access.</td>
-        <td><code>objectAt()</code> returns <code>nil</code> outside the valid
-        range.</td>
-      </tr>
-      <tr>
-        <td><code>addObject(object)</code></td>
-        <td>Records an object insertion.</td>
-        <td>The same wrapper cannot be added twice to one group.</td>
-      </tr>
-      <tr>
-        <td><code>removeObject(object)</code></td>
-        <td>Records an object removal.</td>
-        <td>Removing an object that is not currently in the group is ignored.</td>
-      </tr>
-      <tr>
-        <td><code>MapObject:new(name, type, x, y, w, h)</code></td>
-        <td>A detached rectangular MapObject.</td>
-        <td>Coordinates and size are integer-aligned by the binding.</td>
-      </tr>
-      <tr>
-        <td><code>name()</code>, <code>setName(value)</code></td>
-        <td>Reads or records the object's logical name.</td>
-        <td>RoomDefs often use the name to join adjacent rectangles belonging
-        to one room.</td>
-      </tr>
-      <tr>
-        <td><code>type()</code>, <code>setType(value)</code></td>
-        <td>Reads or records the object's type string.</td>
-        <td>Type matching is exact. Use the spelling expected by the PZ tool or
-        game workflow consuming the object.</td>
-      </tr>
-      <tr>
-        <td><code>bounds()</code></td>
-        <td>An integer-aligned Rect around the object.</td>
-        <td>Fractional source coordinates are rounded outward by
-        <code>toAlignedRect()</code>.</td>
-      </tr>
-      <tr>
-        <td><code>setBounds(x, y, w, h)</code></td>
-        <td>Records position and size together.</td>
-        <td>For existing polygon/polyline objects this changes the object's
-        bounds, but the Lua API does not expose vertex editing.</td>
-      </tr>
-      <tr>
-        <td><code>shape()</code></td>
-        <td><code>"rectangle"</code>, <code>"polygon"</code> or
-        <code>"polyline"</code>.</td>
-        <td>Read-only in this binding.</td>
-      </tr>
-      <tr>
-        <td><code>property(name)</code></td>
-        <td>The string value, or an empty string when absent.</td>
-        <td>Use <code>propertyNames()</code> when absence must be distinguished
-        from an intentionally empty value.</td>
-      </tr>
-      <tr>
-        <td><code>setProperty(name, value)</code></td>
-        <td>Records a string property.</td>
-        <td>Both names and values are converted from UTF-8.</td>
-      </tr>
-      <tr>
-        <td><code>removeProperty(name)</code></td>
-        <td>Records removal of the named property.</td>
-        <td>Removing an absent property has no visible effect.</td>
-      </tr>
-      <tr>
-        <td><code>propertyNames()</code></td>
-        <td>A case-insensitively sorted one-based Lua list.</td>
-        <td>Useful for generic inspectors and migration scripts.</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>Map BMP data, aliases, rules and blends</h3>
-  <table>
-    <thead><tr><th>Function</th><th>Returns / effect</th><th>Usage notes</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>bmp(0)</code>, <code>bmp(1)</code></td>
-        <td>Main and vegetation MapBmp wrappers.</td>
-        <td>Use only indexes 0 and 1. The images use map-tile coordinates.</td>
-      </tr>
-      <tr>
-        <td><code>pixel(x, y)</code></td>
-        <td>A packed RGB integer.</td>
-        <td>Compare with <code>rgb(r,g,b).pixel</code>. An out-of-bounds read
-        returns packed black, so bounds should be checked by the script.</td>
-      </tr>
-      <tr>
-        <td><code>setPixel(x, y, color)</code></td>
-        <td>Records one changed BMP pixel.</td>
-        <td>Out-of-bounds writes are ignored.</td>
-      </tr>
-      <tr>
-        <td><code>erase(...)</code></td>
-        <td>Fills an area or the complete BMP with black.</td>
-        <td>Rectangle and Region inputs are clipped to image bounds.</td>
-      </tr>
-      <tr>
-        <td><code>fill(..., color)</code></td>
-        <td>Fills an area or the complete BMP and records changed pixels.</td>
-        <td>Use Regions to avoid scanning unrelated parts of large maps.</td>
-      </tr>
-      <tr>
-        <td><code>replace(oldColor, newColor)</code></td>
-        <td>Legacy full-image color replacement.</td>
-        <td>In the current integration, prefer an explicit
-        <code>pixel()/setPixel()</code> loop when Undo tracking matters; the
-        legacy implementation does not mark its altered region consistently.</td>
-      </tr>
-      <tr>
-        <td><code>rand(x, y)</code></td>
-        <td>A deterministic coordinate-based pseudo-random value.</td>
-        <td>Useful for stable procedural choices that should repeat across
-        script runs.</td>
-      </tr>
-      <tr>
-        <td><code>alias(name)</code>, <code>alias:tiles()</code></td>
-        <td>A named BMP alias and its one-based list of tile names.</td>
-        <td>Returns <code>nil</code> for an unknown alias.</td>
-      </tr>
-      <tr>
-        <td><code>rules()</code>, <code>ruleAt(index)</code>,
-        <code>rule(label)</code></td>
-        <td>All rules, a zero-based rule, or a labeled rule.</td>
-        <td>Unlabeled rules are available by list/index but not by label.</td>
-      </tr>
-      <tr>
-        <td><code>rule:label/bmpIndex/color/tiles/layer/condition</code></td>
-        <td>The read-only components of a BMP rule.</td>
-        <td><code>tiles()</code> is a one-based Lua list of possible tile names.
-        <code>bmpIndex()</code> identifies main versus vegetation input.</td>
-      </tr>
-      <tr>
-        <td><code>blends()</code></td>
-        <td>A one-based list of BmpBlend objects.</td>
-        <td>Blend definitions are read-only through Lua.</td>
-      </tr>
-      <tr>
-        <td><code>blend:layer/mainTile/blendTile/direction/exclude</code></td>
-        <td>Blend target, source names, direction and exclusion list.</td>
-        <td><code>exclude()</code> is a one-based list. Direction is a
-        <code>BmpBlend.*</code> enum.</td>
-      </tr>
-      <tr>
-        <td><code>isBlendTile(tile)</code></td>
-        <td>True if the tile is used by a loaded blend definition.</td>
-        <td>Pass a non-nil Tile from the current map/catalog.</td>
-      </tr>
-      <tr>
-        <td><code>blendLayers()</code></td>
-        <td>A one-based list of target layer names used by blends.</td>
-        <td>Useful for validating that required map layers exist.</td>
-      </tr>
-      <tr>
-        <td><code>reloadRules()</code>, <code>reloadBlends()</code></td>
-        <td>Rereads the configured rule or blend file.</td>
-        <td>Previously held Lua rule/alias/blend wrappers may become invalid;
-        reacquire them after reload.</td>
-      </tr>
-      <tr>
-        <td><code>noBlend(layerName)</code></td>
-        <td>A MapNoBlend mask for a layer.</td>
-        <td>The mask is created lazily if needed.</td>
-      </tr>
-      <tr>
-        <td><code>MapNoBlend:get(x,y)</code></td>
-        <td>The current boolean mask value.</td>
-        <td>Used to suppress automatic blending at exact coordinates.</td>
-      </tr>
-      <tr>
-        <td><code>MapNoBlend:set(x,y,value)</code>,
-        <code>set(region,value)</code></td>
-        <td>Records mask changes.</td>
-        <td>The Region overload is convenient for selections and tool previews.</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>Color and file output</h3>
-  <table>
-    <thead><tr><th>Function</th><th>Returns / effect</th><th>Usage notes</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>Color:new()</code></td>
-        <td>Black.</td>
-        <td>Equivalent to <code>rgb(0,0,0)</code>.</td>
-      </tr>
-      <tr>
-        <td><code>Color:new(r,g,b)</code>, <code>rgb(r,g,b)</code></td>
-        <td>A Color with <code>r</code>, <code>g</code>, <code>b</code> and
-        packed <code>pixel</code> fields.</td>
-        <td><code>rgb()</code> is the shorter form used by shipped scripts.</td>
-      </tr>
-      <tr>
-        <td><code>write(path)</code></td>
-        <td>Writes the Lua map snapshot as a separate TMX and returns success.</td>
-        <td>Do not use it to overwrite the current batch document; allow
-        TileZed to apply/save recorded changes. This legacy binding converts the
-        supplied path through Latin-1, so avoid it for non-ASCII output paths.</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>Interactive TileTool behavior</h3>
-  <table>
-    <thead><tr><th>Function</th><th>Returns / effect</th><th>Usage notes</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>setCursorType(type)</code></td>
-        <td>Chooses the visual hit/cursor geometry.</td>
-        <td><code>CurbTool</code> snaps to half-tile curb positions;
-        <code>EdgeTool</code> follows edges; <code>None</code> disables the
-        special outline.</td>
-      </tr>
-      <tr>
-        <td><code>currentLayer()</code></td>
-        <td>The selected TileLayer or <code>nil</code>.</td>
-        <td>An Object Group or no current document layer produces
-        <code>nil</code>.</td>
-      </tr>
-      <tr>
-        <td><code>setToolTile(layer, x, y, tile)</code>,
-        <code>setToolTile(layer, region, tile)</code></td>
-        <td>Draws a temporary tile preview.</td>
-        <td>This does not edit the map. The target layer must exist for the
-        preview to be composited visibly.</td>
-      </tr>
-      <tr>
-        <td><code>clearToolTiles()</code></td>
-        <td>Removes all temporary tile previews.</td>
-        <td>Call it before rebuilding a preview in
-        <code>mouseMoved()</code>.</td>
-      </tr>
-      <tr>
-        <td><code>setToolNoBlend(layer, region, value)</code></td>
-        <td>Draws a temporary no-blend preview.</td>
-        <td>Commit the corresponding real
-        <code>map:noBlend(layer):set()</code> values before
-        <code>applyChanges()</code>.</td>
-      </tr>
-      <tr>
-        <td><code>clearToolNoBlends()</code></td>
-        <td>Removes all temporary no-blend previews.</td>
-        <td>It does not alter committed masks.</td>
-      </tr>
-      <tr>
-        <td><code>indicateDistance(x1,y1,x2,y2)</code></td>
-        <td>Shows a distance indicator for an axis-aligned segment.</td>
-        <td>Diagonal coordinates produce no indicator. Up to four cardinal
-        indicators can be visible.</td>
-      </tr>
-      <tr>
-        <td><code>clearDistanceIndicators()</code></td>
-        <td>Hides all distance indicators.</td>
-        <td>Call when a drag is cancelled or preview geometry changes.</td>
-      </tr>
-      <tr>
-        <td><code>angle(x1,y1,x2,y2)</code></td>
-        <td>The Qt line angle in degrees.</td>
-        <td>Use it to choose directional tile variants.</td>
-      </tr>
-      <tr>
-        <td><code>dragged()</code></td>
-        <td>True after at least four pixels of Manhattan pointer movement.</td>
-        <td>This is screen-pointer movement, not a number of map tiles.</td>
-      </tr>
-      <tr>
-        <td><code>applyChanges(undoText)</code></td>
-        <td>Applies recorded Lua-map edits as one Undo macro.</td>
-        <td>Call once after a completed gesture. It recreates the Lua map
-        wrapper on the next event, so do not retain old layer/object wrappers
-        after applying.</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>Interactive callbacks and options</h3>
-  <p>Callbacks are optional. TileZed invokes only those present in the script.</p>
-  <table>
-    <thead><tr><th>Callback</th><th>When it runs</th><th>Important details</th></tr></thead>
-    <tbody>
-      <tr><td><code>activate()</code></td><td>The tool becomes active.</td><td>Initialize cursor type and state here.</td></tr>
-      <tr><td><code>deactivate()</code></td><td>The tool is switched away.</td><td>TileZed clears previews, closes the Lua state and releases wrappers afterward.</td></tr>
-      <tr><td><code>mouseMoved(buttons,x,y,modifiers)</code></td><td>The pointer moves over the map.</td><td><code>x</code>/<code>y</code> are fractional tile coordinates.</td></tr>
-      <tr><td><code>mousePressed(...)</code></td><td>A mouse button is pressed.</td><td>Store the start coordinate and initialize cancellation state.</td></tr>
-      <tr><td><code>mouseReleased(...)</code></td><td>A mouse button is released.</td><td>Validate the gesture, edit real layers, then call <code>applyChanges()</code>.</td></tr>
-      <tr><td><code>modifiersChanged(modifiers)</code></td><td>Alt, Control or Shift changes.</td><td>Rebuild a preview if modifiers change placement semantics.</td></tr>
-      <tr><td><code>options()</code></td><td>Once when the tool script is loaded.</td><td>Returns a one-based list of option descriptors.</td></tr>
-      <tr><td><code>setOption(name,value)</code></td><td>For defaults and each user change.</td><td>Values are persisted per tool script in portable settings.</td></tr>
-    </tbody>
-  </table>
-
-  <p>Every option descriptor needs unique <code>name</code>, visible
-  <code>label</code> and <code>type</code> fields:</p>
-  <pre><code>function options()
-    return {
-        { name="erase", label="Erase", type="bool", default=false },
-        { name="width", label="Width", type="int",
-          min=1, max=20, default=3 },
-        { name="style", label="Style", type="enum",
-          choices={"Concrete", "Asphalt"} },
-        { name="variant", label="Variant", type="list",
-          items={"A", "B", "C"} },
-        { name="prefix", label="Tile prefix", type="string",
-          default="street_01" }
-    }
-end
-
-function setOption(name, value)
-    self[name] = value
-end</code></pre>
-
-  <p>An enum callback receives the selected string. A list callback receives a
-  one-based numeric index. Integer values are clamped to
-  <code>min..max</code>. Invalid saved enum values fall back to the first
-  choice, and all option values are stored under the script's base filename.</p>
-
-  <h3>Perlin noise</h3>
-  <table>
-    <thead><tr><th>Function</th><th>Returns / effect</th><th>Usage notes</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>Perlin:new()</code></td>
-        <td>A deterministic Perlin generator.</td>
-        <td>Create one generator and reuse it across the coordinate loop.</td>
-      </tr>
-      <tr>
-        <td><code>perlin(x,y,z)</code></td>
-        <td>A smooth deterministic noise value.</td>
-        <td>Scale coordinates to control feature size. Keep <code>z</code>
-        constant for a 2D field or vary it to create another deterministic
-        layer.</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h2 id="errors">Errors, undo and cancellation</h2>
-  <ul>
-    <li>Use <code>assert(value, "message")</code> for required layers and tiles.
-      Errors include a Lua traceback in the console.</li>
-    <li><code>print()</code> writes to the Lua Console. UTF-8 is attempted first,
-      with a Latin-1 fallback for old scripts.</li>
-    <li>Batch scripts show progress and can be cancelled. Cancellation is
-      cooperative and checked periodically while Lua code is running.</li>
-    <li>A failed batch script is not applied to the current map. Directory and
-      world modes stop on the first failed map.</li>
-    <li>Interactive tools must call <code>self:applyChanges()</code> after a
-      successful edit. Preview calls alone do not change the map.</li>
-  </ul>
+<p>Installed examples:</p>
+<ul>
+  <li><code>lua/example-building-inspect.lua</code> — read-only report;</li>
+  <li><code>lua/example-building-fill-room.lua</code> — room fill and selection.</li>
+</ul>
 </body>
 </html>

@@ -295,7 +295,10 @@
           <item>
            <widget class="QCheckBox" name="openGL">
             <property name="text">
-             <string>Use hardware-accelerated drawing (OpenGL)</string>
+             <string>Use hardware-accelerated drawing (OpenGL 3.3)</string>
+            </property>
+            <property name="toolTip">
+             <string>Uncheck to use Qt's raster (software) renderer. Use the software renderer if the map is blank or corrupted by a graphics-driver issue.</string>
             </property>
            </widget>
           </item>

@@ -26,7 +26,6 @@
 #include "buildingpreferences.h"
 #include "simplefile.h"
 
-#include "mainwindow.h"
 #include "mapmanager.h"
 #include "mapimagemanager.h"
 #include "preferences.h"
@@ -341,14 +340,28 @@ void WelcomeMode::writeSettings(QSettings &settings)
 
 void WelcomeMode::onActivated(const QModelIndex &index)
 {
-    QString path = mFSModel->filePath(index);
-    QFileInfo fileInfo(path);
+    if (!index.isValid())
+        return;
+
+    const QString path = mFSModel->filePath(index);
+    const QFileInfo fileInfo(path);
     if (fileInfo.isDir()) {
         BuildingPreferences *prefs = BuildingPreferences::instance();
         prefs->setMapsDirectory(fileInfo.canonicalFilePath());
         return;
     }
-    Tiled::Internal::MainWindow::instance()->openFile(path);
+
+    BuildingEditorWindow *editor = BuildingEditorWindow::instance();
+    if (editor == nullptr) {
+        qCritical() << "Building browser cannot open file because the "
+                       "BuildingEditorWindow instance is unavailable:"
+                    << path;
+        return;
+    }
+
+    qInfo() << "Building browser opening" << path;
+    if (!editor->openFile(path))
+        qWarning() << "Building browser failed to open" << path;
 }
 
 void WelcomeMode::browse()

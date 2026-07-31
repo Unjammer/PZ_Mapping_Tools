@@ -120,9 +120,10 @@ void AddTilesetsDialog::setFilesList()
     QDir dir(mDirectory/* + QLatin1String("/2x")*/);
     dir.setFilter(QDir::Files);
     dir.setSorting(QDir::Name);
-    QStringList nameFilters;
-    foreach (QByteArray format, QImageReader::supportedImageFormats())
-        nameFilters += QLatin1String("*.") + QString::fromLatin1(format);
+    // Project Zomboid tilesets are PNG-only. Listing every Qt-supported
+    // image type here suggested that JPEG/GIF/etc. could be added, only for
+    // the catalog loader to reject them later.
+    const QStringList nameFilters = QStringList() << QLatin1String("*.png");
 
     QFileInfoList fileInfoList = dir.entryInfoList(nameFilters);
     foreach (QFileInfo fileInfo, fileInfoList) {

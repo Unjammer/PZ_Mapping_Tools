@@ -24,6 +24,7 @@
 #include "filesystemwatcher.h"
 #include "tiledeffile.h"
 #include "tileset.h"
+#include "tilesetimagelock.h"
 
 #include <QImage>
 #ifdef ZOMBOID
@@ -38,6 +39,7 @@
 #include <QMetaType>
 #include <QScopedPointer>
 #include <QStringList>
+#include <QWriteLocker>
 #endif
 
 using namespace Tiled;
@@ -360,9 +362,21 @@ void TilesetManager::fileChangedTimeout()
 
         if (!TileMetaInfoMgr::instance()->addNewTilesets()) {
             qWarning().noquote()
-                    << "Unable to update Tilesets.txt after a Tiles "
+                    << "Unable to discover new PNG sheets after a Tiles "
                        "directory change:"
                     << TileMetaInfoMgr::instance()->errorString();
+        }
+
+        // Deleting a PNG commonly emits only directoryChanged(). Feed missing
+        // cache sources through the normal file invalidation path as well.
+        for (Tileset *cached : std::as_const(mTilesetImageCache->mTilesets)) {
+            const QString source = cached->imageSource2x().isEmpty()
+                    ? cached->imageSource() : cached->imageSource2x();
+            if (!source.isEmpty()
+                    && !QImageReader(source).size().isValid()) {
+                qWarning() << "Tileset image removed:" << source;
+                mChangedFiles.insert(source);
+            }
         }
 
         for (Tileset *tileset
@@ -381,11 +395,13 @@ void TilesetManager::fileChangedTimeout()
     foreach (Tileset *tileset, mTilesetImageCache->mTilesets) {
         QString fileName = tileset->imageSource2x().isEmpty() ? tileset->imageSource() : tileset->imageSource2x();
         if (mChangedFiles.contains(fileName)) {
+            QWriteLocker imageWriteLock(&tilesetImageLock());
             if (QImageReader(fileName).size().isValid()) {
                 tileset->loadFromImage(QImage(fileName), tileset->imageSource());
                 tileset->setMissing(false);
             } else {
-                if (tileset->tileHeight() == mMissingTile->width() && tileset->tileWidth() == mMissingTile->height()) {
+                if (tileset->tileHeight() == mMissingTile->height()
+                        && tileset->tileWidth() == mMissingTile->width()) {
                     for (int i = 0; i < tileset->tileCount(); i++)
                         tileset->tileAt(i)->setImage(mMissingTile);
                 }
@@ -398,6 +414,7 @@ void TilesetManager::fileChangedTimeout()
         QString fileName2 = tileset->imageSource2x().isEmpty() ? tileset->imageSource() : tileset->imageSource2x();
         if (mChangedFiles.contains(fileName2)) {
             if (Tileset *cached = mTilesetImageCache->findMatch(tileset, fileName, fileName2)) {
+                QWriteLocker imageWriteLock(&tilesetImageLock());
                 if (tileset->loadFromCache(cached)) {
                     tileset->setMissing(cached->isMissing());
 #ifdef ZOMBOID_TILE_LAYER_NAMES
@@ -434,6 +451,7 @@ void TilesetManager::fileChangedTimeout()
 #ifdef ZOMBOID
 void TilesetManager::imageLoaded(QImage *image, Tileset *tileset)
 {
+    QWriteLocker imageWriteLock(&tilesetImageLock());
     Q_ASSERT(mTilesetImageCache->mTilesets.contains(tileset));
 
     // This updates a tileset in the cache.
@@ -570,14 +588,17 @@ void TilesetManager::waitForTilesets(const QList<Tileset *> &tilesets, QWidget *
     }
 
     int current = qMax(0, total - requested.size());
+    int loadAttempts = 0;
     for (Tileset *tileset : requested) {
         if (progress) {
             progress->update(
                         tr("Loading tilesets %1 / %2: %3")
                         .arg(++current).arg(total).arg(tileset->name()));
         }
-        if (!tileset->isLoaded() && !tileset->isMissing())
+        if (!tileset->isLoaded() && !tileset->isMissing()) {
+            ++loadAttempts;
             loadTileset(tileset, tileset->imageSource());
+        }
     }
 
     int loaded = 0;
@@ -596,11 +617,14 @@ void TilesetManager::waitForTilesets(const QList<Tileset *> &tilesets, QWidget *
             pendingNames += ts->name();
         }
     }
-    qInfo() << "Tileset preload complete:"
-            << "total" << requested.size()
-            << "loaded" << loaded
-            << "missing" << missing
-            << "pending" << pending;
+    if (loadAttempts > 0 || missing > 0 || pending > 0) {
+        qInfo() << "Tileset readiness check:"
+                << "requested" << requested.size()
+                << "load-attempts" << loadAttempts
+                << "loaded" << loaded
+                << "missing" << missing
+                << "pending" << pending;
+    }
     if (!missingNames.isEmpty()) {
         const QString suffix = missingNames.size() > 20
                 ? tr(" (and %1 more)").arg(missingNames.size() - 20)

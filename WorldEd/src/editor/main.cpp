@@ -16,6 +16,7 @@
  */
 
 #include <QApplication>
+#include <QFileInfo>
 #include <QMessageBox>
 #include <QSettings>
 #include "mainwindow.h"
@@ -24,6 +25,7 @@
 
 #ifdef ZOMBOID
 #include "documentmanager.h"
+#include "document.h"
 #include "toolmanager.h"
 #include "preferences.h"
 #include "mapimagemanager.h"
@@ -31,6 +33,8 @@
 #include "progress.h"
 #include "tilemetainfomgr.h"
 #include "tilesetmanager.h"
+#include "world.h"
+#include "worlddocument.h"
 using namespace Tiled;
 using namespace Tiled::Internal;
 #endif
@@ -60,6 +64,14 @@ int main(int argc, char *argv[])
     if (!FirstLaunchDialog::ensureSharedPaths())
         return 0;
 
+    const QStringList commandLineArguments = a.arguments().mid(1);
+    for (const QString &argument : commandLineArguments) {
+        if (argument == QLatin1String("--renderer=opengl"))
+            Preferences::instance()->setUseOpenGL(true);
+        else if (argument == QLatin1String("--renderer=raster"))
+            Preferences::instance()->setUseOpenGL(false);
+    }
+
     Preferences::instance()->applyTheme();
 
     MainWindow w;
@@ -68,9 +80,6 @@ int main(int argc, char *argv[])
 
     if (!w.InitConfigFiles())
         return 0;
-
-    TilesetManager::instance()->waitForTilesets(
-                TileMetaInfoMgr::instance()->tilesets(), &w);
 
     // Mark the interactive session dirty before restoring documents.  If a
     // malformed project or map terminates WorldEd, the next launch starts
@@ -85,7 +94,49 @@ int main(int argc, char *argv[])
     sessionSettings.setValue(cleanExitKey, false);
     sessionSettings.sync();
 
-    if (Preferences::instance()->restoreLastSession()) {
+    bool openedCommandLineFile = false;
+    QPoint commandLineCell(-1, -1);
+    for (const QString &argument : commandLineArguments) {
+        if (argument.startsWith(QLatin1String("--cell="))) {
+            const QStringList coordinates =
+                    argument.mid(7).split(QLatin1Char(','));
+            bool xOk = false;
+            bool yOk = false;
+            if (coordinates.size() == 2) {
+                const int x = coordinates.at(0).toInt(&xOk);
+                const int y = coordinates.at(1).toInt(&yOk);
+                if (xOk && yOk)
+                    commandLineCell = QPoint(x, y);
+            }
+            continue;
+        }
+        if (QFileInfo(argument).isFile()) {
+            openedCommandLineFile = w.openFile(argument)
+                    || openedCommandLineFile;
+        }
+    }
+    if (openedCommandLineFile
+            && commandLineCell.x() >= 0
+            && commandLineCell.y() >= 0) {
+        Document *document =
+                DocumentManager::instance()->currentDocument();
+        WorldDocument *worldDocument =
+                document ? document->asWorldDocument() : nullptr;
+        if (worldDocument
+                && worldDocument->world()->cellAt(
+                    commandLineCell.x(), commandLineCell.y())) {
+            qInfo() << "Command line opening cell"
+                    << commandLineCell.x() << commandLineCell.y();
+            worldDocument->editCell(
+                        commandLineCell.x(), commandLineCell.y());
+        } else {
+            qCritical() << "Command-line cell is outside the opened world:"
+                        << commandLineCell;
+        }
+    }
+
+    if (!openedCommandLineFile
+            && Preferences::instance()->restoreLastSession()) {
         if (previousSessionClosedCleanly) {
             w.openLastFiles();
         } else {

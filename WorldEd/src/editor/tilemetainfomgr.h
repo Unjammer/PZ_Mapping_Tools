@@ -65,9 +65,11 @@ public:
 
     Tileset *tileset(const QString &tilesetName)
     {
-        if (mTilesetByName.contains(tilesetName))
-            return mTilesetByName[tilesetName];
-        return nullptr;
+        Tileset *tileset = mTilesetByName.value(tilesetName, nullptr);
+        if (tileset)
+            return tileset;
+        return mTilesetByFoldedName.value(
+                    tilesetName.toCaseFolded(), nullptr);
     }
 
     int indexOf(Tileset *ts)
@@ -75,9 +77,7 @@ public:
 
     int indexOf(const QString &tilesetName)
     {
-        if (mTilesetByName.contains(tilesetName))
-            return tilesets().indexOf(mTilesetByName[tilesetName]);
-        return -1;
+        return tilesets().indexOf(tileset(tilesetName));
     }
 
     QStringList tilesetNames() const;
@@ -102,7 +102,7 @@ public:
     QString errorString() const
     { return mError; }
 
-    bool addNewTilesets();
+    bool addNewTilesets(bool loadImages = true);
     bool rebuildTilesetsTxt(int *addedCount = nullptr,
                             int *updatedCount = nullptr,
                             bool updateExisting = true);
@@ -143,6 +143,7 @@ private:
     ~TileMetaInfoMgr();
 
     QMap<QString,Tileset*> mTilesetByName;
+    QMap<QString,Tileset*> mTilesetByFoldedName;
     QList<Tiled::Tileset*> mRemovedTilesets;
 
     QStringList mEnumNames;

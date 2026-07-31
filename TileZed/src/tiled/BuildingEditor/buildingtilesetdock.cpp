@@ -117,6 +117,8 @@ BuildingTilesetDock::BuildingTilesetDock(QWidget *parent) :
             this, &BuildingTilesetDock::tilesetAdded);
     connect(TileMetaInfoMgr::instance(), &TileMetaInfoMgr::tilesetCatalogLoaded,
             this, &BuildingTilesetDock::setTilesetList);
+    connect(TileMetaInfoMgr::instance(), &TileMetaInfoMgr::tilesetDiscoveryFinished,
+            this, &BuildingTilesetDock::tilesetDiscoveryFinished);
     connect(TileMetaInfoMgr::instance(), &TileMetaInfoMgr::tilesetAboutToBeRemoved,
             this, &BuildingTilesetDock::tilesetAboutToBeRemoved);
 
@@ -157,6 +159,7 @@ bool BuildingTilesetDock::validateTilesetCatalog(QString *errorString)
     }
 
     int validationRow = -1;
+    int fallbackValidationRow = -1;
     QStringList failures;
     for (int row = 0; row < catalogCount; ++row) {
         Tileset *candidate = TileMetaInfoMgr::instance()->tileset(row);
@@ -167,26 +170,32 @@ bool BuildingTilesetDock::validateTilesetCatalog(QString *errorString)
         }
         if (candidate->isMissing())
             continue;
-        if (validationRow < 0)
+        if (fallbackValidationRow < 0)
+            fallbackValidationRow = row;
+        // Prefer a metadata-only sheet so this test exercises Tile mode's
+        // lazy decode path instead of merely selecting an image already used
+        // by the object or building-template validation.
+        if (validationRow < 0 && !candidate->isLoaded())
             validationRow = row;
-        if (!candidate->isLoaded()) {
-            failures += tr("%1 was not preloaded.").arg(candidate->name());
-            continue;
-        }
         if (candidate->tileCount() <= 0) {
             failures += tr("%1 contains no tiles.").arg(candidate->name());
             continue;
         }
-        for (int tileIndex = 0; tileIndex < candidate->tileCount(); ++tileIndex) {
-            Tile *tile = candidate->tileAt(tileIndex);
-            // A fully-transparent sprite is represented by a null cropped
-            // QImage while retaining its original dimensions. This is valid
-            // for effects sheets such as Fire, Smoke and Rain. Validate the
-            // tile object and its source dimensions instead.
-            if (!tile || tile->width() <= 0 || tile->height() <= 0) {
-                failures += tr("%1 has invalid storage for tile %2.")
-                        .arg(candidate->name()).arg(tileIndex);
-                break;
+        // Unselected catalog sheets intentionally remain metadata-only.
+        // Validate decoded tile storage only for sheets that were requested
+        // by the current building, object catalogs or Tile mode.
+        if (candidate->isLoaded()) {
+            for (int tileIndex = 0;
+                 tileIndex < candidate->tileCount(); ++tileIndex) {
+                Tile *tile = candidate->tileAt(tileIndex);
+                // A fully-transparent sprite is represented by a null cropped
+                // QImage while retaining its original dimensions. This is
+                // valid for effects sheets such as Fire, Smoke and Rain.
+                if (!tile || tile->width() <= 0 || tile->height() <= 0) {
+                    failures += tr("%1 has invalid storage for tile %2.")
+                            .arg(candidate->name()).arg(tileIndex);
+                    break;
+                }
             }
         }
     }
@@ -195,11 +204,17 @@ bool BuildingTilesetDock::validateTilesetCatalog(QString *errorString)
                 .arg(failures.mid(0, 12).join(QLatin1Char('\n')));
         return false;
     }
+    if (validationRow < 0)
+        validationRow = fallbackValidationRow;
     if (validationRow < 0) {
         *errorString = tr("No available tileset image was found in the catalog.");
         return false;
     }
 
+    Tileset *validationTileset =
+            TileMetaInfoMgr::instance()->tileset(validationRow);
+    const bool validatesLazyLoad =
+            validationTileset && !validationTileset->isLoaded();
     ui->tilesets->setCurrentRow(validationRow);
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
     if (!mCurrentTileset) {
@@ -223,6 +238,11 @@ bool BuildingTilesetDock::validateTilesetCatalog(QString *errorString)
         *errorString = tr("The selected tileset has no visible tiles: %1")
                 .arg(mCurrentTileset->name());
         return false;
+    }
+    if (validatesLazyLoad) {
+        qInfo().noquote()
+                << "BuildingEd Tile mode lazy-load validation: PASS -"
+                << mCurrentTileset->name();
     }
 
     return true;
@@ -425,8 +445,9 @@ void BuildingTilesetDock::currentTilesetChanged(int row)
         mCurrentTileset = TileMetaInfoMgr::instance()->tileset(row);
         if (mCurrentTileset && !mCurrentTileset->isLoaded() &&
                 !mCurrentTileset->isMissing()) {
-            // The normal startup path preloads the entire catalog. Keep this
-            // synchronous fallback for a catalog imported during the session.
+            // Decode only the selected sheet. The list itself is backed by
+            // catalog metadata, so BuildingEd does not need to preload every
+            // tileset merely to make Tile mode complete.
             TileMetaInfoMgr::instance()->loadTilesets(
                         QList<Tileset *>() << mCurrentTileset, false);
         }
@@ -474,9 +495,23 @@ void BuildingTilesetDock::tileSelectionChanged()
 
 void BuildingTilesetDock::tilesetAdded(Tileset *tileset)
 {
+    if (TileMetaInfoMgr::instance()->isDiscoveringTilesets())
+        return;
     setTilesetList();
     int row = TileMetaInfoMgr::instance()->indexOf(tileset);
     ui->tilesets->setCurrentRow(row);
+}
+
+void BuildingTilesetDock::tilesetDiscoveryFinished()
+{
+    const QString currentName = mCurrentTileset
+            ? mCurrentTileset->name() : QString();
+    setTilesetList();
+    if (!currentName.isEmpty()) {
+        const int row = TileMetaInfoMgr::instance()->indexOf(currentName);
+        if (row >= 0)
+            ui->tilesets->setCurrentRow(row);
+    }
 }
 
 void BuildingTilesetDock::tilesetAboutToBeRemoved(Tileset *tileset)

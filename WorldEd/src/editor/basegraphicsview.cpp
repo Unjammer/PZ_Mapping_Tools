@@ -82,8 +82,8 @@ void BaseGraphicsView::drawProjectGridBadge(QPainter *painter, int cellSize) con
 
     const bool legacy = cellSize == 300;
     const QString text = legacy
-            ? tr("PROJECT GRID  ·  300 × 300  ·  LEGACY")
-            : tr("PROJECT GRID  ·  256 × 256  ·  NATIVE");
+            ? tr("PROJECT GRID  -  300 x 300  -  LEGACY")
+            : tr("PROJECT GRID  -  256 x 256  -  NATIVE");
 
     painter->save();
     painter->resetTransform();
@@ -139,9 +139,13 @@ void BaseGraphicsView::setUseOpenGL(bool useOpenGL)
     if (useOpenGL) {
         if (!qobject_cast<QOpenGLWidget*>(viewport())) {
             QSurfaceFormat format = QSurfaceFormat::defaultFormat();
+            format.setVersion(3, 3);
+            format.setProfile(QSurfaceFormat::CoreProfile);
             format.setDepthBufferSize(0);
+            format.setStencilBufferSize(0);
             QOpenGLWidget *openGLWidget = new QOpenGLWidget();
-//            openGLWidget->setFormat(format);
+            openGLWidget->setFormat(format);
+            qInfo() << "WorldEd CellView requested OpenGL format" << format;
             newViewport = openGLWidget;
         }
     } else {
@@ -179,6 +183,10 @@ void BaseGraphicsView::setUseOpenGL(bool useOpenGL)
     QWidget *v = viewport();
     v->setAttribute(Qt::WA_StaticContents);
     v->setMouseTracking(true);
+    qInfo() << "WorldEd CellView renderer:"
+            << (qobject_cast<QOpenGLWidget*>(v)
+                ? QStringLiteral("OpenGL 3.3 core")
+                : QStringLiteral("Qt raster (software)"));
 #endif
 }
 

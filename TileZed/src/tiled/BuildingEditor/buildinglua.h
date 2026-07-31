@@ -81,6 +81,13 @@ private:
     static int luaObjectDirection(lua_State *state);
     static int luaMoveObject(lua_State *state);
     static int luaRemoveObject(lua_State *state);
+    static int luaFurnitureGroupNames(lua_State *state);
+    static int luaFurnitureCount(lua_State *state);
+    static int luaFurnitureOrientations(lua_State *state);
+    static int luaFurnitureSize(lua_State *state);
+    static int luaFurnitureTileAt(lua_State *state);
+    static int luaFindFurniture(lua_State *state);
+    static int luaPlaceFurniture(lua_State *state);
     static int luaUserLayerNames(lua_State *state);
     static int luaUserTileAt(lua_State *state);
     static int luaSetUserTile(lua_State *state);
@@ -108,6 +115,7 @@ private:
     QRegion mTileSelection;
     QMap<BuildingObject *, QPoint> mMovedObjects;
     QSet<BuildingObject *> mRemovedObjects;
+    QSet<BuildingObject *> mAddedObjects;
     bool mPropertiesChanged;
     bool mRoomSelectionChanged;
     bool mTileSelectionChanged;

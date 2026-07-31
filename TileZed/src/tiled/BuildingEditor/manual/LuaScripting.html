@@ -32,7 +32,7 @@ script while the console is in BuildingEd mode.</p>
   The global <code>building</code> is a transactional view of the current
   document. A successful script is committed as one Undo operation. A syntax
   error, runtime error, or user cancellation changes nothing in the document.
-  The current API version is <code>building.apiVersion == 2</code>.
+  The current API version is <code>building.apiVersion == 3</code>.
 </div>
 
 <p>The global <code>scriptDirectory</code> contains the absolute directory of
@@ -80,12 +80,30 @@ building:setRoom(level, 5, 8, -1) -- erase assignment</code></pre>
 <tr><td><code>objectDirection(level,index)</code></td><td>Direction string used by BuildingEd.</td></tr>
 <tr><td><code>moveObject(level,index,x,y)</code></td><td>Moves an object after validating its bounds.</td></tr>
 <tr><td><code>removeObject(level,index)</code></td><td>Removes an object. Later indexes reflect the removal.</td></tr>
+<tr><td><code>furnitureGroupNames()</code></td><td>One-based list of furniture-catalog group names.</td></tr>
+<tr><td><code>furnitureCount(group)</code></td><td>Number of definitions in a group. The group is a name or zero-based index.</td></tr>
+<tr><td><code>furnitureOrientations(group,index)</code></td><td>Available explicit orientations for one furniture definition.</td></tr>
+<tr><td><code>furnitureSize(group,index,orientation)</code></td><td>Returns width and height of the resolved orientation.</td></tr>
+<tr><td><code>furnitureTileAt(group,index,orientation,x,y)</code></td><td>Tile name at a local furniture coordinate, or an empty string.</td></tr>
+<tr><td><code>findFurniture(tileName)</code></td><td>Returns every catalog match with group, indexes, orientation, local coordinates and layer.</td></tr>
+<tr><td><code>placeFurniture(level,x,y,group,index,orientation)</code></td><td>Stages a catalog-backed FurnitureObject and returns its transactional object index.</td></tr>
 </table>
 
 <div class="warning">
   If removing multiple objects, iterate indexes from the end toward zero.
-  Adding catalog-backed objects is not part of API version 2.
 </div>
+
+<p>Furniture additions are part of API version 3 and participate in the same
+all-or-nothing undo transaction as the other mutations. This example converts
+one tile at map position <code>x,y</code> using the first catalog match:</p>
+<pre><code>local matches = building:findFurniture(tileName)
+local match = matches[1]
+if match then
+    local objectX = x - match.localX
+    local objectY = y - match.localY
+    building:placeFurniture(level, objectX, objectY,
+        match.groupIndex, match.furnitureIndex, match.orientation)
+end</code></pre>
 
 <h2>User-tile and grime layers</h2>
 <p>These functions access the per-floor string tile grids used for grime and

@@ -26,8 +26,11 @@
 #include "tileset.h"
 
 #include <QDir>
+#include <QCryptographicHash>
+#include <QCoreApplication>
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
@@ -37,6 +40,65 @@ using namespace Tiled;
 using namespace Tiled::Internal;
 
 static const char *TXT_FILE = "Tilesets.txt";
+
+static int recoverSingleRowColumnCount(Tiled::Tileset *tileset)
+{
+    if (tileset->columnCount() > 0 || tileset->tileCount() <= 0)
+        return tileset->columnCount();
+
+    QString path1x;
+    QString path2x;
+    TilesetManager::instance()->getTilesetFileName(
+                tileset->name(), path1x, path2x);
+
+    QList<QPair<QString, int> > candidates;
+    candidates += qMakePair(path2x, 2);
+    candidates += qMakePair(path1x, 1);
+    if (!tileset->imageSource2x().isEmpty())
+        candidates += qMakePair(tileset->imageSource2x(), 2);
+    if (!tileset->imageSource().isEmpty()) {
+        candidates += qMakePair(tileset->imageSource(), 1);
+        // Some imported 2x-only sheets temporarily retain their selected
+        // 2x path as the logical image source.
+        candidates += qMakePair(tileset->imageSource(), 2);
+    }
+
+    QSet<QString> checked;
+    for (const QPair<QString, int> &candidate : std::as_const(candidates)) {
+        const QString path = QDir::cleanPath(candidate.first);
+        const QString key = path.toLower()
+                + QLatin1Char('|') + QString::number(candidate.second);
+        if (path.isEmpty() || checked.contains(key))
+            continue;
+        checked.insert(key);
+
+        const QSize imageSize = QImageReader(path).size();
+        const int scale = candidate.second;
+        const int tileWidth = tileset->tileWidth() * scale;
+        const int tileHeight = tileset->tileHeight() * scale;
+        if (!imageSize.isValid() || tileWidth <= 0 || tileHeight <= 0)
+            continue;
+
+        const int columns =
+                (imageSize.width() - tileset->margin()
+                 + tileset->tileSpacing())
+                / (tileWidth + tileset->tileSpacing());
+        const int rows =
+                (imageSize.height() - tileset->margin()
+                 + tileset->tileSpacing())
+                / (tileHeight + tileset->tileSpacing());
+        if (rows == 1 && columns == tileset->tileCount()) {
+            tileset->setColumnCount(columns);
+            qInfo() << "Recovered single-row tileset geometry"
+                    << tileset->name()
+                    << columns << "columns, 1 row from"
+                    << path << imageSize << "scale" << scale;
+            return columns;
+        }
+    }
+
+    return tileset->columnCount();
+}
 
 TileMetaInfoMgr* TileMetaInfoMgr::mInstance = nullptr;
 
@@ -68,7 +130,8 @@ TileMetaInfoMgr::TileMetaInfoMgr(QObject *parent) :
     QObject(parent),
     mRevision(0),
     mSourceRevision(0),
-    mHasReadTxt(false)
+    mHasReadTxt(false),
+    mDiscoveringTilesets(false)
 {
     connect(TilesetManager::instance(), &TilesetManager::tilesetChanged,
             this, &TileMetaInfoMgr::tilesetChanged);
@@ -247,6 +310,9 @@ bool TileMetaInfoMgr::writeTxt()
 
 bool TileMetaInfoMgr::writeTxt(const QString &fileName, int revision, int sourceRevision)
 {
+    qInfo() << "Writing tileset catalog" << fileName
+            << "revision" << revision
+            << "entries" << tilesets().count();
     QList<TilesetsTxtFile::Tileset*> fileTilesets;
     QList<TilesetsTxtFile::MetaEnum> fileMetaEnums;
 
@@ -256,18 +322,41 @@ bool TileMetaInfoMgr::writeTxt(const QString &fileName, int revision, int source
 
     QDir tilesDir(tilesDirectory());
     for (Tiled::Tileset *tileset : tilesets()) {
+        int columns = tileset->columnCount();
+        const int tileCount = tileset->tileCount();
+        if (columns <= 0)
+            columns = recoverSingleRowColumnCount(tileset);
+        if (columns <= 0 || tileCount <= 0
+                || tileCount % columns != 0) {
+            qDeleteAll(fileTilesets);
+            mError = tr(
+                        "Cannot save Tilesets.txt because tileset '%1' has "
+                        "invalid geometry (%2 tiles, %3 columns).")
+                    .arg(tileset->name()).arg(tileCount).arg(columns);
+            qWarning() << "Tileset catalog geometry validation failed:"
+                       << mError;
+            return false;
+        }
+
         QString relativePath = tilesDir.relativeFilePath(tileset->imageSource());
-        relativePath.truncate(relativePath.length() - 4); // remove .png
+        if (!relativePath.endsWith(
+                    QLatin1String(".png"), Qt::CaseInsensitive)) {
+            qDeleteAll(fileTilesets);
+            mError = tr(
+                        "Cannot save Tilesets.txt because tileset '%1' does "
+                        "not reference a PNG image:\n'%2'")
+                    .arg(tileset->name(),
+                         QDir::toNativeSeparators(tileset->imageSource()));
+            qWarning() << "Tileset catalog image validation failed:"
+                       << mError;
+            return false;
+        }
+        relativePath.chop(4); // remove .png
         TilesetsTxtFile::Tileset* fileTileset = new TilesetsTxtFile::Tileset();
         fileTileset->mName = tileset->name();
         fileTileset->mFile = relativePath;
 
-        int columns = tileset->columnCount();
-        int rows = tileset->tileCount() / columns;
-        if (tileset->isLoaded()) {
-            columns = tileset->columnCountForWidth(tileset->imageWidth());
-            rows = tileset->imageHeight() / (tileset->imageSource2x().isEmpty() ? 128 : (128 * 2));
-        }
+        const int rows = tileCount / columns;
         fileTileset->mColumns = columns;
         fileTileset->mRows = rows;
 
@@ -290,9 +379,11 @@ bool TileMetaInfoMgr::writeTxt(const QString &fileName, int revision, int source
     TilesetsTxtFile writer;
     if (!writer.write(fileName, revision, sourceRevision, fileTilesets, fileMetaEnums)) {
         mError = writer.errorString();
+        qWarning() << "Tileset catalog writer failed:" << mError;
         return false;
     }
 
+    qInfo() << "Finished writing tileset catalog" << fileName;
     return true;
 }
 #else
@@ -593,43 +684,143 @@ bool TileMetaInfoMgr::mergeTxt()
     return true;
 }
 
-bool TileMetaInfoMgr::addNewTilesets()
+bool TileMetaInfoMgr::addNewTilesets(bool loadImages)
 {
-    QDir dir(tiles2xDirectory());
-    if (!dir.exists())
-        return true;
+    mDiscoveringTilesets = true;
 
-    dir.setFilter(QDir::Files);
-    dir.setSorting(QDir::Name);
-    QStringList nameFilters;
-    foreach (QByteArray format, QImageReader::supportedImageFormats())
-        nameFilters += QLatin1String("*.") + QString::fromLatin1(format);
+    struct ImageCandidate {
+        QString path;
+        int scale = 1;
+    };
 
-    QFileInfoList fileInfoList = dir.entryInfoList(nameFilters);
-    foreach (QFileInfo fileInfo, fileInfoList) {
-        QString tilesetName = fileInfo.completeBaseName();
-        if (mTilesetByName.contains(tilesetName))
+    QMap<QString, ImageCandidate> images;
+    auto scanDirectory = [&images](const QString &path, int scale,
+                                   bool scanChildren) {
+        QDir directory(path);
+        if (!directory.exists())
+            return;
+
+        const QStringList filters = { QLatin1String("*.png") };
+        auto addFiles = [&images, scale, &filters](const QDir &source) {
+            const QFileInfoList files = source.entryInfoList(
+                        filters, QDir::Files, QDir::Name);
+            for (const QFileInfo &file : files) {
+                const QString name = file.completeBaseName();
+                const QString key = name.toCaseFolded();
+                if (!images.contains(key)
+                        || scale > images.value(key).scale) {
+                    ImageCandidate candidate;
+                    candidate.path = file.absoluteFilePath();
+                    candidate.scale = scale;
+                    images.insert(key, candidate);
+                }
+            }
+        };
+
+        addFiles(directory);
+        if (!scanChildren)
+            return;
+        const QFileInfoList children = directory.entryInfoList(
+                    QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        for (const QFileInfo &child : children)
+            addFiles(QDir(child.absoluteFilePath()));
+    };
+
+    const QString rootPath = tilesDirectory();
+    scanDirectory(rootPath, 1, false);
+    const QFileInfoList rootChildren = QDir(rootPath).entryInfoList(
+                QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QFileInfo &child : rootChildren) {
+        if (child.fileName().compare(
+                    QLatin1String("2x"), Qt::CaseInsensitive) != 0) {
+            scanDirectory(child.absoluteFilePath(), 1, false);
+        }
+    }
+    scanDirectory(tiles2xDirectory(), 2, true);
+
+    int addedCount = 0;
+    for (auto it = images.constBegin(); it != images.constEnd(); ++it) {
+        const QFileInfo imageInfo(it.value().path);
+        const QString tilesetName = imageInfo.completeBaseName();
+        if (tileset(tilesetName))
             continue;
-        QImageReader ir(fileInfo.absoluteFilePath());
-        if (!ir.size().isValid())
+
+        QImageReader reader(it.value().path);
+        const QSize imageSize = reader.size();
+        const QSize tileSize =
+                Tiled::getZomboidTilesetSize1x(tilesetName);
+        if (!imageSize.isValid()
+                || imageSize.width() < tileSize.width() * it.value().scale
+                || imageSize.height() < tileSize.height() * it.value().scale) {
+            qWarning() << "Ignoring undersized tileset PNG"
+                       << it.value().path << imageSize;
             continue;
-        QSize tilesetSize = Tiled::getZomboidTilesetSize1x(tilesetName);
-        int tileWidth = tilesetSize.width();
-        int tileHeight = tilesetSize.height();
-        int columns = ir.size().width() / (tileWidth * 2);
-        int rows = ir.size().height() / (tileHeight * 2);
-        Tileset *tileset = new Tileset(tilesetName, tileWidth, tileHeight);
-        Tiled::setZomboidTileOffset(tileset);
-        tileset->loadFromNothing(QSize(columns * tileWidth, rows * tileHeight), fileInfo.fileName());
-        Tile *missingTile = TilesetManager::instance()->missingTile();
-        for (int i = 0; i < tileset->tileCount(); i++)
-            tileset->tileAt(i)->setImage(missingTile);
-        tileset->setMissing(true);
-        addTileset(tileset);
-        TilesetMetaInfo *info = new TilesetMetaInfo;
-        mTilesetInfo[tilesetName] = info;
+        }
+
+        Tileset *newTileset = nullptr;
+        if (loadImages) {
+            newTileset = loadTileset(it.value().path);
+            if (!newTileset) {
+                qWarning() << "Unable to discover tileset"
+                           << it.value().path << mError;
+                continue;
+            }
+        } else {
+            newTileset = new Tileset(tilesetName,
+                                     tileSize.width(),
+                                     tileSize.height());
+            Tiled::setZomboidTileOffset(newTileset);
+
+            QString imageSource;
+            QString imageSource2x;
+            TilesetManager::instance()->getTilesetFileName(
+                        tilesetName, imageSource, imageSource2x);
+            const QSize logicalImageSize =
+                    imageSize / it.value().scale;
+            if (!newTileset->loadFromNothing(logicalImageSize,
+                                             imageSource)) {
+                qWarning() << "Unable to register tileset metadata"
+                           << it.value().path << logicalImageSize;
+                delete newTileset;
+                continue;
+            }
+            if (it.value().scale == 2)
+                newTileset->setImageSource2x(imageSource2x);
+            else
+                newTileset->setImageSource2x(QString());
+            TilesetManager::instance()->changeTilesetSource(
+                        newTileset, imageSource, false);
+        }
+        const bool quietBuildingEdStartup =
+                !loadImages
+                && QCoreApplication::applicationName().compare(
+                    QLatin1String("BuildingEd"),
+                    Qt::CaseInsensitive) == 0;
+        if (quietBuildingEdStartup) {
+            // BuildingEd creates several catalog views before the initial
+            // PNG discovery pass. Emitting one tilesetAdded signal per sheet
+            // makes those views resolve and decode each new image
+            // immediately, only for Startup() to preload the complete
+            // catalog again. Register the metadata silently and refresh the
+            // tileset dock once through tilesetDiscoveryFinished().
+            const QSignalBlocker blocker(this);
+            addTileset(newTileset);
+        } else {
+            addTileset(newTileset);
+        }
+        mTilesetInfo[tilesetName] = new TilesetMetaInfo;
+        ++addedCount;
     }
 
+    if (addedCount > 0) {
+        qInfo() << "Discovered new Tiles PNGs in memory:"
+                << addedCount
+                << "(Tilesets.txt is unchanged; use the explicit Update "
+                   "Tilesets.txt command to persist them)";
+    }
+    mDiscoveringTilesets = false;
+    if (addedCount > 0)
+        emit tilesetDiscoveryFinished();
     return true;
 }
 
@@ -668,46 +859,252 @@ Tileset *TileMetaInfoMgr::createTilesetFromTxtFile(TilesetsTxtFile::Tileset *fil
 
 Tileset *TileMetaInfoMgr::loadTileset(const QString &source)
 {
+    qInfo() << "Loading tileset selected by user" << source;
     QFileInfo info(source);
+    if (!info.exists() || !info.isFile()) {
+        mError = tr("Tileset image does not exist:\n'%1'").arg(source);
+        qWarning() << "Tileset add rejected:" << mError;
+        return nullptr;
+    }
+    if (info.suffix().compare(
+                QLatin1String("png"), Qt::CaseInsensitive) != 0) {
+        mError = tr("Project Zomboid tilesets must be PNG images:\n'%1'")
+                .arg(source);
+        qWarning() << "Tileset add rejected:" << mError;
+        return nullptr;
+    }
+
     QSize tilesetSize = Tiled::getZomboidTilesetSize1x(info.completeBaseName());
     int tileWidth = tilesetSize.width();
     int tileHeight = tilesetSize.height();
     Tileset *ts = new Tileset(info.completeBaseName(), tileWidth, tileHeight);
     Tiled::setZomboidTileOffset(ts);
     if (!loadTilesetImage(ts, source)) {
+        qWarning() << "Tileset image load failed:" << mError;
         delete ts;
         return nullptr;
     }
+    qInfo() << "Tileset image ready" << ts->name()
+            << ts->columnCount() << "columns"
+            << ts->tileCount() << "tiles";
     return ts;
 }
 
 bool TileMetaInfoMgr::loadTilesetImage(Tileset *ts, const QString &source)
 {
+    QString selectedPath =
+            QDir::cleanPath(QFileInfo(source).absoluteFilePath());
     QString imageSource, imageSource2x;
     TilesetManager::instance()->getTilesetFileName(ts->name(), imageSource, imageSource2x);
+    qInfo() << "Tileset path resolution" << ts->name()
+            << "selected" << selectedPath
+            << "resolved-1x" << imageSource
+            << "resolved-2x" << imageSource2x;
+
+    QString resolved1x =
+            QDir::cleanPath(QFileInfo(imageSource).absoluteFilePath());
+    QString resolved2x =
+            QDir::cleanPath(QFileInfo(imageSource2x).absoluteFilePath());
+    bool selectedIsKnown =
+            selectedPath.compare(resolved1x, Qt::CaseInsensitive) == 0
+            || selectedPath.compare(resolved2x, Qt::CaseInsensitive) == 0;
+    if (!selectedIsKnown) {
+        const QDir tilesRoot(tilesDirectory());
+        if (!tilesRoot.exists()) {
+            mError = tr("The configured Tiles folder does not exist:\n'%1'")
+                    .arg(QDir::toNativeSeparators(tilesRoot.absolutePath()));
+            qWarning() << "Tileset import failed:" << mError;
+            return false;
+        }
+
+        // "Add Tilesets" historically allowed browsing to another Tiles
+        // tree, but loadTilesetImage() then discarded the selected path and
+        // searched only the active Tiles tree. Import the selected PNG into
+        // the active tree so it can be reloaded on later launches.
+        const QString normalized =
+                QDir::fromNativeSeparators(selectedPath);
+        const QStringList parts =
+                normalized.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+        int scaleFolder = -1;
+        for (int index = parts.count() - 2; index >= 0; --index) {
+            if (parts.at(index).compare(
+                        QLatin1String("2x"), Qt::CaseInsensitive) == 0
+                    || parts.at(index).compare(
+                        QLatin1String("1x"), Qt::CaseInsensitive) == 0) {
+                scaleFolder = index;
+                break;
+            }
+        }
+
+        QString relativeDestination = QFileInfo(selectedPath).fileName();
+        if (scaleFolder >= 0) {
+            const bool is2x = parts.at(scaleFolder).compare(
+                        QLatin1String("2x"), Qt::CaseInsensitive) == 0;
+            QStringList suffix = parts.mid(scaleFolder + 1);
+            if (is2x)
+                suffix.prepend(QLatin1String("2x"));
+            relativeDestination = suffix.join(QLatin1Char('/'));
+        } else {
+            const QString parentName =
+                    QFileInfo(selectedPath).dir().dirName();
+            if (parentName.endsWith(
+                        QLatin1String(".pack"), Qt::CaseInsensitive)) {
+                relativeDestination =
+                        parentName + QLatin1Char('/')
+                        + QFileInfo(selectedPath).fileName();
+            }
+        }
+
+        const QString importedPath =
+                QDir::cleanPath(tilesRoot.filePath(relativeDestination));
+        const QString importedParent = QFileInfo(importedPath).absolutePath();
+        if (!QDir().mkpath(importedParent)) {
+            mError = tr("Unable to create the tileset import folder:\n'%1'")
+                    .arg(QDir::toNativeSeparators(importedParent));
+            qWarning() << "Tileset import failed:" << mError;
+            return false;
+        }
+
+        if (!QFileInfo::exists(importedPath)) {
+            if (!QFile::copy(selectedPath, importedPath)) {
+                mError = tr(
+                            "Unable to import tileset image.\n\n"
+                            "From: '%1'\nTo: '%2'")
+                        .arg(QDir::toNativeSeparators(selectedPath),
+                             QDir::toNativeSeparators(importedPath));
+                qWarning() << "Tileset import failed:" << mError;
+                return false;
+            }
+            qInfo() << "Imported external tileset from"
+                    << selectedPath << "to" << importedPath;
+        } else {
+            auto sha256 = [](const QString &path) {
+                QFile file(path);
+                QCryptographicHash hash(QCryptographicHash::Sha256);
+                if (!file.open(QIODevice::ReadOnly)
+                        || !hash.addData(&file)) {
+                    return QByteArray();
+                }
+                return hash.result();
+            };
+            const QByteArray selectedHash = sha256(selectedPath);
+            const QByteArray importedHash = sha256(importedPath);
+            if (selectedHash.isEmpty()
+                    || selectedHash != importedHash) {
+                mError = tr(
+                            "A different tileset image already exists in "
+                            "the active Tiles folder.\n\n"
+                            "Selected: '%1'\nExisting: '%2'\n\n"
+                            "Rename the selected tileset or remove the "
+                            "conflicting file first.")
+                        .arg(QDir::toNativeSeparators(selectedPath),
+                             QDir::toNativeSeparators(importedPath));
+                qWarning() << "Tileset import conflict:" << mError;
+                return false;
+            }
+            qInfo() << "Using existing imported tileset" << importedPath;
+        }
+
+        selectedPath = importedPath;
+        TilesetManager::instance()->tilesetDirectoryChanged();
+        TilesetManager::instance()->getTilesetFileName(
+                    ts->name(), imageSource, imageSource2x);
+        resolved1x =
+                QDir::cleanPath(QFileInfo(imageSource).absoluteFilePath());
+        resolved2x =
+                QDir::cleanPath(QFileInfo(imageSource2x).absoluteFilePath());
+        selectedIsKnown =
+                selectedPath.compare(resolved1x, Qt::CaseInsensitive) == 0
+                || selectedPath.compare(resolved2x, Qt::CaseInsensitive) == 0;
+        if (!selectedIsKnown) {
+            mError = tr(
+                        "The tileset was imported, but its folder layout is "
+                        "not supported:\n'%1'")
+                    .arg(QDir::toNativeSeparators(importedPath));
+            qWarning() << "Tileset import failed:" << mError;
+            return false;
+        }
+    }
+
+    auto validateGeometry = [this, ts](
+            const QString &path, const QSize &imageSize, int scale) {
+        const int scaledTileWidth = ts->tileWidth() * scale;
+        const int scaledTileHeight = ts->tileHeight() * scale;
+        if (!imageSize.isValid()
+                || scaledTileWidth <= 0 || scaledTileHeight <= 0
+                || imageSize.width() < scaledTileWidth
+                || imageSize.height() < scaledTileHeight) {
+            mError = tr(
+                        "Invalid tileset geometry for '%1'.\n\n"
+                        "Image: %2 x %3 pixels\n"
+                        "Expected at least one %4 x %5 tile.")
+                    .arg(QDir::toNativeSeparators(path))
+                    .arg(imageSize.width()).arg(imageSize.height())
+                    .arg(scaledTileWidth).arg(scaledTileHeight);
+            qWarning() << "Tileset geometry validation failed:"
+                       << mError;
+            return false;
+        }
+        return true;
+    };
 
     QImageReader ir2x(imageSource2x);
     if (ir2x.size().isValid()) {
-        ts->loadFromNothing(ir2x.size() / 2, source);
+        qInfo() << "Loading 2x tileset image" << imageSource2x
+                << ir2x.size();
+        if (!validateGeometry(imageSource2x, ir2x.size(), 2))
+            return false;
+        if (!ts->loadFromNothing(ir2x.size() / 2, imageSource)) {
+            mError = tr("Unable to initialize tileset '%1' from:\n'%2'")
+                    .arg(ts->name(), QDir::toNativeSeparators(imageSource2x));
+            return false;
+        }
+        ts->setImageSource2x(imageSource2x);
         // can't use canonicalFilePath since the 1x tileset may not exist
-        TilesetManager::instance()->loadTileset(ts, source);
+        TilesetManager::instance()->loadTileset(ts, imageSource);
+        if (ts->columnCount() <= 0 || ts->tileCount() <= 0) {
+            mError = tr("Tileset '%1' produced no usable tiles.").arg(ts->name());
+            return false;
+        }
         return true;
     }
     QImageReader reader(imageSource);
     if (reader.size().isValid()) {
-        ts->loadFromNothing(reader.size(), imageSource);
+        qInfo() << "Loading 1x tileset image" << imageSource
+                << reader.size();
+        if (!validateGeometry(imageSource, reader.size(), 1))
+            return false;
+        if (!ts->loadFromNothing(reader.size(), imageSource)) {
+            mError = tr("Unable to initialize tileset '%1' from:\n'%2'")
+                    .arg(ts->name(), QDir::toNativeSeparators(imageSource));
+            return false;
+        }
         QFileInfo info(imageSource);
         TilesetManager::instance()->loadTileset(ts, info.canonicalFilePath());
+        if (ts->columnCount() <= 0 || ts->tileCount() <= 0) {
+            mError = tr("Tileset '%1' produced no usable tiles.").arg(ts->name());
+            return false;
+        }
         return true;
     }
-    mError = tr("Error loading tileset image:\n'%1'").arg(source);
+    mError = tr(
+                "No readable PNG was found for tileset '%1'.\n\n"
+                "Selected: '%2'\nResolved 1x: '%3'\nResolved 2x: '%4'")
+            .arg(ts->name(),
+                 QDir::toNativeSeparators(source),
+                 QDir::toNativeSeparators(imageSource),
+                 QDir::toNativeSeparators(imageSource2x));
+    qWarning() << "Tileset image load failed:" << mError;
     return false;
 }
 
 void TileMetaInfoMgr::addTileset(Tileset *tileset)
 {
     Q_ASSERT(mTilesetByName.contains(tileset->name()) == false);
+    Q_ASSERT(mTilesetByFoldedName.contains(
+                 tileset->name().toCaseFolded()) == false);
     mTilesetByName[tileset->name()] = tileset;
+    mTilesetByFoldedName[tileset->name().toCaseFolded()] = tileset;
     if (!mRemovedTilesets.contains(tileset))
         TilesetManager::instance()->addReference(tileset, false);
     mRemovedTilesets.removeAll(tileset);
@@ -720,6 +1117,7 @@ void TileMetaInfoMgr::removeTileset(Tileset *tileset)
     Q_ASSERT(mRemovedTilesets.contains(tileset) == false);
     emit tilesetAboutToBeRemoved(tileset);
     mTilesetByName.remove(tileset->name());
+    mTilesetByFoldedName.remove(tileset->name().toCaseFolded());
     emit tilesetRemoved(tileset);
 
     // Don't remove references now, that will delete the tileset, and the

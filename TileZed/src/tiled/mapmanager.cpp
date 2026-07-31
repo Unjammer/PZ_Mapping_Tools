@@ -775,7 +775,10 @@ void MapManager::mapLoadedByThread(Map *map, MapInfo *mapInfo)
                 tileset->tileAt(i)->setImage(missingTile);
         }
     }
-    TilesetManager::instance()->addReferences(map->tilesets(), false);
+    // Preserve the historical shared-image behavior across every loaded map.
+    // Loading all embedded declarations lets a tileset image cached by one
+    // document populate compatible declarations in every other document.
+    TilesetManager::instance()->addReferences(map->tilesets());
 
     QList<Tileset *> usedTilesets = map->usedTilesets().values();
     usedTilesets.removeAll(TilesetManager::instance()->invisibleTileset());

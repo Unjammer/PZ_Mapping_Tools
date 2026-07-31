@@ -34,6 +34,7 @@
 #include "BuildingEditor/buildingeditorwindow.h"
 #include "BuildingEditor/buildingfloor.h"
 #include "BuildingEditor/buildingfurnituredock.h"
+#include "BuildingEditor/buildinglua.h"
 #include "BuildingEditor/buildingmap.h"
 #include "BuildingEditor/buildingtemplates.h"
 #include "BuildingEditor/buildingtiles.h"
@@ -46,9 +47,13 @@
 #include "zprogress.h"
 #include "tile.h"
 #include "tileset.h"
+#include <QDir>
 #include <QFileInfo>
 #include <QMessageBox>
+#include <QSettings>
 #include <QSet>
+#include <QTemporaryFile>
+#include <QUndoStack>
 #endif
 
 #include <QDebug>
@@ -184,6 +189,106 @@ static bool validateAllBuildingTemplates(QString *errorString)
 
     qInfo() << "Validated all building templates:"
             << templates->templateCount();
+    return true;
+}
+
+static bool validateBuildingLuaFurniture(
+        BuildingEditor::BuildingDocument *document, QString *errorString)
+{
+    static const char scriptSource[] =
+            "assert(building.apiVersion >= 3)\n"
+            "local groups = building:furnitureGroupNames()\n"
+            "assert(#groups > 0, 'empty furniture catalog')\n"
+            "local function findPlaceable()\n"
+            "  for groupIndex = 0, #groups - 1 do\n"
+            "    local count = building:furnitureCount(groupIndex)\n"
+            "    for furnitureIndex = 0, count - 1 do\n"
+            "      local orientations = building:furnitureOrientations(\n"
+            "          groupIndex, furnitureIndex)\n"
+            "      for _, orientation in ipairs(orientations) do\n"
+            "        local width, height = building:furnitureSize(\n"
+            "            groupIndex, furnitureIndex, orientation)\n"
+            "        if width <= building:width() - 2 and\n"
+            "            height <= building:height() - 2 then\n"
+            "          for y = 0, height - 1 do\n"
+            "            for x = 0, width - 1 do\n"
+            "              local tileName = building:furnitureTileAt(\n"
+            "                  groupIndex, furnitureIndex, orientation, x, y)\n"
+            "              if tileName ~= '' then\n"
+            "                local matches = building:findFurniture(tileName)\n"
+            "                assert(#matches > 0,\n"
+            "                    'reverse furniture lookup returned no match')\n"
+            "                return groupIndex, furnitureIndex, orientation\n"
+            "              end\n"
+            "            end\n"
+            "          end\n"
+            "        end\n"
+            "      end\n"
+            "    end\n"
+            "  end\n"
+            "end\n"
+            "local groupIndex, furnitureIndex, orientation = findPlaceable()\n"
+            "assert(groupIndex, 'no placeable furniture definition')\n"
+            "local level = building:currentLevel()\n"
+            "local before = building:objectCount(level)\n"
+            "local objectIndex = building:placeFurniture(\n"
+            "    level, 1, 1, groupIndex, furnitureIndex, orientation)\n"
+            "assert(objectIndex == before, 'unexpected furniture object index')\n"
+            "assert(building:objectCount(level) == before + 1)\n"
+            "assert(building:objectType(level, objectIndex) == 'Furniture')\n";
+
+    QTemporaryFile scriptFile(
+                QDir::tempPath()
+                + QLatin1String("/buildinged-lua-validation-XXXXXX.lua"));
+    if (!scriptFile.open()) {
+        *errorString = QStringLiteral("Could not create the temporary Lua test");
+        return false;
+    }
+    if (scriptFile.write(scriptSource) != qint64(sizeof(scriptSource) - 1)
+            || !scriptFile.flush()) {
+        *errorString = QStringLiteral("Could not write the temporary Lua test");
+        return false;
+    }
+
+    const int objectCountBefore =
+            document->building()->floor(0)->objectCount();
+    BuildingEditor::BuildingLuaScript script(document);
+    QString luaError;
+    if (!script.run(scriptFile.fileName(), &luaError)) {
+        *errorString = QStringLiteral("Lua execution failed: %1").arg(luaError);
+        return false;
+    }
+    if (!script.applyChanges(QStringLiteral(
+                                 "BuildingEd Lua furniture validation"))) {
+        *errorString = QStringLiteral(
+                    "Lua furniture placement produced no document change");
+        return false;
+    }
+
+    QUndoStack *undoStack = document->undoStack();
+    if (document->building()->floor(0)->objectCount()
+            != objectCountBefore + 1 || !undoStack->canUndo()) {
+        *errorString = QStringLiteral(
+                    "Lua furniture placement was not committed correctly");
+        return false;
+    }
+    undoStack->undo();
+    if (document->building()->floor(0)->objectCount()
+            != objectCountBefore || !undoStack->canRedo()) {
+        *errorString = QStringLiteral(
+                    "Lua furniture placement Undo validation failed");
+        return false;
+    }
+    undoStack->redo();
+    if (document->building()->floor(0)->objectCount()
+            != objectCountBefore + 1) {
+        *errorString = QStringLiteral(
+                    "Lua furniture placement Redo validation failed");
+        return false;
+    }
+    undoStack->undo();
+    undoStack->clear();
+    qInfo() << "BuildingEd Lua furniture validation: placement, Undo and Redo PASS";
     return true;
 }
 #endif
@@ -453,10 +558,22 @@ int main(int argc, char *argv[])
                         && templateTilesValid
                         && furnitureValid
                         && categoriesValid;
+                QString luaFurnitureError;
+                const bool luaFurnitureValid =
+                        validateBuildingLuaFurniture(
+                            document, &luaFurnitureError);
+                qInfo().noquote()
+                        << "BuildingEd Lua furniture validation:"
+                        << (luaFurnitureValid
+                            ? QStringLiteral("PASS")
+                            : QStringLiteral("FAIL: %1")
+                              .arg(luaFurnitureError));
+                const bool allValid = valid && luaFurnitureValid;
                 qInfo() << "BuildingEd category validation result:"
-                        << (valid ? "PASS" : "FAIL");
-                buildingEditor.close();
-                QCoreApplication::exit(valid ? 0 : 2);
+                        << (allValid ? "PASS" : "FAIL");
+                BuildingEditor::BuildingDocumentMgr::instance()
+                        ->closeAllDocuments();
+                QCoreApplication::exit(allValid ? 0 : 2);
                 return;
             }
 
@@ -496,13 +613,15 @@ int main(int argc, char *argv[])
     if (!w.InitConfigFiles())
         return 0;
 
-    {
-        PROGRESS progress(QObject::tr("Loading all tilesets..."), &w);
-        TileMetaInfoMgr::instance()->loadTilesets(
-                    QList<Tiled::Tileset *>(), false, &progress);
-        TilesetManager::instance()->waitForTilesets(
-                    TileMetaInfoMgr::instance()->tilesets());
-    }
+    QSettings sessionSettings(QSettings::IniFormat, QSettings::UserScope,
+                              QLatin1String("TheIndieStone"),
+                              QLatin1String("TileZed"));
+    const QString cleanExitKey =
+            QLatin1String("Startup/PreviousSessionClosedCleanly");
+    const bool previousSessionClosedCleanly =
+            sessionSettings.value(cleanExitKey, true).toBool();
+    sessionSettings.setValue(cleanExitKey, false);
+    sessionSettings.sync();
 
     foreach (QString f, Preferences::instance()->worldedFiles()) {
         if (f.isEmpty())
@@ -534,7 +653,20 @@ int main(int argc, char *argv[])
         foreach (const QString &fileName, commandLine.filesToOpen())
             w.openFile(fileName);
     } else if (Preferences::instance()->restoreLastSession()) {
-        w.openLastFiles();
+        if (previousSessionClosedCleanly) {
+            w.openLastFiles();
+        } else {
+            qWarning() << "Automatic TileZed session restore skipped after "
+                          "an unclean shutdown.";
+            QMessageBox::warning(
+                        &w, QObject::tr("TileZed Session Recovery"),
+                        QObject::tr(
+                            "TileZed did not close cleanly last time.\n\n"
+                            "Automatic document restoration was skipped to "
+                            "avoid repeating a startup crash. Your map files "
+                            "were not changed; open the required file "
+                            "manually after checking settings/logs."));
+        }
     }
 
 #ifdef ZOMBOID
@@ -544,5 +676,8 @@ int main(int argc, char *argv[])
     w.startSettingsAutoSave();
 #endif
 
-    return a.exec();
+    const int result = a.exec();
+    sessionSettings.setValue(cleanExitKey, true);
+    sessionSettings.sync();
+    return result;
 }

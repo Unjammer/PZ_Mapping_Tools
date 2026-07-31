@@ -347,17 +347,25 @@ QStringList BuildingMap::loadNeededTilesets(Building *building)
     foreach (QString tilesetName, requestedNames) {
         Tileset *tileset = TileMetaInfoMgr::instance()->tileset(tilesetName);
         if (!tileset) {
-            QString source = TileMetaInfoMgr::instance()->tilesDirectory() +
-                    QLatin1Char('/') + tilesetName + QLatin1String(".png");
-            QFileInfo info(source);
-            if (!info.exists()) {
+            QString source1x;
+            QString source2x;
+            if (!TilesetManager::instance()->getTilesetFileName(
+                        tilesetName, source1x, source2x)) {
                 unresolved += tilesetName;
                 continue;
             }
-            source = info.canonicalFilePath();
+
+            const QString source =
+                    QFileInfo(source2x).isFile() ? source2x : source1x;
             tileset = TileMetaInfoMgr::instance()->loadTileset(source);
             if (tileset) {
                 TileMetaInfoMgr::instance()->addTileset(tileset);
+                qInfo() << "Loaded building tileset on demand"
+                        << tilesetName << "from" << source;
+            } else {
+                qWarning() << "Failed to load building tileset on demand"
+                           << tilesetName << "from" << source
+                           << TileMetaInfoMgr::instance()->errorString();
             }
         }
         if (tileset)
@@ -365,6 +373,11 @@ QStringList BuildingMap::loadNeededTilesets(Building *building)
     }
 
     const QList<Tileset *> needed = neededTilesets.values();
+    int decodeRequired = 0;
+    for (Tileset *tileset : needed) {
+        if (!tileset->isLoaded() && !tileset->isMissing())
+            ++decodeRequired;
+    }
     if (!needed.isEmpty()) {
         TileMetaInfoMgr::instance()->loadTilesets(needed, true);
         TilesetManager::instance()->waitForTilesets(needed);
@@ -382,6 +395,7 @@ QStringList BuildingMap::loadNeededTilesets(Building *building)
 
     qInfo() << "Building tileset resolution:"
             << requestedNames.count() << "requested,"
+            << decodeRequired << "needed decoding,"
             << loadedCount << "loaded,"
             << unresolved.count() << "unresolved";
     if (!unresolved.isEmpty())

@@ -30,6 +30,7 @@
 #include "staggeredrenderer.h"
 #include "tilelayer.h"
 #include "tilesetmanager.h"
+#include "tilesetimagelock.h"
 #include "zprogress.h"
 #include "zlevelrenderer.h"
 
@@ -41,6 +42,7 @@
 #include <QImageReader>
 #include <QMessageBox>
 #include <QPainterPath>
+#include <QReadLocker>
 
 #ifdef QT_NO_DEBUG
 inline QNoDebug noise() { return QNoDebug(); }
@@ -1058,6 +1060,7 @@ void MapImageRenderWorker::resume(MapImage *mapImage)
 
 MapImageData MapImageRenderWorker::generateMapImage(MapComposite *mapComposite)
 {
+    QReadLocker imageReadLock(&tilesetImageLock());
     Map *map = mapComposite->map();
 
     MapRenderer *renderer = NULL;

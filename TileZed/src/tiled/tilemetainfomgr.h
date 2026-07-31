@@ -71,9 +71,11 @@ public:
 
     Tileset *tileset(const QString &tilesetName)
     {
-        if (mTilesetByName.contains(tilesetName))
-            return mTilesetByName[tilesetName];
-        return nullptr;
+        Tileset *tileset = mTilesetByName.value(tilesetName, nullptr);
+        if (tileset)
+            return tileset;
+        return mTilesetByFoldedName.value(
+                    tilesetName.toCaseFolded(), nullptr);
     }
 
     int indexOf(Tileset *ts)
@@ -81,9 +83,7 @@ public:
 
     int indexOf(const QString &tilesetName)
     {
-        if (mTilesetByName.contains(tilesetName))
-            return tilesets().indexOf(mTilesetByName[tilesetName]);
-        return -1;
+        return tilesets().indexOf(tileset(tilesetName));
     }
 
     QStringList tilesetNames() const;
@@ -115,7 +115,9 @@ public:
     QString errorString() const
     { return mError; }
 
-    bool addNewTilesets();
+    bool addNewTilesets(bool loadImages = true);
+    bool isDiscoveringTilesets() const
+    { return mDiscoveringTilesets; }
 
     Tileset *createTilesetFromTxtFile(TilesetsTxtFile::Tileset *fileTileset);
 
@@ -143,6 +145,7 @@ public:
 
 signals:
     void tilesetCatalogLoaded();
+    void tilesetDiscoveryFinished();
     void tilesetAdded(Tiled::Tileset *ts);
     void tilesetAboutToBeRemoved(Tiled::Tileset *ts);
     void tilesetRemoved(Tiled::Tileset *ts);
@@ -159,6 +162,7 @@ private:
     ~TileMetaInfoMgr();
 
     QMap<QString,Tileset*> mTilesetByName;
+    QMap<QString,Tileset*> mTilesetByFoldedName;
     QList<Tiled::Tileset*> mRemovedTilesets;
 
     QStringList mEnumNames;
@@ -169,6 +173,7 @@ private:
     int mSourceRevision;
     QString mError;
     bool mHasReadTxt;
+    bool mDiscoveringTilesets;
 };
 
 } // namespace Internal

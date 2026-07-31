@@ -14,6 +14,14 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace PortableSettings {
 
@@ -406,6 +414,32 @@ inline void messageHandler(QtMsgType type,
         std::abort();
 }
 
+#ifdef Q_OS_WIN
+inline LONG WINAPI unhandledExceptionLogger(EXCEPTION_POINTERS *exceptionInfo)
+{
+    if (exceptionInfo && exceptionInfo->ExceptionRecord) {
+        qCritical().nospace()
+                << "Unhandled Windows exception code=0x"
+                << QString::number(
+                       exceptionInfo->ExceptionRecord->ExceptionCode, 16)
+                << " address=0x"
+                << QString::number(
+                       reinterpret_cast<quintptr>(
+                           exceptionInfo->ExceptionRecord->ExceptionAddress),
+                       16);
+    } else {
+        qCritical() << "Unhandled Windows exception (details unavailable)";
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
+inline void terminateLogger()
+{
+    qCritical() << "Unhandled C++ exception or std::terminate()";
+    std::abort();
+}
+
 inline QString installLogging()
 {
     const QString logDirectory = path(QStringLiteral("logs"));
@@ -444,6 +478,10 @@ inline QString installLogging()
         return QString();
 
     qInstallMessageHandler(messageHandler);
+#ifdef Q_OS_WIN
+    SetUnhandledExceptionFilter(unhandledExceptionLogger);
+#endif
+    std::set_terminate(terminateLogger);
     qInfo().noquote() << "Logging to" << QDir::toNativeSeparators(filePath);
     qInfo().noquote() << "Installation root" << QDir::toNativeSeparators(installRootPath());
     qInfo().noquote() << "Application configuration" << QDir::toNativeSeparators(applicationConfigPath());

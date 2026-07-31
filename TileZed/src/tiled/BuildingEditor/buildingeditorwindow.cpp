@@ -772,12 +772,6 @@ bool BuildingEditorWindow::closeYerself()
 
 bool BuildingEditorWindow::Startup()
 {
-    PROGRESS progress(tr("Loading all tilesets..."), this);
-    TileMetaInfoMgr::instance()->loadTilesets(
-                QList<Tileset *>(), false, &progress);
-    TilesetManager::instance()->waitForTilesets(
-                TileMetaInfoMgr::instance()->tilesets());
-
     connect(BuildingTilesMgr::instance(), &BuildingTilesMgr::tilesetAdded,
             this, &BuildingEditorWindow::tilesetAdded);
     connect(BuildingTilesMgr::instance(), &BuildingTilesMgr::tilesetAboutToBeRemoved,
@@ -2664,51 +2658,22 @@ void BuildingEditorWindow::reportMissingTilesets()
     if (!building || mCurrentDocumentStuff->missingTilesetsReported())
         return;
 
-    QSet<QString> missingTilesets;
-    foreach (BuildingTileEntry *entry, building->usedTiles()) {
-        if (!entry || entry->isNone())
-            continue;
-        for (int i = 0; i < entry->category()->enumCount(); i++) {
-            BuildingTile *btile = entry->tile(i);
-            if (btile->mTilesetName.isEmpty())
-                continue;
-            if (!TileMetaInfoMgr::instance()->tileset(btile->mTilesetName))
-                missingTilesets.insert(btile->mTilesetName);
-        }
+    QStringList unavailableTilesets;
+    const QStringList requestedTilesets = building->tilesetNames();
+    for (const QString &tilesetName : requestedTilesets) {
+        Tileset *tileset =
+                TileMetaInfoMgr::instance()->tileset(tilesetName);
+        if (!tileset || !tileset->isLoaded() || tileset->isMissing())
+            unavailableTilesets += tilesetName;
     }
-    foreach (FurnitureTiles *ftiles, building->usedFurniture()) {
-        foreach (FurnitureTile *ftile, ftiles->tiles()) {
-            if (!ftile || ftile->isEmpty())
-                continue;
-            foreach (BuildingTile *btile, ftile->tiles()) {
-                if (!btile || btile->mTilesetName.isEmpty())
-                    continue;
-                if (!TileMetaInfoMgr::instance()->tileset(btile->mTilesetName))
-                    missingTilesets.insert(btile->mTilesetName);
-            }
-        }
-    }
-    foreach (BuildingFloor *floor, building->floors()) {
-        foreach (QString layerName, floor->grimeLayers()) {
-            for (int y = 0; y < floor->height(); y++) {
-                for (int x = 0; x < floor->width(); x++) {
-                    QString tileName = floor->grimeAt(layerName, x, y);
-                    QString tilesetName;
-                    int tileIndex;
-                    if (!tileName.isEmpty() && BuildingTilesMgr::parseTileName(tileName, tilesetName, tileIndex)) {
-                        if (!TileMetaInfoMgr::instance()->tileset(tilesetName))
-                            missingTilesets.insert(tilesetName);
-                    }
-                }
-            }
-        }
-    }
+    unavailableTilesets.removeDuplicates();
+    unavailableTilesets.sort(Qt::CaseInsensitive);
 
-    if (missingTilesets.size()) {
-        QStringList tilesets(missingTilesets.values());
-        tilesets.sort();
-        ListOfStringsDialog dialog(tr("The following tileset files were not found."),
-                                   tilesets, this);
+    if (!unavailableTilesets.isEmpty()) {
+        ListOfStringsDialog dialog(
+                    tr("The following tilesets could not be loaded from the "
+                       "configured Tiles tree."),
+                    unavailableTilesets, this);
         dialog.setWindowTitle(tr("Missing Tilesets"));
         dialog.exec();
     }

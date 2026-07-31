@@ -7,6 +7,7 @@
 #include "buildingtemplates.h"
 #include "buildingtiles.h"
 #include "buildingundoredo.h"
+#include "furnituregroups.h"
 
 #include "luaconsole.h"
 #include "zprogress.h"
@@ -74,6 +75,36 @@ static void setFunction(lua_State *state, const char *name, lua_CFunction fn,
     lua_setfield(state, -2, name);
 }
 
+static FurnitureGroup *furnitureGroup(lua_State *state, int argument)
+{
+    FurnitureGroups *catalog = FurnitureGroups::instance();
+    if (lua_type(state, argument) == LUA_TSTRING)
+        return catalog->group(catalog->indexOf(luaString(state, argument)));
+    return catalog->group(int(luaL_checkinteger(state, argument)));
+}
+
+static FurnitureTile::FurnitureOrientation furnitureOrientation(
+        lua_State *state, int argument)
+{
+    const QString value = luaString(state, argument).toUpper();
+    static const char *names[] = { "W", "N", "E", "S", "SW", "NW", "NE", "SE" };
+    for (int i = 0; i < FurnitureTile::OrientCount; ++i) {
+        if (value == QLatin1String(names[i]))
+            return FurnitureTile::FurnitureOrientation(i);
+    }
+    return FurnitureTile::FurnitureUnknown;
+}
+
+static FurnitureTiles *furnitureDefinition(lua_State *state, int groupArgument,
+                                           int itemArgument)
+{
+    FurnitureGroup *group = furnitureGroup(state, groupArgument);
+    const int item = int(luaL_checkinteger(state, itemArgument));
+    if (!group || item < 0 || item >= group->mTiles.size())
+        return nullptr;
+    return group->mTiles.at(item);
+}
+
 } // namespace
 
 BuildingLuaScript::BuildingLuaScript(BuildingDocument *document)
@@ -100,6 +131,7 @@ BuildingLuaScript::BuildingLuaScript(BuildingDocument *document)
 
 BuildingLuaScript::~BuildingLuaScript()
 {
+    qDeleteAll(mAddedObjects);
     for (FloorState *state : mFloors) {
         qDeleteAll(state->userTiles);
         delete state;
@@ -181,7 +213,7 @@ int BuildingLuaScript::argumentBase(lua_State *state)
 void BuildingLuaScript::registerApi(lua_State *state)
 {
     lua_newtable(state);
-    lua_pushinteger(state, 2);
+    lua_pushinteger(state, 3);
     lua_setfield(state, -2, "apiVersion");
 
     setFunction(state, "width", luaWidth, this);
@@ -202,6 +234,13 @@ void BuildingLuaScript::registerApi(lua_State *state)
     setFunction(state, "objectDirection", luaObjectDirection, this);
     setFunction(state, "moveObject", luaMoveObject, this);
     setFunction(state, "removeObject", luaRemoveObject, this);
+    setFunction(state, "furnitureGroupNames", luaFurnitureGroupNames, this);
+    setFunction(state, "furnitureCount", luaFurnitureCount, this);
+    setFunction(state, "furnitureOrientations", luaFurnitureOrientations, this);
+    setFunction(state, "furnitureSize", luaFurnitureSize, this);
+    setFunction(state, "furnitureTileAt", luaFurnitureTileAt, this);
+    setFunction(state, "findFurniture", luaFindFurniture, this);
+    setFunction(state, "placeFurniture", luaPlaceFurniture, this);
     setFunction(state, "userLayerNames", luaUserLayerNames, this);
     setFunction(state, "userTileAt", luaUserTileAt, this);
     setFunction(state, "setUserTile", luaSetUserTile, this);
@@ -293,7 +332,8 @@ bool BuildingLuaScript::applyChanges(const QString &undoText)
         }
         changeCount += state->changedUserTiles.size();
     }
-    changeCount += mMovedObjects.size() + mRemovedObjects.size();
+    changeCount += mMovedObjects.size() + mRemovedObjects.size()
+            + mAddedObjects.size();
     changeCount += mPropertiesChanged ? 1 : 0;
     changeCount += mRoomSelectionChanged ? 1 : 0;
     changeCount += mTileSelectionChanged ? 1 : 0;
@@ -338,6 +378,17 @@ bool BuildingLuaScript::applyChanges(const QString &undoText)
         const int index = floor->indexOf(object);
         if (index >= 0)
             stack->push(new RemoveObject(mDocument, floor, index));
+    }
+
+    for (FloorState *state : mFloors) {
+        for (BuildingObject *object : state->objects) {
+            if (mAddedObjects.contains(object)) {
+                BuildingFloor *floor = state->floor;
+                stack->push(new AddObject(mDocument, floor,
+                                          floor->objectCount(), object));
+                mAddedObjects.remove(object);
+            }
+        }
     }
 
     if (mPropertiesChanged)
@@ -541,6 +592,10 @@ int BuildingLuaScript::luaMoveObject(lua_State *state)
         return luaL_error(state, "object index out of range");
     if (!object->isValidPos(target - object->pos(), floor->floor))
         return luaL_error(state, "invalid target position for object");
+    if (self->mAddedObjects.contains(object)) {
+        object->setPos(target);
+        return 0;
+    }
     self->mMovedObjects.insert(object, target);
     return 0;
 }
@@ -556,8 +611,172 @@ int BuildingLuaScript::luaRemoveObject(lua_State *state)
         return luaL_error(state, "object index out of range");
     floor->objects.removeAt(index);
     self->mMovedObjects.remove(object);
+    if (self->mAddedObjects.remove(object)) {
+        delete object;
+        return 0;
+    }
     self->mRemovedObjects.insert(object);
     return 0;
+}
+
+int BuildingLuaScript::luaFurnitureGroupNames(lua_State *state)
+{
+    const QList<FurnitureGroup *> groups = FurnitureGroups::instance()->groups();
+    lua_createtable(state, groups.size(), 0);
+    for (int i = 0; i < groups.size(); ++i) {
+        pushString(state, groups.at(i)->mLabel);
+        lua_rawseti(state, -2, i + 1);
+    }
+    return 1;
+}
+
+int BuildingLuaScript::luaFurnitureCount(lua_State *state)
+{
+    const int base = argumentBase(state);
+    FurnitureGroup *group = furnitureGroup(state, base);
+    if (!group)
+        return luaL_error(state, "furniture group not found");
+    lua_pushinteger(state, group->mTiles.size());
+    return 1;
+}
+
+int BuildingLuaScript::luaFurnitureOrientations(lua_State *state)
+{
+    const int base = argumentBase(state);
+    FurnitureTiles *tiles = furnitureDefinition(state, base, base + 1);
+    if (!tiles)
+        return luaL_error(state, "furniture group or item index not found");
+
+    lua_newtable(state);
+    int resultIndex = 1;
+    for (int orient = 0; orient < FurnitureTile::OrientCount; ++orient) {
+        FurnitureTile *tile = tiles->tile(orient);
+        if (tile && tile->resolved() && !tile->resolved()->isEmpty()) {
+            pushString(state, tile->orientToString());
+            lua_rawseti(state, -2, resultIndex++);
+        }
+    }
+    return 1;
+}
+
+int BuildingLuaScript::luaFurnitureSize(lua_State *state)
+{
+    const int base = argumentBase(state);
+    FurnitureTiles *tiles = furnitureDefinition(state, base, base + 1);
+    const FurnitureTile::FurnitureOrientation orient =
+            furnitureOrientation(state, base + 2);
+    if (!tiles || orient == FurnitureTile::FurnitureUnknown)
+        return luaL_error(state, "furniture definition or orientation not found");
+    FurnitureTile *tile = tiles->tile(orient);
+    if (!tile || !tile->resolved() || tile->resolved()->isEmpty())
+        return luaL_error(state, "furniture orientation has no tiles");
+    lua_pushinteger(state, tile->resolved()->width());
+    lua_pushinteger(state, tile->resolved()->height());
+    return 2;
+}
+
+int BuildingLuaScript::luaFurnitureTileAt(lua_State *state)
+{
+    const int base = argumentBase(state);
+    FurnitureTiles *tiles = furnitureDefinition(state, base, base + 1);
+    const FurnitureTile::FurnitureOrientation orient =
+            furnitureOrientation(state, base + 2);
+    const int x = int(luaL_checkinteger(state, base + 3));
+    const int y = int(luaL_checkinteger(state, base + 4));
+    if (!tiles || orient == FurnitureTile::FurnitureUnknown)
+        return luaL_error(state, "furniture definition or orientation not found");
+    FurnitureTile *tile = tiles->tile(orient);
+    tile = tile ? tile->resolved() : nullptr;
+    if (!tile || x < 0 || y < 0 || x >= tile->width() || y >= tile->height())
+        return luaL_error(state, "furniture tile coordinate out of range");
+    BuildingTile *buildingTile = tile->tile(x, y);
+    pushString(state, buildingTile && !buildingTile->isNone()
+               ? buildingTile->name() : QString());
+    return 1;
+}
+
+int BuildingLuaScript::luaFindFurniture(lua_State *state)
+{
+    const int base = argumentBase(state);
+    const QString wanted = BuildingTilesMgr::normalizeTileName(
+                luaString(state, base));
+    if (!BuildingTilesMgr::legalTileName(wanted))
+        return luaL_error(state, "invalid tile name");
+
+    const QList<FurnitureGroup *> groups = FurnitureGroups::instance()->groups();
+    lua_newtable(state);
+    int matchIndex = 1;
+    for (int groupIndex = 0; groupIndex < groups.size(); ++groupIndex) {
+        FurnitureGroup *group = groups.at(groupIndex);
+        for (int itemIndex = 0; itemIndex < group->mTiles.size(); ++itemIndex) {
+            FurnitureTiles *tiles = group->mTiles.at(itemIndex);
+            for (int orient = 0; orient < FurnitureTile::OrientCount; ++orient) {
+                FurnitureTile *selected = tiles->tile(orient);
+                FurnitureTile *resolved = selected ? selected->resolved() : nullptr;
+                if (!resolved || resolved->isEmpty())
+                    continue;
+                for (int y = 0; y < resolved->height(); ++y) {
+                    for (int x = 0; x < resolved->width(); ++x) {
+                        BuildingTile *tile = resolved->tile(x, y);
+                        if (!tile || tile->isNone()
+                                || BuildingTilesMgr::normalizeTileName(tile->name())
+                                   != wanted)
+                            continue;
+                        lua_createtable(state, 0, 7);
+                        lua_pushinteger(state, groupIndex);
+                        lua_setfield(state, -2, "groupIndex");
+                        pushString(state, group->mLabel);
+                        lua_setfield(state, -2, "group");
+                        lua_pushinteger(state, itemIndex);
+                        lua_setfield(state, -2, "furnitureIndex");
+                        pushString(state, selected->orientToString());
+                        lua_setfield(state, -2, "orientation");
+                        lua_pushinteger(state, x);
+                        lua_setfield(state, -2, "localX");
+                        lua_pushinteger(state, y);
+                        lua_setfield(state, -2, "localY");
+                        pushString(state, FurnitureTiles::layerNames().value(
+                                       int(tiles->layer())));
+                        lua_setfield(state, -2, "layer");
+                        lua_rawseti(state, -2, matchIndex++);
+                    }
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+int BuildingLuaScript::luaPlaceFurniture(lua_State *state)
+{
+    BuildingLuaScript *self = fromLua(state);
+    const int base = argumentBase(state);
+    FloorState *floor = self->floorState(int(luaL_checkinteger(state, base)));
+    const int x = int(luaL_checkinteger(state, base + 1));
+    const int y = int(luaL_checkinteger(state, base + 2));
+    FurnitureTiles *tiles = furnitureDefinition(state, base + 3, base + 4);
+    const FurnitureTile::FurnitureOrientation orient =
+            furnitureOrientation(state, base + 5);
+    if (!floor)
+        return luaL_error(state, "invalid floor level");
+    if (!tiles || orient == FurnitureTile::FurnitureUnknown)
+        return luaL_error(state, "furniture definition or orientation not found");
+
+    FurnitureTile *tile = tiles->tile(orient);
+    if (!tile || !tile->resolved() || tile->resolved()->isEmpty())
+        return luaL_error(state, "furniture orientation has no tiles");
+
+    FurnitureObject *object = new FurnitureObject(floor->floor, x, y);
+    object->setFurnitureTile(tile);
+    if (!object->isValidPos()) {
+        delete object;
+        return luaL_error(state, "furniture position is outside the floor");
+    }
+
+    floor->objects.append(object);
+    self->mAddedObjects.insert(object);
+    lua_pushinteger(state, floor->objects.size() - 1);
+    return 1;
 }
 
 int BuildingLuaScript::luaUserLayerNames(lua_State *state)

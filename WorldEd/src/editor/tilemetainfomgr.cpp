@@ -37,6 +37,65 @@ using namespace Tiled::Internal;
 
 static const char *TXT_FILE = "Tilesets.txt";
 
+static int recoverSingleRowColumnCount(Tiled::Tileset *tileset)
+{
+    if (tileset->columnCount() > 0 || tileset->tileCount() <= 0)
+        return tileset->columnCount();
+
+    QString path1x;
+    QString path2x;
+    TilesetManager::instance()->getTilesetFileName(
+                tileset->name(), path1x, path2x);
+
+    QList<QPair<QString, int> > candidates;
+    candidates += qMakePair(path2x, 2);
+    candidates += qMakePair(path1x, 1);
+    if (!tileset->imageSource2x().isEmpty())
+        candidates += qMakePair(tileset->imageSource2x(), 2);
+    if (!tileset->imageSource().isEmpty()) {
+        candidates += qMakePair(tileset->imageSource(), 1);
+        // Some imported 2x-only sheets temporarily retain their selected
+        // 2x path as the logical image source.
+        candidates += qMakePair(tileset->imageSource(), 2);
+    }
+
+    QSet<QString> checked;
+    for (const QPair<QString, int> &candidate : qAsConst(candidates)) {
+        const QString path = QDir::cleanPath(candidate.first);
+        const QString key = path.toLower()
+                + QLatin1Char('|') + QString::number(candidate.second);
+        if (path.isEmpty() || checked.contains(key))
+            continue;
+        checked.insert(key);
+
+        const QSize imageSize = QImageReader(path).size();
+        const int scale = candidate.second;
+        const int tileWidth = tileset->tileWidth() * scale;
+        const int tileHeight = tileset->tileHeight() * scale;
+        if (!imageSize.isValid() || tileWidth <= 0 || tileHeight <= 0)
+            continue;
+
+        const int columns =
+                (imageSize.width() - tileset->margin()
+                 + tileset->tileSpacing())
+                / (tileWidth + tileset->tileSpacing());
+        const int rows =
+                (imageSize.height() - tileset->margin()
+                 + tileset->tileSpacing())
+                / (tileHeight + tileset->tileSpacing());
+        if (rows == 1 && columns == tileset->tileCount()) {
+            tileset->setColumnCount(columns);
+            qInfo() << "Recovered single-row tileset geometry"
+                    << tileset->name()
+                    << columns << "columns, 1 row from"
+                    << path << imageSize << "scale" << scale;
+            return columns;
+        }
+    }
+
+    return tileset->columnCount();
+}
+
 TileMetaInfoMgr* TileMetaInfoMgr::mInstance = nullptr;
 
 TileMetaInfoMgr* TileMetaInfoMgr::instance()
@@ -216,20 +275,38 @@ bool TileMetaInfoMgr::writeTxt()
 
     QDir tilesDir(tilesDirectory());
     for (Tiled::Tileset *tileset : tilesets()) {
+        int columns = tileset->columnCount();
+        const int tileCount = tileset->tileCount();
+        if (columns <= 0)
+            columns = recoverSingleRowColumnCount(tileset);
+        if (columns <= 0 || tileCount <= 0
+                || tileCount % columns != 0) {
+            qDeleteAll(fileTilesets);
+            mError = tr(
+                        "Cannot save Tilesets.txt because tileset '%1' has "
+                        "invalid geometry (%2 tiles, %3 columns).")
+                    .arg(tileset->name()).arg(tileCount).arg(columns);
+            return false;
+        }
+
         QString relativePath = tilesDir.relativeFilePath(tileset->imageSource());
-        relativePath.truncate(relativePath.length() - 4); // remove .png
+        if (!relativePath.endsWith(
+                    QLatin1String(".png"), Qt::CaseInsensitive)) {
+            qDeleteAll(fileTilesets);
+            mError = tr(
+                        "Cannot save Tilesets.txt because tileset '%1' does "
+                        "not reference a PNG image:\n'%2'")
+                    .arg(tileset->name(),
+                         QDir::toNativeSeparators(tileset->imageSource()));
+            return false;
+        }
+        relativePath.chop(4); // remove .png
         TilesetsTxtFile::Tileset* fileTileset = new TilesetsTxtFile::Tileset();
         fileTileset->mName = tileset->name();
         fileTileset->mFile = relativePath;
 
-        int columns = tileset->columnCount();
-        int rows = tileset->tileCount() / columns;
-        if (tileset->isLoaded()) {
-            columns = tileset->columnCountForWidth(tileset->imageWidth());
-            rows = tileset->imageHeight() / (tileset->imageSource2x().isEmpty() ? 128 : (128 * 2));
-        }
         fileTileset->mColumns = columns;
-        fileTileset->mRows = rows;
+        fileTileset->mRows = tileCount / columns;
 
         if (mTilesetInfo.contains(tileset->name())) {
             QMap<QString,TileMetaInfo> &info = mTilesetInfo[tileset->name()]->mInfo;
@@ -248,11 +325,13 @@ bool TileMetaInfoMgr::writeTxt()
     }
 
     TilesetsTxtFile writer;
-    if (!writer.write(txtPath(), ++mRevision, mSourceRevision, fileTilesets, fileMetaEnums)) {
+    if (!writer.write(txtPath(), mRevision + 1, mSourceRevision,
+                      fileTilesets, fileMetaEnums)) {
         mError = writer.errorString();
         return false;
     }
 
+    ++mRevision;
     return true;
 }
 #else
@@ -535,9 +614,123 @@ bool TileMetaInfoMgr::mergeTxt()
     return true;
 }
 
-bool TileMetaInfoMgr::addNewTilesets()
+bool TileMetaInfoMgr::addNewTilesets(bool loadImages)
 {
-    return rebuildTilesetsTxt(nullptr, nullptr, false);
+    struct ImageCandidate {
+        QString path;
+        int scale = 1;
+    };
+
+    QMap<QString, ImageCandidate> images;
+    auto scanDirectory = [&images](const QString &path, int scale,
+                                   bool scanChildren) {
+        QDir directory(path);
+        if (!directory.exists())
+            return;
+
+        const QStringList filters = { QLatin1String("*.png") };
+        auto addFiles = [&images, scale, &filters](const QDir &source) {
+            const QFileInfoList files = source.entryInfoList(
+                        filters, QDir::Files, QDir::Name);
+            for (const QFileInfo &file : files) {
+                const QString name = file.completeBaseName();
+                const QString key = name.toCaseFolded();
+                if (!images.contains(key)
+                        || scale > images.value(key).scale) {
+                    ImageCandidate candidate;
+                    candidate.path = file.absoluteFilePath();
+                    candidate.scale = scale;
+                    images.insert(key, candidate);
+                }
+            }
+        };
+
+        addFiles(directory);
+        if (!scanChildren)
+            return;
+        const QFileInfoList children = directory.entryInfoList(
+                    QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        for (const QFileInfo &child : children)
+            addFiles(QDir(child.absoluteFilePath()));
+    };
+
+    const QString rootPath = tilesDirectory();
+    scanDirectory(rootPath, 1, false);
+    const QFileInfoList rootChildren = QDir(rootPath).entryInfoList(
+                QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QFileInfo &child : rootChildren) {
+        if (child.fileName().compare(
+                    QLatin1String("2x"), Qt::CaseInsensitive) != 0) {
+            scanDirectory(child.absoluteFilePath(), 1, false);
+        }
+    }
+    scanDirectory(tiles2xDirectory(), 2, true);
+
+    int addedCount = 0;
+    for (auto it = images.constBegin(); it != images.constEnd(); ++it) {
+        const QString tilesetName =
+                QFileInfo(it.value().path).completeBaseName();
+        if (tileset(tilesetName))
+            continue;
+
+        QImageReader reader(it.value().path);
+        const QSize imageSize = reader.size();
+        const QSize tileSize =
+                Tiled::getZomboidTilesetSize1x(tilesetName);
+        if (!imageSize.isValid()
+                || imageSize.width() < tileSize.width() * it.value().scale
+                || imageSize.height() < tileSize.height() * it.value().scale) {
+            qWarning() << "Ignoring undersized tileset PNG"
+                       << it.value().path << imageSize;
+            continue;
+        }
+
+        Tileset *tileset = nullptr;
+        if (loadImages) {
+            tileset = loadTileset(it.value().path);
+            if (!tileset) {
+                qWarning() << "Unable to discover tileset"
+                           << it.value().path << mError;
+                continue;
+            }
+        } else {
+            tileset = new Tileset(tilesetName,
+                                  tileSize.width(),
+                                  tileSize.height());
+            Tiled::setZomboidTileOffset(tileset);
+
+            QString imageSource;
+            QString imageSource2x;
+            TilesetManager::instance()->getTilesetFileName(
+                        tilesetName, imageSource, imageSource2x);
+            const QSize logicalImageSize =
+                    imageSize / it.value().scale;
+            if (!tileset->loadFromNothing(logicalImageSize,
+                                          imageSource)) {
+                qWarning() << "Unable to register tileset metadata"
+                           << it.value().path << logicalImageSize;
+                delete tileset;
+                continue;
+            }
+            if (it.value().scale == 2)
+                tileset->setImageSource2x(imageSource2x);
+            else
+                tileset->setImageSource2x(QString());
+            TilesetManager::instance()->changeTilesetSource(
+                        tileset, imageSource, false);
+        }
+        addTileset(tileset);
+        mTilesetInfo[tilesetName] = new TilesetMetaInfo;
+        ++addedCount;
+    }
+
+    if (addedCount > 0) {
+        qInfo() << "Discovered new Tiles PNGs in memory:"
+                << addedCount
+                << "(Tilesets.txt is unchanged; use the explicit Update "
+                   "Tilesets.txt command to persist them)";
+    }
+    return true;
 }
 
 bool TileMetaInfoMgr::rebuildTilesetsTxt(int *addedCountResult,
@@ -646,7 +839,7 @@ bool TileMetaInfoMgr::rebuildTilesetsTxt(int *addedCountResult,
             ++updatedCount;
         }
 
-        if (!mTilesetByName.contains(it.key())) {
+        if (!tileset(it.key())) {
             Tileset *tileset = new Tileset(
                         it.key(), tileSize.width(), tileSize.height());
             Tiled::setZomboidTileOffset(tileset);
@@ -722,7 +915,10 @@ bool TileMetaInfoMgr::loadTilesetImage(Tileset *ts, const QString &source)
 void TileMetaInfoMgr::addTileset(Tileset *tileset)
 {
     Q_ASSERT(mTilesetByName.contains(tileset->name()) == false);
+    Q_ASSERT(mTilesetByFoldedName.contains(
+                 tileset->name().toCaseFolded()) == false);
     mTilesetByName[tileset->name()] = tileset;
+    mTilesetByFoldedName[tileset->name().toCaseFolded()] = tileset;
     if (!mRemovedTilesets.contains(tileset))
         TilesetManager::instance()->addReference(tileset, false);
     mRemovedTilesets.removeAll(tileset);
@@ -735,6 +931,7 @@ void TileMetaInfoMgr::removeTileset(Tileset *tileset)
     Q_ASSERT(mRemovedTilesets.contains(tileset) == false);
     emit tilesetAboutToBeRemoved(tileset);
     mTilesetByName.remove(tileset->name());
+    mTilesetByFoldedName.remove(tileset->name().toCaseFolded());
     emit tilesetRemoved(tileset);
 
     // Don't remove references now, that will delete the tileset, and the

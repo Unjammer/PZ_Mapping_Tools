@@ -86,6 +86,7 @@ private slots:
     void tileSelectionChanged();
 
     void tilesetAdded(Tiled::Tileset *tileset);
+    void tilesetDiscoveryFinished();
     void tilesetAboutToBeRemoved(Tiled::Tileset *tileset);
     void tilesetChanged(Tiled::Tileset *tileset);
     void tileLayerNameChanged(Tiled::Tile *tile);

@@ -178,6 +178,7 @@ public:
      * Returns the number of tile columns in the tileset image.
      */
     int columnCount() const { return mColumnCount; }
+    void setColumnCount(int columns) { mColumnCount = columns; }
 
     /**
      * Returns the width of the tileset image.

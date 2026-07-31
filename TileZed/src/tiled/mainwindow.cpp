@@ -1010,7 +1010,12 @@ bool MainWindow::openFile(const QString &fileName,
     }
 
 #ifdef ZOMBOID
-    const QList<Tileset*> usedTilesets = map->tilesets();
+    QList<Tileset*> usedTilesets = map->usedTilesets().values();
+    usedTilesets.removeAll(TilesetManager::instance()->invisibleTileset());
+    usedTilesets.removeAll(TilesetManager::instance()->missingTileset());
+    qInfo() << "TMX tilesets:"
+            << "declared" << map->tilesets().size()
+            << "used" << usedTilesets.size();
     TileMetaInfoMgr::instance()->loadTilesets(usedTilesets, true, &progress);
     TilesetManager::instance()->waitForTilesets(usedTilesets);
 #endif
@@ -1193,22 +1198,28 @@ bool MainWindow::InitConfigFiles(QWidget *parent)
     const bool buildingEditorMode =
             QCoreApplication::applicationName().compare(
                 QLatin1String("BuildingEd"), Qt::CaseInsensitive) == 0;
+    progress.update(tr("Discovering additional tilesets..."));
+    qInfo().noquote() << "Scanning for additional tilesets in"
+                      << QDir::toNativeSeparators(
+                             TileMetaInfoMgr::instance()->tilesDirectory());
+    if (!TileMetaInfoMgr::instance()->addNewTilesets(false)) {
+        QMessageBox::critical(parent, tr("Tileset Configuration Error"),
+                              tr("%1\n(while adding new tilesets)")
+                              .arg(TileMetaInfoMgr::instance()->errorString()));
+        return false;
+    }
+    qInfo() << "Tileset discovery complete:"
+            << TileMetaInfoMgr::instance()->tilesets().size() << "entries";
     if (buildingEditorMode) {
-        qInfo() << "BuildingEd will preload every tileset listed in the "
-                   "shared catalog";
-    } else {
-        progress.update(tr("Discovering additional tilesets..."));
-        qInfo().noquote() << "Scanning for additional tilesets in"
-                          << QDir::toNativeSeparators(
-                                 TileMetaInfoMgr::instance()->tiles2xDirectory());
-        if (!TileMetaInfoMgr::instance()->addNewTilesets()) {
-            QMessageBox::critical(parent, tr("Tileset Configuration Error"),
-                                  tr("%1\n(while adding new tilesets)")
-                                  .arg(TileMetaInfoMgr::instance()->errorString()));
-            return false;
-        }
-        qInfo() << "Tileset discovery complete:"
-                << TileMetaInfoMgr::instance()->tilesets().size() << "entries";
+        // Resolve availability while the object/category views are still
+        // empty. Doing the same bulk pass after BuildingTiles.txt and
+        // BuildingFurniture.txt had populated them caused every source-change
+        // notification to rebuild the views again.
+        progress.update(tr("Checking available tileset images..."));
+        TileMetaInfoMgr::instance()->resolveTilesets(
+                    TileMetaInfoMgr::instance()->tilesets());
+        qInfo() << "BuildingEd registered the complete tileset catalog; "
+                   "PNG sheets will be decoded on demand";
     }
 
     progress.update(tr("Building configuration [1/4]: Reading %1...")
@@ -1951,11 +1962,18 @@ void MainWindow::tilesetMetaInfoDialog()
 {
     TileMetaInfoMgr *mgr = TileMetaInfoMgr::instance();
 
+    qInfo() << "Opening Tileset Metadata dialog";
     TileMetaInfoDialog dialog(this);
     dialog.exec();
+    qInfo() << "Tileset Metadata dialog closed; saving"
+            << mgr->tilesets().count() << "catalog entries";
 
     if (!mgr->writeTxt()) {
+        qWarning() << "Tileset catalog save failed:"
+                   << mgr->errorString();
         QMessageBox::warning(this, tr("Tileset Metadata Error"), mgr->errorString());
+    } else {
+        qInfo() << "Tileset catalog saved successfully";
     }
 }
 
