@@ -13,6 +13,8 @@ mapping automation, stability fixes, and current Project Zomboid data support.
 This is a community project. It is not an official The Indie Stone release.
 Project Zomboid game assets are not included.
 
+![WorldEd displaying a generated terrain cell](docs/images/worlded-overview.png)
+
 ## The three editors
 
 | Application | Main purpose | Notable additions in this fork |
@@ -92,7 +94,9 @@ project.
 - Correct thumbnails for both grid formats, selection-only rebuilds, and
   configurable thumbnail resolution and grid appearance.
 - Restored and optimized Biomemap generation using both ground and vegetation
-  images, with explicit unmapped-color and zone-type diagnostics.
+  images. Only `Vegitation`, `DeepForest`, `Forest`, `TownZone`, `Farm`,
+  `FarmLand`, and `TrailerPark` are written to its green channel; every other
+  vector zone/object remains an `objects.lua` export.
 - Editable Zombie Heatmap with 300-cell and native 256-cell geometry, brush
   controls, undo, atomic save, and a safety backup.
 - Restored InGameMap road generation for roads, trails, and railways.
@@ -137,9 +141,6 @@ The current API keeps existing scripts working while adding:
 `LuaTools.txt` can be supplied by a separate user catalog. Portable installs
 detect when the user and application catalog are the same file and load it only
 once.
-
-See the [Lua scripting reference](docs/TileZed/LuaScripting.html) and
-the [Automapper guide](docs/TileZed/Automapper.html).
 
 ## BuildingEd
 
@@ -193,14 +194,6 @@ PZTools/
 If the Tiles directory is moved later, use **Change Shared Paths** from WorldEd
 or TileZed. BuildingEd consumes the same shared setting.
 
-## Documentation and issue reports
-
-- [PZTools user guide](docs/TileZed/PZToolsGuide.html)
-- [Lua scripting reference](docs/TileZed/LuaScripting.html)
-- [Automapper guide](docs/TileZed/Automapper.html)
-- [Detailed fork changelog](CHANGELOG-PZTOOLS.md)
-- [Current release changes](RELEASE_CHANGELOG.md)
-
 Logs are written to `settings/logs`. A useful issue report includes:
 
 - application name and exact steps to reproduce;
@@ -239,15 +232,3 @@ nmake
 
 The TileZed build also produces BuildingEd and the Tiled format plugins. Keep
 executables and their matching libraries together when assembling a release.
-
-## Repository layout
-
-```text
-.
-├── WorldEd/                 WorldEd source tree
-├── TileZed/                 TileZed and BuildingEd source tree
-├── docs/images/             README screenshots
-├── CHANGELOG-PZTOOLS.md     detailed differences from upstream
-├── RELEASE_CHANGELOG.md     concise current-release notes
-└── README.md
-```
