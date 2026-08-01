@@ -4,7 +4,7 @@ This document describes the functional differences between the current PZTools
 Unofficial suite and the Tim Baker `basements` branches used as its clean upstream
 bases.
 
-Reference date: July 30, 2026.
+Reference date: July 31, 2026.
 
 | Project | Initial Tim Baker baseline | Local branch | Committed local revision |
 |---|---|---|---|
@@ -13,6 +13,22 @@ Reference date: July 30, 2026.
 
 This changelog includes the current working trees under `integration/WorldEd`
 and `integration/TileZed`. No public repository has been modified or pushed.
+
+## July 31, 2026 / Zero-column and Jumbo crash hardening
+
+- Tile metadata lookup no longer divides by zero when an embedded TMX/TBX
+  declaration temporarily exposes a zero-column tileset during lazy image
+  resolution. It reuses the matching catalogue geometry when available and
+  otherwise defers the optional metadata lookup.
+- Legacy Jumbo trunk/leaves overlays now validate the column count and target
+  tile before use. An incomplete sheet skips only the optional overlay instead
+  of crashing the renderer.
+- The same guards are present in WorldEd's OpenGL cell renderer and in the
+  shared TileZed/BuildingEd renderer.
+- Tile Definitions now detects resized sheets inside separate `.pack`
+  directories through the shared 1x/2x resolver. Existing properties are
+  retained by tile coordinate, the matrix is updated, and the open
+  `def.tiles` document is marked for saving.
 
 ## July 30, 2026 / WorldEd renderer selection and cell display
 

@@ -1230,9 +1230,15 @@ static JUMBO s_jumbo[] = {
 
 int LayerGroupVBO::tryAddExtraJumbo_Trunk(const Tiled::Tile *tile, const QPointF &screenPos, int tileWidth, QList<VBOTile> &tiles)
 {
+    if (!tile || !tile->tileset() || tiles.isEmpty())
+        return 0;
+
     VBOTile &vboTile0 = tiles.last();
     // Leaves overlay
-    int columns = tile->tileset()->columnCount();
+    const int columns = tile->tileset()->columnCount();
+    if (columns <= 0)
+        return 0;
+
     int row_trunk = 0;
     int row = tile->id() / columns;
     if (row < 2) {
@@ -1243,6 +1249,8 @@ int LayerGroupVBO::tryAddExtraJumbo_Trunk(const Tiled::Tile *tile, const QPointF
     for (size_t i = 0; i < sizeof(s_jumbo) / sizeof(JUMBO); i++) {
         if (s_jumbo[i].bHasLeaves && tilesetName.startsWith(s_jumbo[i].tilesetName)) {
             Tile *tile2 = tileset->tileAt(columns * row_trunk + tile->id() % columns);
+            if (!tile2)
+                return 0;
 
             VBOTile vboTile = vboTile0;
             vboTile.mRect = QRect(screenPos.x() + tileset->tileOffset().x() + tile2->offset().x(),
@@ -1259,9 +1267,15 @@ int LayerGroupVBO::tryAddExtraJumbo_Trunk(const Tiled::Tile *tile, const QPointF
 
 int LayerGroupVBO::tryAddExtraJumbo_Leaves(const Tiled::Tile *tile, const QPointF &screenPos, int tileWidth, QList<VBOTile> &tiles)
 {
+    if (!tile || !tile->tileset() || tiles.isEmpty())
+        return 0;
+
     VBOTile &vboTile0 = tiles.last();
     // Leaves overlay
-    int columns = tile->tileset()->columnCount();
+    const int columns = tile->tileset()->columnCount();
+    if (columns <= 0)
+        return 0;
+
     int row_summer = 3;
     int row = tile->id() / columns;
     if (row >= 2) {
@@ -1272,6 +1286,8 @@ int LayerGroupVBO::tryAddExtraJumbo_Leaves(const Tiled::Tile *tile, const QPoint
     for (size_t i = 0; i < sizeof(s_jumbo) / sizeof(JUMBO); i++) {
         if (s_jumbo[i].bHasLeaves && tilesetName.startsWith(s_jumbo[i].tilesetName)) {
             Tile *tile2 = tileset->tileAt(columns * row_summer + tile->id() % columns);
+            if (!tile2)
+                return 0;
 
             VBOTile vboTile = vboTile0;
             vboTile.mRect = QRect(screenPos.x() + tileset->tileOffset().x() + tile2->offset().x(),

@@ -801,18 +801,30 @@ QPolygonF ZLevelRenderer::tileRectToPolygon(const QRectF &rect, int level) const
 
 void ZLevelRenderer::drawJumboTreeTile_Trunk(Tile *tile, QPainter *painter, const QTransform &baseTransform, qreal x, qreal y, qreal m11, qreal m12, qreal m21, qreal m22) const
 {
-    int columns = tile->tileset()->columnCount();
+    if (!tile || !tile->tileset())
+        return;
+
+    Tileset *tileset = tile->tileset();
+    const int columns = tileset->columnCount();
+    // Embedded TMX/TBX declarations may temporarily have no image geometry
+    // while the shared catalogue image is still being resolved.  Such a
+    // declaration is still drawable as a missing tile, but it cannot be
+    // split into the legacy Jumbo tree rows.
+    if (columns <= 0)
+        return;
+
     int row_trunk = 0;
     int row = tile->id() / columns;
     if (row < 2) {
         return;
     }
     const int tileWidth = DISPLAY_TILE_WIDTH;
-    Tileset *tileset = tile->tileset();
     QString tilesetName = tileset->name();
     for (size_t i = 0; i < sizeof(s_jumbo) / sizeof(JUMBO); i++) {
         if (s_jumbo[i].bHasLeaves && tilesetName.startsWith(s_jumbo[i].tilesetName)) {
             Tile *tile2 = tileset->tileAt(columns * row_trunk + tile->id() % columns);
+            if (!tile2)
+                return;
             QImage img = tile2->image();
             QPoint offset = tileset->tileOffset() + tile2->offset();
             int dx = offset.x() + x;
@@ -828,18 +840,26 @@ void ZLevelRenderer::drawJumboTreeTile_Trunk(Tile *tile, QPainter *painter, cons
 
 void ZLevelRenderer::drawJumboTreeTile_Leaves(Tile *tile, QPainter *painter, const QTransform &baseTransform, qreal x, qreal y, qreal m11, qreal m12, qreal m21, qreal m22) const
 {
-    int columns = tile->tileset()->columnCount();
+    if (!tile || !tile->tileset())
+        return;
+
+    Tileset *tileset = tile->tileset();
+    const int columns = tileset->columnCount();
+    if (columns <= 0)
+        return;
+
     int row_summer = 3;
     int row = tile->id() / columns;
     if (row >= 2) {
         return;
     }
     const int tileWidth = DISPLAY_TILE_WIDTH;
-    Tileset *tileset = tile->tileset();
     QString tilesetName = tileset->name();
     for (size_t i = 0; i < sizeof(s_jumbo) / sizeof(JUMBO); i++) {
         if (s_jumbo[i].bHasLeaves && tilesetName.startsWith(s_jumbo[i].tilesetName)) {
             Tile *tile2 = tileset->tileAt(columns * row_summer + tile->id() % columns);
+            if (!tile2)
+                return;
             QImage img = tile2->image();
             QPoint offset = tileset->tileOffset() + tile2->offset();
             int dx = offset.x() + x;

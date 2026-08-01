@@ -1164,6 +1164,31 @@ void TileDefDialog::tileLeft(const QModelIndex &index)
 
 void TileDefDialog::tilesetChanged(Tileset *tileset)
 {
+    if (!tileset || !mTileDefFile)
+        return;
+
+    if (TileDefTileset *defTileset =
+            mTileDefFile->tileset(tileset->name())) {
+        const int columns = tileset->columnCount();
+        const int tileCount = tileset->tileCount();
+        const int rows = columns > 0 && tileCount % columns == 0
+                ? tileCount / columns : 0;
+        if (columns > 0 && rows > 0
+                && (columns != defTileset->mColumns
+                    || rows != defTileset->mRows)) {
+            const QSize oldSize(defTileset->mColumns, defTileset->mRows);
+            defTileset->resize(columns, rows);
+            // An external PNG/catalogue change is not an undoable property
+            // edit, but the resized geometry must still be saved to def.tiles.
+            mUndoStack->resetClean();
+            updateWindowTitle();
+            qInfo() << "Updated open tile-definition geometry:"
+                    << tileset->name() << oldSize << "->"
+                    << QSize(columns, rows)
+                    << "(properties preserved by tile coordinates)";
+        }
+    }
+
     if (tileset == mCurrentTileset)
         setTilesList();
 }
@@ -2015,15 +2040,35 @@ void TileDefDialog::tilesDirChanged()
     QList<ResizedTileset> resized;
 
     for (TileDefTileset *tsDef : mTileDefFile->tilesets()) {
-        QString imageSource = dir.filePath(tsDef->mImageSource);
-        QString imageSource2x = dir2x.filePath(tsDef->mImageSource);
-        if (QFileInfo::exists(imageSource2x)) {
+        QString imageSource;
+        QString imageSource2x;
+        TilesetManager::instance()->getTilesetFileName(
+                    tsDef->mName, imageSource, imageSource2x);
+
+        // Keep the historical per-def.tiles directory fallback, but prefer
+        // the shared resolver because it knows about 1x/2x and .pack folders.
+        if (!QImageReader(imageSource).size().isValid())
+            imageSource = dir.filePath(tsDef->mImageSource);
+        if (!QImageReader(imageSource2x).size().isValid())
+            imageSource2x = dir2x.filePath(tsDef->mImageSource);
+
+        const QSize customSize = CustomTileSize::forTileset(tsDef->mName);
+        const QSize tileSize = customSize.isEmpty()
+                ? QSize(64, 128) : customSize;
+
+        if (QImageReader(imageSource2x).size().isValid()) {
             imageSource2x = QFileInfo(imageSource2x).canonicalFilePath();
             QImageReader ir(imageSource2x);
             if (ir.size().isValid()) {
-                int columns = ir.size().width() / (64 * 2);
-                int rows = ir.size().height() / (128 * 2);
-                if (QSize(columns, rows) != QSize(tsDef->mColumns, tsDef->mRows)) {
+                const int scaledWidth = tileSize.width() * 2;
+                const int scaledHeight = tileSize.height() * 2;
+                int columns = scaledWidth > 0
+                        ? ir.size().width() / scaledWidth : 0;
+                int rows = scaledHeight > 0
+                        ? ir.size().height() / scaledHeight : 0;
+                if (columns > 0 && rows > 0
+                        && QSize(columns, rows)
+                        != QSize(tsDef->mColumns, tsDef->mRows)) {
                     resized += ResizedTileset(tsDef->mName,
                                               QSize(tsDef->mColumns, tsDef->mRows),
                                               QSize(columns, rows));
@@ -2033,13 +2078,17 @@ void TileDefDialog::tilesDirChanged()
             if (QFileInfo::exists(imageSource)) {
                imageSource = QFileInfo(imageSource).canonicalFilePath();
             }
-        } else if (QFileInfo::exists(imageSource)) {
+        } else if (QImageReader(imageSource).size().isValid()) {
             imageSource = QFileInfo(imageSource).canonicalFilePath();
             QImageReader ir(imageSource);
             if (ir.size().isValid()) {
-                int columns = ir.size().width() / 64;
-                int rows = ir.size().height() / 128 ;
-                if (QSize(columns, rows) != QSize(tsDef->mColumns, tsDef->mRows)) {
+                int columns = tileSize.width() > 0
+                        ? ir.size().width() / tileSize.width() : 0;
+                int rows = tileSize.height() > 0
+                        ? ir.size().height() / tileSize.height() : 0;
+                if (columns > 0 && rows > 0
+                        && QSize(columns, rows)
+                        != QSize(tsDef->mColumns, tsDef->mRows)) {
                     resized += ResizedTileset(tsDef->mName,
                                               QSize(tsDef->mColumns, tsDef->mRows),
                                               QSize(columns, rows));
@@ -2051,7 +2100,13 @@ void TileDefDialog::tilesDirChanged()
         // Try to reuse a tileset from our list of removed tilesets.
         bool reused = false;
         for (Tileset *ts : std::as_const(mRemovedTilesets)) {
-            if ((ts->imageSource() == imageSource) || (!imageSource2x.isEmpty() && (imageSource2x == ts->imageSource2x()))) {
+            const bool geometryMatches =
+                    ts->columnCount() == tsDef->mColumns
+                    && ts->tileCount() == tsDef->mColumns * tsDef->mRows;
+            if (geometryMatches
+                    && ((ts->imageSource() == imageSource)
+                        || (!imageSource2x.isEmpty()
+                            && imageSource2x == ts->imageSource2x()))) {
                 mTilesets += ts;
                 mTilesetByName[ts->name()] = ts;
                 // Don't addReferences().
@@ -2063,8 +2118,6 @@ void TileDefDialog::tilesDirChanged()
         if (reused)
             continue;
 
-        const QSize customSize = CustomTileSize::forTileset(tsDef->mName);
-        const QSize tileSize = customSize.isEmpty() ? QSize(64, 128) : customSize;
         Tileset *tileset = new Tileset(tsDef->mName, tileSize.width(), tileSize.height());
         int width = tsDef->mColumns * tileSize.width(), height = tsDef->mRows * tileSize.height();
         tileset->loadFromNothing(QSize(width, height), imageSource);
@@ -2079,6 +2132,11 @@ void TileDefDialog::tilesDirChanged()
     }
 
     if (resized.size()) {
+        // Make sure closing the editor prompts to persist the new matrix even
+        // when no tile property was edited.
+        mUndoStack->resetClean();
+        updateWindowTitle();
+
         QStringList sl;
         for (const ResizedTileset& rt : std::as_const(resized)) {
             bool smaller = rt.oldSize.width() > rt.newSize.width() ||

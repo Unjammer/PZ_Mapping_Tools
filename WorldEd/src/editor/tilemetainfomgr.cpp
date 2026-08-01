@@ -1002,6 +1002,8 @@ void TileMetaInfoMgr::tilesetChanged(Tileset *ts)
 void TileMetaInfoMgr::setTileEnum(Tile *tile, const QString &enumName)
 {
     QString key = TilesetMetaInfo::key(tile);
+    if (key.isEmpty())
+        return;
     QString tilesetName = tile->tileset()->name();
     if (enumName.isEmpty()) {
         if (mTilesetInfo.contains(tilesetName))
@@ -1016,10 +1018,14 @@ void TileMetaInfoMgr::setTileEnum(Tile *tile, const QString &enumName)
 
 QString TileMetaInfoMgr::tileEnum(Tile *tile)
 {
+    if (!tile || !tile->tileset())
+        return QString();
     QString tilesetName = tile->tileset()->name();
     if (!mTilesetInfo.contains(tilesetName))
         return QString();
     QString key = TilesetMetaInfo::key(tile);
+    if (key.isEmpty())
+        return QString();
     TilesetMetaInfo *info = mTilesetInfo[tilesetName];
     if (!info->mInfo.contains(key))
         return QString();
@@ -1074,7 +1080,26 @@ bool TileMetaInfoMgr::parse2Ints(const QString &s, int *pa, int *pb)
 
 QString TilesetMetaInfo::key(Tile *tile)
 {
-    int column = tile->id() % tile->tileset()->columnCount();
-    int row = tile->id() / tile->tileset()->columnCount();
+    if (!tile || !tile->tileset())
+        return QString();
+
+    Tileset *tileset = tile->tileset();
+    int columns = tileset->columnCount();
+    if (columns <= 0) {
+        // Maps and buildings carry their own embedded Tileset instances.
+        // During lazy loading those declarations may not have image geometry
+        // yet, while the catalogue entry for the same sheet already does.
+        if (Tileset *catalogTileset =
+                TileMetaInfoMgr::instance()->tileset(tileset->name())) {
+            columns = catalogTileset->columnCount();
+        }
+    }
+    if (columns <= 0)
+        columns = recoverSingleRowColumnCount(tileset);
+    if (columns <= 0)
+        return QString();
+
+    int column = tile->id() % columns;
+    int row = tile->id() / columns;
     return QString(QLatin1String("%1,%2")).arg(column).arg(row);
 }

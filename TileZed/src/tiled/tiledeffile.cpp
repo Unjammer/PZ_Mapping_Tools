@@ -434,7 +434,7 @@ TileDefTileset::TileDefTileset(Tileset *ts) :
     mName = ts->name();
     mImageSource = QFileInfo(ts->imageSource()).fileName();
     mColumns = ts->columnCount();
-    mRows = ts->tileCount() / mColumns;
+    mRows = mColumns > 0 ? ts->tileCount() / mColumns : 0;
     mTiles.resize(ts->tileCount());
     for (int i = 0; i < mTiles.size(); i++)
         mTiles[i] = new TileDefTile(this, i);
@@ -459,6 +459,9 @@ TileDefTile *TileDefTileset::tileAt(int index)
 
 void TileDefTileset::resize(int columns, int rows)
 {
+    if (columns <= 0 || rows <= 0)
+        return;
+
     if (columns == mColumns && rows == mRows)
         return;
 
