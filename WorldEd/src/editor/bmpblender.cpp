@@ -18,6 +18,7 @@
 #include "bmpblender.h"
 
 #include "mapcomposite.h"
+#include "tilemetainfomgr.h"
 #include "tilesetmanager.h"
 
 #include "BuildingEditor/buildingfloor.h"
@@ -384,7 +385,25 @@ void BmpBlender::fromMap()
         }
         for (int i = 0; i < blend->exclude2.size(); i += 2) {
             QString tileName = blend->exclude2[i];
-            if (BuildingEditor::BuildingTilesMgr::legalTileName(tileName)) {
+            Tileset *wholeSheet =
+                    TileMetaInfoMgr::instance()->tileset(tileName);
+            if (!wholeSheet) {
+                for (Tileset *tileset :
+                     TileMetaInfoMgr::instance()->tilesets()) {
+                    if (tileset && BuildingEditor::BuildingTilesMgr::
+                            normalizeTileName(tileset->name()).compare(
+                                tileName, Qt::CaseInsensitive) == 0) {
+                        wholeSheet = tileset;
+                        break;
+                    }
+                }
+            }
+            if (wholeSheet) {
+                // This selector represents every tile in the named sheet.
+                // Keep the numeric sheet suffix out of tile-name
+                // normalization (foo_01 is not tile 1 of sheet foo).
+                blend->exclude2[i] = wholeSheet->name();
+            } else if (BuildingEditor::BuildingTilesMgr::legalTileName(tileName)) {
                 tileNames += tileName;
             }
         }
@@ -415,10 +434,45 @@ QList<Tile *>& BmpBlender::tileNameToTiles(const QString &name, QList<Tile *>& t
         tiles += nullptr;
     else if (mAliasByName.contains(name))
         tiles += tileNamesToTiles(mAliasByName[name]->mTiles);
-    else if (mTileByName.contains(name))
-        tiles += mTileByName[name];
-    else
-        tiles += TilesetManager::instance()->missingTile();
+    else {
+        Tileset *selectedTileset = nullptr;
+        if (mMap) {
+            for (Tileset *tileset : mMap->tilesets()) {
+                if (tileset && tileset->name().compare(
+                            name, Qt::CaseInsensitive) == 0) {
+                    selectedTileset = tileset;
+                    break;
+                }
+            }
+        }
+        if (selectedTileset) {
+            for (int index = 0;
+                 index < selectedTileset->tileCount(); ++index) {
+                if (Tile *tile = selectedTileset->tileAt(index))
+                    tiles += tile;
+            }
+        } else if (mTileByName.contains(name)) {
+            tiles += mTileByName[name];
+        } else {
+            for (Tileset *tileset : mMap->tilesets()) {
+                if (tileset && BuildingEditor::BuildingTilesMgr::
+                        normalizeTileName(tileset->name()).compare(
+                            name, Qt::CaseInsensitive) == 0) {
+                    selectedTileset = tileset;
+                    break;
+                }
+            }
+            if (selectedTileset) {
+                for (int index = 0;
+                     index < selectedTileset->tileCount(); ++index) {
+                    if (Tile *tile = selectedTileset->tileAt(index))
+                        tiles += tile;
+                }
+            } else {
+                tiles += TilesetManager::instance()->missingTile();
+            }
+        }
+    }
     return tiles;
 }
 
@@ -1491,8 +1545,26 @@ missingKV:
                                 .arg(kv.lineNumber).arg(layerName);
                         return false;
                     }
+                    Tileset *wholeSheet =
+                            TileMetaInfoMgr::instance()->tileset(tileName);
+                    if (!wholeSheet) {
+                        for (Tileset *tileset :
+                             TileMetaInfoMgr::instance()->tilesets()) {
+                            if (tileset && BuildingEditor::BuildingTilesMgr::
+                                    normalizeTileName(tileset->name()).compare(
+                                        tileName, Qt::CaseInsensitive) == 0) {
+                                wholeSheet = tileset;
+                                break;
+                            }
+                        }
+                    }
                     if (aliasToName.contains(tileName)) {
                         exclude2 += tileName;
+                    } else if (wholeSheet) {
+                        // exclude2 accepts a complete sheet selector.
+                        // Preserve it verbatim instead of interpreting its
+                        // numeric suffix as a tile index.
+                        exclude2 += wholeSheet->name();
                     } else {
                         if (!BuildingEditor::BuildingTilesMgr::legalTileName(tileName)) {
                             mError = tr("Line %1: Invalid tile name '%2'")
@@ -1566,6 +1638,17 @@ void BmpBlendsFile::fromMap(Map *map)
 
 QString BmpBlendsFile::unpaddedTileName(const QString &tileName)
 {
+    if (TileMetaInfoMgr::instance()->tileset(tileName))
+        return tileName;
+
+    for (Tileset *tileset : TileMetaInfoMgr::instance()->tilesets()) {
+        if (tileset && BuildingEditor::BuildingTilesMgr::
+                normalizeTileName(tileset->name()).compare(
+                    tileName, Qt::CaseInsensitive) == 0) {
+            return tileset->name();
+        }
+    }
+
     if (!mAliasNames.contains(tileName)) {
         QString tilesetName;
         int tileID;

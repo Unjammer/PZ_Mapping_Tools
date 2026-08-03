@@ -308,8 +308,14 @@ void MapsDock::selectionChanged()
     QFileInfo info(path);
     if (info.isDir())
         return;
-    if (info.suffix() == QLatin1String("pzw"))
+    if (info.suffix() == QLatin1String("pzw")
+            || info.fileName().compare(
+                QStringLiteral("streets.xml"),
+                Qt::CaseInsensitive) == 0) {
+        mPreviewLabel->setPixmap(QPixmap());
+        mPreviewMapImage = nullptr;
         return;
+    }
     MapImage *mapImage = MapImageManager::instance()->getMapImage(path);
     if (mapImage) {
         if (mapImage->isLoaded()) {
@@ -381,7 +387,8 @@ MapsView::MapsView(QWidget *parent)
     QStringList filters;
     filters << QLatin1String("*.tmx")
             << QLatin1String("*.tbx")
-            << QLatin1String("*.pzw");
+            << QLatin1String("*.pzw")
+            << QLatin1String("streets.xml");
     foreach (QString format, BMPToTMX::supportedImageFormats())
         filters << QLatin1String("*.") + format;
     model->setNameFilters(filters);

@@ -13,12 +13,80 @@ mapping automation, stability fixes, and current Project Zomboid data support.
 This is a community project. It is not an official The Indie Stone release.
 Project Zomboid game assets are not included.
 
+![WorldEd displaying a generated terrain cell](docs/images/worlded-overview.png)
+
+## Why do unofficial mapping tools exist?
+
+The source code of the Project Zomboid mapping tools has remained publicly
+available and has continued to receive updates. Source availability, however,
+is not the same thing as a usable release. Matching official binaries,
+configuration files, and Tiles packages have repeatedly arrived late, remained
+available only through scattered forum links, or not been released at all. At
+the time this project was created, the Steam tools were older than the version
+distributed through Project Zomboid's own forum.
+
+Over the years it also became increasingly apparent that the original tools
+were no longer being developed from the day-to-day perspective of an active
+mapper. They continued to gain the minimum support required for new game data,
+but comparatively little work addressed the long-standing workflow, usability,
+performance, distribution, and reliability problems encountered when creating
+and maintaining real maps.
+
+The original decision to publish the source was nevertheless extremely
+valuable. It gave the mapping community an early view of future formats and
+made it possible to prepare for changes such as 256 × 256 cells, Biomemap,
+depth maps, basements, and other Build 42 systems before public game releases
+made them unavoidable. In several cases, community tool maintainers understood
+an upcoming format before working TIS mappers had been briefed about it. That
+suggests that, at least historically, tool and format development sometimes
+progressed in parallel with the mapping team rather than through one
+fully synchronized production pipeline.
+
+The releases did not keep pace with those source changes. Without community
+builds and fixes, there would have been no practical public B42 mapping
+workflow when mappers needed one. Those builds did more than keep existing
+projects opening: they made B42 maps possible, trained dozens of new mappers,
+documented new concepts, and helped some creators build the visible body of
+work that later led to paid mapping jobs.
+
+The missing pieces were not limited to executables. Required configuration
+files and current Tiles were also frequently absent from official
+distributions. Even now, the community is still waiting for an official,
+complete release of Tiles introduced around the Build 41.78 Louisville
+changes, together with an unambiguous statement that those resources may be
+used in the public mapping workflow.
+
+You can, of course, wait for an official release. It is also worth noticing
+that newer mapping utilities such as the depth-map and street-name editors
+appeared directly inside the game. Whatever the internal reasons, that is a
+strong sign that the in-game Java toolchain became the practical place to
+deliver tools when the separate C++ editors could not evolve quickly enough.
+It does not make WorldEd, TileZed, or BuildingEd obsolete; it demonstrates the
+maintenance gap that unofficial releases have been filling.
+
+I still hope that the official tools will catch up with the unofficial ones,
+adopt any ideas that prove useful, and eventually remove the need for this
+project. I also know that this work is visible to TIS, although I do not expect
+an official endorsement of a community fork. More importantly, I cannot
+promise to carry it forever: TIS is a profitable studio, while I develop,
+test, document, support, and distribute these tools in my free time.
+
+If you believe you can do better, please do it. Open source becomes healthier
+when more people are willing to maintain it. So far, however, repeated official
+and community announcements have not produced another complete, current,
+publicly usable tool suite. Before dismissing unofficial tools, remember the
+gap they filled, the maps they enabled during the last two years, the people
+they helped into professional work, and the dozens of mappers they helped
+teach.
+
+You're welcome. It was my pleasure.
+
 ## The three editors
 
 | Application | Main purpose | Notable additions in this fork |
 |---|---|---|
 | **WorldEd** | Assemble the world, assign TMX maps to cells, edit roads and zones, and export map data | Per-project 300/256 grids, terrain and vegetation PNG editor, procedural terrain tools, improved thumbnails, Biomemap and Zombie Heatmap tools, safer InGameMap export |
-| **TileZed** | Edit TMX maps, tilesets, TileDefs, Automapper rules, and run Lua mapping tools | Complete tileset catalog preload, 2x/custom-only support, restored Automapper, expanded Lua API, pack and tileset utilities, clearer tile status and diagnostics |
+| **TileZed** | Edit TMX maps, tilesets, TileDefs, depth geometry, Automapper rules, and run Lua mapping tools | Build 42 depth-map editor, complete tileset catalog preload, 2x/custom-only support, restored Automapper, expanded Lua API, pack and tileset utilities, clearer tile status and diagnostics |
 | **BuildingEd** | Create and edit TBX buildings, rooms, furniture, roofs, grime, and building metadata | Standalone executable, complete Tile/Furniture/Object palettes, category validation, templates, autosave, and transactional Lua building scripts |
 
 ## Highlights
@@ -92,7 +160,9 @@ project.
 - Correct thumbnails for both grid formats, selection-only rebuilds, and
   configurable thumbnail resolution and grid appearance.
 - Restored and optimized Biomemap generation using both ground and vegetation
-  images, with explicit unmapped-color and zone-type diagnostics.
+  images. Only `Vegitation`, `DeepForest`, `Forest`, `TownZone`, `Farm`,
+  `FarmLand`, and `TrailerPark` are written to its green channel; every other
+  vector zone/object remains an `objects.lua` export.
 - Editable Zombie Heatmap with 300-cell and native 256-cell geometry, brush
   controls, undo, atomic save, and a safety backup.
 - Restored InGameMap road generation for roads, trails, and railways.
@@ -119,6 +189,24 @@ project.
 - The restored Automapping panel accepts TMX rule maps and nested TXT rule
   lists, detects recursion and duplicate loading, and supports Object Groups,
   property wildcards, and object add/change/remove triggers.
+
+### Build 42 depth geometry
+
+**Tools > Depth Map Editor...** opens a geometry-first editor for the selected
+tileset. It reads and writes Build 42 `tileGeometry.txt` primitives together
+with the matching `DEPTH_<tileset>.png` atlas.
+
+- Add `XY`, `XZ`, or `YZ` polygons, boxes, and cylinders.
+- Select wireframes directly over the source tile, drag them in X/Z, and edit
+  exact translations, rotations, bounds, radii, height, and polygon points.
+- Rasterize one primitive into existing pixels or rebuild the complete depth
+  tile from its geometry, optionally restricted by source-tile opacity.
+- Use the separate Pixel Retouch tab for inspection and manual corrections.
+- Save geometry and the full eight-column depth atlas together with `Ctrl+S`.
+
+Geometry writes use the current version-2 integer-coordinate format and replace
+only the active tileset block, preserving unrelated tilesets and tile-property
+blocks already present in `tileGeometry.txt`.
 
 ### Lua mapping automation
 
@@ -185,7 +273,6 @@ PZTools/
 ├── translations/
 ├── settings/        created at runtime; shared INI files and logs
 └── Tiles/           optional local game Tiles; not included
-    ├── 1x/          optional
     ├── 2x/          optional
     └── custom/      optional
 ```
@@ -198,6 +285,7 @@ or TileZed. BuildingEd consumes the same shared setting.
 - [PZTools user guide](docs/TileZed/PZToolsGuide.html)
 - [Lua scripting reference](docs/TileZed/LuaScripting.html)
 - [Automapper guide](docs/TileZed/Automapper.html)
+- [Upstream history and source provenance](UPSTREAM-HISTORY.md)
 - [Detailed fork changelog](CHANGELOG-PZTOOLS.md)
 - [Current release changes](RELEASE_CHANGELOG.md)
 
@@ -247,7 +335,35 @@ executables and their matching libraries together when assembling a release.
 ├── WorldEd/                 WorldEd source tree
 ├── TileZed/                 TileZed and BuildingEd source tree
 ├── docs/images/             README screenshots
+├── UPSTREAM-HISTORY.md      exact upstream baselines and port registry
 ├── CHANGELOG-PZTOOLS.md     detailed differences from upstream
 ├── RELEASE_CHANGELOG.md     concise current-release notes
 └── README.md
 ```
+
+## Upstream, licenses, and assets
+
+PZWorldEd, TileZed, and BuildingEd retain their upstream copyright notices and
+are distributed as modified GPL applications. `libtiled`, `tmxviewer`, Qt, and
+the other bundled components retain their respective licenses. The release
+contains:
+
+- [`COPYING`](COPYING), the distribution and source-availability overview;
+- [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt), the component index;
+- [`licenses/`](licenses/), the complete applicable license texts;
+- [`UPSTREAM-HISTORY.md`](UPSTREAM-HISTORY.md), the exact upstream baselines,
+  selectively ported changes, and provenance policy.
+
+Complete corresponding source for each PZ Mapping Tools release is published
+at <https://github.com/Unjammer/PZ_Mapping_Tools>. The portable Windows release
+dynamically links against Qt 5.14.2; its corresponding upstream source is
+available from
+<https://download.qt.io/archive/qt/5.14/5.14.2/single/>. See
+`SOURCE-OFFER.txt` in the binary distribution for the fallback written offer.
+
+No additional proprietary restriction is imposed on the GPL-covered editor
+code. Refer to the included license texts for the controlling terms.
+
+Project Zomboid game data, Tiles, textures, and other game assets are not part
+of this repository or release. Users must obtain them from an authorized game
+installation and follow the game's modding and redistribution rules.

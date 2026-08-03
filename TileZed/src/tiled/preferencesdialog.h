@@ -26,6 +26,7 @@
 #include <QDialog>
 
 class QModelIndex;
+class QCheckBox;
 
 namespace Ui {
 class PreferencesDialog;
@@ -89,6 +90,7 @@ private:
     Ui::PreferencesDialog *mUi;
     QStringList mLanguages;
     ObjectTypesModel *mObjectTypesModel;
+    QCheckBox *mSyncThemeCheckBox;
 };
 
 

@@ -135,6 +135,7 @@ public:
 
     BuildingIsoView *isoView() const { return mIsoView; }
     BuildingIsoView *tileView() const { return mTileView; }
+    BuildingIsoView *attributeView() const { return mAttributeView; }
 
     void setInitialPosition();
 
@@ -357,6 +358,7 @@ private:
     QAction *mRedoAction;
     QAction *mRunLuaScriptAction = nullptr;
     QAction *mLuaConsoleAction = nullptr;
+    QAction *mNightPreviewAction = nullptr;
     QSettings &mSettings;
     QString mError;
     QString mLuaScriptFile;

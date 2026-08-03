@@ -28,6 +28,7 @@
 #include "tile.h"
 
 #include <QGraphicsItem>
+#include <QHash>
 #include <QOpenGLBuffer>
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLShaderProgram>
@@ -47,6 +48,8 @@ class MapBuildings;
 class MapComposite;
 class MapImage;
 class MapInfo;
+class NightPreviewItem;
+class EnvironmentPreviewItem;
 class ObjectItem;
 class PropertyHolder;
 class ResizeHandle;
@@ -897,6 +900,19 @@ public:
     bool isDestroying() const
     { return mDestroying; }
 
+    void setNightPreviewEnabled(bool enabled);
+    void rebuildNightPreview();
+    void setPoweredPreviewEnabled(bool enabled);
+    void setSnowPreviewEnabled(bool enabled);
+    void setJumboPreviewEnabled(bool enabled);
+    void rebuildEnvironmentPreview();
+    void restoreEnvironmentPreviewTiles();
+    Tiled::Tile *environmentPreviewTile(
+            const Tiled::Tile *sourceTile, const QPoint &square) const;
+    Tiled::Tile *environmentPreviewOverlayTile(
+            const Tiled::Tile *sourceTile, const QPoint &square) const;
+    void invalidateEnvironmentPreviewVBOs();
+
     ObjectItem *newObjectItem(WorldCellObject *obj, QGraphicsItem *parent);
 
     void lotFileChanged(WorldCellLot *lot);
@@ -1058,6 +1074,17 @@ private:
     QList<InGameMapFeatureItem*> mFeatureItems;
     QSet<InGameMapFeatureItem*> mSelectedFeatureItems;
     QGraphicsRectItem *mDarkRectangle;
+    EnvironmentPreviewItem *mEnvironmentPreviewItem;
+    NightPreviewItem *mNightPreviewItem;
+    bool mNightPreviewEnabled;
+    bool mPoweredPreviewEnabled;
+    bool mSnowPreviewEnabled;
+    bool mJumboPreviewEnabled;
+    bool mEnvironmentPreviewRebuilding;
+    QHash<Tiled::Tile*, Tiled::Tile*> mEnvironmentPreviewOriginalTiles;
+    QHash<Tiled::Tile*, Tiled::Tile*> mEnvironmentPreviewMappings;
+    QHash<Tiled::Tile*, Tiled::Tile*> mEnvironmentPreviewOverlays;
+    QVector<Tiled::Tile*> mEnvironmentPreviewJumboCandidates;
     CellGridItem *mGridItem;
     bool mHighlightCurrentLevel;
     bool mWasHighlightCurrentLevel;

@@ -169,6 +169,42 @@ public:
             mCells.clear();
     }
 
+    /**
+     * Resizes a sparse grid while preserving every existing cell.
+     *
+     * This is considerably cheaper than scanning the complete rectangular
+     * bounds when only a small number of cells are populated, which is the
+     * common case for the temporary layers used by painting undo commands.
+     * The caller must ensure that no existing cell is clipped.
+     */
+    void resizePreservingCells(int width, int height, const QPoint &offset)
+    {
+        SparseTileGrid resized(width, height);
+
+        if (mUseVector) {
+            for (int y = 0; y < mHeight; ++y) {
+                for (int x = 0; x < mWidth; ++x) {
+                    const Cell &cell = mCellsVector.at(y * mWidth + x);
+                    if (!cell.isEmpty())
+                        resized.replace(x + offset.x(),
+                                        y + offset.y(),
+                                        cell);
+                }
+            }
+        } else {
+            for (auto it = mCells.constBegin(); it != mCells.constEnd(); ++it) {
+                const int oldIndex = it.key();
+                const int oldX = oldIndex % mWidth;
+                const int oldY = oldIndex / mWidth;
+                resized.replace(oldX + offset.x(),
+                                oldY + offset.y(),
+                                it.value());
+            }
+        }
+
+        *this = resized;
+    }
+
 private:
     void swapToVector()
     {

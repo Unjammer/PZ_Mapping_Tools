@@ -16,9 +16,14 @@
  */
 
 #include <QApplication>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QSettings>
+#include <QXmlStreamReader>
+
+#include <limits>
 #include "mainwindow.h"
 #include "../firstlaunchdialog.h"
 #include "../portablesettings.h"
@@ -26,6 +31,7 @@
 #ifdef ZOMBOID
 #include "documentmanager.h"
 #include "document.h"
+#include "bmptotmx.h"
 #include "toolmanager.h"
 #include "preferences.h"
 #include "mapimagemanager.h"
@@ -33,8 +39,12 @@
 #include "progress.h"
 #include "tilemetainfomgr.h"
 #include "tilesetmanager.h"
+#include "streetnamesdock.h"
+#include "InGameMap/ingamemapreader.h"
+#include "InGameMap/ingamemapwriterbinary.h"
 #include "world.h"
 #include "worlddocument.h"
+#include "zlevelrenderer.h"
 using namespace Tiled;
 using namespace Tiled::Internal;
 #endif
@@ -61,10 +71,112 @@ int main(int argc, char *argv[])
     a.setAttribute(Qt::AA_DontShowIconsInMenus);
 #endif
 
+    const QStringList commandLineArguments = a.arguments().mid(1);
+    QString validateBmpGenerationProject;
+    for (const QString &argument : commandLineArguments) {
+        const QString inGameMapValidationPrefix =
+                QLatin1String("--validate-ingamemap=");
+        if (argument.startsWith(inGameMapValidationPrefix)) {
+            const QString fileName =
+                    argument.mid(inGameMapValidationPrefix.size());
+            QFile scanFile(fileName);
+            if (!scanFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                qCritical() << "InGameMap validation could not open:"
+                            << fileName << scanFile.errorString();
+                return 6;
+            }
+
+            int minX = std::numeric_limits<int>::max();
+            int minY = std::numeric_limits<int>::max();
+            int maxX = std::numeric_limits<int>::min();
+            int maxY = std::numeric_limits<int>::min();
+            QXmlStreamReader scanner(&scanFile);
+            while (!scanner.atEnd()) {
+                scanner.readNext();
+                if (!scanner.isStartElement() ||
+                        scanner.name() != QLatin1String("cell"))
+                    continue;
+                bool xOk = false;
+                bool yOk = false;
+                const int x = scanner.attributes().value(
+                            QLatin1String("x")).toInt(&xOk);
+                const int y = scanner.attributes().value(
+                            QLatin1String("y")).toInt(&yOk);
+                if (!xOk || !yOk)
+                    continue;
+                minX = qMin(minX, x);
+                minY = qMin(minY, y);
+                maxX = qMax(maxX, x);
+                maxY = qMax(maxY, y);
+            }
+            if (scanner.hasError() || minX > maxX || minY > maxY) {
+                qCritical() << "InGameMap validation could not determine "
+                               "the XML bounds:" << scanner.errorString();
+                return 7;
+            }
+
+            World world(maxX - minX + 1, maxY - minY + 1,
+                        WorldGridFormat::Legacy300);
+            GenerateLotsSettings settings;
+            settings.worldOrigin = QPoint(minX, minY);
+            world.setGenerateLotsSettings(settings);
+            InGameMapReader reader;
+            if (!reader.readWorld(fileName, &world)) {
+                qCritical() << "InGameMap validation could not read:"
+                            << reader.errorString();
+                return 8;
+            }
+
+            const QString outputFile =
+                    fileName + QLatin1String(".validated.bin");
+            InGameMapWriterBinary writer;
+            if (!writer.writeWorld(&world, outputFile)) {
+                qCritical() << "InGameMap validation could not write:"
+                            << writer.errorString();
+                return 9;
+            }
+            qInfo() << "InGameMap validation passed:" << fileName
+                    << "converted output:" << outputFile;
+            return 0;
+        }
+
+        const QString bmpValidationPrefix =
+                QLatin1String("--validate-bmp-generation=");
+        if (argument.startsWith(bmpValidationPrefix)) {
+            validateBmpGenerationProject =
+                    argument.mid(bmpValidationPrefix.size());
+            continue;
+        }
+        if (argument == QLatin1String(
+                    "--validate-preview-overlays")) {
+            QString error;
+            if (!ZLevelRenderer::validatePreviewOverlayAlignment(
+                        &error)) {
+                qCritical() << "Environment-preview overlay validation "
+                               "failed:" << error;
+                return 3;
+            }
+            qInfo() << "Environment-preview overlay validation passed";
+            return 0;
+        }
+        if (!argument.startsWith(QLatin1String("--validate-streets=")))
+            continue;
+        const QString fileName = argument.mid(19);
+        StreetNamesDock validator;
+        QString error;
+        int streetCount = 0;
+        if (!validator.validateStreetFile(fileName, &streetCount, &error)) {
+            qCritical() << "streets.xml validation failed:" << error;
+            return 2;
+        }
+        qInfo() << "streets.xml validation passed:" << streetCount
+                << "street(s)";
+        return 0;
+    }
+
     if (!FirstLaunchDialog::ensureSharedPaths())
         return 0;
 
-    const QStringList commandLineArguments = a.arguments().mid(1);
     for (const QString &argument : commandLineArguments) {
         if (argument == QLatin1String("--renderer=opengl"))
             Preferences::instance()->setUseOpenGL(true);
@@ -80,6 +192,28 @@ int main(int argc, char *argv[])
 
     if (!w.InitConfigFiles())
         return 0;
+
+    if (!validateBmpGenerationProject.isEmpty()) {
+        if (!w.openFile(validateBmpGenerationProject)) {
+            qCritical() << "BMP to TMX input validation could not open:"
+                        << validateBmpGenerationProject;
+            return 4;
+        }
+        Document *document =
+                DocumentManager::instance()->currentDocument();
+        WorldDocument *worldDocument =
+                document ? document->asWorldDocument() : nullptr;
+        if (!BMPToTMX::instance()->validateGenerationInputs(
+                    worldDocument)) {
+            qCritical().noquote()
+                    << "BMP to TMX input validation failed:"
+                    << BMPToTMX::instance()->errorString();
+            return 5;
+        }
+        qInfo() << "BMP to TMX input validation passed:"
+                << validateBmpGenerationProject;
+        return 0;
+    }
 
     // Mark the interactive session dirty before restoring documents.  If a
     // malformed project or map terminates WorldEd, the next launch starts

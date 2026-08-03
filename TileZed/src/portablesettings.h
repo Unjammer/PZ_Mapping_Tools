@@ -127,6 +127,50 @@ inline QString sharedSettingsFilePath()
     return QDir(rootPath()).filePath(QLatin1String("PZTools.ini"));
 }
 
+inline bool syncThemeAcrossApplications()
+{
+    QSettings shared(sharedSettingsFilePath(), QSettings::IniFormat);
+    return shared.value(
+                QLatin1String("Interface/SyncThemeAcrossApplications"),
+                false).toBool();
+}
+
+inline QString sharedTheme(const QString &fallback = QStringLiteral("Default"))
+{
+    QSettings shared(sharedSettingsFilePath(), QSettings::IniFormat);
+    return shared.value(QLatin1String("Interface/Theme"), fallback).toString();
+}
+
+inline void setThemeForAllApplications(const QString &theme)
+{
+    QSettings shared(sharedSettingsFilePath(), QSettings::IniFormat);
+    shared.setValue(QLatin1String("Interface/Theme"), theme);
+    shared.sync();
+
+    const QStringList applicationNames = {
+        QLatin1String("TileZed"),
+        QLatin1String("BuildingEd"),
+        QLatin1String("PZWorldEd")
+    };
+    for (const QString &applicationName : applicationNames) {
+        QSettings settings(QSettings::IniFormat, QSettings::UserScope,
+                           QLatin1String("TheIndieStone"), applicationName);
+        settings.setValue(QLatin1String("Interface/Theme"), theme);
+        settings.sync();
+    }
+}
+
+inline void setSyncThemeAcrossApplications(bool enabled,
+                                           const QString &currentTheme = QString())
+{
+    QSettings shared(sharedSettingsFilePath(), QSettings::IniFormat);
+    shared.setValue(QLatin1String("Interface/SyncThemeAcrossApplications"),
+                    enabled);
+    shared.sync();
+    if (enabled && !currentTheme.isEmpty())
+        setThemeForAllApplications(currentTheme);
+}
+
 inline QString sharedConfigurationPath()
 {
     QSettings shared(sharedSettingsFilePath(), QSettings::IniFormat);
@@ -388,13 +432,17 @@ inline void messageHandler(QtMsgType type,
               .arg(QString::fromUtf8(context.file))
               .arg(context.line)
             : QString();
-    const QString line = QStringLiteral("%1 [%2] [pid:%3 thread:%4] %5%6\n")
+    const QString threadName = QThread::currentThread()->objectName();
+    const QString threadLabel = threadName.isEmpty()
+            ? QString()
+            : QStringLiteral(" name:%1").arg(threadName);
+    const QString line = QStringLiteral("%1 [%2] [pid:%3 thread:%4%5] %6%7\n")
             .arg(QDateTime::currentDateTime().toString(
                      QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz")))
             .arg(QString::fromLatin1(messageTypeName(type)))
             .arg(QCoreApplication::applicationPid())
             .arg(reinterpret_cast<quintptr>(QThread::currentThreadId()), 0, 16)
-            .arg(message, source);
+            .arg(threadLabel, message, source);
     const QByteArray encoded = line.toUtf8();
 
     {
@@ -417,15 +465,34 @@ inline void messageHandler(QtMsgType type,
 inline LONG WINAPI unhandledExceptionLogger(EXCEPTION_POINTERS *exceptionInfo)
 {
     if (exceptionInfo && exceptionInfo->ExceptionRecord) {
+        const quintptr address = reinterpret_cast<quintptr>(
+                    exceptionInfo->ExceptionRecord->ExceptionAddress);
+        QString moduleDescription;
+        HMODULE module = nullptr;
+        if (GetModuleHandleExW(
+                    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
+                    | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                    reinterpret_cast<LPCWSTR>(address), &module)) {
+            wchar_t modulePath[MAX_PATH] = {};
+                const DWORD length = GetModuleFileNameW(
+                        module, modulePath, MAX_PATH);
+            if (length > 0) {
+                moduleDescription =
+                        QStringLiteral(" module=\"%1\" module-offset=0x%2")
+                        .arg(QDir::toNativeSeparators(
+                                 QString::fromWCharArray(
+                                     modulePath, int(length))))
+                        .arg(address - reinterpret_cast<quintptr>(module),
+                             0, 16);
+            }
+        }
         qCritical().nospace()
                 << "Unhandled Windows exception code=0x"
                 << QString::number(
                        exceptionInfo->ExceptionRecord->ExceptionCode, 16)
                 << " address=0x"
-                << QString::number(
-                       reinterpret_cast<quintptr>(
-                           exceptionInfo->ExceptionRecord->ExceptionAddress),
-                       16);
+                << QString::number(address, 16)
+                << moduleDescription;
     } else {
         qCritical() << "Unhandled Windows exception (details unavailable)";
     }

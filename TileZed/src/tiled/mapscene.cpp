@@ -29,6 +29,7 @@
 #include "mapobject.h"
 #include "mapobjectitem.h"
 #include "maprenderer.h"
+#include "nightpreviewitem.h"
 #include "objectgroup.h"
 #include "objectgroupitem.h"
 #include "preferences.h"
@@ -50,6 +51,8 @@
 #include <QPainter>
 #include <QKeyEvent>
 #include <QApplication>
+#include <QDebug>
+#include <QElapsedTimer>
 
 #include <cmath>
 
@@ -67,7 +70,9 @@ MapScene::MapScene(QObject *parent):
     mGridVisible(true),
     mUnderMouse(false),
     mCurrentModifiers(Qt::NoModifier),
-    mDarkRectangle(new QGraphicsRectItem)
+    mDarkRectangle(new QGraphicsRectItem),
+    mNightPreviewItem(new NightPreviewItem),
+    mNightPreviewEnabled(false)
 #ifdef ZOMBOID
     ,
     mGridItem(new ZGridItem)
@@ -94,6 +99,9 @@ MapScene::MapScene(QObject *parent):
     mDarkRectangle->setBrush(Qt::black);
     mDarkRectangle->setOpacity(darkeningFactor);
     addItem(mDarkRectangle);
+    mNightPreviewItem->setZValue(50000);
+    mNightPreviewItem->setVisible(false);
+    addItem(mNightPreviewItem);
 
 #ifdef ZOMBOID
     setBackgroundBrush(prefs->backgroundColor());
@@ -196,6 +204,18 @@ void MapScene::setHandScrolling(bool handScrolling)
 
 void MapScene::refreshScene()
 {
+#ifdef ZOMBOID
+    QElapsedTimer refreshTimer;
+    refreshTimer.start();
+    qint64 previousRefreshMs = 0;
+    auto logRefreshStep = [&](const char *step) {
+        const qint64 elapsedMs = refreshTimer.elapsed();
+        qInfo() << "TileZed scene setup:" << step
+                << (elapsedMs - previousRefreshMs) << "ms step,"
+                << elapsedMs << "ms total";
+        previousRefreshMs = elapsedMs;
+    };
+#endif
     mLayerItems.clear();
     mObjectItems.clear();
 
@@ -203,11 +223,16 @@ void MapScene::refreshScene()
     removeItem(mGridItem);
 #endif
     removeItem(mDarkRectangle);
+    removeItem(mNightPreviewItem);
     clear();
     addItem(mDarkRectangle);
+    mNightPreviewItem->setZValue(50000);
+    mNightPreviewItem->setVisible(mNightPreviewEnabled);
+    addItem(mNightPreviewItem);
 #ifdef ZOMBOID
     addItem(mGridItem);
     mGridItem->setZValue(20000);
+    logRefreshStep("base items");
 #endif
 
     if (!mMapDocument) {
@@ -220,12 +245,15 @@ void MapScene::refreshScene()
     // by including the map's drawMargins.
     // It also includes lot bounds.
     QRectF sceneRect = mMapDocument->mapComposite()->boundingRect(mMapDocument->renderer());
+    logRefreshStep("map bounds");
     setSceneRect(sceneRect);
     mDarkRectangle->setRect(sceneRect);
+    mNightPreviewItem->setBounds(sceneRect);
 #else
     const QSize mapSize = mMapDocument->renderer()->mapSize();
     setSceneRect(0, 0, mapSize.width(), mapSize.height());
     mDarkRectangle->setRect(0, 0, mapSize.width(), mapSize.height());
+    mNightPreviewItem->setBounds(sceneRect());
 #endif
 
     const Map *map = mMapDocument->map();
@@ -239,6 +267,7 @@ void MapScene::refreshScene()
         mLayerItems[layerIndex] = layerItem;
         ++layerIndex;
     }
+    logRefreshStep("layer graphics");
 
     TileSelectionItem *selectionItem = new TileSelectionItem(mMapDocument);
     selectionItem->setZValue(10000 - 1);
@@ -255,6 +284,24 @@ void MapScene::refreshScene()
 #endif
 
     updateCurrentLayerHighlight();
+    logRefreshStep("layer highlight");
+    if (mNightPreviewEnabled)
+        rebuildNightPreview();
+}
+
+void MapScene::setNightPreviewEnabled(bool enabled)
+{
+    mNightPreviewEnabled = enabled;
+    mNightPreviewItem->setVisible(enabled);
+    if (enabled)
+        rebuildNightPreview();
+}
+
+void MapScene::rebuildNightPreview()
+{
+    mNightPreviewItem->setBounds(sceneRect());
+    mNightPreviewItem->setLights(QVector<NightPreviewLight>());
+    mNightPreviewItem->setLitRooms(QVector<QPolygonF>());
 }
 
 QGraphicsItem *MapScene::createLayerItem(Layer *layer)
@@ -334,6 +381,8 @@ void MapScene::currentLevelChanged(int z)
     // LevelIsometric orientation may move the grid
     mGridItem->currentLayerIndexChanged();
 #endif
+    if (mNightPreviewEnabled)
+        rebuildNightPreview();
 }
 #else
 void MapScene::repaintRegion(const QRegion &region)

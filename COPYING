@@ -1,0 +1,41 @@
+PZ Mapping Tools - licensing overview
+=====================================
+
+PZ Mapping Tools combines and modifies code from Tim Baker's TileZed /
+BuildingEd and PZWorldEd source trees. The complete provenance of the source
+baseline is recorded in UPSTREAM-HISTORY.md.
+
+The executable editor applications and their GPL-covered source are distributed
+under the GNU General Public License version 2, or (where stated by the source
+file) any later version. See:
+
+    licenses/GPL-2.0.txt
+
+The libtiled library and tmxviewer contain code under the Simplified BSD
+license. See:
+
+    licenses/BSD-2-Clause.txt
+
+The portable Windows build dynamically links against Qt 5.14.2. The Qt
+libraries are distributed under the terms described in:
+
+    licenses/Qt-5-LGPL-3.0-GPL-3.0.txt
+
+Other bundled or compiled-in components retain their own licenses and
+copyright notices. Their notices and the location of the applicable license
+texts are listed in THIRD_PARTY_NOTICES.txt and the licenses directory.
+
+Complete corresponding source for this maintained fork is available at:
+
+    https://github.com/Unjammer/PZ_Mapping_Tools
+
+The unmodified Qt 5.14.2 source archive corresponding to the dynamically linked
+Qt runtime is available from:
+
+    https://download.qt.io/archive/qt/5.14/5.14.2/single/
+
+The binary distribution also includes SOURCE-OFFER.txt as a fallback written
+offer for the corresponding editor and Qt source.
+
+Project Zomboid game data, Tiles, textures, and other game assets are not part
+of this source repository or binary distribution.

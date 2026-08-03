@@ -29,6 +29,7 @@
 #include "../portablesettings.h"
 
 #include <QColorDialog>
+#include <QCheckBox>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QPainter>
@@ -100,7 +101,8 @@ QSize ColorDelegate::sizeHint(const QStyleOptionViewItem &,
 PreferencesDialog::PreferencesDialog(QWidget *parent) :
     QDialog(parent),
     mUi(new Ui::PreferencesDialog),
-    mLanguages(LanguageManager::instance()->availableLanguages())
+    mLanguages(LanguageManager::instance()->availableLanguages()),
+    mSyncThemeCheckBox(nullptr)
 {
     mUi->setupUi(this);
     connect(mUi->sharedPathsButton, &QAbstractButton::clicked,
@@ -155,6 +157,14 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) :
     const int themeIndex = mUi->themeCombo->findText(Preferences::instance()->theme(),
                                                      Qt::MatchFixedString);
     mUi->themeCombo->setCurrentIndex(themeIndex >= 0 ? themeIndex : 0);
+    mSyncThemeCheckBox = new QCheckBox(
+                tr("Apply to TileZed, BuildingEd and WorldEd"), this);
+    mSyncThemeCheckBox->setChecked(
+                PortableSettings::syncThemeAcrossApplications());
+    mSyncThemeCheckBox->setToolTip(tr(
+                "Store the selected theme in the shared portable settings "
+                "and apply it to all three applications on their next start."));
+    mUi->themeLayout->addWidget(mSyncThemeCheckBox);
 #endif
 
     fromPreferences();
@@ -185,6 +195,11 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) :
     connect(mUi->raisePZPropertiesFile, &QAbstractButton::clicked, this, &PreferencesDialog::raisePropertiesFile);
     connect(mUi->lowerPZPropertiesFile, &QAbstractButton::clicked, this, &PreferencesDialog::lowerPropertiesFile);
     connect(mUi->themeCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, &PreferencesDialog::themeChanged);
+    connect(mSyncThemeCheckBox, &QAbstractButton::toggled,
+            this, [this](bool enabled) {
+        PortableSettings::setSyncThemeAcrossApplications(
+                    enabled, mUi->themeCombo->currentText());
+    });
 #endif // ZOMBOID
 
     connect(mUi->objectTypesTable->selectionModel(),

@@ -191,6 +191,8 @@ SOURCES += main.cpp\
     tmxtobmp.cpp \
     tmxtobmpdialog.cpp \
     searchdock.cpp \
+    streetnamesdock.cpp \
+    nightpreviewitem.cpp \
     defaultsfile.cpp \
     BuildingEditor/roofhiding.cpp \
     waterflow.cpp
@@ -323,6 +325,8 @@ HEADERS  += mainwindow.h \
     tmxtobmp.h \
     tmxtobmpdialog.h \
     searchdock.h \
+    streetnamesdock.h \
+    nightpreviewitem.h \
     defaultsfile.h \
     BuildingEditor/roofhiding.h \
     waterflow.h

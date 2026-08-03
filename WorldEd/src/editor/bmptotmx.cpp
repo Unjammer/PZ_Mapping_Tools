@@ -26,6 +26,7 @@
 #include "progress.h"
 #include "simplefile.h"
 #include "tilemetainfomgr.h"
+#include "tilesetmanager.h"
 #include "undoredo.h"
 #include "unknowncolorsdialog.h"
 #include "worldcell.h"
@@ -48,6 +49,7 @@
 #include <QImageReader>
 #include <QMessageBox>
 #include <QPainter>
+#include <QSet>
 #include <QStringList>
 #include <QUndoStack>
 #include <QXmlStreamWriter>
@@ -93,6 +95,31 @@ BMPToTMX::~BMPToTMX()
 {
     qDeleteAll(mRules);
     qDeleteAll(mBlends);
+}
+
+bool BMPToTMX::validateGenerationInputs(WorldDocument *worldDoc)
+{
+    if (!worldDoc || !worldDoc->world()) {
+        mError = tr("No WorldEd project is available for BMP to TMX validation.");
+        return false;
+    }
+
+    mWorldDoc = worldDoc;
+    mError.clear();
+    TileMetaInfoMgr::instance()->resolveTilesets();
+    if (!LoadBaseXML()) {
+        mError += tr("\n(while reading MapBaseXML.txt)");
+        return false;
+    }
+    if (!LoadRules()) {
+        mError += tr("\n(while reading Rules.txt)");
+        return false;
+    }
+    if (!LoadBlends()) {
+        mError += tr("\n(while reading Blends.txt)");
+        return false;
+    }
+    return loadGenerationTilesets();
 }
 
 bool BMPToTMX::generateWorld(WorldDocument *worldDoc, BMPToTMX::GenerateMode mode)
@@ -171,6 +198,8 @@ bool BMPToTMX::generateWorld(WorldDocument *worldDoc, BMPToTMX::GenerateMode mod
         mError += tr("\n(while reading Blends.txt)");
         return false;
     }
+    if (!loadGenerationTilesets())
+        return false;
 
     // Try to free up some memory before loading large images.
     MapManager::instance()->purgeUnreferencedMaps();
@@ -617,6 +646,7 @@ bool BMPToTMX::LoadRules()
     mRulesByColor0.clear();
     mRulesByColor1.clear();
     qDeleteAll(mAliases);
+    mAliasByName.clear();
     mAliases = file.aliasesCopy();
     foreach (BmpAlias *alias, mAliases)
         mAliasByName[alias->name] = alias;
@@ -687,6 +717,13 @@ bool BMPToTMX::LoadBlends()
             if (!mAliasByName.contains(tileName) && !getTileFromTileName(tileName))
                 goto bogusTile;
         }
+        for (int i = 0; i + 1 < blend->exclude2.size(); i += 2) {
+            tileName = blend->exclude2.at(i);
+            if (!mAliasByName.contains(tileName)
+                    && !TileMetaInfoMgr::instance()->tileset(tileName)
+                    && !getTileFromTileName(tileName))
+                goto bogusTile;
+        }
     }
 
     return true;
@@ -696,6 +733,85 @@ bogusTile:
     mError += tr("The missing tile is called '%1'.\n\n").arg(tileName);
     mError += tr("Please fix the invalid tile index or add the tileset\nif it is missing using the Tilesets dialog in TileZed.\n");
     return false;
+}
+
+bool BMPToTMX::loadGenerationTilesets()
+{
+    QSet<Tileset *> requiredTilesets;
+
+    const auto addConcreteTile = [&requiredTilesets, this](
+            const QString &tileName) {
+        if (tileName.isEmpty())
+            return;
+        Tile *tile = getTileFromTileName(tileName);
+        if (tile && tile->tileset())
+            requiredTilesets.insert(tile->tileset());
+    };
+    const auto addTileOrAlias = [&addConcreteTile, &requiredTilesets, this](
+            const QString &tileName) {
+        BmpAlias *alias = mAliasByName.value(tileName, nullptr);
+        if (alias) {
+            for (const QString &aliasTile : alias->tiles)
+                addConcreteTile(aliasTile);
+        } else if (Tileset *tileset =
+                   TileMetaInfoMgr::instance()->tileset(tileName)) {
+            requiredTilesets.insert(tileset);
+        } else {
+            addConcreteTile(tileName);
+        }
+    };
+
+    for (BmpAlias *alias : mAliases) {
+        if (!alias)
+            continue;
+        for (const QString &tileName : alias->tiles)
+            addConcreteTile(tileName);
+    }
+    for (BmpRule *rule : mRules) {
+        if (!rule)
+            continue;
+        for (const QString &tileName : rule->tileChoices)
+            addTileOrAlias(tileName);
+    }
+    for (BmpBlend *blend : mBlends) {
+        if (!blend)
+            continue;
+        addTileOrAlias(blend->mainTile);
+        addTileOrAlias(blend->blendTile);
+        for (const QString &tileName : blend->ExclusionList)
+            addTileOrAlias(tileName);
+        for (int i = 0; i + 1 < blend->exclude2.size(); i += 2)
+            addTileOrAlias(blend->exclude2.at(i));
+    }
+
+    QList<Tileset *> required = requiredTilesets.values();
+    TileMetaInfoMgr::instance()->loadTilesets(required);
+    Tiled::Internal::TilesetManager::instance()->waitForTilesets(
+                required, MainWindow::instance());
+
+    QStringList unavailable;
+    for (Tileset *tileset : required) {
+        if (!tileset || tileset->isMissing() || !tileset->isLoaded())
+            unavailable += tileset ? tileset->name() : tr("<unknown>");
+    }
+    unavailable.removeDuplicates();
+    unavailable.sort(Qt::CaseInsensitive);
+    if (!unavailable.isEmpty()) {
+        mError = tr(
+                    "BMP to TMX cannot continue because %1 tileset image(s) "
+                    "required by Rules.txt or Blends.txt could not be loaded:\n\n"
+                    "%2\n\n"
+                    "Restore these PNG files or update the rules before "
+                    "generating the TMX cells.")
+                .arg(unavailable.size())
+                .arg(unavailable.join(QLatin1Char('\n')));
+        qCritical().noquote() << mError;
+        return false;
+    }
+
+    qInfo() << "BMP to TMX generation tilesets ready:"
+            << required.size() << "required by rules and blends";
+    return true;
 }
 
 void BMPToTMX::AddRule(BmpRule *rule)

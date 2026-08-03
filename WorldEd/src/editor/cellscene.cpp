@@ -25,6 +25,7 @@
 #include "mapcomposite.h"
 #include "mapimagemanager.h"
 #include "mapmanager.h"
+#include "nightpreviewitem.h"
 #include "preferences.h"
 #include "progress.h"
 #include "scenetools.h"
@@ -59,11 +60,14 @@
 #include <QGraphicsItem>
 #include <QGraphicsSceneEvent>
 #include <QKeyEvent>
+#include <QLineF>
 #include <QMatrix4x4>
 #include <QMessageBox>
 #include <QMimeData>
 #include <QOpenGLFunctions>
 #include <QOpenGLWidget>
+#include <QScopedValueRollback>
+#include <QSettings>
 #include <QStyleOptionGraphicsItem>
 #include <QUrl>
 #include <QUndoStack>
@@ -1160,7 +1164,10 @@ void LayerGroupVBO::gatherTiles(Tiled::MapRenderer *renderer, const QRectF& expo
                     const TilePlusLayer &cell = cells[i];
                     if (cell.mTile == nullptr)
                         continue;
-                    const Tile *tile = cell.mTile;
+                    const Tile *sourceTile = cell.mTile;
+                    const Tile *tile =
+                            mMapCompositeVBO->mScene->environmentPreviewTile(
+                                sourceTile, square);
                     if (tile->properties().contains(QStringLiteral("invisible"))) {
                         tile = invisibleTile;
                     }
@@ -1168,6 +1175,8 @@ void LayerGroupVBO::gatherTiles(Tiled::MapRenderer *renderer, const QRectF& expo
                         tile = missingTile;
                     }
                     Tileset *tileset = tile->tileset();
+                    if (!mMapCompositeVBO->mUsedTilesets.contains(tileset))
+                        mMapCompositeVBO->mUsedTilesets.append(tileset);
                     QSize customSize = CustomTileSize::forTileset(tileset->name());
                     bool bJUMBO = !customSize.isEmpty();
                     VBOTile vboTile;
@@ -1198,6 +1207,60 @@ void LayerGroupVBO::gatherTiles(Tiled::MapRenderer *renderer, const QRectF& expo
                     if (bJUMBO && !tileset->name().contains(QStringLiteral("JUMBOXL_")) && !tileset->name().contains(QStringLiteral("JUMBOXXL_"))) {
                         tileCount[vx + vy * VBO_SQUARES] += tryAddExtraJumbo_Trunk(tile, screenPos, tileWidth, tiles);
                         tileCount[vx + vy * VBO_SQUARES] += tryAddExtraJumbo_Leaves(tile, screenPos, tileWidth, tiles);
+                    }
+
+                    // Powered variants and the treetop half of XL/XXL trees
+                    // are transparent overlays. Keep them next to their
+                    // source tile in the ordered VBO instead of drawing them
+                    // in a scene-wide item above roofs and upper floors.
+                    const Tile *overlayTile =
+                            mMapCompositeVBO->mScene->
+                            environmentPreviewOverlayTile(
+                                sourceTile, square);
+                    if (overlayTile && !overlayTile->image().isNull()) {
+                        Tileset *overlayTileset =
+                                overlayTile->tileset();
+                        if (!mMapCompositeVBO->mUsedTilesets.contains(
+                                    overlayTileset)) {
+                            mMapCompositeVBO->mUsedTilesets.append(
+                                        overlayTileset);
+                        }
+                        VBOTile overlayVbo = vboTile;
+                        overlayVbo.mRect = QRect(
+                            screenPos.x() +
+                                overlayTileset->tileOffset().x() +
+                                overlayTile->offset().x(),
+                            screenPos.y() +
+                                overlayTileset->tileOffset().y() +
+                                overlayTile->offset().y() -
+                                overlayTile->height(),
+                            overlayTile->atlasSize().width(),
+                            overlayTile->atlasSize().height());
+                        overlayVbo.mTilesetName =
+                                overlayTileset->name();
+                        overlayVbo.mAtlasUVST =
+                                overlayTile->atlasUVST();
+                        overlayVbo.mInvisible = false;
+                        const QSize overlayCustomSize =
+                                CustomTileSize::forTileset(
+                                    overlayTileset->name());
+                        if (!overlayCustomSize.isEmpty()) {
+                            overlayVbo.mRect.translate(
+                                -(overlayCustomSize.width() - 64) / 2,
+                                0);
+                        } else if (tileWidth ==
+                                   overlayTile->width() * 2) {
+                            overlayVbo.mRect.translate(
+                                overlayTile->offset().x(),
+                                overlayTile->offset().y() -
+                                    overlayTile->height());
+                            overlayVbo.mRect.setWidth(
+                                overlayTile->atlasSize().width() * 2);
+                            overlayVbo.mRect.setHeight(
+                                overlayTile->atlasSize().height() * 2);
+                        }
+                        tiles += overlayVbo;
+                        tileCount[vx + vy * VBO_SQUARES]++;
                     }
                 }
             }
@@ -4630,6 +4693,13 @@ CellScene::CellScene(QObject *parent)
     , mRenderer(0)
     , mDnDItem(0)
     , mDarkRectangle(new QGraphicsRectItem)
+    , mEnvironmentPreviewItem(new EnvironmentPreviewItem)
+    , mNightPreviewItem(new NightPreviewItem)
+    , mNightPreviewEnabled(false)
+    , mPoweredPreviewEnabled(false)
+    , mSnowPreviewEnabled(false)
+    , mJumboPreviewEnabled(false)
+    , mEnvironmentPreviewRebuilding(false)
     , mGridItem(new CellGridItem(this))
     , mMapBordersItem(new QGraphicsPolygonItem)
     , mMapBuildings(new MapBuildings)
@@ -4678,6 +4748,7 @@ CellScene::CellScene(QObject *parent)
 CellScene::~CellScene()
 {
     mDestroying = true;
+    restoreEnvironmentPreviewTiles();
     // mMap, mMapInfo are shared, don't destroy
     delete mMapComposite;
     delete mRenderer;
@@ -5151,7 +5222,10 @@ void CellScene::loadMap()
     mPendingDefer = true;
 
     if (mMap) {
+        restoreEnvironmentPreviewTiles();
         removeItem(mDarkRectangle);
+        removeItem(mEnvironmentPreviewItem);
+        removeItem(mNightPreviewItem);
         removeItem(mGridItem);
         removeItem(mMapBordersItem);
         removeItem(mWaterFlowOverlay);
@@ -5248,6 +5322,14 @@ void CellScene::loadMap()
     case Map::Isometric:
     case Map::LevelIsometric:
         mRenderer = new ZLevelRenderer(mMap);
+        static_cast<ZLevelRenderer*>(mRenderer)->setPreviewTileResolver(
+                    [this](Tiled::Tile *tile, const QPoint &square) {
+            return environmentPreviewTile(tile, square);
+        });
+        static_cast<ZLevelRenderer*>(mRenderer)->setPreviewOverlayResolver(
+                    [this](Tiled::Tile *tile, const QPoint &square) {
+            return environmentPreviewOverlayTile(tile, square);
+        });
         break;
     default:
         return; // TODO: Add error handling
@@ -5308,6 +5390,16 @@ void CellScene::loadMap()
     handlePendingUpdates();
 
     addItem(mDarkRectangle);
+    mEnvironmentPreviewItem->setBounds(sceneRect());
+    mEnvironmentPreviewItem->setZValue(49000);
+    mEnvironmentPreviewItem->setVisible(
+                mPoweredPreviewEnabled || mSnowPreviewEnabled ||
+                mJumboPreviewEnabled);
+    addItem(mEnvironmentPreviewItem);
+    mNightPreviewItem->setBounds(sceneRect());
+    mNightPreviewItem->setZValue(50000);
+    mNightPreviewItem->setVisible(mNightPreviewEnabled);
+    addItem(mNightPreviewItem);
     addItem(mGridItem);
     addItem(mMapBordersItem);
     addItem(mWaterFlowOverlay);
@@ -5319,6 +5411,11 @@ void CellScene::loadMap()
                                       world()->roadsInRect(roadCellBounds()));
 
     mMapBuildingsInvalid = true;
+    if (mPoweredPreviewEnabled || mSnowPreviewEnabled ||
+            mJumboPreviewEnabled)
+        rebuildEnvironmentPreview();
+    if (mNightPreviewEnabled)
+        rebuildNightPreview();
 }
 
 void CellScene::updateBordersItem()
@@ -5815,6 +5912,874 @@ void CellScene::currentLevelChanged(int index)
     Q_UNUSED(index)
     updateCurrentLevelHighlight();
     mGridItem->updateBoundingRect();
+    if (mPoweredPreviewEnabled || mSnowPreviewEnabled ||
+            mJumboPreviewEnabled)
+        rebuildEnvironmentPreview();
+    if (mNightPreviewEnabled)
+        rebuildNightPreview();
+}
+
+void CellScene::setPoweredPreviewEnabled(bool enabled)
+{
+    mPoweredPreviewEnabled = enabled;
+    QSettings().setValue(
+                QStringLiteral("EnvironmentPreview/Powered"), enabled);
+    mEnvironmentPreviewItem->setVisible(
+                mPoweredPreviewEnabled || mSnowPreviewEnabled ||
+                mJumboPreviewEnabled);
+    rebuildEnvironmentPreview();
+}
+
+void CellScene::setSnowPreviewEnabled(bool enabled)
+{
+    mSnowPreviewEnabled = enabled;
+    QSettings().setValue(
+                QStringLiteral("EnvironmentPreview/Snow"), enabled);
+    mEnvironmentPreviewItem->setVisible(
+                mPoweredPreviewEnabled || mSnowPreviewEnabled ||
+                mJumboPreviewEnabled);
+    rebuildEnvironmentPreview();
+}
+
+void CellScene::setJumboPreviewEnabled(bool enabled)
+{
+    mJumboPreviewEnabled = enabled;
+    QSettings().setValue(
+                QStringLiteral("EnvironmentPreview/Jumbo"), enabled);
+    mEnvironmentPreviewItem->setVisible(
+                mPoweredPreviewEnabled || mSnowPreviewEnabled ||
+                mJumboPreviewEnabled);
+    rebuildEnvironmentPreview();
+}
+
+void CellScene::rebuildEnvironmentPreview()
+{
+    if (mEnvironmentPreviewRebuilding)
+        return;
+    QScopedValueRollback<bool> rebuildingGuard(
+                mEnvironmentPreviewRebuilding, true);
+    restoreEnvironmentPreviewTiles();
+    QVector<EnvironmentPreviewSprite> sprites;
+    if ((!mPoweredPreviewEnabled && !mSnowPreviewEnabled &&
+            !mJumboPreviewEnabled) ||
+            !mMap || !mMapComposite || !mRenderer) {
+        mEnvironmentPreviewItem->setSprites(sprites);
+        mEnvironmentPreviewItem->setVisible(false);
+        invalidateEnvironmentPreviewVBOs();
+        update();
+        return;
+    }
+
+    const int level = mDocument->currentLevel();
+    CompositeLayerGroup *layerGroup =
+            mMapComposite->tileLayersForLevel(level);
+    if (!layerGroup) {
+        mEnvironmentPreviewItem->setSprites(sprites);
+        mEnvironmentPreviewItem->setVisible(false);
+        invalidateEnvironmentPreviewVBOs();
+        update();
+        return;
+    }
+
+    struct PendingSprite {
+        int x;
+        int y;
+        bool flipH;
+        bool flipV;
+        bool flipD;
+        bool replaceInPlace;
+        bool overlay;
+        Tiled::Tile *sourceTile;
+        Tiled::Tile *tile;
+    };
+    QVector<PendingSprite> pending;
+    QSet<Tiled::Tileset*> requiredTilesets;
+    QMap<QString, Tiled::Tileset*> tilesetsByName;
+    QVector<Tiled::Tile*> jumboCandidates;
+    Tiled::Internal::TilesetManager *tilesetManager =
+            Tiled::Internal::TilesetManager::instance();
+    for (Tiled::Tileset *tileset : tilesetManager->tilesets()) {
+        if (tileset)
+            tilesetsByName.insert(tileset->name().toLower(), tileset);
+        if (tileset && (tileset->name().contains(
+                            QStringLiteral("JUMBOXL_"),
+                            Qt::CaseInsensitive) ||
+                        tileset->name().contains(
+                            QStringLiteral("JUMBOXXL_"),
+                            Qt::CaseInsensitive))) {
+            if (Tiled::Tile *candidate = tileset->tileAt(0))
+                jumboCandidates.append(candidate);
+        }
+    }
+    if (mJumboPreviewEnabled) {
+        for (Tiled::Tile *candidate : qAsConst(jumboCandidates)) {
+            if (candidate && candidate->tileset())
+                requiredTilesets.insert(candidate->tileset());
+        }
+    }
+
+    layerGroup->prepareDrawing2();
+    OrderedCellsTemporaries vars;
+    QVector<const Tiled::Cell*> cells;
+    Tiled::Internal::TileDefWatcher *tileDefWatcher =
+            BuildingEditor::getTileDefWatcher();
+    tileDefWatcher->check();
+
+    const auto tileFromFullName = [&tilesetsByName](
+            const QString &fullName) -> Tiled::Tile* {
+        const int separator = fullName.lastIndexOf(QLatin1Char('_'));
+        if (separator <= 0 || separator >= fullName.length() - 1)
+            return nullptr;
+        bool idOk = false;
+        const int tileId = fullName.mid(separator + 1).toInt(&idOk);
+        if (!idOk)
+            return nullptr;
+        Tiled::Tileset *tileset = tilesetsByName.value(
+                    fullName.left(separator).toLower(), nullptr);
+        return tileset ? tileset->tileAt(tileId) : nullptr;
+    };
+    const auto roofSnowTileId = [](int roofSheet, int sourceId) {
+        if (roofSheet < 1 || roofSheet > 5 || sourceId < 0)
+            return -1;
+        if (sourceId >= 128) {
+            if (roofSheet != 5)
+                return -1;
+            if (sourceId >= 128 && sourceId <= 135)
+                return sourceId - 128 + 96;
+            if (sourceId == 136 || sourceId == 138)
+                return 0;
+            if (sourceId == 137 || sourceId == 139)
+                return 1;
+            if (sourceId == 140 || sourceId == 142)
+                return 4;
+            if (sourceId == 141 || sourceId == 143)
+                return 5;
+            return -1;
+        }
+
+        int snowId = sourceId;
+        const auto paired = [sourceId](int current) {
+            if (sourceId == 104 || sourceId == 106)
+                return 0;
+            if (sourceId == 105 || sourceId == 107)
+                return 1;
+            if (sourceId == 108 || sourceId == 110)
+                return 4;
+            if (sourceId == 109 || sourceId == 111)
+                return 5;
+            return current;
+        };
+        switch (roofSheet) {
+        case 1:
+            if (sourceId >= 72 && sourceId <= 79)
+                snowId = sourceId - 8;
+            if (sourceId == 112 || sourceId == 114)
+                snowId = 0;
+            if (sourceId == 113 || sourceId == 115)
+                snowId = 1;
+            if (sourceId == 116 || sourceId == 118)
+                snowId = 4;
+            if (sourceId == 117 || sourceId == 119)
+                snowId = 5;
+            break;
+        case 2:
+            if (sourceId == 50)
+                snowId = 106;
+            if (sourceId == 51)
+                snowId = 107;
+            if (sourceId >= 72 && sourceId <= 79)
+                snowId = sourceId - 8;
+            snowId = paired(snowId);
+            break;
+        case 3:
+        case 4:
+            if (roofSheet == 4 && sourceId >= 48 && sourceId <= 51)
+                snowId = sourceId + 58;
+            if (sourceId == 72 || sourceId == 74)
+                snowId = 0;
+            if (sourceId == 73 || sourceId == 75)
+                snowId = 1;
+            if (sourceId == 76 || sourceId == 78)
+                snowId = 4;
+            if (sourceId == 77 || sourceId == 79)
+                snowId = 5;
+            if (sourceId == 102)
+                snowId = 70;
+            if (sourceId == 103)
+                snowId = 71;
+            snowId = paired(snowId);
+            if (roofSheet == 3 &&
+                    sourceId >= 120 && sourceId <= 127)
+                snowId = sourceId - 16;
+            break;
+        case 5:
+            if (sourceId >= 72 && sourceId <= 79)
+                snowId = sourceId - 8;
+            snowId = paired(snowId);
+            if (sourceId >= 112 && sourceId <= 119)
+                snowId = sourceId - 32;
+            break;
+        }
+        return snowId;
+    };
+
+    for (int y = 0; y < mMap->height(); ++y) {
+        for (int x = 0; x < mMap->width(); ++x) {
+            if (!layerGroup->orderedCellsAt2(QPoint(x, y), vars, cells))
+                continue;
+            for (const Tiled::Cell *cell : qAsConst(cells)) {
+                if (!cell || !cell->tile)
+                    continue;
+                Tiled::Tile *sourceTile = cell->tile;
+                Tiled::Tile *previewTile = nullptr;
+                Tiled::Tile *overlayTile = nullptr;
+
+                if (mSnowPreviewEnabled) {
+                    TileDefTile *tileDef = tileDefWatcher->tile(
+                                sourceTile->tileset()->name(),
+                                sourceTile->id());
+                    QString snowTileName;
+                    if (tileDef) {
+                        for (auto it = tileDef->mProperties.constBegin();
+                             it != tileDef->mProperties.constEnd(); ++it) {
+                            if (it.key().compare(
+                                    QStringLiteral("SnowTile"),
+                                    Qt::CaseInsensitive) == 0) {
+                                snowTileName = it.value().trimmed();
+                                break;
+                            }
+                        }
+                    }
+                    if (snowTileName.isEmpty())
+                        snowTileName = sourceTile->property(
+                                    QStringLiteral("SnowTile")).trimmed();
+                    previewTile = tileFromFullName(snowTileName);
+                    if (!previewTile &&
+                            sourceTile->tileset()->name().startsWith(
+                                QStringLiteral("roofs_"),
+                                Qt::CaseInsensitive)) {
+                        const QString roofName =
+                                sourceTile->tileset()->name().toLower();
+                        bool roofIdOk = false;
+                        const int roofSheet = roofName.mid(6, 2).toInt(
+                                    &roofIdOk);
+                        if (roofIdOk && roofSheet >= 1 &&
+                                roofSheet <= 5) {
+                            const int snowId = roofSnowTileId(
+                                        roofSheet, sourceTile->id());
+                            Tiled::Tileset *snowTileset =
+                                    tilesetsByName.value(
+                                        QStringLiteral(
+                                            "e_roof_snow_1"), nullptr);
+                            if (snowTileset && snowId >= 0)
+                                previewTile =
+                                        snowTileset->tileAt(snowId);
+                        }
+                    }
+                }
+
+                if (mPoweredPreviewEnabled) {
+                    const QString poweredName =
+                            sourceTile->tileset()->name() +
+                            QStringLiteral("_on");
+                    if (Tiled::Tileset *poweredTileset =
+                            tilesetsByName.value(
+                                poweredName.toLower(), nullptr)) {
+                        overlayTile = poweredTileset->tileAt(
+                                    sourceTile->id());
+                    }
+                }
+
+                const bool isJumboMarker =
+                        mJumboPreviewEnabled &&
+                        sourceTile->tileset()->name().compare(
+                            QStringLiteral("jumbo_tree_01"),
+                            Qt::CaseInsensitive) == 0 &&
+                        sourceTile->id() == 0;
+
+                // Jumbo markers are resolved per square by the renderer.
+                // They must never become a scene-wide overlay: doing that
+                // loses the original layer order and draws trees outside the
+                // map when the cell contains thousands of marker tiles.
+                if (!previewTile && isJumboMarker)
+                    continue;
+
+                if (previewTile && previewTile != sourceTile) {
+                    requiredTilesets.insert(previewTile->tileset());
+                    pending.append({
+                        x, y,
+                        cell->flippedHorizontally,
+                        cell->flippedVertically,
+                        cell->flippedAntiDiagonally,
+                        true,
+                        false,
+                        sourceTile,
+                        previewTile
+                    });
+                }
+                if (overlayTile && overlayTile != sourceTile) {
+                    requiredTilesets.insert(overlayTile->tileset());
+                    pending.append({
+                        x, y,
+                        cell->flippedHorizontally,
+                        cell->flippedVertically,
+                        cell->flippedAntiDiagonally,
+                        false,
+                        true,
+                        sourceTile,
+                        overlayTile
+                    });
+                }
+            }
+        }
+    }
+
+    // Environment substitutions are properties of a tile definition, not of
+    // the currently selected Z level. Build the roof/powered mappings from
+    // every tileset used by the composite so toggling SNOW or POWER affects
+    // all visible floors immediately.
+    const QList<Tiled::Tileset*> usedTilesets =
+            mMapComposite->usedTilesets();
+    Tiled::Tileset *snowTileset = tilesetsByName.value(
+                QStringLiteral("e_roof_snow_1"), nullptr);
+    for (Tiled::Tileset *sourceTileset : usedTilesets) {
+        if (!sourceTileset)
+            continue;
+        const QString sourceName = sourceTileset->name();
+        bool roofIdOk = false;
+        const int roofSheet = sourceName.startsWith(
+                    QStringLiteral("roofs_"), Qt::CaseInsensitive)
+                ? sourceName.mid(6, 2).toInt(&roofIdOk) : -1;
+        Tiled::Tileset *poweredTileset = mPoweredPreviewEnabled
+                ? tilesetsByName.value(
+                      (sourceName + QStringLiteral("_on")).toLower(),
+                      nullptr)
+                : nullptr;
+        const int sourceCount = sourceTileset->tileCount();
+        for (int tileId = 0; tileId < sourceCount; ++tileId) {
+            Tiled::Tile *sourceTile = sourceTileset->tileAt(tileId);
+            Tiled::Tile *previewTile = nullptr;
+            Tiled::Tile *overlayTile = nullptr;
+            if (mSnowPreviewEnabled && snowTileset && roofIdOk) {
+                const int snowId = roofSnowTileId(roofSheet, tileId);
+                if (snowId >= 0)
+                    previewTile = snowTileset->tileAt(snowId);
+            }
+            if (poweredTileset)
+                overlayTile = poweredTileset->tileAt(tileId);
+            if (!sourceTile)
+                continue;
+            if (previewTile && sourceTile != previewTile) {
+                requiredTilesets.insert(previewTile->tileset());
+                pending.append({
+                    0, 0, false, false, false, true, false,
+                    sourceTile, previewTile
+                });
+            }
+            if (overlayTile && sourceTile != overlayTile) {
+                requiredTilesets.insert(overlayTile->tileset());
+                pending.append({
+                    0, 0, false, false, false, false, true,
+                    sourceTile, overlayTile
+                });
+            }
+        }
+    }
+
+    QList<Tiled::Tileset*> required = requiredTilesets.values();
+    for (Tiled::Tileset *tileset : qAsConst(required)) {
+        if (tileset && (tileset->tileCount() == 0 ||
+                        (tileset->tileAt(0) &&
+                         tileset->tileAt(0)->image().isNull()))) {
+            tilesetManager->loadTileset(tileset, tileset->imageSource());
+        }
+    }
+    if (!required.isEmpty())
+        tilesetManager->waitForTilesets(required);
+
+    int mappedTiles = 0;
+    for (const PendingSprite &entry : qAsConst(pending)) {
+        Tiled::Tile *tile = entry.tile;
+        if (!tile || tile->image().isNull())
+            continue;
+        if (entry.overlay) {
+            if (!mEnvironmentPreviewOverlays.contains(entry.sourceTile))
+                ++mappedTiles;
+            mEnvironmentPreviewOverlays.insert(entry.sourceTile, tile);
+        } else {
+            if (!mEnvironmentPreviewMappings.contains(entry.sourceTile))
+                ++mappedTiles;
+            mEnvironmentPreviewMappings.insert(entry.sourceTile, tile);
+        }
+    }
+    mEnvironmentPreviewJumboCandidates = jumboCandidates;
+
+    mEnvironmentPreviewItem->setBounds(sceneRect());
+    mEnvironmentPreviewItem->setSprites(sprites);
+    mEnvironmentPreviewItem->setVisible(false);
+    invalidateEnvironmentPreviewVBOs();
+    update();
+    qInfo().noquote() << QStringLiteral(
+        "Environment preview: powered=%1 snow=%2 jumbo=%3 "
+        "mappings=%4 overlays=%5 jumboCandidates=%6")
+        .arg(mPoweredPreviewEnabled)
+        .arg(mSnowPreviewEnabled)
+        .arg(mJumboPreviewEnabled)
+        .arg(mappedTiles)
+        .arg(sprites.size())
+        .arg(jumboCandidates.size());
+}
+
+void CellScene::restoreEnvironmentPreviewTiles()
+{
+    for (auto it = mEnvironmentPreviewOriginalTiles.begin();
+         it != mEnvironmentPreviewOriginalTiles.end(); ++it) {
+        if (it.key() && it.value())
+            it.key()->setImage(it.value());
+        delete it.value();
+    }
+    mEnvironmentPreviewOriginalTiles.clear();
+    mEnvironmentPreviewMappings.clear();
+    mEnvironmentPreviewOverlays.clear();
+    mEnvironmentPreviewJumboCandidates.clear();
+}
+
+Tiled::Tile *CellScene::environmentPreviewTile(
+        const Tiled::Tile *sourceTile, const QPoint &square) const
+{
+    if (!sourceTile)
+        return nullptr;
+
+    if (Tiled::Tile *mapped =
+            mEnvironmentPreviewMappings.value(
+                const_cast<Tiled::Tile*>(sourceTile), nullptr))
+        return mapped;
+
+    if (!mJumboPreviewEnabled ||
+            mEnvironmentPreviewJumboCandidates.isEmpty() ||
+            !sourceTile->tileset() ||
+            sourceTile->tileset()->name().compare(
+                QStringLiteral("jumbo_tree_01"),
+                Qt::CaseInsensitive) != 0 ||
+            sourceTile->id() != 0)
+        return const_cast<Tiled::Tile*>(sourceTile);
+
+    const int cellSize = world()->cellSize();
+    const qint64 worldX = qint64(cell()->x()) * cellSize + square.x();
+    const qint64 worldY = qint64(cell()->y()) * cellSize + square.y();
+    const quint32 hash = quint32(worldX) * 73856093u ^
+            quint32(worldY) * 19349663u ^
+            quint32(worldX + worldY) * 83492791u;
+    Tiled::Tile *candidate = mEnvironmentPreviewJumboCandidates.at(
+                int(hash % quint32(
+                        mEnvironmentPreviewJumboCandidates.size())));
+    return candidate && !candidate->image().isNull()
+            ? candidate : const_cast<Tiled::Tile*>(sourceTile);
+}
+
+Tiled::Tile *CellScene::environmentPreviewOverlayTile(
+        const Tiled::Tile *sourceTile, const QPoint &square) const
+{
+    if (!sourceTile)
+        return nullptr;
+
+    // A powered sheet contains only the illuminated pixels. It is not a
+    // replacement for the original object (a streetlight would otherwise
+    // lose its pole), so return it through the overlay path.
+    if (Tiled::Tile *overlay =
+            mEnvironmentPreviewOverlays.value(
+                const_cast<Tiled::Tile*>(sourceTile), nullptr)) {
+        return overlay;
+    }
+
+    if (!mJumboPreviewEnabled ||
+            mEnvironmentPreviewJumboCandidates.isEmpty() ||
+            !sourceTile->tileset() ||
+            sourceTile->tileset()->name().compare(
+                QStringLiteral("jumbo_tree_01"),
+                Qt::CaseInsensitive) != 0 ||
+            sourceTile->id() != 0) {
+        return nullptr;
+    }
+
+    const int cellSize = world()->cellSize();
+    const qint64 worldX = qint64(cell()->x()) * cellSize + square.x();
+    const qint64 worldY = qint64(cell()->y()) * cellSize + square.y();
+    const quint32 hash = quint32(worldX) * 73856093u ^
+            quint32(worldY) * 19349663u ^
+            quint32(worldX + worldY) * 83492791u;
+    Tiled::Tile *candidate = mEnvironmentPreviewJumboCandidates.at(
+                int(hash % quint32(
+                        mEnvironmentPreviewJumboCandidates.size())));
+    if (!candidate || !candidate->tileset())
+        return nullptr;
+
+    // IsoTreeJumbo describes XL/XXL trees as two sprites: the main tile at
+    // id N and its treetop at N+6. Preview both halves just like the game.
+    Tiled::Tile *treetop = candidate->tileset()->tileAt(
+                candidate->id() + 6);
+    return treetop && !treetop->image().isNull()
+            ? treetop : nullptr;
+}
+
+void CellScene::invalidateEnvironmentPreviewVBOs()
+{
+    for (MapCompositeVBO &mapVBO : mMapCompositeVBO) {
+        for (LayerGroupVBO *layerVBO : mapVBO.mLayerVBOs) {
+            if (!layerVBO)
+                continue;
+            layerVBO->mCreated = false;
+            for (VBOTiles *tiles : layerVBO->mTiles) {
+                if (!tiles)
+                    continue;
+                tiles->mCreated = false;
+                tiles->mGathered = false;
+                tiles->mTiles.clear();
+                tiles->mTileCount.fill(0);
+                tiles->mTileFirst.fill(-1);
+            }
+        }
+    }
+}
+
+void CellScene::setNightPreviewEnabled(bool enabled)
+{
+    mNightPreviewEnabled = enabled;
+    mNightPreviewItem->setVisible(enabled);
+    if (enabled)
+        rebuildNightPreview();
+}
+
+void CellScene::rebuildNightPreview()
+{
+    QVector<NightPreviewLight> lights;
+    QVector<QPolygonF> litRooms;
+
+    if (!mNightPreviewEnabled || !mMap || !mMapComposite || !mRenderer) {
+        mNightPreviewItem->setLights(lights);
+        mNightPreviewItem->setLitRooms(litRooms);
+        return;
+    }
+
+    const int level = mDocument->currentLevel();
+    CompositeLayerGroup *layerGroup =
+            mMapComposite->tileLayersForLevel(level);
+    if (!layerGroup) {
+        mNightPreviewItem->setLights(lights);
+        mNightPreviewItem->setLitRooms(litRooms);
+        return;
+    }
+
+    // orderedCellsAt2 includes lots and building submaps, which is important:
+    // the preview must describe the final composite rather than only the
+    // currently-open cell TMX.
+    layerGroup->prepareDrawing2();
+    OrderedCellsTemporaries vars;
+    QVector<const Tiled::Cell*> cells;
+    Tiled::Internal::TileDefWatcher *tileDefWatcher =
+            BuildingEditor::getTileDefWatcher();
+    tileDefWatcher->check();
+    QVector<QPoint> roomSwitchPositions;
+    QSet<quint64> roomSwitchKeys;
+    QSet<QString> lightKeys;
+    int explicitLightColors = 0;
+    int derivedLightColors = 0;
+    int fallbackLightColors = 0;
+    QMap<QString, Tiled::Tileset*> tilesetsByName;
+    Tiled::Internal::TilesetManager *tilesetManager =
+            Tiled::Internal::TilesetManager::instance();
+    for (Tiled::Tileset *tileset : tilesetManager->tilesets()) {
+        if (tileset)
+            tilesetsByName.insert(tileset->name().toLower(), tileset);
+    }
+    QSet<Tiled::Tileset*> loadedPoweredTilesets;
+    QHash<const Tiled::Tile*, QColor> derivedColorCache;
+
+    const auto derivePoweredColor =
+            [&tilesetsByName, tilesetManager, &loadedPoweredTilesets,
+             &derivedColorCache](const Tiled::Tile *sourceTile) {
+        if (derivedColorCache.contains(sourceTile))
+            return derivedColorCache.value(sourceTile);
+        QColor result;
+        if (!sourceTile || !sourceTile->tileset()) {
+            derivedColorCache.insert(sourceTile, result);
+            return result;
+        }
+        Tiled::Tileset *poweredTileset = tilesetsByName.value(
+                    (sourceTile->tileset()->name() +
+                     QStringLiteral("_on")).toLower(), nullptr);
+        if (!poweredTileset) {
+            derivedColorCache.insert(sourceTile, result);
+            return result;
+        }
+        if (!loadedPoweredTilesets.contains(poweredTileset) &&
+                (poweredTileset->tileCount() == 0 ||
+                 (poweredTileset->tileAt(0) &&
+                  poweredTileset->tileAt(0)->image().isNull()))) {
+            tilesetManager->loadTileset(
+                        poweredTileset, poweredTileset->imageSource());
+            tilesetManager->waitForTilesets({ poweredTileset });
+            loadedPoweredTilesets.insert(poweredTileset);
+        }
+        Tiled::Tile *poweredTile =
+                poweredTileset->tileAt(sourceTile->id());
+        if (!poweredTile || poweredTile->image().isNull() ||
+                sourceTile->image().isNull()) {
+            derivedColorCache.insert(sourceTile, result);
+            return result;
+        }
+        const QImage normal = sourceTile->image().convertToFormat(
+                    QImage::Format_ARGB32);
+        const QImage powered = poweredTile->image().convertToFormat(
+                    QImage::Format_ARGB32);
+        const int width = qMin(normal.width(), powered.width());
+        const int height = qMin(normal.height(), powered.height());
+        qint64 redSum = 0;
+        qint64 greenSum = 0;
+        qint64 blueSum = 0;
+        qint64 weightSum = 0;
+        for (int py = 0; py < height; ++py) {
+            const QRgb *normalLine =
+                    reinterpret_cast<const QRgb*>(normal.constScanLine(py));
+            const QRgb *poweredLine =
+                    reinterpret_cast<const QRgb*>(powered.constScanLine(py));
+            for (int px = 0; px < width; ++px) {
+                if (qAlpha(poweredLine[px]) == 0)
+                    continue;
+                const int delta = qGray(poweredLine[px]) -
+                        qGray(normalLine[px]);
+                if (delta < 12)
+                    continue;
+                const qint64 weight = qint64(delta) * delta;
+                redSum += qRed(poweredLine[px]) * weight;
+                greenSum += qGreen(poweredLine[px]) * weight;
+                blueSum += qBlue(poweredLine[px]) * weight;
+                weightSum += weight;
+            }
+        }
+        if (weightSum > 0) {
+            result = QColor(
+                        int(redSum / weightSum),
+                        int(greenSum / weightSum),
+                        int(blueSum / weightSum));
+        }
+        derivedColorCache.insert(sourceTile, result);
+        return result;
+    };
+
+    for (int y = 0; y < mMap->height(); ++y) {
+        for (int x = 0; x < mMap->width(); ++x) {
+            if (!layerGroup->orderedCellsAt2(QPoint(x, y), vars, cells))
+                continue;
+
+            for (const Tiled::Cell *cell : qAsConst(cells)) {
+                if (!cell || !cell->tile)
+                    continue;
+                const Tiled::Tile *tile = cell->tile;
+                TileDefTile *tileDef = tileDefWatcher->tile(
+                            tile->tileset()->name(), tile->id());
+                const auto property = [tile, tileDef](
+                        const QString &name) {
+                    if (tileDef) {
+                        auto exact = tileDef->mProperties.constFind(name);
+                        if (exact != tileDef->mProperties.constEnd())
+                            return exact.value();
+                        for (auto it = tileDef->mProperties.constBegin();
+                             it != tileDef->mProperties.constEnd(); ++it) {
+                            if (it.key().compare(name,
+                                                 Qt::CaseInsensitive) == 0)
+                                return it.value();
+                        }
+                    }
+                    const auto &properties = tile->properties();
+                    auto exact = properties.constFind(name);
+                    if (exact != properties.constEnd())
+                        return exact.value();
+                    for (auto it = properties.constBegin();
+                         it != properties.constEnd(); ++it) {
+                        if (it.key().compare(name,
+                                             Qt::CaseInsensitive) == 0)
+                            return it.value();
+                    }
+                    return QString();
+                };
+                const auto containsProperty = [tile, tileDef](
+                        const QString &name) {
+                    if (tileDef) {
+                        for (auto it = tileDef->mProperties.constBegin();
+                             it != tileDef->mProperties.constEnd(); ++it) {
+                            if (it.key().compare(name,
+                                                 Qt::CaseInsensitive) == 0)
+                                return true;
+                        }
+                    }
+                    const auto &properties = tile->properties();
+                    for (auto it = properties.constBegin();
+                         it != properties.constEnd(); ++it) {
+                        if (it.key().compare(name,
+                                             Qt::CaseInsensitive) == 0)
+                            return true;
+                    }
+                    return false;
+                };
+                const QString isoType = property(
+                            QStringLiteral("IsoType"));
+                const QString tilesetName = tile->tileset()->name();
+                const bool isKnownRoomSwitch =
+                        tilesetName.compare(
+                            QStringLiteral("lighting_indoor_01"),
+                            Qt::CaseInsensitive) == 0 &&
+                        tile->id() >= 0 && tile->id() < 8;
+                const bool isLightSwitch =
+                        isoType.compare(QStringLiteral("lightswitch"),
+                                        Qt::CaseInsensitive) == 0 ||
+                        containsProperty(
+                            QStringLiteral("lightswitch")) ||
+                        isKnownRoomSwitch;
+                const QString redText = property(
+                            QStringLiteral("lightR"));
+                const QString greenText = property(
+                            QStringLiteral("lightG"));
+                const QString blueText = property(
+                            QStringLiteral("lightB"));
+                bool redOk = false;
+                bool greenOk = false;
+                bool blueOk = false;
+                int red = redText.toInt(&redOk);
+                int green = greenText.toInt(&greenOk);
+                int blue = blueText.toInt(&blueOk);
+
+                bool hasLightColor = redOk && greenOk && blueOk;
+                if (hasLightColor)
+                    ++explicitLightColors;
+                const bool standardOutdoorLight =
+                        tilesetName.startsWith(
+                            QStringLiteral("lighting_outdoor_"),
+                            Qt::CaseInsensitive)
+                        && !tilesetName.endsWith(
+                            QStringLiteral("_on"),
+                            Qt::CaseInsensitive);
+                bool fallbackLight = false;
+                if (!hasLightColor && standardOutdoorLight) {
+                    // Vanilla maps can be edited without a registered
+                    // newtiledefinitions.tiles file. Preserve a useful
+                    // preview for the standard lamp sheets in that case;
+                    // explicit tiledefs always win above.
+                    QColor fallbackColor = derivePoweredColor(tile);
+                    if (fallbackColor.isValid())
+                        ++derivedLightColors;
+                    else
+                        ++fallbackLightColors;
+                    if (!fallbackColor.isValid()) {
+                        fallbackColor = QColor(
+                                QSettings().value(
+                                    QStringLiteral(
+                                        "NightPreview/FallbackColor"),
+                                    QStringLiteral("#ffdca4")).toString());
+                    }
+                    red = fallbackColor.isValid()
+                            ? fallbackColor.red() : 255;
+                    green = fallbackColor.isValid()
+                            ? fallbackColor.green() : 220;
+                    blue = fallbackColor.isValid()
+                            ? fallbackColor.blue() : 164;
+                    hasLightColor = true;
+                    fallbackLight = true;
+                }
+                if (!hasLightColor) {
+                    if (!isLightSwitch)
+                        continue;
+                    // A switch without RGB controls the room light in the
+                    // game. Keep that distinction in the editor preview.
+                    const quint64 positionKey =
+                            (quint64(quint32(x)) << 32) | quint32(y);
+                    if (!roomSwitchKeys.contains(positionKey)) {
+                        roomSwitchKeys.insert(positionKey);
+                        roomSwitchPositions.append(QPoint(x, y));
+                    }
+                    continue;
+                }
+
+                const QString key = QStringLiteral("%1:%2:%3:%4")
+                        .arg(x).arg(y)
+                        .arg(tilesetName)
+                        .arg(tile->id());
+                if (lightKeys.contains(key))
+                    continue;
+                lightKeys.insert(key);
+
+                bool radiusOk = false;
+                int radius = property(
+                            QStringLiteral("LightRadius")).toInt(&radiusOk);
+                if (!radiusOk || radius <= 0)
+                    radius = fallbackLight
+                            ? QSettings().value(
+                                  QStringLiteral(
+                                      "NightPreview/FallbackRadius"),
+                                  4).toInt()
+                            : 10;
+
+                NightPreviewLight light;
+                light.center = mRenderer->tileToPixelCoords(
+                            QPointF(x + 0.5, y + 0.5), level);
+                light.color = QColor(qBound(0, red, 255),
+                                     qBound(0, green, 255),
+                                     qBound(0, blue, 255));
+                const QPointF radiusXPoint =
+                        mRenderer->tileToPixelCoords(
+                            QPointF(x + radius + 0.5, y + 0.5), level);
+                const QPointF radiusYPoint =
+                        mRenderer->tileToPixelCoords(
+                            QPointF(x + 0.5, y + radius + 0.5), level);
+                light.radiusX = QLineF(light.center, radiusXPoint).length();
+                light.radiusY = QLineF(light.center, radiusYPoint).length();
+                lights.append(light);
+            }
+        }
+    }
+
+    if (!roomSwitchPositions.isEmpty()) {
+        if (mMapBuildingsInvalid) {
+            mMapBuildings->calculate(mMapComposite);
+            mMapBuildingsInvalid = false;
+        }
+
+        QSet<MapBuildingsNS::Room*> switchedRooms;
+        for (const QPoint &position : qAsConst(roomSwitchPositions)) {
+            if (MapBuildingsNS::Room *room =
+                    mMapBuildings->roomAt(position, level)) {
+                switchedRooms.insert(room);
+            }
+        }
+
+        for (MapBuildingsNS::Room *room : qAsConst(switchedRooms)) {
+            for (MapBuildingsNS::RoomRect *rect : qAsConst(room->rects)) {
+                QPolygonF polygon;
+                polygon << mRenderer->tileToPixelCoords(
+                               QPointF(rect->x, rect->y), level)
+                        << mRenderer->tileToPixelCoords(
+                               QPointF(rect->x + rect->w, rect->y), level)
+                        << mRenderer->tileToPixelCoords(
+                               QPointF(rect->x + rect->w,
+                                       rect->y + rect->h), level)
+                        << mRenderer->tileToPixelCoords(
+                               QPointF(rect->x, rect->y + rect->h), level);
+                litRooms.append(polygon);
+            }
+        }
+    }
+
+    mNightPreviewItem->setBounds(sceneRect());
+    mNightPreviewItem->setLights(lights);
+    mNightPreviewItem->setLitRooms(litRooms);
+    mNightPreviewItem->update();
+    qInfo() << "Night preview detected" << lights.size()
+            << "tile light source(s) and" << litRooms.size()
+            << "lit room polygon(s) at level" << level
+            << "- colors:" << explicitLightColors << "tiledef,"
+            << derivedLightColors << "powered-sprite,"
+            << fallbackLightColors << "fallback; configured tiledef files:"
+            << Preferences::instance()->tilePropertiesFiles().size();
 }
 
 void CellScene::showCellBorderChanged(bool visible)
@@ -6045,6 +7010,7 @@ void CellScene::handlePendingUpdates()
         if (sceneRect != this->sceneRect()) {
             setSceneRect(sceneRect);
             mDarkRectangle->setRect(sceneRect);
+            mNightPreviewItem->setBounds(sceneRect);
             updateBordersItem();
             mGridItem->updateBoundingRect();
 

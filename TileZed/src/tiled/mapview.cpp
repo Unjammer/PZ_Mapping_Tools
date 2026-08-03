@@ -33,6 +33,7 @@
 
 #include <QApplication>
 #include <QCursor>
+#include <QDebug>
 #include <QPainter>
 #include <QWheelEvent>
 #include <QScrollBar>
@@ -171,6 +172,10 @@ void MapView::setUseOpenGL(bool useOpenGL)
     QWidget *v = viewport();
     v->setAttribute(Qt::WA_StaticContents);
     v->setMouseTracking(true);
+    qInfo() << "TileZed MapView renderer:"
+            << (qobject_cast<QOpenGLWidget *>(v)
+                ? QStringLiteral("OpenGL viewport")
+                : QStringLiteral("Qt raster viewport"));
 #endif
 }
 #else

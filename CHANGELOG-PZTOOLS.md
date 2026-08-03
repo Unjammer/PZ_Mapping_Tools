@@ -4,23 +4,441 @@ This document describes the functional differences between the current PZTools
 Unofficial suite and the Tim Baker `basements` branches used as its clean upstream
 bases.
 
-Reference date: July 27, 2026.
+Reference date: August 2, 2026.
 
-| Project | Tim Baker baseline | Local branch | Committed local revision |
+| Project | Initial Tim Baker baseline | Local branch | Committed local revision |
 |---|---|---|---|
-| WorldEd | `80e3511cae257f51250df035141243ba6b9cf7cc` | `integration/qt5-basements` | `c5c5cb4` |
-| TileZed / BuildingEd | `f9489a9ba605f8dc503c205f19655644798b9ec4` | `integration/qt5-basements` | `bae65aa5` |
+| WorldEd | `80e3511cae257f51250df035141243ba6b9cf7cc` | `integration/qt5-basements` | working tree |
+| TileZed / BuildingEd | `f9489a9ba605f8dc503c205f19655644798b9ec4` | `integration/qt5-basements` | working tree |
 
 This changelog includes the current working trees under `integration/WorldEd`
 and `integration/TileZed`. No public repository has been modified or pushed.
+
+## August 2, 2026 / Distribution licensing
+
+- The portable build now includes a consolidated copying notice, complete
+  third-party component index, upstream author credits, the applicable
+  GPL/BSD/Qt/LGPL and dependency license texts, and a corresponding-source
+  offer.
+- Tim Baker's July 30 Qt 6 packaging commits were reviewed as distribution
+  compliance changes only. They do not replace the existing GPL/BSD source
+  licenses or add an anti-fork condition.
+
+## August 2, 2026 / Crash and legacy-data safeguards
+
+- Opening a TMX no longer invokes the object-default editor unless the user
+  explicitly selects the object-creation tool.
+- Valid 8 x 1 sheets such as `Giblet_00` no longer fail metadata saving with a
+  zero-column geometry error in TileZed, BuildingEd, or WorldEd.
+- Official Build 42 `LadderS`, `LadderE`, `LadderN`, and `LadderW` properties
+  are accepted and preserved.
+- Every map retains its complete ordered tileset header for adjacent-cell
+  correctness, and every declared sheet is made ready before rendering.
+  PZ BMP rules and blend layers may use sheets absent from normal layer GIDs.
+- Startup loads every discovered PNG. The resolver searches all 2x locations
+  first and falls back to all 1x locations, without excluding debug,
+  placeholder, custom-pack, or nested sheets.
+- WorldEd clips 300-cell InGameMap polygons at 256-cell boundaries and guards
+  binary exports against the engine renderer's signed 16-bit geometry limits.
+  Any needed highway simplification affects only the temporary export copy.
+
+## August 2, 2026 / Tiledefs, shared themes, and Street Names layout
+
+- Tile Properties now supports separate Build 42 mod (512/512) and base-game
+  (1024/1024) validation targets. Damaged or oversized files load in recovery
+  mode, and a repair command can reassign IDs and emit numbered `.tiles` plus
+  `.tiles.txt` series without discarding tile metadata.
+- The repair validator covers a 513-sheet input split into 512/1 definitions.
+  A single PNG exceeding the 512-tile sheet limit is rejected with a specific
+  explanation because the image itself must be split.
+- Themes can be synchronized across TileZed, BuildingEd, and WorldEd using the
+  shared portable configuration.
+- WorldEd tabs Street Names beside Search in the lower-left dock area, with
+  Search selected on the default layout.
+
+## August 1, 2026 / Legacy TMX header compatibility
+
+- WorldEd and TileZed once again resolve every declaration in each TMX/TBX
+  tileset header before rendering, rather than trusting only the reduced
+  used-tileset set.
+- This restores correct current/adjacent-cell rendering for older exported
+  projects where every cell carries the same catalogue in a different
+  `firstgid` order. Valid tiles no longer become red `???` placeholders merely
+  because their declaration was omitted from another cell's reduced set.
+- The image cache continues to share decoded PNG data, but the complete
+  per-map declarations deliberately restore the original tools' higher memory
+  and loading cost where required for compatibility.
+
+## August 1, 2026 / TileZed geometry-based depth-map editor
+
+- **Tools > Depth Map Editor...** edits Build 42 `tileGeometry.txt` primitives
+  and `DEPTH_<tileset>.png` atlases together.
+- It implements the game's eight-column 128 x 256 atlas layout, isometric
+  30/315-degree orthographic projection, per-pixel ray intersections, and
+  normalized depth calculation.
+- Tiles support selectable `XY`, `XZ`, and `YZ` polygons, boxes, and
+  cylinders. Wireframes are drawn over the source tile, can be selected and
+  moved directly in X/Z, and expose exact transform and shape fields.
+- Corrected the retained yellow selection brush that could fill the complete
+  preview and hide both the source sprite and the wireframe. Selected
+  primitives now show an XYZ gizmo and may also be selected by clicking inside
+  their projected bounds.
+- Tile IDs now use an explicit badge painted into every thumbnail, keeping
+  identifiers 10–63 visible rather than clipping them after tile 9.
+- Selected or complete tile geometry can be rasterized with an optional source
+  opacity mask. Existing pixel painting remains in a separate retouching tab.
+- Version-1 and version-2 geometry are readable. Version-2 writes are atomic
+  and replace only the selected tileset block, preserving unrelated tilesets
+  and existing tile properties.
+- `Ctrl+S` saves both geometry and the full Build 42 depth atlas. The automated
+  validator covers rasterization, PNG output, geometry round-tripping, and
+  preservation of unrelated geometry-file content. It also verifies the
+  selection preview and can load a real Build 42 primitive into the editor UI.
+
+## August 1, 2026 / Night-preview exposure
+
+- The DAY/NIGHT prototype is hidden and disabled in WorldEd, TileZed, and
+  BuildingEd. The current compositor is not a faithful replacement for the
+  game's Lighting64 renderer and is therefore no longer presented as a
+  dependable mapping preview.
+- The implementation is retained internally for later renderer work, starts
+  off, and cannot be enabled from the current user interface.
+
+## July 31, 2026 / World Street Name Editor
+
+- The disabled legacy Road dock is replaced by a `streets.xml` editor for
+  Build 42.20 street-name data.
+- WorldEd loads existing version-1 street files and displays named,
+  variable-width polylines over the World view. It supports point creation and
+  dragging, segment insertion, street/point deletion, reverse, split, and a
+  dedicated undo/redo history.
+- Coordinates account for project cell size and world origin. The XML reader
+  and writer validate geometry and use atomic replacement on save.
+- The overlay now works in World and Cell scenes, with per-cell culling,
+  show/hide control, adjustable display thickness, logical-width scaling, and
+  a high-contrast selected-street style.
+- A visible street can be selected and highlighted directly from either
+  canvas while navigation mode is active. Empty clicks and ordinary cell
+  double-clicks continue to reach WorldEd.
+- The list provides live case-insensitive name filtering and sortable Street,
+  Width, and Points headers, including numeric sorting for the latter two.
+- Labels now have rounded, bordered high-contrast backgrounds. Distant
+  non-selected labels are culled and screen-space collision checks prevent
+  overlaps, while the selected street remains labelled.
+- Street Names is a movable, floatable and dockable tool window. It receives
+  a compact first-run floating layout and uses icon-sized geometry controls
+  with tooltips instead of forcing the normal left dock to remain wide.
+- Navigation, geometry editing, and creation are separate, clearly labelled
+  states. Only explicit Edit/Create modes intercept scene input, so normal
+  map selection and World-view double-click cell opening remain untouched.
+- Objects remains the default active dock tab when Street Names is first
+  introduced to a saved or fresh layout.
+- Saving the project through the menu or `Ctrl+S` also updates `streets.xml`
+  when street data, street edits, or an existing street file are present.
+- `streets.xml` is visible in WorldEd's Maps browser without being treated as
+  an image-preview input.
+
+## July 31, 2026 / Global day/night lighting preview
+
+- WorldEd, TileZed and BuildingEd expose the same **Night Preview** action and
+  bottom DAY/NIGHT control. All three applications start with preview modes
+  disabled.
+- WorldEd places **DAY/NIGHT**, **POWER**, **SNOW**, and **JUMBO** preview
+  toggles together in the bottom view-state strip before the zoom control.
+- The visual-only overlay dims the scene and reads the Build 42
+  `lightswitch`, `lightR`, `lightG`, `lightB`, and `LightRadius` tiledefs to
+  render colored halos through a composition mode shared by the raster and
+  OpenGL backends. If RGB tiledefs are unavailable, WorldEd derives the color
+  from the powered sprite before using the configured fallback. It
+  deliberately excludes Lighting64's vision-cone simulation.
+- Switch tiles without RGB illuminate their containing mapper-defined room,
+  matching the separate room-controller behavior in the Build 42 loader.
+- Registered tiledefs and embedded map properties are combined with
+  case-insensitive lookup. If no `.tiles` file is configured, vanilla
+  `lighting_outdoor_*` lamps and the known `lighting_indoor_01` switch row
+  receive a conservative fallback; explicit RGB/radius definitions win.
+- World view provides the global night treatment; cell, composite, tile and
+  building views provide the detailed tiledef and room preview without
+  intercepting editor input.
+- The DAY/NIGHT menu provides live darkness, light-intensity, fallback-radius,
+  and fallback-color controls.
+- POWER draws matching same-index `*_on` images over their unchanged source
+  tiles at the original ordered render position. Transparent light pixels no
+  longer replace lamp posts or jump above roofs and upper floors.
+- SNOW uses `SnowTile` definitions plus the Build 42 roofs fallback mapping to
+  `e_roof_snow_1` across every composite level. JUMBO recognizes
+  `jumbo_tree_01_0` and chooses a stable coordinate-derived variant from the
+  available catalogue.
+- JUMBO selects only Build 42 XL/XXL sheets and reconstructs each tree as the
+  main sprite `N` plus its `IsoTreeJumbo` treetop `N+6`. Raster and OpenGL
+  renderers insert replacements and transparent overlays at the source tile's
+  exact ordered position instead of drawing scene-wide sprites.
+- All environment previews are non-destructive: tile IDs, map layers,
+  TMX/TBX files, and lot output remain unchanged.
+
+## July 31, 2026 / WorldEd cell and OpenGL regression fixes
+
+- Culled Street Names labels are no longer represented by null graphics
+  entries, eliminating thousands of `removeItem(nullptr)` warnings and their
+  view-switch delay.
+- Embedded TMX declarations remain registered and are all resolved before
+  current or adjacent-cell rendering. The short-lived used-GID-only
+  optimization was removed after it produced red unknown tiles for PZ
+  procedural sheets and legacy headers.
+- The complete global catalogue is decoded once at startup and subsequent
+  cells reuse the shared image cache.
+- OpenGL 3.3 uses a compatibility context again. The forced core context
+  compiled the shader but could not draw the legacy VBOs without an explicit
+  VAO, which caused the tileless cell display.
+- The 256/300 project-grid badge is rendered to a raster image before OpenGL
+  compositing, avoiding corrupted glyphs after the native VBO pass.
+
+## July 31, 2026 / Zero-column and Jumbo crash hardening
+
+- Tile metadata lookup no longer divides by zero when an embedded TMX/TBX
+  declaration temporarily exposes a zero-column tileset during lazy image
+  resolution. It reuses the matching catalogue geometry when available and
+  otherwise defers the optional metadata lookup.
+- Legacy Jumbo trunk/leaves overlays now validate the column count and target
+  tile before use. An incomplete sheet skips only the optional overlay instead
+  of crashing the renderer.
+- The same guards are present in WorldEd's OpenGL cell renderer and in the
+  shared TileZed/BuildingEd renderer.
+- Tile Definitions now detects resized sheets inside separate `.pack`
+  directories through the shared 1x/2x resolver. Existing properties are
+  retained by tile coordinate, the matrix is updated, and the open
+  `def.tiles` document is marked for saving.
+
+## July 30, 2026 / WorldEd renderer selection and cell display
+
+- CellView continues to support both OpenGL 3.3 and Qt raster/software
+  rendering. Preferences identifies the fallback clearly and WorldEd records
+  the active backend in its log.
+- Fresh installations hide invisible helper-tile wireframes by default. The
+  overlay remains available from **View > Show Invisible Tiles**.
+- The 256/300 project-grid badge no longer contains mojibake caused by source
+  encoding of its separator and multiplication glyphs.
+
+## July 30, 2026 / BuildingEd browser crash fix
+
+- Activating a TBX in BuildingEd's welcome-page file browser now opens it
+  through `BuildingEditorWindow`, the same proven path used by **Open
+  Building**.
+- The browser no longer dereferences TileZed's absent `MainWindow` singleton
+  when BuildingEd runs as the standalone executable. Browser opens and failures
+  are recorded with the full TBX path.
+- BuildingEd preloads every discovered sheet before Tile mode, categories,
+  furniture previews, or a TBX document is exposed. Availability therefore
+  never depends on which palette the user clicked first.
+- Metadata-only PNG discovery suppresses per-sheet BuildingEd UI notifications
+  and refreshes the catalogue once after the scan. This removes the former
+  discovery/full-catalogue double pass.
+- Tileset readiness logs now report actual decode attempts separately from
+  already-ready requests, eliminating misleading duplicate-preload messages.
+- The internal BuildingEd validator exercises every template and category,
+  Tile mode, the furniture catalogue, and a Lua-created FurnitureObject through
+  placement, Undo and Redo.
+
+## July 30, 2026 / BuildingEd Lua furniture objects
+
+- `building.apiVersion` is now 3. Lua scripts can enumerate the furniture
+  catalogue, inspect orientations and component tiles, and reverse-match a
+  loose tile name with `findFurniture(tileName)`.
+- `placeFurniture(level,x,y,group,index,orientation)` creates a real
+  catalog-backed `FurnitureObject`, returns its transactional object index, and
+  participates in the script's single undo operation.
+- New furniture objects remain detached until the script succeeds; errors and
+  cancellation delete them without changing the open building.
+
+## July 29, 2026 / Project Zomboid 42.20 update
+
+- Tile-definition loading follows the B42.20 runtime order, including
+  `newtiledefinitions`, erosion, overlays, chunk-caching, NoiseWorks patch,
+  and both native Jumbo definition files.
+- `.patch.tiles` files now merge properties into their base definitions.
+  Version-1 file/set/tile limits are validated for both legacy 512-tile files
+  and the 1024-tile `newtiledefinitions` format.
+- Native 256-cell lot generation no longer applies WorldEd's legacy fake-Jumbo
+  randomizer. Explicit B42 Jumbo trees and Biomemap/WorldGen decisions are
+  preserved.
+- Biomemap ID 171 remains available as **Forced Redbud Jumbo XXL (map
+  override)**. It is intentionally enabled per map by `WorldGenOverride.lua`;
+  see `docs/PZ-B42.20-Jumbo-Trees.md`.
+- Tim Baker's `f492c5c` LotPackViewer z-coordinate fix is integrated.
+- Tim Baker's `a7d5a77` cell renderer update is integrated. The legacy
+  fixed-function path is replaced by an OpenGL 3.3 shader; the published
+  include typo is corrected, core-profile-incompatible quads are rendered as
+  triangle fans, CellView explicitly requests a 3.3 core context, and
+  unavailable contexts/shaders now produce diagnostics instead of continuing
+  through an invalid rendering path.
+- The B42.20 room-name catalog and the `connectX`/`connectY` tile properties
+  are synchronized with the game scripts.
+
+### Tileset lifecycle and thumbnail loading
+
+- **Tools > Tilesets... > Add Tilesets** now imports a browsed external PNG
+  into the active Tiles tree, preserving `1x`/`2x` and `.pack` layout. Name
+  collisions are detected by content and never overwritten silently.
+- Invalid or undersized sheets are rejected with their selected and resolved
+  paths. Zero-column tilesets can no longer crash while `Tilesets.txt` is
+  saved, and duplicate registration caused by the directory watcher is safe.
+- Valid single-row sheets are supported explicitly. If an in-memory tileset
+  temporarily reports zero columns, the tools recover an unambiguous `N x 1`
+  geometry from its 1x or 2x PNG before saving `Tilesets.txt`; genuinely
+  inconsistent geometry is still rejected.
+- Tileset add, path resolution, import, geometry validation and catalog-save
+  boundaries are logged and flushed immediately. Unhandled Windows/C++
+  exceptions now leave a final diagnostic in each application's log.
+- WorldEd startup reports the current sheet and `n / total` while decoding the
+  complete discovered catalogue.
+- WorldEd, TileZed and BuildingEd watch the configured Tiles directories. A
+  newly copied PNG is discovered and loaded without restarting the tool.
+- PNG removal is also hot-reloaded safely. Directory-only notifications are
+  converted into sheet invalidations, missing placeholders use the correct
+  width/height test, and thumbnail workers are prevented from reading a tile
+  image while the watcher replaces it.
+- BuildingEd now performs the same startup discovery as the other editors,
+  including 1x, 2x and immediate `.pack` subdirectories. TBX tileset names are
+  matched case-insensitively and resolved through the shared path resolver
+  before being reported as missing.
+- The **Missing Tilesets** dialog now lists only sheets that remain unloaded
+  after resolution. A PNG that is available outside the catalogue is loaded
+  on demand and registered in memory instead of being falsely reported absent.
+- **Edit > Update Tilesets.txt from Tiles PNGs...** adds new sheets, refreshes
+  changed dimensions, preserves meta-enums and keeps `Tilesets.txt.bak`.
+- Automatic PNG discovery is memory-only. Startup and directory-watcher scans
+  no longer rewrite or inflate `Tilesets.txt`; persistence remains an explicit
+  menu command.
+- TileZed loads the complete discovered global catalogue and makes every
+  embedded TMX declaration ready before opening a map. Clicking a sheet in the
+  Tilesets dock is no longer required to repair an already-visible cell.
+- Startup discovery registers the dimensions of uncatalogued PNGs without
+  decoding all of them. A PNG added during the running session is still loaded
+  immediately by the directory watcher.
+- The first-run path chooser accepts an installation root containing `config`
+  and/or `Tiles`, as well as the directories themselves.
+- World thumbnail progress is modeless and event-driven. The GUI no longer
+  spins in a modal `processEvents()` loop.
+- WorldEd preloads the complete discovered catalogue before opening a project.
+  Current and adjacent cells retain their ordered headers and reuse the shared
+  cache. A real command-line cell-opening validation path exercises the same
+  CellDocument and renderer pipeline as the UI.
+- WorldEd and TileZed again register every embedded TMX tileset declaration
+  with the shared image cache. Artwork loaded for one map is reused by current
+  and adjacent cells regardless of embedded catalog-size differences.
+- The WorldEd thumbnail-cache version was advanced so thumbnails containing
+  stale red unknown-tile placeholders are regenerated automatically.
+- TileZed skips automatic document restoration after an unclean shutdown,
+  preventing a malformed previous session from creating a startup crash loop.
+- Async reader/renderer threads are named in logs, rendered TMX paths are
+  recorded at start and finish, and Windows access violations include the
+  faulting DLL and module offset. Missing-image replacement now takes the
+  shared tileset-image write lock.
+- BMP Tools can optionally replace unknown Main and Vegetation pixels during
+  validation. Each fallback is chosen from its Rules palette (black by
+  default), and the repair is one undoable operation.
+- The suite does not require elevation when extracted to a user-writable
+  directory. Its portable `settings`, logs, `config`, Tiles, and edited project
+  locations must remain writable; `Program Files` and read-only shares are not
+  supported portable locations.
+
+## July 28, 2026 update
+
+### WorldEd responsiveness and thumbnails
+
+- Opening a WorldView cell context menu is now constant-time. The menu no
+  longer opens and parses every TMX merely to decide whether **Remove All Empty
+  Border Cells** should be enabled. The exhaustive safety scan runs only after
+  that command is selected.
+- Thumbnail preparation and rendering now use up to four independent workers
+  instead of one serialized renderer. Pending WorldView and adjacent-world
+  thumbnails are admitted according to the available worker slots.
+- An explicit **Recreate Thumbnail** request now starts the forced render
+  directly. It no longer loads the old cached PNG first or renders the same TMX
+  twice after a cache miss.
+- PNG encoding and file writing are performed by the render workers. The GUI
+  thread only installs the completed image and writes its small metadata file.
+- The redundant GUI-thread layer/tileset rescan immediately before rendering
+  was removed. TMX loading already prepares the tilesets used by the map.
+- Embedded TMX declarations resolve their artwork through the shared image
+  cache by stable tileset name. Declarations are retained to preserve the
+  historical cross-cell fallback for generated border maps.
+- A tileset finishing its load invalidates the CellScene composite/VBO, not
+  merely the widget paint. Stale `??` placeholders, including water tiles in
+  adjacent-cell mode, are therefore rebuilt with the real tile image.
+- World thumbnail visibility is honored for both the current project and
+  adjacent worlds. Saved per-cell visibility is restored independently for
+  each PZW.
+
+### WorldEd object and browser workflow
+
+- **Create Object** asks for reusable Name and Type defaults. Values are
+  initialized from the selected object or current object group and persisted
+  for the next activation.
+- Newly drawn WorldEd objects receive the chosen name/type immediately.
+- **Create Object** remains active after a rectangle is completed, allowing
+  several zones to be drawn in succession. The new object remains selected for
+  visual feedback.
+- The **Maps** browser now displays headers, file size and last-modified time and
+  has a wider default layout.
+- The 300 x 300 / 256 x 256 project-grid badge is explicitly invalidated during
+  scrolling and resizing, eliminating duplicated or smeared badge remnants.
+
+### Biomemap and foraging zones
+
+- The green Biomemap channel now matches the game's `metazoneHandler` split
+  exactly: `Vegitation`, `DeepForest`, `Forest`, `TownZone`, `Farm`,
+  `FarmLand`, and `TrailerPark` are rasterized into the image.
+- All other vector zone/object types remain outside the image and are reported
+  as `objects.lua` content, including vehicle zones, geometries, WorldGen,
+  `WaterZone`, and custom types.
+- The completion dialog lists the types actually rasterized and those that must
+  remain in `objects.lua`.
+- Green-channel identifiers are validated without resampling their bytes.
+  Unknown IDs stop generation and mixed identifiers inside the game's 8 x 8
+  chunk sampling area produce a warning.
+- Legacy 300-cell projects generate complete 256 x 256 Biomemap tiles. Boundary
+  areas without a full source tile are filled explicitly with neutral values
+  and reported; inputs are never silently stretched.
+
+### TileZed workflow fixes
+
+- **Insert Object (O)** now asks for reusable Name and Type defaults and applies
+  them to every new object. A single selected object can seed those defaults.
+- Insert Object remains available when a tile layer is selected. If the current
+  level has no Object Layer, TileZed offers to create one above that level's
+  existing visual layers.
+- Existing Object Layers on the selected level are reused automatically.
+- The **Maps** browser now shows file size and last-modified time with a wider
+  default layout.
+- The Lua `distanceIndicator` used by scripts such as
+  `tool-four-directions.lua` now renders above map content and uses the current
+  level instead of being hard-coded to level zero.
+- The 300 x 300 / 256 x 256 project-grid badge is available in TileZed and its
+  old and new screen regions are invalidated during scrolling, preventing
+  visual duplication.
+- Opening a map makes its complete ordered tileset header ready before
+  exposing the document, including sheets used indirectly by BMP rules and
+  blend layers.
+
+### Package and validation
+
+- WorldEd, TileZed and BuildingEd were rebuilt from the current working trees
+  with Qt 5.14.2 and MSVC 2017.
+- The packaged executables were startup-tested and BuildingEd category
+  validation completed successfully.
+- `build/PZTools-Qt5-Latest` is the sole retained packaged build; obsolete test,
+  backup and intermediate release directories were removed.
+- The package remains unsigned. Enterprise Code Integrity policies that require
+  trusted signing can still reject `PZWorldEd.exe` or bundled DLLs such as
+  `zlib1.dll`; no binary was replaced merely to hide that policy event.
 
 ## Suite-wide changes
 
 ### Supported platform and build
 
-- Windows 10, Qt 5.14.2, qmake and an MSVC-compatible x64 toolchain remain the
-  supported development target. The current package was rebuilt with MSVC 2022
-  against the Qt `msvc2017_64` binaries.
+- Windows 10, Qt 5.14.2, qmake and MSVC 2017 x64 remain the supported
+  development target.
 - Qt 5 compatibility was restored in code paths that had moved toward Qt 6 APIs.
 - Unneeded Qt 6 branches were removed from WorldEd's main execution paths.
 - Obsolete Windows build scripts containing machine-specific absolute paths were
@@ -155,12 +573,19 @@ and `integration/TileZed`. No public repository has been modified or pushed.
 - `Map.png` and `Map_veg.png` both contribute to the biome layer.
 - The green channel is no longer copied directly from the vegetation image.
 - The green channel can be generated in either of two ways:
-  - rasterize Zone objects from the current WorldEd project;
+  - rasterize the seven Biomemap-managed Zone types from the current WorldEd
+    project;
   - read exact zone identifiers from a grayscale PNG or a PNG green channel.
-- A Project Zomboid zone-type-to-biomemap-ID table is included.
+- `Vegitation`, `DeepForest`, `Forest`, `TownZone`, `Farm`, `FarmLand`, and
+  `TrailerPark` are the only WorldEd types rasterized into the green channel,
+  matching the types deliberately ignored by the game's `metazoneHandler`.
+- Every other vector object or zone type remains excluded from the image and
+  must be exported through `objects.lua`, including vehicle zones, geometries,
+  WorldGen, and `WaterZone`.
+- The result dialog lists the actual project types placed in each output path.
 - Input dimensions are validated against the current project's 300 or 256 grid.
 - Images are never resized or padded silently.
-- Detailed warnings report unmapped biome colors and unknown zone types.
+- Detailed warnings report unmapped biome colors and invalid channel values.
 
 ### Zombie Heatmap
 
@@ -382,3 +807,16 @@ and `integration/TileZed`. No public repository has been modified or pushed.
 - Upstream `LotFilesManager256` as the LOT-export foundation.
 - `CustomTileSize`, `FloorOverlay`, ID reassignment and TileDef filters.
 - BuildingEd Attribute mode, RoomTone, basement export and unlit-room detection.
+
+## Source publication notes
+
+- `integration/WorldEd` and `integration/TileZed` are the two source trees
+  prepared for private publication. Each retains its own upstream history.
+- Current working-tree changes still need to be reviewed and grouped into
+  thematic commits before the private remotes are pushed.
+- Lua examples that modify maps should first be tested on a copy or with batch
+  backups enabled.
+- The planned Linux migration will require another case-sensitivity and
+  Windows-specific-path audit.
+- General cleanup of `#if 0`, `ZOMBOID` and other dead branches remains a
+  separate, incremental task so each cleanup set can be compiled and tested.

@@ -26,6 +26,7 @@
 #include "mainwindow.h"
 #include "mapimagemanager.h"
 #include "mapmanager.h"
+#include "nightpreviewitem.h"
 #include "preferences.h"
 #include "progress.h"
 #include "scenetools.h"
@@ -76,6 +77,7 @@ WorldScene::WorldScene(WorldDocument *worldDoc, QObject *parent)
     , mZombieSpawnImageItem(nullptr)
     , mBiomeMapItem(nullptr)
     , mBMPToolActive(false)
+    , mNightPreviewItem(new NightPreviewItem)
 
 {
     setBackgroundBrush(Qt::darkGray);
@@ -137,6 +139,10 @@ WorldScene::WorldScene(WorldDocument *worldDoc, QObject *parent)
 
     mGridItem->updateBoundingRect();
     setSceneRect(mGridItem->boundingRect());
+    mNightPreviewItem->setBounds(sceneRect());
+    mNightPreviewItem->setZValue(50000);
+    mNightPreviewItem->setVisible(false);
+    addItem(mNightPreviewItem);
     mCoordItem->updateBoundingRect();
 
     Preferences *prefs = Preferences::instance();
@@ -458,6 +464,7 @@ void WorldScene::worldResized(const QSize &oldSize)
     mCellItems = items;
     mGridItem->updateBoundingRect();
     setSceneRect(mGridItem->boundingRect());
+    mNightPreviewItem->setBounds(sceneRect());
     mCoordItem->updateBoundingRect();
     mSelectionItem->updateBoundingRect();
     foreach (WorldBMPItem *item, mBMPItems)
@@ -623,6 +630,14 @@ void WorldScene::cellObjectPointsChanged(WorldCell *cell, int objectIndex)
 void WorldScene::setShowGrid(bool show)
 {
     mGridItem->setVisible(show);
+}
+
+void WorldScene::setNightPreviewEnabled(bool enabled)
+{
+    mNightPreviewItem->setBounds(sceneRect());
+    mNightPreviewItem->setLights(QVector<NightPreviewLight>());
+    mNightPreviewItem->setLitRooms(QVector<QPolygonF>());
+    mNightPreviewItem->setVisible(enabled);
 }
 
 void WorldScene::setShowCoordinates(bool show)

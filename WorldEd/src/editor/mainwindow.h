@@ -40,6 +40,7 @@ class ObjectsDock;
 class PropertiesDock;
 class RoadsDock;
 class SearchDock;
+class StreetNamesDock;
 class UndoDock;
 class World;
 class WorldDocument;
@@ -48,6 +49,7 @@ class Zoomable;
 
 class QComboBox;
 class QMenu;
+class QToolButton;
 
 namespace Lua {
 class LuaTable;
@@ -248,6 +250,7 @@ private:
     ObjectsDock *mObjectsDock;
     PropertiesDock *mPropertiesDock;
     SearchDock* mSearchDock;
+    StreetNamesDock *mStreetNamesDock;
     InGameMapDock* mInGameMapDock;
 #ifdef ROAD_UI
     RoadsDock *mRoadsDock;
@@ -263,6 +266,11 @@ private:
     KeyboardShortcutWindow *mKeyboardShortcutWindow = nullptr;
     QAction *mUndoAction = nullptr;
     QAction *mRedoAction = nullptr;
+    QAction *mNightPreviewAction = nullptr;
+    QToolButton *mNightPreviewButton = nullptr;
+    QToolButton *mPoweredPreviewButton = nullptr;
+    QToolButton *mSnowPreviewButton = nullptr;
+    QToolButton *mJumboPreviewButton = nullptr;
 
     static MainWindow *mInstance;
 };

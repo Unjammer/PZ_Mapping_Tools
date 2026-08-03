@@ -37,6 +37,7 @@
 
 #include <cmath>
 
+#include <QLineF>
 #include <QMutex>
 #include <QPainterPath>
 
@@ -235,6 +236,88 @@ static Tile *placeholderTile(bool invisible)
     return tile;
 }
 
+static QPoint previewImageOrigin(const Tile *tile)
+{
+    if (!tile || !tile->tileset())
+        return QPoint();
+    return tile->tileset()->tileOffset() + tile->offset();
+}
+
+static QTransform alignedPreviewOverlayTransform(
+        const QTransform &sourceTransform,
+        const Tile *sourceTile,
+        const Tile *overlayTile)
+{
+    // Tile::setImage() crops transparent borders. A powered *_on sprite
+    // commonly has a wider glow than its normal counterpart, so both tiles
+    // have different cropped-image origins even though their pixels share
+    // the same 128x256 source-cell coordinates.
+    //
+    // Convert the overlay's local image coordinates back into the complete
+    // source-cell coordinate system, then apply the exact source matrix. This
+    // preserves flips/scaling while keeping every powered pixel on the object
+    // it belongs to.
+    const QPoint delta = previewImageOrigin(overlayTile) -
+                         previewImageOrigin(sourceTile);
+    const qreal dx = sourceTransform.dx() +
+            sourceTransform.m11() * delta.x() +
+            sourceTransform.m21() * delta.y();
+    const qreal dy = sourceTransform.dy() +
+            sourceTransform.m12() * delta.x() +
+            sourceTransform.m22() * delta.y();
+    return QTransform(sourceTransform.m11(), sourceTransform.m12(),
+                      sourceTransform.m21(), sourceTransform.m22(),
+                      dx, dy);
+}
+
+bool ZLevelRenderer::validatePreviewOverlayAlignment(QString *error)
+{
+    Tileset sourceTileset(QStringLiteral("preview_source"), 64, 128);
+    Tileset overlayTileset(QStringLiteral("preview_source_on"), 64, 128);
+    QImage sourceImage(128, 256, QImage::Format_ARGB32);
+    sourceImage.fill(Qt::transparent);
+    QPainter sourcePainter(&sourceImage);
+    sourcePainter.fillRect(QRect(60, 28, 9, 194), Qt::black);
+    sourcePainter.end();
+    QImage overlayImage(128, 256, QImage::Format_ARGB32);
+    overlayImage.fill(Qt::transparent);
+    QPainter overlayPainter(&overlayImage);
+    overlayPainter.setPen(Qt::NoPen);
+    overlayPainter.setBrush(Qt::white);
+    overlayPainter.drawEllipse(QRect(48, 16, 33, 33));
+    overlayPainter.end();
+    Tile sourceTile(sourceImage, 0, &sourceTileset);
+    Tile overlayTile(overlayImage, 0, &overlayTileset);
+
+    const QPoint sharedCellPixel(64, 32);
+    const QPointF sourceLocal =
+            sharedCellPixel - previewImageOrigin(&sourceTile);
+    const QPointF overlayLocal =
+            sharedCellPixel - previewImageOrigin(&overlayTile);
+    const QList<QTransform> sourceTransforms = {
+        QTransform(1.0, 0.0, 0.0, 1.0, 420.0, 180.0),
+        QTransform(-1.0, 0.0, 0.0, 1.0, 560.0, 180.0),
+        QTransform(0.0, 1.0, 1.0, 0.0, 420.0, 180.0),
+        QTransform(2.0, 0.0, 0.0, 2.0, 420.0, 180.0)
+    };
+    for (const QTransform &sourceTransform : sourceTransforms) {
+        const QTransform overlayTransform =
+                alignedPreviewOverlayTransform(
+                    sourceTransform, &sourceTile, &overlayTile);
+        const QPointF sourcePoint = sourceTransform.map(sourceLocal);
+        const QPointF overlayPoint = overlayTransform.map(overlayLocal);
+        if (QLineF(sourcePoint, overlayPoint).length() > 0.001) {
+            if (error) {
+                *error = QStringLiteral(
+                    "cropped overlay anchor differs by %1 pixels")
+                    .arg(QLineF(sourcePoint, overlayPoint).length());
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
 void ZLevelRenderer::drawTileLayer(QPainter *painter,
                                       const TileLayer *layer,
                                       const QRectF &exposed) const
@@ -310,15 +393,24 @@ void ZLevelRenderer::drawTileLayer(QPainter *painter,
             if (layer->contains(columnItr)) {
                 const Cell &cell = layer->cellAt(columnItr);
                 if (!cell.isEmpty()) {
-                    QImage img = cell.tile->image();
-                    const QPoint offset = cell.tile->tileset()->tileOffset() + cell.tile->offset();
+                    Tile *sourceTile = cell.tile;
+                    Tile *tile = sourceTile;
+                    if (mPreviewTileResolver)
+                        tile = mPreviewTileResolver(tile, columnItr);
+                    Tile *overlayTile = mPreviewOverlayResolver
+                            ? mPreviewOverlayResolver(
+                                  sourceTile, columnItr)
+                            : nullptr;
+                    QImage img = tile->image();
+                    const QPoint offset =
+                            tile->tileset()->tileOffset() + tile->offset();
 
                     qreal m11 = 1;      // Horizontal scaling factor
                     qreal m12 = 0;      // Vertical shearing factor
                     qreal m21 = 0;      // Horizontal shearing factor
                     qreal m22 = 1;      // Vertical scaling factor
                     qreal dx = offset.x() + x;
-                    qreal dy = offset.y() + y - cell.tile->height();
+                    qreal dy = offset.y() + y - tile->height();
 
                     if (cell.flippedAntiDiagonally) {
                         // Use shearing to swap the X/Y axis
@@ -343,34 +435,46 @@ void ZLevelRenderer::drawTileLayer(QPainter *painter,
                                                          : img.height();
                     }
 
-                    QString tilesetName = cell.tile->tileset()->name();
+                    QString tilesetName = tile->tileset()->name();
                     QSize customSize = CustomTileSize::forTileset(tilesetName);
                     bool bJUMBO = !customSize.isEmpty();
                     if (bJUMBO) {
                         dx -= (customSize.width() - 64) / 2; // tileWidth / 2;
-                    } else if (tileWidth == cell.tile->width() * 2) {
+                    } else if (tileWidth == tile->width() * 2) {
                         m11 *= 2.0f;
                         m22 *= 2.0f;
-                        dx += cell.tile->offset().x();
-                        dy -= cell.tile->height() - cell.tile->offset().y();
-                    } else if (tileWidth == cell.tile->width() / 2) {
+                        dx += tile->offset().x();
+                        dy -= tile->height() - tile->offset().y();
+                    } else if (tileWidth == tile->width() / 2) {
                         float scale = 0.5f;
                         m11 *= scale;
                         m22 *= scale;
-                        dy += cell.tile->height() / 2;
+                        dy += tile->height() / 2;
                     }
 
                     if (bJUMBO && !tilesetName.contains(QStringLiteral("JUMBOXL")) && !tilesetName.contains(QStringLiteral("JUMBOXXL"))) {
-                        drawJumboTreeTile_Trunk(cell.tile, painter, baseTransform, x, y, m11, m12, m21, m22);
+                        drawJumboTreeTile_Trunk(tile, painter, baseTransform, x, y, m11, m12, m21, m22);
                     }
 
                     const QTransform transform(m11, m12, m21, m22, dx, dy);
                     painter->setTransform(transform * baseTransform);
 
                     painter->drawImage(0, 0, img);
+                    if (overlayTile &&
+                            !overlayTile->image().isNull()) {
+                        const QTransform overlayTransform =
+                                alignedPreviewOverlayTransform(
+                                    transform, tile, overlayTile);
+                        painter->setTransform(
+                                    overlayTransform * baseTransform);
+                        painter->drawImage(0, 0,
+                                           overlayTile->image());
+                        painter->setTransform(
+                                    transform * baseTransform);
+                    }
 
                     if (bJUMBO && !tilesetName.contains(QStringLiteral("JUMBOXL")) && !tilesetName.contains(QStringLiteral("JUMBOXXL"))) {
-                        drawJumboTreeTile_Leaves(cell.tile, painter, baseTransform, x, y, m11, m12, m21, m22);
+                        drawJumboTreeTile_Leaves(tile, painter, baseTransform, x, y, m11, m12, m21, m22);
                     }
                 }
             }
@@ -483,7 +587,14 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
                     }
                     const Cell *cell = cells[i];
                     if (!cell->isEmpty()) {
-                        Tile *tile = cell->tile;
+                        Tile *sourceTile = cell->tile;
+                        Tile *tile = sourceTile;
+                        if (mPreviewTileResolver)
+                            tile = mPreviewTileResolver(tile, columnItr);
+                        Tile *overlayTile = mPreviewOverlayResolver
+                                ? mPreviewOverlayResolver(
+                                      sourceTile, columnItr)
+                                : nullptr;
                         if (tile->properties().contains(QLatin1String("invisible"))) {
                             if (isShowInvisibleTiles() == false)
                                 continue;
@@ -528,7 +639,7 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
                                                              : img.height();
                         }
 
-                        QString tilesetName = cell->tile->tileset()->name();
+                        QString tilesetName = tile->tileset()->name();
                         QSize customSize = CustomTileSize::forTileset(tilesetName);
                         bool bJUMBO = !customSize.isEmpty();
                         if (bJUMBO) {
@@ -549,7 +660,7 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
                         }
 
                         if (bJUMBO && !tilesetName.contains(QStringLiteral("JUMBOXL")) && !tilesetName.contains(QStringLiteral("JUMBOXXL"))) {
-                            drawJumboTreeTile_Trunk(cell->tile, painter, baseTransform, x, y, m11, m12, m21, m22);
+                            drawJumboTreeTile_Trunk(tile, painter, baseTransform, x, y, m11, m12, m21, m22);
                         }
 
                         const QTransform transform(m11, m12, m21, m22, dx, dy);
@@ -558,9 +669,23 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
                         painter->setOpacity(opacities[i] * opacity);
 
                         painter->drawImage(0, 0, img);
+                        if (overlayTile &&
+                                !overlayTile->image().isNull()) {
+                            const QTransform overlayTransform =
+                                    alignedPreviewOverlayTransform(
+                                        transform, tile, overlayTile);
+                            painter->setTransform(
+                                        overlayTransform *
+                                        baseTransform);
+                            painter->drawImage(
+                                        0, 0,
+                                        overlayTile->image());
+                            painter->setTransform(
+                                        transform * baseTransform);
+                        }
 
                         if (bJUMBO && !tilesetName.contains(QStringLiteral("JUMBOXL")) && !tilesetName.contains(QStringLiteral("JUMBOXXL"))) {
-                            drawJumboTreeTile_Leaves(cell->tile, painter, baseTransform, x, y, m11, m12, m21, m22);
+                            drawJumboTreeTile_Leaves(tile, painter, baseTransform, x, y, m11, m12, m21, m22);
                         }
                     }
                 }

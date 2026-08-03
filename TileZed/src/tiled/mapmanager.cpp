@@ -21,6 +21,7 @@
 #include "preferences.h"
 #include "tilemetainfomgr.h"
 #include "tilesetmanager.h"
+#include "tilesetimagelock.h"
 #include "zprogress.h"
 
 #include "map.h"
@@ -47,6 +48,7 @@ using namespace SharedTools;
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QWriteLocker>
 
 #ifdef QT_NO_DEBUG
 inline QNoDebug noise() { return QNoDebug(); }
@@ -98,6 +100,8 @@ MapManager::MapManager() :
     mMapReaderWorker.resize(mMapReaderThread.size());
     for (int i = 0; i < mMapReaderThread.size(); i++) {
         mMapReaderThread[i] = new InterruptibleThread;
+        mMapReaderThread[i]->setObjectName(
+                    QStringLiteral("map-reader-%1").arg(i));
         mMapReaderWorker[i] = new MapReaderWorker(mMapReaderThread[i], i);
         mMapReaderWorker[i]->moveToThread(mMapReaderThread[i]);
         connect(mMapReaderWorker[i], qOverload<Map*,MapInfo*>(&MapReaderWorker::loaded),
@@ -764,28 +768,59 @@ void MapManager::mapLoadedByThread(Map *map, MapInfo *mapInfo)
 
     Tile *invisibleTile = TilesetManager::instance()->invisibleTile();
     Tile *missingTile = TilesetManager::instance()->missingTile();
-    foreach (Tileset *tileset, map->missingTilesets()) {
-        if (tileset == invisibleTile->tileset())
-            continue;
-        if (tileset == missingTile->tileset())
-            continue;
-        if (tileset->tileHeight() == missingTile->height() && tileset->tileWidth() == missingTile->width()) {
-            // Replace the all-red image with something nicer.
-            for (int i = 0; i < tileset->tileCount(); i++)
-                tileset->tileAt(i)->setImage(missingTile);
+    {
+        QWriteLocker imageWriteLock(&tilesetImageLock());
+        foreach (Tileset *tileset, map->missingTilesets()) {
+            if (tileset == invisibleTile->tileset())
+                continue;
+            if (tileset == missingTile->tileset())
+                continue;
+            if (tileset->tileHeight() == missingTile->height()
+                    && tileset->tileWidth() == missingTile->width()) {
+                // Replace the all-red image with something nicer.
+                for (int i = 0; i < tileset->tileCount(); i++)
+                    tileset->tileAt(i)->setImage(missingTile);
+            }
         }
     }
-    // Preserve the historical shared-image behavior across every loaded map.
-    // Loading all embedded declarations lets a tileset image cached by one
-    // document populate compatible declarations in every other document.
-    TilesetManager::instance()->addReferences(map->tilesets());
-
+    // Preserve every TMX's complete, ordered header. This is required by old
+    // projects whose adjacent cells contain the same catalogue in a different
+    // firstgid/order. BMP rules and blend layers also reference sheets that
+    // are absent from Map::usedTilesets(), so every declaration must be ready
+    // before either a current or adjacent map reaches the renderer.
+    const QList<Tileset *> declaredTilesets = map->tilesets();
+    TilesetManager::instance()->addReferences(declaredTilesets, false);
     QList<Tileset *> usedTilesets = map->usedTilesets().values();
     usedTilesets.removeAll(TilesetManager::instance()->invisibleTileset());
     usedTilesets.removeAll(TilesetManager::instance()->missingTileset());
-    for (Tileset *tileset : qAsConst(usedTilesets))
-        TilesetManager::instance()->loadTileset(tileset, tileset->imageSource());
-    TilesetManager::instance()->waitForTilesets(usedTilesets);
+    qInfo() << "Loading complete ordered TMX tileset header:"
+            << declaredTilesets.count() << "declared,"
+            << usedTilesets.count() << "used" << mapInfo->path();
+    for (Tileset *tileset : std::as_const(declaredTilesets))
+        TilesetManager::instance()->loadTileset(
+                    tileset, tileset->imageSource());
+    if (!declaredTilesets.isEmpty())
+        TilesetManager::instance()->waitForTilesets(declaredTilesets);
+    for (Tileset *tileset : std::as_const(usedTilesets)) {
+        int nullImages = 0;
+        for (int tileIndex = 0; tileIndex < tileset->tileCount();
+             ++tileIndex) {
+            Tile *tile = tileset->tileAt(tileIndex);
+            if (!tile || tile->image().isNull())
+                ++nullImages;
+        }
+        if (!tileset->isLoaded() || tileset->isMissing()
+                || nullImages > 0) {
+            qWarning() << "TMX used tileset image state:"
+                       << tileset->name()
+                       << "loaded" << tileset->isLoaded()
+                       << "missing" << tileset->isMissing()
+                       << "tiles" << tileset->tileCount()
+                       << "null-images" << nullImages
+                       << "source" << tileset->imageSource()
+                       << "source2x" << tileset->imageSource2x();
+        }
+    }
 
     bool replace = mapInfo->mMap != 0;
     if (replace) {

@@ -69,6 +69,8 @@ MapImageManager::MapImageManager() :
     mNextThreadForJob = 0;
     for (int i = 0; i < mImageReaderWorkers.size(); i++) {
         mImageReaderThreads[i] = new InterruptibleThread;
+        mImageReaderThreads[i]->setObjectName(
+                    QStringLiteral("thumbnail-reader-%1").arg(i));
         mImageReaderWorkers[i] = new MapImageReaderWorker(mImageReaderThreads[i]);
         mImageReaderWorkers[i]->moveToThread(mImageReaderThreads[i]);
         connect(mImageReaderWorkers[i], &MapImageReaderWorker::imageLoaded,
@@ -77,6 +79,7 @@ MapImageManager::MapImageManager() :
     }
 
     mImageRenderThread = new InterruptibleThread;
+    mImageRenderThread->setObjectName(QStringLiteral("thumbnail-renderer"));
     mImageRenderWorker = new MapImageRenderWorker(mImageRenderThread);
     mImageRenderWorker->moveToThread(mImageRenderThread);
     connect(mImageRenderWorker, &MapImageRenderWorker::mapNeeded,
@@ -997,12 +1000,15 @@ void MapImageRenderWorker::work()
 
         Job job = mJobs.takeFirst();
 
-        noise() << "MapImageRenderWorker started" << job.mapImage->mapInfo()->path();
+        qInfo() << "Thumbnail render started"
+                << job.mapImage->mapInfo()->path();
 #ifndef QT_NO_DEBUG
 //        Sleep::msleep(1000);
 #endif
         MapImageData data = generateMapImage(job.mapComposite);
-        noise() << "MapImageRenderWorker" << (aborted() ? "aborted" : "finished") << job.mapImage->mapInfo()->path();
+        qInfo() << "Thumbnail render"
+                << (aborted() ? "aborted" : "finished")
+                << job.mapImage->mapInfo()->path();
 
         emit jobDone(job.mapComposite); // main thread needs to delete this
 

@@ -30,6 +30,7 @@
 #include "zoomable.h"
 
 #include "BuildingEditor/buildingtiles.h"
+#include "../portablesettings.h"
 
 #include "layer.h"
 #include "layermodel.h"
@@ -39,10 +40,28 @@
 
 #include <QDebug>
 #include <QDesktopServices>
+#include <QDirIterator>
+#include <QComboBox>
+#include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
+#include <QFileSystemWatcher>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QIcon>
+#include <QLabel>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPixmap>
+#include <QPushButton>
+#include <QSaveFile>
 #include <QSettings>
+#include <QSignalBlocker>
+#include <QStandardPaths>
 #include <QUrl>
+#include <QVBoxLayout>
+
+#include <algorithm>
 
 using namespace Tiled;
 using namespace Tiled::Internal;
@@ -127,6 +146,54 @@ public:
     QList<BmpBlend*> mBlends;
 };
 
+class ReplaceUnknownBmpPixels : public QUndoCommand
+{
+public:
+    ReplaceUnknownBmpPixels(MapDocument *mapDocument,
+                            const QImage &mainImage,
+                            const QImage &vegetationImage)
+        : QUndoCommand(QCoreApplication::translate(
+                           "Undo Commands",
+                           "Replace Unknown BMP Colors"))
+        , mMapDocument(mapDocument)
+        , mBeforeMain(mapDocument->map()->bmpMain().image())
+        , mBeforeVegetation(mapDocument->map()->bmpVeg().image())
+        , mAfterMain(mainImage)
+        , mAfterVegetation(vegetationImage)
+    {
+    }
+
+    void undo() override
+    {
+        apply(mBeforeMain, mBeforeVegetation);
+    }
+
+    void redo() override
+    {
+        apply(mAfterMain, mAfterVegetation);
+    }
+
+private:
+    void apply(const QImage &mainImage, const QImage &vegetationImage)
+    {
+        mMapDocument->swapBmpImage(0, mainImage);
+        mMapDocument->swapBmpImage(1, vegetationImage);
+        const QRect mainBounds(QPoint(), mainImage.size());
+        const QRect vegetationBounds(QPoint(), vegetationImage.size());
+        mMapDocument->mapComposite()->bmpBlender()->markDirty(mainBounds);
+        mMapDocument->mapComposite()->bmpBlender()->markDirty(
+                    vegetationBounds);
+        mMapDocument->emitBmpPainted(0, mainBounds);
+        mMapDocument->emitBmpPainted(1, vegetationBounds);
+    }
+
+    MapDocument *mMapDocument;
+    QImage mBeforeMain;
+    QImage mBeforeVegetation;
+    QImage mAfterMain;
+    QImage mAfterVegetation;
+};
+
 } // namespace Internal
 } // namespace Tiled
 
@@ -146,6 +213,7 @@ BmpToolDialog::BmpToolDialog(QWidget *parent) :
     mExpanded(true)
 {
     ui->setupUi(this);
+    setupCustomBrushUi();
 
     setWindowFlags(windowFlags() | Qt::Tool);
 
@@ -205,6 +273,10 @@ BmpToolDialog::BmpToolDialog(QWidget *parent) :
     connect(ui->trashBlends, &QAbstractButton::clicked, this, &BmpToolDialog::trashBlends);
 
     connect(ui->help, &QAbstractButton::clicked, this, &BmpToolDialog::help);
+    connect(ui->repairUnknownColors, &QCheckBox::toggled,
+            this, &BmpToolDialog::repairUnknownColorsToggled);
+    ui->groundFallback->setEnabled(false);
+    ui->vegetationFallback->setEnabled(false);
 
     QSettings settings;
     settings.beginGroup(QLatin1String("BmpToolDialog"));
@@ -222,6 +294,9 @@ BmpToolDialog::BmpToolDialog(QWidget *parent) :
                                    QLatin1String("square")).toString();
     if (shape == QLatin1String("square")) brushSquare();
     else if (shape == QLatin1String("circle")) brushCircle();
+    else if (shape == QLatin1String("custom"))
+        selectCustomBrush(settings.value(
+                    QLatin1String("customBrushPath")).toString());
 
     bool isRestricted = settings.value(QLatin1String("restrictToSelection"), true).toBool();
     BmpBrushTool::instance()->setRestrictToSelection(isRestricted);
@@ -249,6 +324,387 @@ BmpToolDialog::~BmpToolDialog()
     delete ui;
 }
 
+QString BmpToolDialog::userBrushDirectory() const
+{
+    const QString portable = QDir(PortableSettings::rootPath()).filePath(
+                QLatin1String("brushes"));
+    if (QDir().mkpath(portable))
+        return QDir::cleanPath(portable);
+
+    const QString fallback = QDir(
+                QStandardPaths::writableLocation(
+                    QStandardPaths::AppLocalDataLocation)).filePath(
+                QLatin1String("brushes"));
+    QDir().mkpath(fallback);
+    return QDir::cleanPath(fallback);
+}
+
+QStringList BmpToolDialog::brushDirectories() const
+{
+    QStringList directories;
+    directories << QDir::cleanPath(PortableSettings::installPath(
+                                       QLatin1String("brushes")))
+                << userBrushDirectory();
+    directories.removeDuplicates();
+    return directories;
+}
+
+void BmpToolDialog::ensureExampleBrushes()
+{
+    const QDir directory(userBrushDirectory());
+    if (!directory.exists())
+        return;
+    QSettings settings;
+    if (settings.value(
+                QLatin1String("BmpToolDialog/CustomBrushExamplesCreated"),
+                false).toBool()) {
+        return;
+    }
+
+    bool examplesWritten = true;
+    const auto writeExample = [&directory, &examplesWritten](
+            const QString &fileName, const QImage &image) {
+        const QString path = directory.filePath(fileName);
+        if (!QFileInfo::exists(path) && !image.save(path, "PNG")) {
+            examplesWritten = false;
+            qWarning().noquote() << "Could not create example BMP brush"
+                                 << QDir::toNativeSeparators(path);
+        }
+    };
+
+    QImage scatter(32, 32, QImage::Format_ARGB32);
+    scatter.fill(Qt::transparent);
+    for (int y = 1; y < scatter.height(); ++y) {
+        for (int x = 1; x < scatter.width(); ++x) {
+            // Stable pseudo-random distribution: examples remain identical
+            // across machines and never change an existing user file.
+            if (((x * 37 + y * 53 + x * y * 3) % 97) < 12)
+                scatter.setPixel(x, y, qRgba(0, 0, 0, 255));
+        }
+    }
+    writeExample(QLatin1String("scatter-32.png"), scatter);
+
+    QImage ring(32, 32, QImage::Format_ARGB32);
+    ring.fill(Qt::transparent);
+    const QPointF center(15.5, 15.5);
+    for (int y = 0; y < ring.height(); ++y) {
+        for (int x = 0; x < ring.width(); ++x) {
+            const qreal dx = x - center.x();
+            const qreal dy = y - center.y();
+            const qreal distance2 = dx * dx + dy * dy;
+            if (distance2 >= 70.0 && distance2 <= 155.0)
+                ring.setPixel(x, y, qRgba(0, 0, 0, 255));
+        }
+    }
+    writeExample(QLatin1String("ring-32.png"), ring);
+    if (examplesWritten)
+        settings.setValue(
+                    QLatin1String(
+                        "BmpToolDialog/CustomBrushExamplesCreated"),
+                    true);
+}
+
+void BmpToolDialog::setupCustomBrushUi()
+{
+    QGroupBox *group = new QGroupBox(tr("Custom PNG brush masks"), this);
+    QVBoxLayout *layout = new QVBoxLayout(group);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(5);
+
+    mCustomBrushes = new QComboBox(group);
+    mCustomBrushes->setIconSize(QSize(36, 36));
+    mCustomBrushes->setSizeAdjustPolicy(
+                QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    mCustomBrushes->setMinimumContentsLength(22);
+    layout->addWidget(mCustomBrushes);
+
+    QHBoxLayout *buttons = new QHBoxLayout;
+    buttons->setSpacing(5);
+    mAddCustomBrush = new QPushButton(tr("Add PNG..."), group);
+    mOpenBrushFolder = new QPushButton(tr("Open Folder"), group);
+    mReloadCustomBrushes = new QPushButton(tr("Reload"), group);
+    buttons->addWidget(mAddCustomBrush);
+    buttons->addWidget(mOpenBrushFolder);
+    buttons->addWidget(mReloadCustomBrushes);
+    buttons->addStretch(1);
+    layout->addLayout(buttons);
+
+    mCustomBrushInfo = new QLabel(group);
+    mCustomBrushInfo->setWordWrap(true);
+    mCustomBrushInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    layout->addWidget(mCustomBrushInfo);
+    ui->verticalLayout_4->insertWidget(1, group);
+
+    mBrushWatcher = new QFileSystemWatcher(this);
+    mBrushReloadTimer.setSingleShot(true);
+    mBrushReloadTimer.setInterval(250);
+    connect(&mBrushReloadTimer, &QTimer::timeout,
+            this, &BmpToolDialog::reloadCustomBrushes);
+    connect(mBrushWatcher, &QFileSystemWatcher::directoryChanged,
+            &mBrushReloadTimer, qOverload<>(&QTimer::start));
+    connect(mBrushWatcher, &QFileSystemWatcher::fileChanged,
+            &mBrushReloadTimer, qOverload<>(&QTimer::start));
+    connect(mCustomBrushes,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &BmpToolDialog::customBrushActivated);
+    connect(mAddCustomBrush, &QPushButton::clicked,
+            this, &BmpToolDialog::addCustomBrush);
+    connect(mOpenBrushFolder, &QPushButton::clicked,
+            this, &BmpToolDialog::openBrushFolder);
+    connect(mReloadCustomBrushes, &QPushButton::clicked,
+            this, &BmpToolDialog::reloadCustomBrushes);
+
+    ensureExampleBrushes();
+    reloadCustomBrushes();
+}
+
+void BmpToolDialog::reloadCustomBrushes()
+{
+    if (!mCustomBrushes)
+        return;
+
+    const QString selected = BmpBrushTool::instance()->brushShape()
+            == BmpBrushTool::BrushShape::Custom
+            ? BmpBrushTool::instance()->customBrushPath()
+            : mCustomBrushes->currentData().toString();
+
+    const QSignalBlocker blocker(mCustomBrushes);
+    mCustomBrushes->clear();
+    mCustomBrushes->addItem(tr("Procedural (Square / Circle)"));
+
+    QStringList files;
+    QStringList watchPaths;
+    for (const QString &rootPath : brushDirectories()) {
+        const QDir root(rootPath);
+        if (!root.exists())
+            continue;
+        watchPaths << root.absolutePath();
+        QDirIterator it(root.absolutePath(),
+                        QStringList() << QLatin1String("*.png"),
+                        QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            const QString fileName = QDir::cleanPath(it.next());
+            files << fileName;
+            watchPaths << fileName;
+            watchPaths << QFileInfo(fileName).absolutePath();
+        }
+    }
+    files.removeDuplicates();
+    watchPaths.removeDuplicates();
+    std::sort(files.begin(), files.end(),
+              [](const QString &a, const QString &b) {
+        return QString::localeAwareCompare(a, b) < 0;
+    });
+
+    QMap<QString, int> baseNameCounts;
+    for (const QString &fileName : files)
+        ++baseNameCounts[QFileInfo(fileName).completeBaseName().toLower()];
+
+    int selectedIndex = 0;
+    for (const QString &fileName : files) {
+        const QImage image(fileName);
+        if (image.isNull() || image.width() > 128 || image.height() > 128)
+            continue;
+        const QRegion mask = BmpBrushTool::regionFromBrushImage(image);
+        if (mask.isEmpty())
+            continue;
+
+        QImage preview(image.size(), QImage::Format_ARGB32);
+        preview.fill(QColor(55, 58, 62));
+        QPainter painter(&preview);
+        for (const QRect &rect : mask)
+            painter.fillRect(rect, QColor(235, 238, 242));
+        painter.end();
+
+        const QFileInfo info(fileName);
+        QString label = info.completeBaseName();
+        if (baseNameCounts.value(label.toLower()) > 1)
+            label += QStringLiteral(" — %1").arg(info.dir().dirName());
+        mCustomBrushes->addItem(
+                    QIcon(QPixmap::fromImage(preview).scaled(
+                              48, 48, Qt::KeepAspectRatio,
+                              Qt::FastTransformation)),
+                    label, fileName);
+        const int index = mCustomBrushes->count() - 1;
+        mCustomBrushes->setItemData(
+                    index,
+                    tr("%1 × %2 pixels\n%3")
+                    .arg(image.width()).arg(image.height())
+                    .arg(QDir::toNativeSeparators(fileName)),
+                    Qt::ToolTipRole);
+        if (!selected.isEmpty()
+                && (QDir::cleanPath(selected).compare(
+                        fileName, Qt::CaseInsensitive) == 0
+                    || QFileInfo(selected).fileName().compare(
+                        info.fileName(), Qt::CaseInsensitive) == 0)) {
+            selectedIndex = index;
+        }
+    }
+
+    const QStringList oldDirectories = mBrushWatcher->directories();
+    const QStringList oldFiles = mBrushWatcher->files();
+    if (!oldDirectories.isEmpty())
+        mBrushWatcher->removePaths(oldDirectories);
+    if (!oldFiles.isEmpty())
+        mBrushWatcher->removePaths(oldFiles);
+    if (!watchPaths.isEmpty())
+        mBrushWatcher->addPaths(watchPaths);
+
+    mCustomBrushes->setCurrentIndex(selectedIndex);
+    if (selectedIndex > 0)
+        customBrushActivated(selectedIndex);
+    else {
+        setProceduralBrushUi();
+        if (BmpBrushTool::instance()->brushShape()
+                == BmpBrushTool::BrushShape::Custom) {
+            ui->brushSquare->setChecked(true);
+            BmpBrushTool::instance()->setBrushShape(
+                        BmpBrushTool::BrushShape::Square);
+        }
+    }
+}
+
+void BmpToolDialog::selectCustomBrush(const QString &fileName)
+{
+    if (fileName.isEmpty() || !mCustomBrushes)
+        return;
+    for (int index = 1; index < mCustomBrushes->count(); ++index) {
+        const QString candidate = mCustomBrushes->itemData(index).toString();
+        if (QDir::cleanPath(candidate).compare(
+                    QDir::cleanPath(fileName), Qt::CaseInsensitive) == 0
+                || QFileInfo(candidate).fileName().compare(
+                    QFileInfo(fileName).fileName(),
+                    Qt::CaseInsensitive) == 0) {
+            mCustomBrushes->setCurrentIndex(index);
+            return;
+        }
+    }
+}
+
+void BmpToolDialog::setProceduralBrushUi()
+{
+    if (!mCustomBrushes)
+        return;
+    const QSignalBlocker blocker(mCustomBrushes);
+    mCustomBrushes->setCurrentIndex(0);
+    ui->brushSize->setEnabled(true);
+    ui->brushSquare->setEnabled(true);
+    ui->brushCircle->setEnabled(true);
+    mCustomBrushInfo->setText(
+                tr("PNG masks use dark, opaque pixels. Transparent or light "
+                   "pixels are ignored. Recommended size: 32 × 32."));
+}
+
+void BmpToolDialog::customBrushActivated(int index)
+{
+    if (!mCustomBrushes)
+        return;
+    if (index <= 0) {
+        ui->brushSquare->setChecked(true);
+        brushSquare();
+        return;
+    }
+
+    const QString fileName = mCustomBrushes->itemData(index).toString();
+    const QImage image(fileName);
+    const QRegion mask = BmpBrushTool::regionFromBrushImage(image);
+    if (image.isNull() || image.width() > 128 || image.height() > 128
+            || mask.isEmpty()) {
+        QMessageBox::warning(
+                    this, tr("Invalid Brush Mask"),
+                    tr("The selected PNG must contain dark opaque pixels and "
+                       "must not exceed 128 × 128 pixels."));
+        setProceduralBrushUi();
+        return;
+    }
+
+    ui->brushSquare->setAutoExclusive(false);
+    ui->brushCircle->setAutoExclusive(false);
+    ui->brushSquare->setChecked(false);
+    ui->brushCircle->setChecked(false);
+    ui->brushSquare->setAutoExclusive(true);
+    ui->brushCircle->setAutoExclusive(true);
+    ui->brushSize->setEnabled(false);
+    int pixelCount = 0;
+    for (const QRect &rect : mask)
+        pixelCount += rect.width() * rect.height();
+    mCustomBrushInfo->setText(
+                tr("%1 × %2 — %3 painted cells — centered on the cursor")
+                .arg(image.width()).arg(image.height()).arg(pixelCount));
+    BmpBrushTool::instance()->setCustomBrush(
+                mask, image.size(), fileName);
+}
+
+void BmpToolDialog::addCustomBrush()
+{
+    const QStringList files = QFileDialog::getOpenFileNames(
+                this, tr("Add Custom Brush Masks"), QString(),
+                tr("PNG images (*.png)"));
+    if (files.isEmpty())
+        return;
+
+    const QDir destination(userBrushDirectory());
+    QString lastImported;
+    for (const QString &sourceName : files) {
+        const QImage image(sourceName);
+        const QRegion mask = BmpBrushTool::regionFromBrushImage(image);
+        if (image.isNull() || image.width() > 128 || image.height() > 128
+                || mask.isEmpty()) {
+            QMessageBox::warning(
+                        this, tr("Invalid Brush Mask"),
+                        tr("'%1' was not imported. A brush PNG must contain "
+                           "dark opaque pixels and must not exceed "
+                           "128 × 128 pixels.")
+                        .arg(QFileInfo(sourceName).fileName()));
+            continue;
+        }
+
+        const QString destinationName =
+                destination.filePath(QFileInfo(sourceName).fileName());
+        if (QFileInfo::exists(destinationName)
+                && QDir::cleanPath(sourceName).compare(
+                    QDir::cleanPath(destinationName),
+                    Qt::CaseInsensitive) != 0) {
+            if (QMessageBox::question(
+                        this, tr("Replace Brush"),
+                        tr("'%1' already exists in the brush folder. "
+                           "Replace it?")
+                        .arg(QFileInfo(destinationName).fileName()))
+                    != QMessageBox::Yes) {
+                continue;
+            }
+        }
+
+        if (QDir::cleanPath(sourceName).compare(
+                    QDir::cleanPath(destinationName),
+                    Qt::CaseInsensitive) != 0) {
+            QFile source(sourceName);
+            QSaveFile output(destinationName);
+            if (!source.open(QIODevice::ReadOnly)
+                    || !output.open(QIODevice::WriteOnly)
+                    || output.write(source.readAll()) < 0
+                    || !output.commit()) {
+                QMessageBox::warning(
+                            this, tr("Brush Import Failed"),
+                            tr("Could not copy '%1' to:\n%2")
+                            .arg(QFileInfo(sourceName).fileName(),
+                                 QDir::toNativeSeparators(
+                                     destinationName)));
+                continue;
+            }
+        }
+        lastImported = destinationName;
+    }
+    reloadCustomBrushes();
+    selectCustomBrush(lastImported);
+}
+
+void BmpToolDialog::openBrushFolder()
+{
+    QDesktopServices::openUrl(
+                QUrl::fromLocalFile(userBrushDirectory()));
+}
+
 void BmpToolDialog::setVisible(bool visible)
 {
     QSettings settings;
@@ -272,6 +728,13 @@ void BmpToolDialog::setVisible(bool visible)
             settings.setValue(QLatin1String("brushShape"), QLatin1String("square"));
         if (ui->brushCircle->isChecked())
             settings.setValue(QLatin1String("brushShape"), QLatin1String("circle"));
+        if (BmpBrushTool::instance()->brushShape()
+                == BmpBrushTool::BrushShape::Custom) {
+            settings.setValue(QLatin1String("brushShape"),
+                              QLatin1String("custom"));
+            settings.setValue(QLatin1String("customBrushPath"),
+                              BmpBrushTool::instance()->customBrushPath());
+        }
         settings.setValue(QLatin1String("restrictToSelection"),
                           BmpBrushTool::instance()->restrictToSelection());
         settings.setValue(QLatin1String("fillAllInSelection"),
@@ -494,6 +957,36 @@ void BmpToolDialog::brushChanged()
 {
     int brushSize = BmpBrushTool::instance()->brushSize();
     ui->brushSize->setValue(brushSize);
+    switch (BmpBrushTool::instance()->brushShape()) {
+    case BmpBrushTool::BrushShape::Square:
+        ui->brushSquare->setChecked(true);
+        setProceduralBrushUi();
+        break;
+    case BmpBrushTool::BrushShape::Circle:
+        ui->brushCircle->setChecked(true);
+        setProceduralBrushUi();
+        break;
+    case BmpBrushTool::BrushShape::Custom: {
+        ui->brushSquare->setAutoExclusive(false);
+        ui->brushCircle->setAutoExclusive(false);
+        ui->brushSquare->setChecked(false);
+        ui->brushCircle->setChecked(false);
+        ui->brushSquare->setAutoExclusive(true);
+        ui->brushCircle->setAutoExclusive(true);
+        ui->brushSize->setEnabled(false);
+        const QString selected =
+                BmpBrushTool::instance()->customBrushPath();
+        for (int index = 1; index < mCustomBrushes->count(); ++index) {
+            if (mCustomBrushes->itemData(index).toString().compare(
+                        selected, Qt::CaseInsensitive) == 0) {
+                const QSignalBlocker blocker(mCustomBrushes);
+                mCustomBrushes->setCurrentIndex(index);
+                break;
+            }
+        }
+        break;
+    }
+    }
 }
 
 void BmpToolDialog::documentAboutToClose(int index, MapDocument *doc)
@@ -507,6 +1000,12 @@ void BmpToolDialog::warningsChanged()
     ui->warnings->clear();
     if (!mDocument)
         return;
+    if (ui->repairUnknownColors->isChecked()
+            && !mApplyingColorFallback
+            && applyUnknownColorFallback()) {
+        mDocument->mapComposite()->bmpBlender()->updateWarnings();
+        return;
+    }
     ui->warnings->addItems(mDocument->mapComposite()->bmpBlender()->warnings());
     ui->tabWidget->setTabIcon(3, ui->warnings->count()
                               ? QIcon(QLatin1String(":/images/24x24/warning.png"))
@@ -540,10 +1039,7 @@ void BmpToolDialog::setDocument(MapDocument *doc)
     ui->exportBlends->setEnabled(mDocument != nullptr);
     ui->trashBlends->setEnabled(ui->reloadBlends->isEnabled());
 
-    switch (BmpBrushTool::instance()->brushShape()) {
-    case BmpBrushTool::BrushShape::Square: ui->brushSquare->setChecked(true); break;
-    case BmpBrushTool::BrushShape::Circle: ui->brushCircle->setChecked(true); break;
-    }
+    brushChanged();
     ui->restrictToSelection->setChecked(BmpBrushTool::instance()->restrictToSelection());
     ui->fillAllInSelectedArea->setChecked(BmpBrushTool::instance()->fillAllInSelection());
     ui->showBMPTiles->setEnabled(mDocument != nullptr);
@@ -553,6 +1049,7 @@ void BmpToolDialog::setDocument(MapDocument *doc)
     if (mDocument) {
         ui->tableView->setRules(mDocument->map());
         QList<BmpRule*> rules = mDocument->map()->bmpSettings()->rules();
+        populateFallbackColors();
 
         ui->blendView->setBlends(mDocument->map());
 
@@ -591,6 +1088,140 @@ void BmpToolDialog::setDocument(MapDocument *doc)
     warningsChanged();
 }
 
+void BmpToolDialog::repairUnknownColorsToggled(bool enabled)
+{
+    ui->groundFallback->setEnabled(enabled);
+    ui->vegetationFallback->setEnabled(enabled);
+    if (!enabled || !mDocument)
+        return;
+
+    if (applyUnknownColorFallback())
+        mDocument->mapComposite()->bmpBlender()->updateWarnings();
+}
+
+void BmpToolDialog::populateFallbackColors()
+{
+    const QRgb previousMain = fallbackColor(0);
+    const QRgb previousVegetation = fallbackColor(1);
+    ui->groundFallback->clear();
+    ui->vegetationFallback->clear();
+
+    const auto addColor = [](QComboBox *combo, QRgb color,
+                             const QString &description) {
+        QPixmap swatch(18, 18);
+        swatch.fill(QColor::fromRgb(color));
+        const QString hex = QStringLiteral("#%1")
+                .arg(color & 0x00ffffff, 6, 16, QLatin1Char('0'))
+                .toUpper();
+        combo->addItem(QIcon(swatch),
+                       description.isEmpty()
+                       ? hex : QStringLiteral("%1 - %2").arg(hex, description),
+                       QVariant::fromValue<quint32>(color));
+    };
+
+    addColor(ui->groundFallback, qRgb(0, 0, 0), tr("Black / empty"));
+    addColor(ui->vegetationFallback, qRgb(0, 0, 0),
+             tr("Black / empty"));
+
+    QSet<QRgb> mainColors;
+    QSet<QRgb> vegetationColors;
+    const QList<BmpRule *> rules =
+            mDocument->map()->bmpSettings()->rules();
+    for (const BmpRule *rule : rules) {
+        QComboBox *combo = rule->bitmapIndex == 0
+                ? ui->groundFallback
+                : rule->bitmapIndex == 1
+                  ? ui->vegetationFallback : nullptr;
+        QSet<QRgb> *colors = rule->bitmapIndex == 0
+                ? &mainColors
+                : rule->bitmapIndex == 1
+                  ? &vegetationColors : nullptr;
+        if (!combo || !colors || colors->contains(rule->color))
+            continue;
+        colors->insert(rule->color);
+        addColor(combo, rule->color,
+                 rule->tileChoices.mid(0, 2).join(
+                     QStringLiteral(", ")));
+    }
+
+    const auto restoreColor = [](QComboBox *combo, QRgb color) {
+        for (int i = 0; i < combo->count(); ++i) {
+            if (combo->itemData(i).toUInt() == quint32(color)) {
+                combo->setCurrentIndex(i);
+                return;
+            }
+        }
+        combo->setCurrentIndex(0);
+    };
+    restoreColor(ui->groundFallback, previousMain);
+    restoreColor(ui->vegetationFallback, previousVegetation);
+}
+
+QRgb BmpToolDialog::fallbackColor(int bitmapIndex) const
+{
+    const QComboBox *combo = bitmapIndex == 0
+            ? ui->groundFallback : ui->vegetationFallback;
+    if (!combo || combo->currentIndex() < 0)
+        return qRgb(0, 0, 0);
+    return QRgb(combo->currentData().toUInt());
+}
+
+bool BmpToolDialog::applyUnknownColorFallback()
+{
+    if (!mDocument || mApplyingColorFallback)
+        return false;
+
+    QSet<QRgb> knownMain;
+    QSet<QRgb> knownVegetation;
+    knownMain.insert(qRgb(0, 0, 0));
+    knownVegetation.insert(qRgb(0, 0, 0));
+    for (const BmpRule *rule : mDocument->map()->bmpSettings()->rules()) {
+        if (rule->bitmapIndex == 0)
+            knownMain.insert(rule->color);
+        else if (rule->bitmapIndex == 1)
+            knownVegetation.insert(rule->color);
+    }
+
+    QImage mainImage = mDocument->map()->bmpMain().image();
+    QImage vegetationImage = mDocument->map()->bmpVeg().image();
+    int replacedMain = 0;
+    int replacedVegetation = 0;
+    const QRgb mainFallback = fallbackColor(0);
+    const QRgb vegetationFallback = fallbackColor(1);
+
+    for (int y = 0; y < mainImage.height(); ++y) {
+        for (int x = 0; x < mainImage.width(); ++x) {
+            if (!knownMain.contains(mainImage.pixel(x, y))) {
+                mainImage.setPixel(x, y, mainFallback);
+                ++replacedMain;
+            }
+        }
+    }
+    for (int y = 0; y < vegetationImage.height(); ++y) {
+        for (int x = 0; x < vegetationImage.width(); ++x) {
+            if (!knownVegetation.contains(vegetationImage.pixel(x, y))) {
+                vegetationImage.setPixel(x, y, vegetationFallback);
+                ++replacedVegetation;
+            }
+        }
+    }
+
+    if (replacedMain == 0 && replacedVegetation == 0)
+        return false;
+
+    mApplyingColorFallback = true;
+    mDocument->undoStack()->push(new ReplaceUnknownBmpPixels(
+        mDocument, mainImage, vegetationImage));
+    mApplyingColorFallback = false;
+    qInfo() << "BMP color fallback replaced"
+            << replacedMain << "Main pixel(s) with"
+            << QColor::fromRgb(mainFallback).name(QColor::HexRgb)
+            << "and" << replacedVegetation
+            << "Vegetation pixel(s) with"
+            << QColor::fromRgb(vegetationFallback).name(QColor::HexRgb);
+    return true;
+}
+
 void BmpToolDialog::changeBmpRules(MapDocument *doc, const QString &fileName,
                                    const QList<BmpAlias *> &aliases,
                                    const QList<BmpRule *> &rules)
@@ -622,11 +1253,13 @@ void BmpToolDialog::brushSizeChanged(int size)
 
 void BmpToolDialog::brushSquare()
 {
+    setProceduralBrushUi();
     BmpBrushTool::instance()->setBrushShape(BmpBrushTool::BrushShape::Square);
 }
 
 void BmpToolDialog::brushCircle()
 {
+    setProceduralBrushUi();
     BmpBrushTool::instance()->setBrushShape(BmpBrushTool::BrushShape::Circle);
 }
 

@@ -35,6 +35,7 @@
 #include "BuildingEditor/buildingfloor.h"
 #include <QDebug>
 #include <QDir>
+#include <QDirIterator>
 #include <QImageReader>
 #include <QMetaType>
 #include <QScopedPointer>
@@ -248,11 +249,10 @@ void TilesetManager::tilesetDirectoryChanged()
     QStringList directories = { rootPath, path2x };
     const QStringList roots = directories;
     for (const QString &path : roots) {
-        const QDir directory(path);
-        const QFileInfoList children = directory.entryInfoList(
-                    QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const QFileInfo &child : children)
-            directories += child.absoluteFilePath();
+        QDirIterator iterator(path, QDir::Dirs | QDir::NoDotAndDotDot,
+                              QDirIterator::Subdirectories);
+        while (iterator.hasNext())
+            directories += QFileInfo(iterator.next()).absoluteFilePath();
     }
     directories.removeAll(QString());
     directories.removeDuplicates();
@@ -290,6 +290,46 @@ bool TilesetManager::getTilesetFileName(const QString &tilesetName, QString &pat
         mTilesetPaths[tilesetName] = paths;
         return true;
     }
+
+    auto findImage = [&fileName](const QDir &root,
+                                 const QString &excludedTree = QString()) {
+        QStringList candidates;
+        const QString excludedPrefix = excludedTree.isEmpty()
+                ? QString()
+                : QDir::cleanPath(QFileInfo(excludedTree).absoluteFilePath())
+                  + QDir::separator();
+        QDirIterator iterator(root.absolutePath(),
+                              QStringList() << fileName,
+                              QDir::Files,
+                              QDirIterator::Subdirectories);
+        while (iterator.hasNext()) {
+            const QString candidate =
+                    QDir::cleanPath(QFileInfo(iterator.next())
+                                    .absoluteFilePath());
+            if (!excludedPrefix.isEmpty()
+                    && candidate.startsWith(
+                        excludedPrefix, Qt::CaseInsensitive)) {
+                continue;
+            }
+            if (QImageReader(candidate).size().isValid())
+                candidates += candidate;
+        }
+        candidates.sort(Qt::CaseInsensitive);
+        return candidates.isEmpty() ? QString() : candidates.first();
+    };
+
+    const QString nested2x = findImage(dir2x);
+    if (!nested2x.isEmpty()) {
+        const QString relative = dir2x.relativeFilePath(nested2x);
+        path1x = dir1x.filePath(relative);
+        path2x = nested2x;
+        paths.bValid = true;
+        paths.path1x = path1x;
+        paths.path2x = path2x;
+        mTilesetPaths[tilesetName] = paths;
+        return true;
+    }
+
     if (QImageReader(path1x).size().isValid()) {
         paths.bValid = true;
         paths.path1x = path1x;
@@ -298,34 +338,17 @@ bool TilesetManager::getTilesetFileName(const QString &tilesetName, QString &pat
         return true;
     }
 
-    QFileInfoList infoList = dir2x.entryInfoList(QDir::AllDirs | QDir::NoDotAndDotDot);
-    for (const QFileInfo &dirInfo : qAsConst(infoList)) {
-        QDir dir = QDir(dirInfo.filePath());
-        QString try2x = dir.filePath(fileName);
-        if (QImageReader(try2x).size().isValid()) {
-            path1x = QDir(dir1x.filePath(dirInfo.fileName())).filePath(fileName);
-            path2x = try2x;
-            paths.bValid = true;
-            paths.path1x = path1x;
-            paths.path2x = path2x;
-            mTilesetPaths[tilesetName] = paths;
-            return true;
-        }
-    }
-
-    infoList = dir1x.entryInfoList(QDir::AllDirs | QDir::NoDotAndDotDot);
-    for (const QFileInfo &dirInfo : qAsConst(infoList)) {
-        QDir dir = QDir(dirInfo.filePath());
-        QString try1x = dir.filePath(fileName);
-        if (QImageReader(try1x).size().isValid()) {
-            path1x = try1x;
-            path2x = QDir(dir2x.filePath(dirInfo.fileName())).filePath(fileName);
-            paths.bValid = true;
-            paths.path1x = path1x;
-            paths.path2x = path2x;
-            mTilesetPaths[tilesetName] = paths;
-            return true;
-        }
+    const QString nested1x =
+            findImage(dir1x, dir2x.absolutePath());
+    if (!nested1x.isEmpty()) {
+        const QString relative = dir1x.relativeFilePath(nested1x);
+        path1x = nested1x;
+        path2x = dir2x.filePath(relative);
+        paths.bValid = true;
+        paths.path1x = path1x;
+        paths.path2x = path2x;
+        mTilesetPaths[tilesetName] = paths;
+        return true;
     }
 
     return false;
@@ -540,8 +563,11 @@ void TilesetManager::loadTileset(Tileset *tileset, const QString &imageSource_)
     if (Tileset *cached = mTilesetImageCache->findMatch(
                 tileset, imageSource, imageSource2x)) {
         if (cached->isLoaded()) {
-            tileset->loadFromCache(cached);
-            tileset->setMissing(false);
+            {
+                QWriteLocker imageWriteLock(&tilesetImageLock());
+                tileset->loadFromCache(cached);
+                tileset->setMissing(false);
+            }
             copyPZProperties(cached, tileset);
             emit tilesetChanged(tileset);
         } else {
@@ -562,10 +588,13 @@ void TilesetManager::loadTileset(Tileset *tileset, const QString &imageSource_)
         cachePZProperties(cached);
         imageLoaded(new QImage(imageSource), cached);
     } else {
-        if (tileset->tileHeight() == mMissingTile->height()
-                && tileset->tileWidth() == mMissingTile->width()) {
-            for (int i = 0; i < tileset->tileCount(); i++)
-                tileset->tileAt(i)->setImage(mMissingTile);
+        {
+            QWriteLocker imageWriteLock(&tilesetImageLock());
+            if (tileset->tileHeight() == mMissingTile->height()
+                    && tileset->tileWidth() == mMissingTile->width()) {
+                for (int i = 0; i < tileset->tileCount(); i++)
+                    tileset->tileAt(i)->setImage(mMissingTile);
+            }
         }
         changeTilesetSource(tileset, imageSource, true);
         tileset->setImageSource2x(QString());

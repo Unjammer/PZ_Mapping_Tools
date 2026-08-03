@@ -88,6 +88,7 @@
 #include <QMessageBox>
 #include <QPixmap>
 #include <QShowEvent>
+#include <QSignalBlocker>
 #include <QSplitter>
 //#include <QStackedWidget>
 #include <QStatusBar>
@@ -539,6 +540,57 @@ BuildingEditorWindow::BuildingEditorWindow(QWidget *parent) :
             prefs, &BuildingPreferences::setHighlightUnlitRooms);
     connect(prefs, &BuildingPreferences::highlightUnlitRoomsChanged,
             this, &BuildingEditorWindow::highlightUnlitRoomsChanged);
+
+    mNightPreviewAction = new QAction(tr("Night Preview"), this);
+    mNightPreviewAction->setCheckable(true);
+    mNightPreviewAction->setToolTip(
+                tr("Dim the building and preview tiledef lights and powered rooms"));
+    mSettings.setValue(QLatin1String("NightPreview/Enabled"), false);
+    mNightPreviewAction->setChecked(false);
+    // This preview is intentionally hidden until it can match the game's
+    // lighting renderer instead of approximating it with circular glows.
+    mNightPreviewAction->setVisible(false);
+    mNightPreviewAction->setEnabled(false);
+    ui->menuView->addSeparator();
+    ui->menuView->addAction(mNightPreviewAction);
+    QToolButton *nightPreviewButton = new QToolButton(this);
+    nightPreviewButton->setCheckable(true);
+    nightPreviewButton->setText(tr("DAY"));
+    nightPreviewButton->setToolTip(
+                tr("Toggle day/night and tiledef lighting preview"));
+    nightPreviewButton->setAutoRaise(false);
+    nightPreviewButton->setVisible(false);
+    nightPreviewButton->setStyleSheet(QStringLiteral(
+        "QToolButton { padding: 2px 7px; border: 1px solid #68717d;"
+        " border-radius: 4px; font-weight: bold; }"
+        "QToolButton:checked { border: 2px solid #76c7ff;"
+        " background: #235c84; color: white; }"));
+    statusBar()->addPermanentWidget(nightPreviewButton);
+    connect(nightPreviewButton, &QToolButton::toggled,
+            mNightPreviewAction, &QAction::setChecked);
+    connect(mNightPreviewAction, &QAction::toggled,
+            nightPreviewButton, [nightPreviewButton](bool enabled) {
+        const QSignalBlocker blocker(nightPreviewButton);
+        nightPreviewButton->setChecked(enabled);
+        nightPreviewButton->setText(enabled
+                                    ? QObject::tr("NIGHT")
+                                    : QObject::tr("DAY"));
+    });
+    connect(mNightPreviewAction, &QAction::toggled, this,
+            [this](bool enabled) {
+        mSettings.setValue(QLatin1String("NightPreview/Enabled"), enabled);
+        for (EditorWindowPerDocumentStuff *stuff :
+             qAsConst(mDocumentStuff)) {
+            const QList<BuildingIsoView*> views = {
+                stuff->isoView(), stuff->tileView(),
+                stuff->attributeView()
+            };
+            for (BuildingIsoView *view : views) {
+                if (view && view->scene())
+                    view->scene()->setNightPreviewEnabled(enabled);
+            }
+        }
+    });
 
     QList<QKeySequence> keys = QKeySequence::keyBindings(QKeySequence::ZoomIn);
     keys += QKeySequence(tr("Ctrl+="));
@@ -1335,6 +1387,19 @@ void BuildingEditorWindow::currentDocumentChanged(BuildingDocument *doc)
 
     mCurrentDocument = doc;
     mCurrentDocumentStuff = doc ? mDocumentStuff[doc] : nullptr; // FIXME: unset when deleted
+
+    if (mCurrentDocumentStuff && mNightPreviewAction) {
+        const bool enabled = mNightPreviewAction->isChecked();
+        const QList<BuildingIsoView*> views = {
+            mCurrentDocumentStuff->isoView(),
+            mCurrentDocumentStuff->tileView(),
+            mCurrentDocumentStuff->attributeView()
+        };
+        for (BuildingIsoView *view : views) {
+            if (view && view->scene())
+                view->scene()->setNightPreviewEnabled(enabled);
+        }
+    }
 
     if (mCurrentDocument) {
         IMode *mode = 0;

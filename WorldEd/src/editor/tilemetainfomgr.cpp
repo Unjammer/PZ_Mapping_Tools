@@ -21,6 +21,7 @@
 #include "preferences.h"
 #include "simplefile.h"
 #include "tilesetmanager.h"
+#include "tilesetimagelock.h"
 #include "tilesetstxtfile.h"
 
 #include "tile.h"
@@ -28,9 +29,11 @@
 
 #include <QDebug>
 #include <QDir>
+#include <QDirIterator>
 #include <QImage>
 #include <QImageReader>
 #include <QSet>
+#include <QWriteLocker>
 
 using namespace Tiled;
 using namespace Tiled::Internal;
@@ -41,6 +44,38 @@ static int recoverSingleRowColumnCount(Tiled::Tileset *tileset)
 {
     if (tileset->columnCount() > 0 || tileset->tileCount() <= 0)
         return tileset->columnCount();
+
+    // Prefer geometry already carried by the Tileset. This remains available
+    // when a portable install was moved or its PNG is temporarily
+    // unavailable, and avoids rejecting a perfectly valid 8x1 sheet merely
+    // because its legacy catalogue entry stored zero columns.
+    if (tileset->imageWidth() > 0 && tileset->imageHeight() > 0) {
+        QList<int> scales;
+        scales += tileset->imageSource2x().isEmpty() ? 1 : 2;
+        scales += scales.first() == 1 ? 2 : 1;
+        for (int scale : std::as_const(scales)) {
+            const int spacing = tileset->tileSpacing() * scale;
+            const int margin = tileset->margin() * scale;
+            const int tileWidth = tileset->tileWidth() * scale;
+            const int tileHeight = tileset->tileHeight() * scale;
+            const int columns =
+                    (tileset->imageWidth() - margin + spacing)
+                    / (tileWidth + spacing);
+            const int rows =
+                    (tileset->imageHeight() - margin + spacing)
+                    / (tileHeight + spacing);
+            if (rows == 1 && columns == tileset->tileCount()) {
+                tileset->setColumnCount(columns);
+                qInfo() << "Recovered single-row tileset geometry"
+                        << tileset->name() << columns
+                        << "columns, 1 row from stored image geometry"
+                        << QSize(tileset->imageWidth(),
+                                 tileset->imageHeight())
+                        << "scale" << scale;
+                return columns;
+            }
+        }
+    }
 
     QString path1x;
     QString path2x;
@@ -60,7 +95,7 @@ static int recoverSingleRowColumnCount(Tiled::Tileset *tileset)
     }
 
     QSet<QString> checked;
-    for (const QPair<QString, int> &candidate : qAsConst(candidates)) {
+    for (const QPair<QString, int> &candidate : std::as_const(candidates)) {
         const QString path = QDir::cleanPath(candidate.first);
         const QString key = path.toLower()
                 + QLatin1Char('|') + QString::number(candidate.second);
@@ -75,14 +110,14 @@ static int recoverSingleRowColumnCount(Tiled::Tileset *tileset)
         if (!imageSize.isValid() || tileWidth <= 0 || tileHeight <= 0)
             continue;
 
+        const int spacing = tileset->tileSpacing() * scale;
+        const int margin = tileset->margin() * scale;
         const int columns =
-                (imageSize.width() - tileset->margin()
-                 + tileset->tileSpacing())
-                / (tileWidth + tileset->tileSpacing());
+                (imageSize.width() - margin + spacing)
+                / (tileWidth + spacing);
         const int rows =
-                (imageSize.height() - tileset->margin()
-                 + tileset->tileSpacing())
-                / (tileHeight + tileset->tileSpacing());
+                (imageSize.height() - margin + spacing)
+                / (tileHeight + spacing);
         if (rows == 1 && columns == tileset->tileCount()) {
             tileset->setColumnCount(columns);
             qInfo() << "Recovered single-row tileset geometry"
@@ -648,10 +683,15 @@ bool TileMetaInfoMgr::addNewTilesets(bool loadImages)
         addFiles(directory);
         if (!scanChildren)
             return;
-        const QFileInfoList children = directory.entryInfoList(
-                    QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-        for (const QFileInfo &child : children)
-            addFiles(QDir(child.absoluteFilePath()));
+
+        // Custom packs are allowed to keep their original directory layout.
+        // Discover every readable PNG below the selected scale root instead
+        // of limiting the catalogue to one arbitrary nesting level.
+        QDirIterator iterator(directory.absolutePath(),
+                              QDir::Dirs | QDir::NoDotAndDotDot,
+                              QDirIterator::Subdirectories);
+        while (iterator.hasNext())
+            addFiles(QDir(iterator.next()));
     };
 
     const QString rootPath = tilesDirectory();
@@ -661,7 +701,7 @@ bool TileMetaInfoMgr::addNewTilesets(bool loadImages)
     for (const QFileInfo &child : rootChildren) {
         if (child.fileName().compare(
                     QLatin1String("2x"), Qt::CaseInsensitive) != 0) {
-            scanDirectory(child.absoluteFilePath(), 1, false);
+            scanDirectory(child.absoluteFilePath(), 1, true);
         }
     }
     scanDirectory(tiles2xDirectory(), 2, true);
@@ -956,23 +996,37 @@ void TileMetaInfoMgr::resolveTilesets(const QList<Tileset *> &tilesets)
         QImageReader reader2x(imageSource2x);
         QImageReader reader1x(imageSource);
         if (reader2x.size().isValid()) {
-            ts->loadFromNothing(reader2x.size() / 2, imageSource);
-            ts->setImageSource2x(imageSource2x);
+            {
+                QWriteLocker imageWriteLock(&tilesetImageLock());
+                ts->loadFromNothing(
+                            reader2x.size() / 2, imageSource);
+                ts->setImageSource2x(imageSource2x);
+            }
             TilesetManager::instance()->changeTilesetSource(
                         ts, imageSource, false);
         } else if (reader1x.size().isValid()) {
             const QString canonicalPath =
                     QFileInfo(imageSource).canonicalFilePath();
-            ts->loadFromNothing(reader1x.size(), canonicalPath);
-            ts->setImageSource2x(QString());
+            {
+                QWriteLocker imageWriteLock(&tilesetImageLock());
+                ts->loadFromNothing(
+                            reader1x.size(), canonicalPath);
+                ts->setImageSource2x(QString());
+            }
             TilesetManager::instance()->changeTilesetSource(
                         ts, canonicalPath, false);
         } else {
-            Tile *missingTile = TilesetManager::instance()->missingTile();
-            for (int index = 0; index < ts->tileCount(); ++index)
-                ts->tileAt(index)->setImage(missingTile);
-            ts->setImage(QImage());
-            ts->setImageSource2x(QString());
+            {
+                QWriteLocker imageWriteLock(&tilesetImageLock());
+                Tile *missingTile =
+                        TilesetManager::instance()->missingTile();
+                for (int index = 0;
+                     index < ts->tileCount(); ++index) {
+                    ts->tileAt(index)->setImage(missingTile);
+                }
+                ts->setImage(QImage());
+                ts->setImageSource2x(QString());
+            }
             TilesetManager::instance()->changeTilesetSource(
                         ts, imageSource, true);
         }

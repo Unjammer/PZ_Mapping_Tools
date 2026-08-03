@@ -28,6 +28,7 @@
 #include <QDir>
 #include <QFile>
 #include <QImageReader>
+#include <QSaveFile>
 
 using namespace Tiled;
 using namespace Tiled::Internal;
@@ -56,6 +57,9 @@ static QString ReadString(QDataStream &in)
 #define VERSION0 0
 #define VERSION1 1
 #define VERSION_LATEST VERSION1
+
+static const int MAX_RECOVERABLE_TILESETS = 8192;
+static const qint64 MAX_RECOVERABLE_TOTAL_TILES = 8 * 1024 * 1024;
 
 bool TileDefFile::read(const QString &fileName)
 {
@@ -93,20 +97,23 @@ bool TileDefFile::read(const QString &fileName)
     int numTilesets;
     in >> numTilesets;
     const bool gameVersion1 = version == VERSION1;
-    const bool primaryDefinitions = QFileInfo(fileName).fileName().compare(
-                QLatin1String("newtiledefinitions.tiles"),
-                Qt::CaseInsensitive) == 0;
-    const int maxTilesets = primaryDefinitions ? 1024 : 512;
-    const int maxTiles = primaryDefinitions ? 1024 : 512;
-    if (gameVersion1 && (numTilesets < 0 || numTilesets > maxTilesets)) {
-        mError = tr("Invalid number of tilesets %1 (expected 0-%2).\n%3")
-                .arg(numTilesets).arg(maxTilesets).arg(fileName);
+    if (numTilesets < 0 || numTilesets > MAX_RECOVERABLE_TILESETS) {
+        mError = tr("Invalid or unsafe number of tilesets %1 "
+                    "(recovery limit is %2).\n%3")
+                .arg(numTilesets).arg(MAX_RECOVERABLE_TILESETS).arg(fileName);
         return false;
     }
+    qint64 totalTileCount = 0;
     for (int i = 0; i < numTilesets; i++) {
         TileDefTileset *ts = new TileDefTileset;
         ts->mName = ReadString(in);
         ts->mImageSource = ReadString(in); // no path, just file + extension
+        if (ts->mName.isEmpty() || mTilesetByName.contains(ts->mName)) {
+            mError = tr("Invalid or duplicate tileset name \"%1\".\n%2")
+                    .arg(ts->mName, fileName);
+            delete ts;
+            return false;
+        }
         qint32 columns, rows;
         in >> columns;
         in >> rows;
@@ -118,10 +125,11 @@ bool TileDefFile::read(const QString &fileName)
         qint32 tileCount;
         in >> tileCount;
         const qint64 imageTileCount = qint64(columns) * qint64(rows);
+        totalTileCount += qMax<qint64>(0, imageTileCount);
         if (columns < 0 || rows < 0 || imageTileCount > 1024 * 1024
                 || tileCount < 0 || tileCount > imageTileCount
-                || (gameVersion1 && (id < 1 || id > maxTilesets
-                                     || tileCount > maxTiles))) {
+                || totalTileCount > MAX_RECOVERABLE_TOTAL_TILES
+                || (gameVersion1 && id < 1)) {
             mError = tr("Invalid dimensions, ID, or tile count in tileset "
                         "\"%1\" (%2x%3, ID %4, %5 tiles).\n%6")
                     .arg(ts->mName).arg(columns).arg(rows).arg(id)
@@ -157,6 +165,15 @@ bool TileDefFile::read(const QString &fileName)
         insertTileset(mTilesets.size(), ts);
     }
 
+    if (in.status() != QDataStream::Ok) {
+        mError = tr("Unexpected end of file or corrupt tile-definition "
+                    "data.\n%1").arg(fileName);
+        qDeleteAll(mTilesets);
+        mTilesets.clear();
+        mTilesetByName.clear();
+        return false;
+    }
+
     mFileName = fileName;
 
     return true;
@@ -171,7 +188,55 @@ static void SaveString(QDataStream& out, const QString& str)
 
 bool TileDefFile::write(const QString &fileName)
 {
-    QFile file(fileName);
+    return write(fileName, inferredTargetFormat(fileName));
+}
+
+bool TileDefFile::write(const QString &fileName, TargetFormat target)
+{
+    return writeTilesets(fileName, mTilesets, target);
+}
+
+bool TileDefFile::writeTilesets(
+        const QString &fileName,
+        const QList<TileDefTileset *> &tilesets,
+        TargetFormat target,
+        const QMap<QString, int> &idOverrides)
+{
+    const int maxTilesets = maximumTilesets(target);
+    const int maxTiles = maximumTilesPerTileset(target);
+    if (tilesets.size() > maxTilesets) {
+        mError = tr("%1 contains %2 tilesets; the selected format allows "
+                    "at most %3.")
+                .arg(fileName).arg(tilesets.size()).arg(maxTilesets);
+        return false;
+    }
+
+    QSet<int> usedIDs;
+    for (TileDefTileset *tileset : tilesets) {
+        const int id = idOverrides.value(tileset->mName, tileset->mID);
+        if (id < 1 || id > maxTilesets) {
+            mError = tr("Tileset \"%1\" has ID %2; the selected format "
+                        "allows IDs from 1 to %3.")
+                    .arg(tileset->mName).arg(id).arg(maxTilesets);
+            return false;
+        }
+        if (usedIDs.contains(id)) {
+            mError = tr("Tileset ID %1 is used more than once. Reassign the "
+                        "IDs before saving.").arg(id);
+            return false;
+        }
+        usedIDs.insert(id);
+        if (tileset->mTiles.size() > maxTiles) {
+            mError = tr("Tileset \"%1\" contains %2 tiles; the selected "
+                        "format allows at most %3 tiles per tileset.")
+                    .arg(tileset->mName)
+                    .arg(tileset->mTiles.size())
+                    .arg(maxTiles);
+            return false;
+        }
+    }
+
+    QSaveFile file(fileName);
     if (!file.open(QIODevice::WriteOnly)) {
         mError = tr("Error opening file for writing.\n%1").arg(fileName);
         return false;
@@ -183,13 +248,13 @@ bool TileDefFile::write(const QString &fileName)
     out << quint8('t') << quint8('d') << quint8('e') << quint8('f');
     out << qint32(VERSION_LATEST);
 
-    out << qint32(mTilesets.size());
-    foreach (TileDefTileset *ts, mTilesets) {
+    out << qint32(tilesets.size());
+    foreach (TileDefTileset *ts, tilesets) {
         SaveString(out, ts->mName);
         SaveString(out, ts->mImageSource); // no path, just file + extension
         out << qint32(ts->mColumns);
         out << qint32(ts->mRows);
-        out << qint32(ts->mID);
+        out << qint32(idOverrides.value(ts->mName, ts->mID));
         out << qint32(ts->mTiles.size());
         foreach (TileDefTile *tile, ts->mTiles) {
             QMap<QString,QString> &properties = tile->mProperties;
@@ -202,6 +267,142 @@ bool TileDefFile::write(const QString &fileName)
         }
     }
 
+    if (out.status() != QDataStream::Ok || !file.commit()) {
+        mError = tr("Error committing tile-definition file.\n%1")
+                .arg(fileName);
+        return false;
+    }
+    return true;
+}
+
+TileDefFile::TargetFormat TileDefFile::inferredTargetFormat(
+        const QString &fileName)
+{
+    return QFileInfo(fileName).fileName().compare(
+                QLatin1String("newtiledefinitions.tiles"),
+                Qt::CaseInsensitive) == 0
+            ? BaseGameFormat
+            : ModFormat;
+}
+
+int TileDefFile::maximumTilesets(TargetFormat target)
+{
+    return target == BaseGameFormat
+            ? MAX_TILESET_ID_GAME
+            : MAX_TILESET_ID_MODS;
+}
+
+int TileDefFile::maximumTilesPerTileset(TargetFormat target)
+{
+    return target == BaseGameFormat
+            ? MAX_TILES_PER_TILESET_GAME
+            : MAX_TILES_PER_TILESET_MODS;
+}
+
+bool TileDefFile::validate(TargetFormat target, QString *error) const
+{
+    QStringList problems;
+    const int maxTilesets = maximumTilesets(target);
+    const int maxTiles = maximumTilesPerTileset(target);
+    if (mTilesets.size() > maxTilesets) {
+        problems += tr("%1 tilesets are present; the limit is %2.")
+                .arg(mTilesets.size()).arg(maxTilesets);
+    }
+
+    QSet<int> usedIDs;
+    for (TileDefTileset *tileset : mTilesets) {
+        if (tileset->mID < 1 || tileset->mID > maxTilesets) {
+            problems += tr("%1 has ID %2; the valid range is 1-%3.")
+                    .arg(tileset->mName)
+                    .arg(tileset->mID)
+                    .arg(maxTilesets);
+        } else if (usedIDs.contains(tileset->mID)) {
+            problems += tr("ID %1 is assigned more than once.")
+                    .arg(tileset->mID);
+        }
+        usedIDs.insert(tileset->mID);
+        if (tileset->mTiles.size() > maxTiles) {
+            problems += tr("%1 contains %2 tiles; the per-tileset limit is %3.")
+                    .arg(tileset->mName)
+                    .arg(tileset->mTiles.size())
+                    .arg(maxTiles);
+        }
+        if (problems.size() >= 12) {
+            problems += tr("Additional errors were omitted.");
+            break;
+        }
+    }
+
+    if (error)
+        *error = problems.join(QLatin1Char('\n'));
+    return problems.isEmpty();
+}
+
+QStringList TileDefFile::modSeriesFileNames(const QString &fileName) const
+{
+    const int partCount = qMax(
+                1, (mTilesets.size() + MAX_TILESET_ID_MODS - 1)
+                / MAX_TILESET_ID_MODS);
+    if (partCount == 1)
+        return QStringList() << fileName;
+
+    const QFileInfo info(fileName);
+    const QDir directory = info.absoluteDir();
+    QString baseName = info.completeBaseName();
+    if (baseName.isEmpty())
+        baseName = QStringLiteral("tiledefinitions");
+    QStringList result;
+    for (int part = 1; part <= partCount; ++part) {
+        result += directory.filePath(
+                    QStringLiteral("%1_%2.tiles")
+                    .arg(baseName).arg(part));
+    }
+    return result;
+}
+
+bool TileDefFile::writeModSeries(const QString &fileName,
+                                 QStringList *writtenFiles)
+{
+    if (writtenFiles)
+        writtenFiles->clear();
+
+    for (TileDefTileset *tileset : std::as_const(mTilesets)) {
+        if (tileset->mTiles.size() > MAX_TILES_PER_TILESET_MODS) {
+            mError = tr("Tileset \"%1\" contains %2 tiles. Splitting a "
+                        "tile-definition file cannot split a PNG sheet; "
+                        "this sheet must first be divided into sheets of at "
+                        "most %3 tiles.")
+                    .arg(tileset->mName)
+                    .arg(tileset->mTiles.size())
+                    .arg(MAX_TILES_PER_TILESET_MODS);
+            return false;
+        }
+    }
+
+    const QStringList outputNames = modSeriesFileNames(fileName);
+    for (int part = 0; part < outputNames.size(); ++part) {
+        const int first = part * MAX_TILESET_ID_MODS;
+        const int count = qMin(MAX_TILESET_ID_MODS,
+                               mTilesets.size() - first);
+        const QList<TileDefTileset*> subset =
+                mTilesets.mid(first, qMax(0, count));
+        QMap<QString,int> ids;
+        for (int index = 0; index < subset.size(); ++index)
+            ids.insert(subset.at(index)->mName, index + 1);
+
+        const QString outputName = outputNames.at(part);
+        if (!writeTilesets(outputName, subset, ModFormat, ids))
+            return false;
+
+        TileDefTextFile textFile;
+        if (!textFile.write(outputName + QLatin1String(".txt"),
+                            subset, ids)) {
+            mError = textFile.errorString();
+            return false;
+        }
+        if (writtenFiles)
+            writtenFiles->append(outputName);
+    }
     return true;
 }
 

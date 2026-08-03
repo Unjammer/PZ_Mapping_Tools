@@ -281,6 +281,8 @@ Preferences::Preferences()
     // them automatically for a new portable installation.
     mShowInvisibleTiles = mSettings->value(QLatin1String("ShowInvisibleTiles"), false).toBool();
     mTheme = mSettings->value(QLatin1String("Theme"), QLatin1String("Default")).toString();
+    if (PortableSettings::syncThemeAcrossApplications())
+        mTheme = PortableSettings::sharedTheme(mTheme);
     mSettings->endGroup();
 
     mSettings->beginGroup(QLatin1String("MapsDirectory"));
@@ -816,10 +818,14 @@ void Preferences::setShowInvisibleTiles(bool show)
 void Preferences::setTheme(const QString &theme)
 {
     if (mTheme == theme) {
+        if (PortableSettings::syncThemeAcrossApplications())
+            PortableSettings::setThemeForAllApplications(theme);
         return;
     }
     mTheme = theme;
     applyTheme();
+    if (PortableSettings::syncThemeAcrossApplications())
+        PortableSettings::setThemeForAllApplications(theme);
 }
 
 QStringList Preferences::availableThemes() const

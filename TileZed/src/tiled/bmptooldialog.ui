@@ -433,6 +433,40 @@ This is a permanent per-map setting.</string>
         </widget>
        </item>
        <item row="1" column="0">
+        <widget class="QCheckBox" name="repairUnknownColors">
+         <property name="toolTip">
+          <string>During the color check, replace every pixel that is not present in the Rules palette. The change is undoable.</string>
+         </property>
+         <property name="text">
+          <string>Replace unknown pixels during color check</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <layout class="QFormLayout" name="fallbackColorsLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="groundFallbackLabel">
+           <property name="text">
+            <string>Main fallback:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QComboBox" name="groundFallback"/>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="vegetationFallbackLabel">
+           <property name="text">
+            <string>Vegetation fallback:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QComboBox" name="vegetationFallback"/>
+         </item>
+        </layout>
+       </item>
+       <item row="3" column="0">
         <layout class="QHBoxLayout" name="horizontalLayout_4">
          <item>
           <widget class="QToolButton" name="help">

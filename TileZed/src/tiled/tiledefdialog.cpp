@@ -37,12 +37,14 @@
 #include "tileset.h"
 
 #include <QCloseEvent>
+#include <QActionGroup>
 #include <QDesktopServices>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QImageReader>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QMenu>
 #include <QProxyStyle>
 #include <QScrollBar>
 #include <QSettings>
@@ -304,9 +306,41 @@ TileDefDialog::TileDefDialog(QWidget *parent) :
     mClipboard(new TilePropertyClipboard),
     mTilesetHistoryIndex(0),
     mUndoGroup(new QUndoGroup(this)),
-    mUndoStack(new QUndoStack(this))
+    mUndoStack(new QUndoStack(this)),
+    mModTargetAction(nullptr),
+    mBaseGameTargetAction(nullptr),
+    mSplitForB42ModsAction(nullptr),
+    mBaseGameTarget(false)
 {
     ui->setupUi(this);
+
+    QMenu *targetMenu = new QMenu(tr("Target Format"), this);
+    QActionGroup *targetGroup = new QActionGroup(this);
+    targetGroup->setExclusive(true);
+    mModTargetAction = targetMenu->addAction(
+                tr("B42 Mod Tiledefs (512 x 512)"));
+    mBaseGameTargetAction = targetMenu->addAction(
+                tr("Base Game File #1 (1024 x 1024)"));
+    mModTargetAction->setCheckable(true);
+    mBaseGameTargetAction->setCheckable(true);
+    targetGroup->addAction(mModTargetAction);
+    targetGroup->addAction(mBaseGameTargetAction);
+    mModTargetAction->setChecked(true);
+    ui->menuFile->insertMenu(ui->actionReassignTilesetIDs, targetMenu);
+
+    mSplitForB42ModsAction = new QAction(
+                tr("Repair / Split for B42 Mods..."), this);
+    mSplitForB42ModsAction->setToolTip(tr(
+                "Reassign IDs to 1-512 and split oversized definitions into "
+                "numbered .tiles files."));
+    ui->menuFile->insertAction(
+                ui->actionTilesDirectory, mSplitForB42ModsAction);
+    connect(mModTargetAction, &QAction::triggered,
+            this, [this]() { setBaseGameTarget(false); });
+    connect(mBaseGameTargetAction, &QAction::triggered,
+            this, [this]() { setBaseGameTarget(true); });
+    connect(mSplitForB42ModsAction, &QAction::triggered,
+            this, &TileDefDialog::splitForB42Mods);
 
     QProxyStyle* style = new MyProxyStyle(qApp->style());
 
@@ -589,7 +623,20 @@ TileDefDialog::~TileDefDialog()
 }
 
 void TileDefDialog::addTileset()
-{ 
+{
+    if (!mTileDefFile)
+        return;
+    if (mTileDefFile->tilesets().size() >= maximumTilesetID()) {
+        QMessageBox::warning(
+                    this, tr("Tile Definition Limit"),
+                    tr("The selected target format allows at most %1 "
+                       "tilesets. Remove a tileset, choose the base-game "
+                       "format when appropriate, or use Repair / Split for "
+                       "B42 Mods.")
+                    .arg(maximumTilesetID()));
+        return;
+    }
+
     AddTilesetsDialog dialog(tilesDir(),
                              mTileDefFile->tilesetNames(),
                              false,
@@ -602,7 +649,30 @@ void TileDefDialog::addTileset()
     foreach (QString fileName, dialog.fileNames()) {
         if (Tiled::Tileset *ts = loadTileset(fileName)) {
             TileDefTileset *defTileset = new TileDefTileset(ts);
-            defTileset->mID = uniqueTilesetID();
+            if (defTileset->mTiles.size() > maximumTilesPerTileset()) {
+                QMessageBox::warning(
+                            this, tr("Tileset Too Large"),
+                            tr("Tileset \"%1\" contains %2 tiles. The selected "
+                               "target format allows at most %3 tiles in one "
+                               "tileset.")
+                            .arg(defTileset->mName)
+                            .arg(defTileset->mTiles.size())
+                            .arg(maximumTilesPerTileset()));
+                delete defTileset;
+                delete ts;
+                continue;
+            }
+            const int id = uniqueTilesetID();
+            if (id < 1) {
+                QMessageBox::warning(
+                            this, tr("Tile Definition Limit"),
+                            tr("No free tileset ID remains in the selected "
+                               "target format."));
+                delete defTileset;
+                delete ts;
+                break;
+            }
+            defTileset->mID = id;
             mUndoStack->push(new AddTileset(this, mTilesets.size(), ts, defTileset));
         } else {
             QMessageBox::warning(this, tr("Tile Definitions Error"), mError);
@@ -728,6 +798,9 @@ void TileDefDialog::fileNew()
 
     mTileDefFile = new TileDefFile;
     mTileDefFile->setFileName(fileName);
+    setBaseGameTarget(
+                TileDefFile::inferredTargetFormat(fileName)
+                == TileDefFile::BaseGameFormat);
 
     initStringComboBoxValues();
     setTilesetList();
@@ -1371,11 +1444,94 @@ void TileDefDialog::tilesetBackgroundColorChanged(const QColor &color)
 
 void TileDefDialog::reassignTilesetIDs()
 {
-    QMessageBox::StandardButton result = QMessageBox::question(this, tr("Reassign Tileset IDs"), tr("This will assign new tileset IDs in alphabetical order.\nThis will break savefile compatibility.\nReassign tileset IDs now?"));
+    if (!mTileDefFile)
+        return;
+    if (mTileDefFile->tilesets().size() > maximumTilesetID()) {
+        QMessageBox::warning(
+                    this, tr("Tile Definition Limit"),
+                    tr("This file contains %1 tilesets, but the selected "
+                       "target format supports only %2. Use Repair / Split "
+                       "for B42 Mods instead.")
+                    .arg(mTileDefFile->tilesets().size())
+                    .arg(maximumTilesetID()));
+        return;
+    }
+    QMessageBox::StandardButton result = QMessageBox::question(
+                this, tr("Reassign Tileset IDs"),
+                tr("This will assign new tileset IDs in alphabetical order "
+                   "within the selected %1 limit.\nThis will break savefile "
+                   "compatibility.\nReassign tileset IDs now?")
+                .arg(maximumTilesetID()));
     if (result == QMessageBox::StandardButton::No) {
         return;
     }
     mUndoStack->push(new ReassignTilesetIDs(this, mTileDefFile->createReassignMap()));
+}
+
+void TileDefDialog::splitForB42Mods()
+{
+    if (!mTileDefFile)
+        return;
+
+    QString suggested = mTileDefFile->fileName();
+    if (suggested.isEmpty())
+        suggested = QDir(tilesDir()).filePath(
+                    QStringLiteral("tiledefinitions.tiles"));
+    QString fileName = QFileDialog::getSaveFileName(
+                this, tr("Repair / Split Tile Definitions for B42 Mods"),
+                suggested,
+                tr("Binary properties files (*.tiles)"));
+    if (fileName.isEmpty())
+        return;
+    if (!fileName.endsWith(QLatin1String(".tiles"),
+                           Qt::CaseInsensitive)) {
+        fileName += QLatin1String(".tiles");
+    }
+
+    const QStringList outputs = mTileDefFile->modSeriesFileNames(fileName);
+    QStringList existing;
+    for (const QString &output : outputs) {
+        if (QFileInfo::exists(output)
+                || QFileInfo::exists(output + QLatin1String(".txt"))) {
+            existing += QDir::toNativeSeparators(output);
+        }
+    }
+    if (!existing.isEmpty()) {
+        const QMessageBox::StandardButton overwrite =
+                QMessageBox::warning(
+                    this, tr("Replace Existing Tile Definitions"),
+                    tr("The following output files already exist:\n\n%1\n\n"
+                       "Replace them?")
+                    .arg(existing.join(QLatin1Char('\n'))),
+                    QMessageBox::Yes | QMessageBox::No,
+                    QMessageBox::No);
+        if (overwrite != QMessageBox::Yes)
+            return;
+    }
+
+    QStringList written;
+    if (!mTileDefFile->writeModSeries(fileName, &written)) {
+        QMessageBox::critical(
+                    this, tr("Tile Definition Repair Failed"),
+                    mTileDefFile->errorString());
+        return;
+    }
+
+    QSettings settings;
+    settings.setValue(QLatin1String("TileDefDialog/LastOpenPath"),
+                      QFileInfo(written.first()).absolutePath());
+
+    QStringList nativeNames;
+    for (const QString &output : std::as_const(written))
+        nativeNames += QDir::toNativeSeparators(output);
+    QMessageBox::information(
+                this, tr("B42 Mod Tile Definitions Written"),
+                tr("Created %1 valid B42 mod tile-definition file(s). "
+                   "IDs were reassigned from 1 in every file:\n\n%2\n\n"
+                   "Declare every generated file with its own unique "
+                   "tiledef fileNumber in the mod configuration.")
+                .arg(written.size())
+                .arg(nativeNames.join(QLatin1Char('\n'))));
 }
 
 void TileDefDialog::updateUI()
@@ -1393,6 +1549,10 @@ void TileDefDialog::updateUI()
     ui->actionAddTileset->setEnabled(hasFile);
     ui->actionRemoveTileset->setEnabled(mCurrentTileset != nullptr);
     ui->actionReassignTilesetIDs->setEnabled(hasFile && !mTileDefFile->tilesets().isEmpty());
+    mSplitForB42ModsAction->setEnabled(
+                hasFile && !mTileDefFile->tilesets().isEmpty());
+    mModTargetAction->setEnabled(hasFile);
+    mBaseGameTargetAction->setEnabled(hasFile);
 
     ui->actionCopyProperties->setEnabled(!mSelectedTiles.isEmpty());
     ui->actionPasteProperties->setEnabled(!mClipboard->mValidRgn.isEmpty() && mSelectedTiles.size());
@@ -1507,10 +1667,24 @@ void TileDefDialog::fileOpen(const QString &fileName)
     }
 
     mTileDefFile = defFile;
+    setBaseGameTarget(
+                TileDefFile::inferredTargetFormat(defFile->fileName())
+                == TileDefFile::BaseGameFormat);
 #ifdef TDEF_TILES_DIR
     mTilesDirectory.clear();
 #endif
     tilesDirChanged();
+
+    QString validationError;
+    if (!validateCurrentTarget(&validationError)) {
+        QMessageBox::warning(
+                    this, tr("Tile Definitions Loaded for Repair"),
+                    tr("The file was loaded, but it is not valid for the "
+                       "selected target format:\n\n%1\n\nYou may edit it, "
+                       "change Target Format, or use File > Repair / Split "
+                       "for B42 Mods.")
+                    .arg(validationError));
+    }
 }
 
 bool TileDefDialog::fileSave(const QString &fileName)
@@ -1518,7 +1692,21 @@ bool TileDefDialog::fileSave(const QString &fileName)
     if (!mTileDefFile)
         return false;
 
-    if (!mTileDefFile->write(fileName)) {
+    QString validationError;
+    if (!validateCurrentTarget(&validationError)) {
+        QMessageBox::warning(
+                    this, tr("Invalid Tile Definitions"),
+                    tr("This file cannot be saved for the selected target "
+                       "format:\n\n%1\n\nUse File > Repair / Split for B42 "
+                       "Mods when converting an oversized mod tiledef.")
+                    .arg(validationError));
+        return false;
+    }
+
+    const TileDefFile::TargetFormat target = mBaseGameTarget
+            ? TileDefFile::BaseGameFormat
+            : TileDefFile::ModFormat;
+    if (!mTileDefFile->write(fileName, target)) {
         QMessageBox::warning(this, tr("Error writing .tiles file"),
                              mTileDefFile->errorString());
         return false;
@@ -2263,12 +2451,52 @@ void TileDefDialog::getTilesDirKeyValues(QMap<QString, QString> &map)
 int TileDefDialog::uniqueTilesetID()
 {
     const QSet<int> usedIDs = mTileDefFile->usedTilesetIDs();
-    for (int i = 1; i <= TileDefFile::MAX_TILESET_ID_GAME; i++) {
+    for (int i = 1; i <= maximumTilesetID(); i++) {
         if (!usedIDs.contains(i)) {
             return i;
         }
     }
     return -1;
+}
+
+int TileDefDialog::maximumTilesetID() const
+{
+    return TileDefFile::maximumTilesets(
+                mBaseGameTarget
+                ? TileDefFile::BaseGameFormat
+                : TileDefFile::ModFormat);
+}
+
+int TileDefDialog::maximumTilesPerTileset() const
+{
+    return TileDefFile::maximumTilesPerTileset(
+                mBaseGameTarget
+                ? TileDefFile::BaseGameFormat
+                : TileDefFile::ModFormat);
+}
+
+void TileDefDialog::setBaseGameTarget(bool baseGame)
+{
+    mBaseGameTarget = baseGame;
+    if (mBaseGameTargetAction)
+        mBaseGameTargetAction->setChecked(baseGame);
+    if (mModTargetAction)
+        mModTargetAction->setChecked(!baseGame);
+    updateUI();
+}
+
+bool TileDefDialog::validateCurrentTarget(QString *error) const
+{
+    if (!mTileDefFile) {
+        if (error)
+            *error = tr("No tile-definition file is open.");
+        return false;
+    }
+    return mTileDefFile->validate(
+                mBaseGameTarget
+                ? TileDefFile::BaseGameFormat
+                : TileDefFile::ModFormat,
+                error);
 }
 
 void TileDefDialog::saveSplitterSizes(QSplitter *splitter)

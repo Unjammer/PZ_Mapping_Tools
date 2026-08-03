@@ -28,18 +28,27 @@
 #include "mapobject.h"
 #include "mapobjectitem.h"
 #include "maprenderer.h"
+#include "nightpreviewitem.h"
 #include "zgriditem.h"
 #include "objectgroup.h"
 #include "preferences.h"
+#include "tile.h"
 #include "tilelayer.h"
 #include "tilelayeritem.h"
+#include "tileset.h"
 #include "toolmanager.h"
 #include "zlevelsmodel.h"
 #include "zlotmanager.h"
+#include "tiledeffile.h"
+
+#include "BuildingEditor/buildingfloor.h"
 
 #include "worlded/worldcell.h"
 
 #include <QGraphicsSceneMouseEvent>
+#include <QLineF>
+#include <QSettings>
+#include <QTimer>
 
 using namespace Tiled;
 using namespace Tiled::Internal;
@@ -108,7 +117,12 @@ ZomboidScene::ZomboidScene(QObject *parent)
     , mMapBordersItem2(new QGraphicsPolygonItem)
     , mMapBuildings(new MapBuildings)
     , mMapBuildingsInvalid(true)
+    , mNightPreviewTimer(new QTimer(this))
 {
+    mNightPreviewTimer->setSingleShot(true);
+    mNightPreviewTimer->setInterval(120);
+    connect(mNightPreviewTimer, &QTimer::timeout,
+            this, &ZomboidScene::rebuildNightPreview);
     connect(&mLotManager, qOverload<MapComposite*,Tiled::MapObject*>(&ZLotManager::lotAdded),
         this, qOverload<MapComposite*,Tiled::MapObject*>(&ZomboidScene::onLotAdded));
     connect(&mLotManager, qOverload<MapComposite*,Tiled::MapObject*>(&ZLotManager::lotRemoved),
@@ -208,6 +222,7 @@ void ZomboidScene::regionAltered(const QRegion &region, Layer *layer)
     }
 
     MapScene::regionChanged(region, layer);
+    scheduleNightPreviewRebuild();
 }
 
 void ZomboidScene::updateLayerGroupsLater(PendingFlags flags)
@@ -254,6 +269,233 @@ void ZomboidScene::mapChanged()
     MapScene::mapChanged();
 
     updateLayerGroupsLater(Bounds);
+    scheduleNightPreviewRebuild();
+}
+
+void ZomboidScene::scheduleNightPreviewRebuild()
+{
+    if (isNightPreviewEnabled())
+        mNightPreviewTimer->start();
+}
+
+void ZomboidScene::rebuildNightPreview()
+{
+    QVector<NightPreviewLight> lights;
+    QVector<QPolygonF> litRooms;
+    if (!isNightPreviewEnabled() || !mapDocument() ||
+            !mapDocument()->mapComposite()) {
+        mNightPreviewItem->setLights(lights);
+        mNightPreviewItem->setLitRooms(litRooms);
+        return;
+    }
+
+    Map *map = mapDocument()->map();
+    MapRenderer *renderer = mapDocument()->renderer();
+    MapComposite *composite = mapDocument()->mapComposite();
+    int level = mapDocument()->currentLevel();
+    if (level == INVALID_LEVEL && mapDocument()->currentLayer())
+        level = mapDocument()->currentLayer()->level();
+    CompositeLayerGroup *layerGroup =
+            composite->tileLayersForLevel(level);
+    if (!layerGroup) {
+        MapScene::rebuildNightPreview();
+        return;
+    }
+
+    layerGroup->prepareDrawing2();
+    OrderedCellsTemporaries vars;
+    QVector<const Tiled::Cell*> cells;
+    TileDefWatcher *tileDefWatcher =
+            BuildingEditor::getTileDefWatcher();
+    tileDefWatcher->check();
+    QVector<QPoint> roomSwitchPositions;
+    QSet<quint64> roomSwitchKeys;
+    QSet<QString> lightKeys;
+
+    for (int y = 0; y < map->height(); ++y) {
+        for (int x = 0; x < map->width(); ++x) {
+            if (!layerGroup->orderedCellsAt2(QPoint(x, y), vars, cells))
+                continue;
+            for (const Tiled::Cell *cell : qAsConst(cells)) {
+                if (!cell || !cell->tile)
+                    continue;
+                const Tiled::Tile *tile = cell->tile;
+                TileDefTile *tileDef = tileDefWatcher->tile(
+                            tile->tileset()->name(), tile->id());
+                const auto property = [tile, tileDef](
+                        const QString &name) {
+                    if (tileDef) {
+                        auto exact = tileDef->mProperties.constFind(name);
+                        if (exact != tileDef->mProperties.constEnd())
+                            return exact.value();
+                        for (auto it = tileDef->mProperties.constBegin();
+                             it != tileDef->mProperties.constEnd(); ++it) {
+                            if (it.key().compare(name,
+                                                 Qt::CaseInsensitive) == 0)
+                                return it.value();
+                        }
+                    }
+                    const auto &properties = tile->properties();
+                    auto exact = properties.constFind(name);
+                    if (exact != properties.constEnd())
+                        return exact.value();
+                    for (auto it = properties.constBegin();
+                         it != properties.constEnd(); ++it) {
+                        if (it.key().compare(name,
+                                             Qt::CaseInsensitive) == 0)
+                            return it.value();
+                    }
+                    return QString();
+                };
+                const auto containsProperty = [tile, tileDef](
+                        const QString &name) {
+                    if (tileDef) {
+                        for (auto it = tileDef->mProperties.constBegin();
+                             it != tileDef->mProperties.constEnd(); ++it) {
+                            if (it.key().compare(name,
+                                                 Qt::CaseInsensitive) == 0)
+                                return true;
+                        }
+                    }
+                    const auto &properties = tile->properties();
+                    for (auto it = properties.constBegin();
+                         it != properties.constEnd(); ++it) {
+                        if (it.key().compare(name,
+                                             Qt::CaseInsensitive) == 0)
+                            return true;
+                    }
+                    return false;
+                };
+                const QString tilesetName = tile->tileset()->name();
+                const bool isKnownRoomSwitch =
+                        tilesetName.compare(
+                            QStringLiteral("lighting_indoor_01"),
+                            Qt::CaseInsensitive) == 0 &&
+                        tile->id() >= 0 && tile->id() < 8;
+                const bool isSwitch =
+                        property(QStringLiteral("IsoType")).compare(
+                            QStringLiteral("lightswitch"),
+                            Qt::CaseInsensitive) == 0 ||
+                        containsProperty(
+                            QStringLiteral("lightswitch")) ||
+                        isKnownRoomSwitch;
+                bool redOk = false;
+                bool greenOk = false;
+                bool blueOk = false;
+                int red = property(
+                            QStringLiteral("lightR")).toInt(&redOk);
+                int green = property(
+                            QStringLiteral("lightG")).toInt(&greenOk);
+                int blue = property(
+                            QStringLiteral("lightB")).toInt(&blueOk);
+                bool hasLightColor = redOk && greenOk && blueOk;
+                bool fallbackLight = false;
+                if (!hasLightColor &&
+                        tilesetName.startsWith(
+                            QStringLiteral("lighting_outdoor_"),
+                            Qt::CaseInsensitive) &&
+                        !tilesetName.endsWith(
+                            QStringLiteral("_on"),
+                            Qt::CaseInsensitive)) {
+                    const QColor fallbackColor(
+                                QSettings().value(
+                                    QStringLiteral(
+                                        "NightPreview/FallbackColor"),
+                                    QStringLiteral("#ffdca4")).toString());
+                    red = fallbackColor.isValid()
+                            ? fallbackColor.red() : 255;
+                    green = fallbackColor.isValid()
+                            ? fallbackColor.green() : 220;
+                    blue = fallbackColor.isValid()
+                            ? fallbackColor.blue() : 164;
+                    hasLightColor = true;
+                    fallbackLight = true;
+                }
+                if (!hasLightColor) {
+                    if (!isSwitch)
+                        continue;
+                    const quint64 positionKey =
+                            (quint64(quint32(x)) << 32) | quint32(y);
+                    if (!roomSwitchKeys.contains(positionKey)) {
+                        roomSwitchKeys.insert(positionKey);
+                        roomSwitchPositions.append(QPoint(x, y));
+                    }
+                    continue;
+                }
+
+                const QString key = QStringLiteral("%1:%2:%3:%4")
+                        .arg(x).arg(y)
+                        .arg(tilesetName)
+                        .arg(tile->id());
+                if (lightKeys.contains(key))
+                    continue;
+                lightKeys.insert(key);
+
+                bool radiusOk = false;
+                int radius = property(
+                            QStringLiteral("LightRadius")).toInt(&radiusOk);
+                if (!radiusOk || radius <= 0)
+                    radius = fallbackLight
+                            ? QSettings().value(
+                                  QStringLiteral(
+                                      "NightPreview/FallbackRadius"),
+                                  4).toInt()
+                            : 10;
+                NightPreviewLight light;
+                light.center = renderer->tileToPixelCoords(
+                            QPointF(x + 0.5, y + 0.5), level);
+                light.color = QColor(qBound(0, red, 255),
+                                     qBound(0, green, 255),
+                                     qBound(0, blue, 255));
+                light.radiusX = QLineF(
+                            light.center,
+                            renderer->tileToPixelCoords(
+                                QPointF(x + radius + 0.5,
+                                        y + 0.5), level)).length();
+                light.radiusY = QLineF(
+                            light.center,
+                            renderer->tileToPixelCoords(
+                                QPointF(x + 0.5,
+                                        y + radius + 0.5), level)).length();
+                lights.append(light);
+            }
+        }
+    }
+
+    if (!roomSwitchPositions.isEmpty()) {
+        if (mMapBuildingsInvalid) {
+            mMapBuildings->calculate(composite);
+            mMapBuildingsInvalid = false;
+        }
+        QSet<MapBuildingsNS::Room*> switchedRooms;
+        for (const QPoint &position : qAsConst(roomSwitchPositions)) {
+            if (MapBuildingsNS::Room *room =
+                    mMapBuildings->roomAt(position, level))
+                switchedRooms.insert(room);
+        }
+        for (MapBuildingsNS::Room *room : qAsConst(switchedRooms)) {
+            for (MapBuildingsNS::RoomRect *rect : qAsConst(room->rects)) {
+                QPolygonF polygon;
+                polygon << renderer->tileToPixelCoords(
+                               QPointF(rect->x, rect->y), level)
+                        << renderer->tileToPixelCoords(
+                               QPointF(rect->x + rect->w, rect->y), level)
+                        << renderer->tileToPixelCoords(
+                               QPointF(rect->x + rect->w,
+                                       rect->y + rect->h), level)
+                        << renderer->tileToPixelCoords(
+                               QPointF(rect->x, rect->y + rect->h), level);
+                litRooms.append(polygon);
+            }
+        }
+    }
+
+    mNightPreviewItem->setBounds(sceneRect());
+    mNightPreviewItem->setLights(lights);
+    mNightPreviewItem->setLitRooms(litRooms);
+    qInfo() << "Night preview detected" << lights.size()
+            << "tile light source(s) and" << litRooms.size()
+            << "lit room polygon(s) at level" << level;
 }
 
 class DummyGraphicsItem : public QGraphicsItem

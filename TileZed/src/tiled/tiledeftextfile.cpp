@@ -99,6 +99,14 @@ bool TileDefTextFile::read(const QString &fileName)
 
 bool TileDefTextFile::write(const QString &fileName, const QList<TileDefTileset *> &tilesets)
 {
+    return write(fileName, tilesets, QMap<QString,int>());
+}
+
+bool TileDefTextFile::write(
+        const QString &fileName,
+        const QList<TileDefTileset *> &tilesets,
+        const QMap<QString, int> &idOverrides)
+{
     SimpleFile simpleFile;
     QList<TileDefTileset *> sorted = tilesets;
     std::sort(sorted.begin(), sorted.end(), [](TileDefTileset *a, TileDefTileset *b) {
@@ -110,7 +118,10 @@ bool TileDefTextFile::write(const QString &fileName, const QList<TileDefTileset 
         tilesetBlock.name = QLatin1String("tileset");
         tilesetBlock.addValue("file", tileset->mName);
         tilesetBlock.addValue("size", QString(QLatin1String("%1,%2")).arg(tileset->mColumns).arg(tileset->mRows));
-        tilesetBlock.addValue("id", QString::number(tileset->mID));
+        tilesetBlock.addValue(
+                    "id",
+                    QString::number(idOverrides.value(
+                                        tileset->mName, tileset->mID)));
         for (TileDefTile* tile : std::as_const(tileset->mTiles)) {
             SimpleFileBlock tileBlock;
             tileBlock.comments += QString(QStringLiteral("%1_%2").arg(tileset->mName).arg(tile->mID));

@@ -26,6 +26,8 @@ set ( Tiled_HDRS
 	changeproperties.h
 	changetileselection.h
 	commandlineparser.h
+	depthgeometry.h
+	depthmapeditor.h
 	erasetiles.h
 	filltiles.h
 	imagelayeritem.h
@@ -91,6 +93,8 @@ set ( Tiled_SRCS
 	commanddialog.cpp
 	commandlineparser.cpp
 	createobjecttool.cpp
+	depthgeometry.cpp
+	depthmapeditor.cpp
 	documentmanager.cpp
 	editpolygontool.cpp
 	eraser.cpp
@@ -224,6 +228,8 @@ set ( Tiled_MOCS
 	commanddialog.h
 	command.h
 	createobjecttool.h
+	depthgeometry.h
+	depthmapeditor.h
 	documentmanager.h
 	editpolygontool.h
 	eraser.h

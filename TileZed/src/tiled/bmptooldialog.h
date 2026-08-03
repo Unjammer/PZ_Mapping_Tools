@@ -19,8 +19,15 @@
 #define BMPTOOLDIALOG_H
 
 #include <QDialog>
+#include <QMap>
 #include <QModelIndex>
+#include <QStringList>
 #include <QTimer>
+
+class QComboBox;
+class QFileSystemWatcher;
+class QLabel;
+class QPushButton;
 
 namespace Ui {
 class BmpToolDialog;
@@ -94,12 +101,26 @@ private slots:
     void documentAboutToClose(int index, Tiled::Internal::MapDocument *doc);
 
     void warningsChanged();
+    void repairUnknownColorsToggled(bool enabled);
+    void reloadCustomBrushes();
+    void customBrushActivated(int index);
+    void addCustomBrush();
+    void openBrushFolder();
 
 private:
     Q_DISABLE_COPY(BmpToolDialog)
     static BmpToolDialog *mInstance;
     explicit BmpToolDialog(QWidget *parent = 0);
     ~BmpToolDialog();
+    void populateFallbackColors();
+    bool applyUnknownColorFallback();
+    QRgb fallbackColor(int bitmapIndex) const;
+    void setupCustomBrushUi();
+    void ensureExampleBrushes();
+    void selectCustomBrush(const QString &fileName);
+    void setProceduralBrushUi();
+    QString userBrushDirectory() const;
+    QStringList brushDirectories() const;
 
     Ui::BmpToolDialog *ui;
     MapDocument *mDocument;
@@ -107,6 +128,14 @@ private:
     QTimer mVisibleLaterTimer;
     QMap<MapDocument*,int> mCurrentRuleForDocument;
     bool mExpanded;
+    bool mApplyingColorFallback = false;
+    QComboBox *mCustomBrushes = nullptr;
+    QLabel *mCustomBrushInfo = nullptr;
+    QPushButton *mAddCustomBrush = nullptr;
+    QPushButton *mOpenBrushFolder = nullptr;
+    QPushButton *mReloadCustomBrushes = nullptr;
+    QFileSystemWatcher *mBrushWatcher = nullptr;
+    QTimer mBrushReloadTimer;
 };
 
 } // namespace Internal

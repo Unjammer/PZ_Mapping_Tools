@@ -387,6 +387,21 @@ void TileLayer::replaceReferencesToTileset(Tileset *oldTileset,
 void TileLayer::resize(const QSize &size, const QPoint &offset)
 {
 #if SPARSE_TILELAYER
+    // PaintTileLayer grows its sparse undo buffers repeatedly while a brush
+    // stroke is in progress. In that case all existing cells are preserved,
+    // so avoid scanning the increasingly large (usually almost empty)
+    // rectangular bounds on every mouse move.
+    const bool preservesAllCells =
+            offset.x() >= 0 && offset.y() >= 0 &&
+            offset.x() + mWidth <= size.width() &&
+            offset.y() + mHeight <= size.height();
+    if (preservesAllCells) {
+        mGrid.resizePreservingCells(size.width(), size.height(), offset);
+        // No cell was added or removed, so mUsedTilesets remains valid.
+        Layer::resize(size, offset);
+        return;
+    }
+
     SparseTileGrid newGrid(size.width(), size.height());
 #else
     QVector<Cell> newGrid(size.width() * size.height());

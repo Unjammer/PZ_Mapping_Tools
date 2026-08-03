@@ -22,7 +22,11 @@
 
 #include "map.h" // for MapRands
 
+#include <QRegion>
+#include <QSize>
 #include <QUndoCommand>
+
+class QImage;
 
 namespace Tiled {
 class Layer;
@@ -117,11 +121,21 @@ public:
 
     enum struct BrushShape {
         Square,
-        Circle
+        Circle,
+        Custom
     };
     void setBrushShape(BrushShape shape);
     BrushShape brushShape() const
     { return mBrushShape; }
+
+    void setCustomBrush(const QRegion &mask, const QSize &size,
+                        const QString &sourcePath);
+    QString customBrushPath() const
+    { return mCustomBrushPath; }
+    QSize customBrushSize() const
+    { return mCustomBrushSize; }
+    QRegion brushRegionAt(const QPoint &tilePos) const;
+    static QRegion regionFromBrushImage(const QImage &image);
 
     void setRestrictToSelection(bool isRestricted)
     {
@@ -158,6 +172,7 @@ protected:
     void tilePositionChanged(const QPoint &tilePos) override;
     void setBrushRegion(const QPoint &tilePos);
     void paint();
+    void paint(const QRegion &region);
 
 signals:
     void ruleChanged();
@@ -179,6 +194,9 @@ private:
     QRgb mColor;
     int mBrushSize;
     BrushShape mBrushShape;
+    QRegion mCustomBrushMask;
+    QSize mCustomBrushSize;
+    QString mCustomBrushPath;
     bool mRestrictToSelection;
     bool mFillAllInSelection;
     bool mUseBmpClipboard;
@@ -206,6 +224,7 @@ protected:
     void tilePositionChanged(const QPoint &tilePos) override;
     void setBrushRegion(const QPoint &tilePos);
     void paint();
+    void paint(const QRegion &region);
     void eraseBmp(int bmpIndex, const QRegion &tileRgn);
 
 private slots:

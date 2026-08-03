@@ -1498,6 +1498,23 @@ property
     ValueAsPropertyName = true
     ToolTip = <p>Defines tile as sheet rope.</p>
 }
+property
+{
+    Type = Enum
+    Name = Ladder direction
+    ShortName =
+    Enums
+    {
+        None =
+        South = LadderS
+        East = LadderE
+        North = LadderN
+        West = LadderW
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p><b>Engine keys:</b> LadderS, LadderE, LadderN and LadderW.</p><p>Directional ladder flags present in the official Build 42 tile definitions. The game registers these properties dynamically from the .tiles files.</p>
+}
 separator
 {
 }

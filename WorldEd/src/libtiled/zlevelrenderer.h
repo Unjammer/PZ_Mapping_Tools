@@ -28,6 +28,8 @@
 
 #include "maprenderer.h"
 
+#include <functional>
+
 namespace Tiled {
 
 #ifdef ZOMBOID
@@ -87,11 +89,25 @@ public:
                             const QColor &color,
                             int level = 0) const override;
 
+#ifdef ZOMBOID
+    using PreviewTileResolver =
+        std::function<Tile*(Tile*, const QPoint&)>;
+    void setPreviewTileResolver(const PreviewTileResolver &resolver)
+    { mPreviewTileResolver = resolver; }
+    void setPreviewOverlayResolver(const PreviewTileResolver &resolver)
+    { mPreviewOverlayResolver = resolver; }
+    static bool validatePreviewOverlayAlignment(QString *error);
+#endif
+
 private:
     QPolygonF tileRectToPolygon(const QRect &rect, int level = 0) const;
     QPolygonF tileRectToPolygon(const QRectF &rect, int level = 0) const;
     void drawJumboTreeTile_Trunk(Tiled::Tile *tile, QPainter *painter, const QTransform &baseTransform, qreal x, qreal y, qreal m11, qreal m12, qreal m21, qreal m22) const;
     void drawJumboTreeTile_Leaves(Tiled::Tile *tile, QPainter *painter, const QTransform &baseTransform, qreal x, qreal y, qreal m11, qreal m12, qreal m21, qreal m22) const;
+#ifdef ZOMBOID
+    PreviewTileResolver mPreviewTileResolver;
+    PreviewTileResolver mPreviewOverlayResolver;
+#endif
 };
 
 } // namespace Tiled

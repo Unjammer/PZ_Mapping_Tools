@@ -58,10 +58,22 @@ inline QDebug noise() { return QDebug(QtDebugMsg); }
 ShadowMap::ShadowMap(MapInfo *mapInfo)
 {
     IN_APP_THREAD
+    QElapsedTimer setupTimer;
+    setupTimer.start();
     Map *map = mapInfo->map()->clone(); // FIXME: make copy of BMP images, not thread-safe
-    TilesetManager::instance()->addReferences(map->tilesets());
+    qInfo() << "TileZed mini-map setup: map clone"
+            << setupTimer.restart() << "ms";
+    // The shadow map shares the already loaded tileset objects with the
+    // document. It only needs to keep them alive; requesting image loads here
+    // used to enqueue every declared TMX tileset again, including hundreds of
+    // unused header entries in older exported cells.
+    TilesetManager::instance()->addReferences(map->tilesets(), false);
     mapInfo = MapManager::instance()->newFromMap(map, mapInfo->path()); // FIXME: save as... changes path?
+    qInfo() << "TileZed mini-map setup: references"
+            << setupTimer.restart() << "ms";
     mMapComposite = new MapComposite(mapInfo);
+    qInfo() << "TileZed mini-map setup: map composite"
+            << setupTimer.restart() << "ms";
 
     foreach (CompositeLayerGroup *layerGroup, mMapComposite->sortedLayerGroups()) {
         foreach (TileLayer *tl, layerGroup->layers()) {
@@ -71,8 +83,9 @@ ShadowMap::ShadowMap(MapInfo *mapInfo)
             layerGroup->setLayerVisibility(tl, isVisible);
             layerGroup->setLayerOpacity(tl, 1.0f);
         }
-        layerGroup->synch();
     }
+    qInfo() << "TileZed mini-map setup: layer configuration"
+            << setupTimer.restart() << "ms";
 }
 
 ShadowMap::~ShadowMap()
@@ -186,11 +199,6 @@ MiniMapRenderWorker::MiniMapRenderWorker(MapInfo *mapInfo, InterruptibleThread *
             : mRenderer = new ZLevelRenderer(mapInfo->map());
     mRenderer->setMaxLevel(mShadowMap->mMapComposite->maxLevel());
     mRenderer->mAbortDrawing = thread->var();
-
-    QRectF r = mShadowMap->mMapComposite->boundingRect(mRenderer, false);
-    qreal scale = 512.0 / r.width();
-    QSize imageSize = QRectF(QPoint(), r.size() * scale).toAlignedRect().size();
-    mImage = QImage(imageSize, QImage::Format_ARGB32);
 }
 
 MiniMapRenderWorker::~MiniMapRenderWorker()
@@ -207,9 +215,11 @@ void MiniMapRenderWorker::work()
 {
     IN_WORKER_THREAD
 
-    processChanges(mPendingChanges);
-    qDeleteAll(mPendingChanges);
-    mPendingChanges.clear();
+    if (!mPendingChanges.isEmpty()) {
+        processChanges(mPendingChanges);
+        qDeleteAll(mPendingChanges);
+        mPendingChanges.clear();
+    }
 
     if (!mVisible)
         return;
@@ -221,6 +231,15 @@ void MiniMapRenderWorker::work()
     QSize mapSize = sceneRect.size().toSize();
     if (mapSize.isEmpty())
         return;
+
+    if (mImage.isNull()) {
+        const int width = 512;
+        const qreal scale = width / sceneRect.width();
+        const int height = qMax(1, qCeil(sceneRect.height() * scale));
+        mImage = QImage(width, height, QImage::Format_ARGB32);
+        mImage.fill(Qt::transparent);
+        emit imageResized(mImage.size());
+    }
 
     QRectF paintRect = mDirtyRect;
     if (mRedrawAll)
@@ -442,7 +461,10 @@ void MiniMapRenderWorker::processChanges(const QList<MapChange *> &changes)
         int width = 512;
         qreal scale = width / newBounds.width();
         int height = qCeil(newBounds.height() * scale);
-        mImage = QImage(width, height, mImage.format());
+        const QImage::Format format = mImage.isNull()
+                ? QImage::Format_ARGB32 : mImage.format();
+        mImage = QImage(width, height, format);
+        mImage.fill(Qt::transparent);
         emit imageResized(mImage.size());
         redrawAll = true;
     }

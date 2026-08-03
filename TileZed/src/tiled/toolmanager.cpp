@@ -181,7 +181,10 @@ void ToolManager::shortcutEdited(QAction *action)
 
 void ToolManager::actionTriggered(QAction *action)
 {
-    setSelectedTool(action->data().value<AbstractTool*>());
+    AbstractTool *tool = action->data().value<AbstractTool*>();
+    setSelectedTool(tool);
+    if (tool)
+        tool->selectedByUser();
 }
 
 void ToolManager::languageChanged()

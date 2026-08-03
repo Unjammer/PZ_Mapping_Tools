@@ -89,6 +89,13 @@ public:
     virtual void deactivate(MapScene *scene) = 0;
 
     /**
+     * Called only when the user explicitly selects the tool action. Unlike
+     * activate(), this is not called when an already-selected tool is merely
+     * attached to a newly opened document.
+     */
+    virtual void selectedByUser() {}
+
+    /**
      * Called when the mouse entered the scene. This is usually an appropriate
      * time to make a hover item visible.
      */

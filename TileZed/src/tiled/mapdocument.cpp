@@ -64,7 +64,9 @@
 #include <QRect>
 #include <QUndoStack>
 #ifdef ZOMBOID
+#include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
 #endif
 
 using namespace Tiled;
@@ -84,13 +86,27 @@ MapDocument::MapDocument(Map *map, const QString &fileName):
     mUndoStack(new QUndoStack(this))
 {
 #ifdef ZOMBOID
+    QElapsedTimer setupTimer;
+    setupTimer.start();
+    qint64 previousSetupMs = 0;
+    auto logSetupStep = [&](const char *step) {
+        const qint64 elapsedMs = setupTimer.elapsed();
+        qInfo() << "TileZed document setup:" << step
+                << (elapsedMs - previousSetupMs) << "ms step,"
+                << elapsedMs << "ms total"
+                << QFileInfo(mFileName).fileName();
+        previousSetupMs = elapsedMs;
+    };
+
     for (int z = MIN_WORLD_LEVEL; z <= MAX_WORLD_LEVEL; z++) {
         if (mMap->mapLevelForZ(z)) {
             continue;
         }
         mMap->addMapLevel(new MapLevel(mMap, z));
     }
+    logSetupStep("map levels");
     mMapComposite = new MapComposite(MapManager::instance()->newFromMap(map, fileName));
+    logSetupStep("map composite");
     mMapComposite->setCellMap(true);
     connect(mMapComposite->bmpBlender(), &BmpBlender::regionAltered,
             this, &MapDocument::bmpBlenderRegionAltered);
@@ -116,6 +132,7 @@ MapDocument::MapDocument(Map *map, const QString &fileName):
                 this, &MapDocument::afterWorldChanged);
         initAdjacentMaps();
     }
+    logSetupStep("adjacent maps");
 #endif
     switch (map->orientation()) {
     case Map::Isometric:
@@ -155,9 +172,11 @@ MapDocument::MapDocument(Map *map, const QString &fileName):
             mCurrentLayerIndex = largestNegative->layerCount() ? map->layers().indexOf(largestNegative->layerAt(0)) : -1;
         }
     }
+    logSetupStep("renderer and current layer");
 #endif
 
     mLayerModel->setMapDocument(this);
+    logSetupStep("layer model");
 
     // Forward signals emitted from the layer model
     connect(mLayerModel, &LayerModel::layerAdded, this, &MapDocument::onLayerAdded);
@@ -183,10 +202,12 @@ MapDocument::MapDocument(Map *map, const QString &fileName):
 
 #ifdef ZOMBOID
     mLevelsModel->setMapDocument(this);
+    logSetupStep("level model");
 #endif
 
     // Forward signals emitted from the map object model
     mMapObjectModel->setMapDocument(this);
+    logSetupStep("object model");
     connect(mMapObjectModel, &MapObjectModel::objectsAdded,
             this, &MapDocument::objectsAdded);
     connect(mMapObjectModel, &MapObjectModel::objectsChanged,
@@ -201,13 +222,20 @@ MapDocument::MapDocument(Map *map, const QString &fileName):
     // Register tileset references
     TilesetManager *tilesetManager = TilesetManager::instance();
     tilesetManager->addReferences(mMap->tilesets(), false);
+    logSetupStep("tileset references");
 
     QList<Tileset *> usedTilesets = mMap->usedTilesets().values();
+    logSetupStep("used tileset query");
     usedTilesets.removeAll(tilesetManager->invisibleTileset());
     usedTilesets.removeAll(tilesetManager->missingTileset());
-    for (Tileset *tileset : qAsConst(usedTilesets))
+    QList<Tileset *> declaredTilesets = mMap->tilesets();
+    declaredTilesets.removeAll(tilesetManager->invisibleTileset());
+    declaredTilesets.removeAll(tilesetManager->missingTileset());
+    for (Tileset *tileset : qAsConst(declaredTilesets))
         tilesetManager->loadTileset(tileset, tileset->imageSource());
-    tilesetManager->waitForTilesets(usedTilesets);
+    if (!declaredTilesets.isEmpty())
+        tilesetManager->waitForTilesets(declaredTilesets);
+    logSetupStep("declared tileset readiness");
 
 #ifdef ZOMBOID
     connect(tilesetManager, &TilesetManager::tileLayerNameChanged,

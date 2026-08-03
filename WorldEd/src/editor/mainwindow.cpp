@@ -57,6 +57,7 @@
 #include "roadsdock.h"
 #include "scenetools.h"
 #include "searchdock.h"
+#include "streetnamesdock.h"
 #include "simplefile.h"
 #include "templatesdialog.h"
 #include "thumbnailsettingsmgr.h"
@@ -105,6 +106,7 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QCloseEvent>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QDebug>
 #include <QFileDialog>
@@ -112,11 +114,16 @@
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QLabel>
+#include <QHBoxLayout>
 #include <QPushButton>
 #include <QPixmap>
 #include <QRandomGenerator>
 #include <QScrollBar>
 #include <QShortcut>
+#include <QSignalBlocker>
+#include <QSlider>
+#include <QToolButton>
+#include <QWidgetAction>
 #include <QSpinBox>
 #include <QTimer>
 #include <QTemporaryFile>
@@ -370,6 +377,7 @@ MainWindow::MainWindow(QWidget *parent)
     , mObjectsDock(new ObjectsDock(this))
     , mPropertiesDock(new PropertiesDock(this))
     , mSearchDock(new SearchDock(this))
+    , mStreetNamesDock(new StreetNamesDock(this))
     , mInGameMapDock(new InGameMapDock(this))
 #ifdef ROAD_UI
     , mRoadsDock(new RoadsDock(this))
@@ -477,6 +485,136 @@ MainWindow::MainWindow(QWidget *parent)
     ui->menuView->addAction(mObjectsDock->toggleViewAction());
     ui->menuView->addAction(mPropertiesDock->toggleViewAction());
     ui->menuView->addAction(mSearchDock->toggleViewAction());
+    ui->menuView->addAction(mStreetNamesDock->toggleViewAction());
+    ui->menuView->addSeparator();
+    mNightPreviewAction = new QAction(tr("Night Preview"), this);
+    mNightPreviewAction->setCheckable(true);
+    mNightPreviewAction->setToolTip(
+                tr("Dim the map and preview tiledef lights and powered rooms"));
+    // Preview state is intentionally session-only. A project must always
+    // open in its authored, unmodified daytime view.
+    mSettings.setValue(QLatin1String("NightPreview/Enabled"), false);
+    mSettings.setValue(QLatin1String("EnvironmentPreview/Powered"), false);
+    mSettings.setValue(QLatin1String("EnvironmentPreview/Snow"), false);
+    mSettings.setValue(QLatin1String("EnvironmentPreview/Jumbo"), false);
+    mNightPreviewAction->setChecked(false);
+    // Retain the experimental implementation for later renderer work, but do
+    // not present it as an in-game-faithful preview.
+    mNightPreviewAction->setVisible(false);
+    mNightPreviewAction->setEnabled(false);
+    ui->menuView->addAction(mNightPreviewAction);
+
+    const QString previewStyle = QStringLiteral(
+        "QToolButton { padding: 2px 7px; border: 1px solid #68717d;"
+        " border-radius: 4px; background: rgba(32,36,42,220);"
+        " color: #d9dde5; font-weight: bold; }"
+        "QToolButton:checked { border: 2px solid #76c7ff;"
+        " background: #235c84; color: white; }");
+    const auto makePreviewButton = [this, previewStyle](
+            const QString &text, const QString &toolTip) {
+        QToolButton *button = new QToolButton(ui->viewTools);
+        button->setText(text);
+        button->setToolTip(toolTip);
+        button->setCheckable(true);
+        button->setAutoRaise(false);
+        button->setStyleSheet(previewStyle);
+        button->setMinimumHeight(24);
+        return button;
+    };
+    mNightPreviewButton = makePreviewButton(
+        mNightPreviewAction->isChecked() ? tr("NIGHT") : tr("DAY"),
+        tr("Toggle day/night and tiledef lighting preview"));
+    mNightPreviewButton->setVisible(false);
+    mPoweredPreviewButton = makePreviewButton(
+        tr("POWER"), tr("Preview matching *_on tile variants"));
+    mSnowPreviewButton = makePreviewButton(
+        tr("SNOW"), tr("Preview SnowTile mappings and roof coverage"));
+    mJumboPreviewButton = makePreviewButton(
+        tr("JUMBO"), tr("Preview deterministic Jumbo XL/XXL variants"));
+    QMenu *nightSettingsMenu = new QMenu(
+                tr("Night Preview Settings"), mNightPreviewButton);
+    const auto addNightSlider = [this, nightSettingsMenu](
+            const QString &title, const QString &key,
+            int minimum, int maximum, int defaultValue,
+            qreal divisor) {
+        QWidget *row = new QWidget(nightSettingsMenu);
+        QHBoxLayout *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(8, 3, 8, 3);
+        QLabel *label = new QLabel(row);
+        QSlider *slider = new QSlider(Qt::Horizontal, row);
+        slider->setRange(minimum, maximum);
+        slider->setMinimumWidth(150);
+        const qreal stored = mSettings.value(key,
+                            qreal(defaultValue) / divisor).toReal();
+        slider->setValue(qRound(stored * divisor));
+        const auto updateLabel = [label, title, divisor](int value) {
+            label->setText(divisor == 1.0
+                    ? QStringLiteral("%1: %2").arg(title).arg(value)
+                    : QStringLiteral("%1: %2").arg(title).arg(
+                          qreal(value) / divisor, 0, 'f', 2));
+        };
+        updateLabel(slider->value());
+        connect(slider, &QSlider::valueChanged, this,
+                [this, key, divisor, updateLabel](int value) {
+            updateLabel(value);
+            mSettings.setValue(key, qreal(value) / divisor);
+            if (!mCurrentDocument)
+                return;
+            if (CellDocument *cellDoc =
+                    mCurrentDocument->asCellDocument())
+                cellDoc->scene()->rebuildNightPreview();
+            mCurrentDocument->view()->scene()->update();
+        });
+        layout->addWidget(label);
+        layout->addWidget(slider, 1);
+        QWidgetAction *action = new QWidgetAction(nightSettingsMenu);
+        action->setDefaultWidget(row);
+        nightSettingsMenu->addAction(action);
+    };
+    addNightSlider(tr("Darkness"),
+                   QStringLiteral("NightPreview/Darkness"),
+                   15, 92, 68, 100.0);
+    addNightSlider(tr("Light intensity"),
+                   QStringLiteral("NightPreview/LightIntensity"),
+                   5, 100, 65, 100.0);
+    addNightSlider(tr("Fallback radius"),
+                   QStringLiteral("NightPreview/FallbackRadius"),
+                   1, 20, 4, 1.0);
+    QAction *lightColorAction = nightSettingsMenu->addAction(
+                tr("Fallback light color..."));
+    connect(lightColorAction, &QAction::triggered, this, [this]() {
+        const QColor current(mSettings.value(
+            QStringLiteral("NightPreview/FallbackColor"),
+            QStringLiteral("#ffdca4")).toString());
+        const QColor selected = QColorDialog::getColor(
+                    current, this, tr("Fallback Light Color"));
+        if (!selected.isValid())
+            return;
+        mSettings.setValue(
+                    QStringLiteral("NightPreview/FallbackColor"),
+                    selected.name(QColor::HexRgb));
+        if (mCurrentDocument) {
+            if (CellDocument *cellDoc =
+                    mCurrentDocument->asCellDocument())
+                cellDoc->scene()->rebuildNightPreview();
+        }
+    });
+    mNightPreviewButton->setMenu(nightSettingsMenu);
+    mNightPreviewButton->setPopupMode(QToolButton::MenuButtonPopup);
+    mNightPreviewButton->setChecked(mNightPreviewAction->isChecked());
+    mPoweredPreviewButton->setChecked(false);
+    mSnowPreviewButton->setChecked(false);
+    mJumboPreviewButton->setChecked(false);
+    const int previewInsertIndex =
+            qMax(0, ui->horizontalLayout->count() - 2);
+    ui->horizontalLayout->insertWidget(
+        previewInsertIndex, mNightPreviewButton);
+    ui->horizontalLayout->insertWidget(
+        previewInsertIndex + 1, mPoweredPreviewButton);
+    ui->horizontalLayout->insertWidget(
+        previewInsertIndex + 2, mSnowPreviewButton);
+    ui->horizontalLayout->insertWidget(
+        previewInsertIndex + 3, mJumboPreviewButton);
 #ifdef ROAD_UI
     ui->menuView->addAction(mRoadsDock->toggleViewAction());
 #endif
@@ -485,6 +623,7 @@ MainWindow::MainWindow(QWidget *parent)
     addDockWidget(Qt::LeftDockWidgetArea, mLotsDock);
     addDockWidget(Qt::LeftDockWidgetArea, mObjectsDock);
     addDockWidget(Qt::LeftDockWidgetArea, mSearchDock);
+    addDockWidget(Qt::LeftDockWidgetArea, mStreetNamesDock);
 #ifdef ROAD_UI
     addDockWidget(Qt::LeftDockWidgetArea, mRoadsDock);
 #endif
@@ -495,6 +634,15 @@ MainWindow::MainWindow(QWidget *parent)
     tabifyDockWidget(mLayersDock, mMapsDock);
     tabifyDockWidget(mObjectsDock, mLotsDock);
     tabifyDockWidget(mLotsDock, mInGameMapDock);
+    // Street Names belongs with Search in the lower-left dock group. Keep
+    // Objects as the initial upper-left workflow and Search as the initially
+    // visible lower-left tab.
+    tabifyDockWidget(mSearchDock, mStreetNamesDock);
+    mSearchDock->raise();
+    // Keep the established Objects workflow as the default tab. Users can
+    // explicitly open Street Names without the new dock taking focus on a
+    // fresh layout.
+    mObjectsDock->raise();
 
     addDockWidget(Qt::RightDockWidgetArea, mUndoDock);
 
@@ -652,6 +800,60 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->actionZoomOut, &QAction::triggered, this, &MainWindow::zoomOut);
     connect(ui->actionZoomNormal, &QAction::triggered, this, &MainWindow::zoomNormal);
     connect(ui->actionShowInvisibleTiles, &QAction::toggled, prefs, &Preferences::setShowInvisibleTiles);
+    connect(mNightPreviewAction, &QAction::toggled, this,
+            [this](bool enabled) {
+        mSettings.setValue(QLatin1String("NightPreview/Enabled"), enabled);
+        if (mNightPreviewButton) {
+            const QSignalBlocker blocker(mNightPreviewButton);
+            mNightPreviewButton->setChecked(enabled);
+            mNightPreviewButton->setText(
+                        enabled ? tr("NIGHT") : tr("DAY"));
+        }
+        if (!mCurrentDocument)
+            return;
+        if (CellDocument *cellDoc =
+                mCurrentDocument->asCellDocument()) {
+            cellDoc->scene()->setNightPreviewEnabled(enabled);
+        } else if (WorldDocument *worldDoc =
+                   mCurrentDocument->asWorldDocument()) {
+            if (WorldScene *scene =
+                    static_cast<WorldScene*>(worldDoc->view()->scene()))
+                scene->setNightPreviewEnabled(enabled);
+        }
+        mCurrentDocument->view()->setNightPreviewEnabled(enabled);
+    });
+    connect(mNightPreviewButton, &QToolButton::toggled,
+            mNightPreviewAction, &QAction::setChecked);
+    connect(mPoweredPreviewButton, &QToolButton::toggled,
+            this, [this](bool enabled) {
+        mSettings.setValue(
+                    QLatin1String("EnvironmentPreview/Powered"), enabled);
+        if (mCurrentDocument) {
+            if (CellDocument *cellDoc =
+                    mCurrentDocument->asCellDocument())
+                cellDoc->scene()->setPoweredPreviewEnabled(enabled);
+        }
+    });
+    connect(mSnowPreviewButton, &QToolButton::toggled,
+            this, [this](bool enabled) {
+        mSettings.setValue(
+                    QLatin1String("EnvironmentPreview/Snow"), enabled);
+        if (mCurrentDocument) {
+            if (CellDocument *cellDoc =
+                    mCurrentDocument->asCellDocument())
+                cellDoc->scene()->setSnowPreviewEnabled(enabled);
+        }
+    });
+    connect(mJumboPreviewButton, &QToolButton::toggled,
+            this, [this](bool enabled) {
+        mSettings.setValue(
+                    QLatin1String("EnvironmentPreview/Jumbo"), enabled);
+        if (mCurrentDocument) {
+            if (CellDocument *cellDoc =
+                    mCurrentDocument->asCellDocument())
+                cellDoc->scene()->setJumboPreviewEnabled(enabled);
+        }
+    });
 
     connect(ui->actionLotPackViewer, &QAction::triggered, this, &MainWindow::lotpackviewer);
     connect(ui->actionLootInspector, &QAction::triggered, this, &MainWindow::lootInspector);
@@ -1048,7 +1250,17 @@ void MainWindow::documentAdded(Document *doc)
             return;
         }
         doc->setView(view);
+        scene->setPoweredPreviewEnabled(mSettings.value(
+            QLatin1String("EnvironmentPreview/Powered"), false).toBool());
+        scene->setSnowPreviewEnabled(mSettings.value(
+            QLatin1String("EnvironmentPreview/Snow"), false).toBool());
+        scene->setJumboPreviewEnabled(mSettings.value(
+            QLatin1String("EnvironmentPreview/Jumbo"), false).toBool());
         cellDoc->setScene(scene);
+        view->setNightPreviewEnabled(mNightPreviewAction &&
+                                     mNightPreviewAction->isChecked());
+        connect(view, &BaseGraphicsView::nightPreviewToggled,
+                mNightPreviewAction, &QAction::setChecked);
 
         int pos = docman()->documents().indexOf(doc);
         ui->documentTabWidget->insertTab(pos, view,
@@ -1070,6 +1282,10 @@ void MainWindow::documentAdded(Document *doc)
         WorldScene *scene = new WorldScene(worldDoc, view);
         view->setScene(scene);
         doc->setView(view);
+        view->setNightPreviewEnabled(mNightPreviewAction &&
+                                     mNightPreviewAction->isChecked());
+        connect(view, &BaseGraphicsView::nightPreviewToggled,
+                mNightPreviewAction, &QAction::setChecked);
 
         QShortcut *selectAllShortcut = new QShortcut(QKeySequence::SelectAll, view);
         connect(selectAllShortcut, &QShortcut::activated, worldDoc, [worldDoc]() {
@@ -1165,6 +1381,7 @@ void MainWindow::currentDocumentChanged(Document *doc)
         mInGameMapDock->setDocument(doc);
         mObjectsDock->setDocument(doc);
         mSearchDock->setDocument(doc);
+        mStreetNamesDock->setDocument(doc);
 #ifdef ROAD_UI
         mRoadsDock->setDocument(doc);
 #endif
@@ -1182,12 +1399,24 @@ void MainWindow::currentDocumentChanged(Document *doc)
         mInGameMapDock->clearDocument();
         mObjectsDock->clearDocument();
         mSearchDock->clearDocument();
+        mStreetNamesDock->clearDocument();
 #ifdef ROAD_UI
         mRoadsDock->clearDocument();
 #endif
     }
 
     ToolManager::instance()->setScene(doc ? doc->view()->scene() : 0);
+    if (doc && mNightPreviewAction) {
+        const bool enabled = mNightPreviewAction->isChecked();
+        if (CellDocument *cellDoc = doc->asCellDocument()) {
+            cellDoc->scene()->setNightPreviewEnabled(enabled);
+        } else if (WorldDocument *worldDoc = doc->asWorldDocument()) {
+            if (WorldScene *scene =
+                    static_cast<WorldScene*>(worldDoc->view()->scene()))
+                scene->setNightPreviewEnabled(enabled);
+        }
+        doc->view()->setNightPreviewEnabled(enabled);
+    }
     mPropertiesDock->setDocument(doc);
 
     ui->documentTabWidget->setCurrentIndex(docman()->indexOf(doc));
@@ -1437,10 +1666,17 @@ bool MainWindow::InitConfigFiles()
                               .arg(TileMetaInfoMgr::instance()->errorString()));
         return false;
     }
-    TileMetaInfoMgr::instance()->resolveTilesets(
-                TileMetaInfoMgr::instance()->tilesets());
-    qInfo() << "WorldEd registered the complete tileset catalog; "
-               "PNG sheets will be decoded on demand";
+    // PZ map generation, BMP rules, blend layers and adjacent cells can use
+    // any installed sheet regardless of the normal GIDs in the active TMX.
+    // Load the complete discovered catalogue before a project is exposed.
+    // Resolution always prefers a readable 2x sheet and falls back to 1x.
+    const QList<Tileset *> completeTilesetCatalog =
+            TileMetaInfoMgr::instance()->tilesets();
+    TileMetaInfoMgr::instance()->resolveTilesets(completeTilesetCatalog);
+    TilesetManager::instance()->waitForTilesets(
+                completeTilesetCatalog, this);
+    qInfo() << "WorldEd loaded the complete tileset catalog before project startup:"
+            << completeTilesetCatalog.size() << "entries";
 
     if (!BuildingTMX::instance()->readTxt()) {
         QMessageBox::critical(this, tr("Building Configuration Error"),
@@ -3830,6 +4066,18 @@ void MainWindow::readSettings()
     const int leftBottomHeight = mSettings.value(QLatin1String("leftBottomDockHeight"), 0).toInt();
     const int rightTopHeight = mSettings.value(QLatin1String("rightTopDockHeight"), 0).toInt();
     const int rightBottomHeight = mSettings.value(QLatin1String("rightBottomDockHeight"), 0).toInt();
+    const QString streetDockDefaultKey =
+            QLatin1String("streetNamesDockDefaultApplied");
+    const bool selectObjectsByDefault =
+            !mSettings.value(streetDockDefaultKey, false).toBool();
+    if (selectObjectsByDefault)
+        mSettings.setValue(streetDockDefaultKey, true);
+    const QString streetDockSearchTabKey =
+            QLatin1String("streetNamesDockSearchTabApplied");
+    const bool dockStreetNamesWithSearch =
+            !mSettings.value(streetDockSearchTabKey, false).toBool();
+    if (dockStreetNamesWithSearch)
+        mSettings.setValue(streetDockSearchTabKey, true);
     mSettings.endGroup();
 
     // QMainWindow may accept restoreState() before all pending layout events
@@ -3837,7 +4085,17 @@ void MainWindow::readSettings()
     // Reapply explicit dimensions on the next event-loop turn.
     QTimer::singleShot(0, this, [this, leftWidth, rightWidth,
                                 leftTopHeight, leftBottomHeight,
-                                rightTopHeight, rightBottomHeight]() {
+                                rightTopHeight, rightBottomHeight,
+                                selectObjectsByDefault,
+                                dockStreetNamesWithSearch]() {
+        if (dockStreetNamesWithSearch) {
+            mStreetNamesDock->setFloating(false);
+            addDockWidget(Qt::LeftDockWidgetArea, mStreetNamesDock);
+            tabifyDockWidget(mSearchDock, mStreetNamesDock);
+            mSearchDock->raise();
+        }
+        if (selectObjectsByDefault)
+            mObjectsDock->raise();
         if (leftWidth > 0) {
             QList<QDockWidget*> docks;
             docks << mObjectsDock;
@@ -3895,6 +4153,11 @@ bool MainWindow::saveFile(const QString &fileName)
         }
         ++pos;
     }
+
+    // streets.xml is project output, like objects.lua. Keep it coupled to the
+    // normal Save action so Ctrl+S never leaves street-name edits behind.
+    if (mStreetNamesDock && !mStreetNamesDock->saveForProject())
+        return false;
 
 //    setRecentFile(fileName);
     return true;

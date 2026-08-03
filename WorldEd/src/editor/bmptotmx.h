@@ -58,6 +58,7 @@ public:
 
     bool generateWorld(WorldDocument *worldDoc, GenerateMode mode);
     bool generateCell(WorldCell *cell);
+    bool validateGenerationInputs(WorldDocument *worldDoc);
 
     QString errorString() const { return mError; }
 
@@ -83,6 +84,7 @@ private:
     bool LoadBaseXML();
     bool LoadRules();
     bool LoadBlends();
+    bool loadGenerationTilesets();
 
     void AddRule(Tiled::BmpRule *rule);
 

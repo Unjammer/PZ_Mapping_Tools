@@ -22,6 +22,7 @@
 #include "progress.h"
 #include "tilemetainfomgr.h"
 #include "tilesetmanager.h"
+#include "tilesetimagelock.h"
 
 #include "map.h"
 #include "maplevel.h"
@@ -47,6 +48,7 @@ using namespace SharedTools;
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QWriteLocker>
 
 #ifdef QT_NO_DEBUG
 inline QNoDebug noise() { return QNoDebug(); }
@@ -101,6 +103,8 @@ MapManager::MapManager() :
     mMapReaderWorker.resize(mMapReaderThread.size());
     for (int i = 0; i < mMapReaderThread.size(); i++) {
         mMapReaderThread[i] = new InterruptibleThread;
+        mMapReaderThread[i]->setObjectName(
+                    QStringLiteral("map-reader-%1").arg(i));
         mMapReaderWorker[i] = new MapReaderWorker(mMapReaderThread[i], i);
         mMapReaderWorker[i]->moveToThread(mMapReaderThread[i]);
         connect(mMapReaderWorker[i], qOverload<Map*,MapInfo*>(&MapReaderWorker::loaded),
@@ -774,36 +778,39 @@ void MapManager::mapLoadedByThread(Map *map, MapInfo *mapInfo)
 
     Tile *invisibleTile = TilesetManager::instance()->invisibleTile();
     Tile *missingTile = TilesetManager::instance()->missingTile();
-    foreach (Tileset *tileset, map->missingTilesets()) {
-        if (tileset == invisibleTile->tileset())
-            continue;
-        if (tileset == missingTile->tileset())
-            continue;
-        if (tileset->tileHeight() == missingTile->height() && tileset->tileWidth() == missingTile->width()) {
-            // Replace the all-red image with something nicer.
-            for (int i = 0; i < tileset->tileCount(); i++)
-                tileset->tileAt(i)->setImage(missingTile);
+    {
+        QWriteLocker imageWriteLock(&tilesetImageLock());
+        foreach (Tileset *tileset, map->missingTilesets()) {
+            if (tileset == invisibleTile->tileset())
+                continue;
+            if (tileset == missingTile->tileset())
+                continue;
+            if (tileset->tileHeight() == missingTile->height()
+                    && tileset->tileWidth() == missingTile->width()) {
+                // Replace the all-red image with something nicer.
+                for (int i = 0; i < tileset->tileCount(); i++)
+                    tileset->tileAt(i)->setImage(missingTile);
+            }
         }
     }
-    // Keep the original PZTools behavior: every embedded declaration is
-    // registered and resolves through TilesetManager's shared image cache.
-    // A sheet loaded by any map is therefore available to every current or
-    // adjacent cell, even when their embedded declarations differ in size.
-    // Do not delete "unused" declarations here; some generated border TMX
-    // files rely on them after the initial used-tileset accounting pass.
-    qInfo() << "Registering embedded TMX tilesets for shared image reuse:"
-            << map->tilesets().count() << mapInfo->path();
-    TilesetManager::instance()->addReferences(map->tilesets());
+    // Preserve the historical WorldEd behavior: load every declaration from
+    // each TMX/TBX header before the map is exposed to MapComposite.  Older
+    // projects commonly export every cell with the complete catalogue but in
+    // a different firstgid/order.  Restricting this to Map::usedTilesets()
+    // allows an adjacent cell to be composited against an unresolved
+    // declaration and permanently bakes the red missing-tile placeholder into
+    // its VBO.  The shared cache still prevents decoding the same PNG from disk
+    // more than once, while each map retains its own ordered declarations.
+    const QList<Tileset *> declaredTilesets = map->tilesets();
+    TilesetManager::instance()->addReferences(declaredTilesets);
 
-    // TileZed waits for a map's tilesets before exposing the document.  Do
-    // the same here: otherwise the first CellScene VBO can bake the missing
-    // tile placeholder while an image is still being read in the background.
     QList<Tileset *> usedTilesets = map->usedTilesets().values();
     usedTilesets.removeAll(TilesetManager::instance()->invisibleTileset());
     usedTilesets.removeAll(TilesetManager::instance()->missingTileset());
-    for (Tileset *tileset : qAsConst(usedTilesets))
-        TilesetManager::instance()->loadTileset(tileset, tileset->imageSource());
-    TilesetManager::instance()->waitForTilesets(usedTilesets);
+    qInfo() << "Loading complete ordered TMX tileset header:"
+            << declaredTilesets.count() << "declared,"
+            << usedTilesets.count() << "used" << mapInfo->path();
+    TilesetManager::instance()->waitForTilesets(declaredTilesets);
 
     bool replace = mapInfo->mMap != 0;
     if (replace) {

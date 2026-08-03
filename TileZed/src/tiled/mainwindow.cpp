@@ -69,6 +69,7 @@
 #include "quickstampmanager.h"
 #include "saveasimagedialog.h"
 #include "stampbrush.h"
+#include "tile.h"
 #include "tilelayer.h"
 #include "tileselectiontool.h"
 #include "tileset.h"
@@ -93,6 +94,7 @@
 #include "converttolotdialog.h"
 #include "convertorientationdialog.h"
 #include "createpackdialog.h"
+#include "depthmapeditor.h"
 #include "luatiletool.h"
 #include "luatooldialog.h"
 #include "mapcomposite.h"
@@ -135,6 +137,7 @@
 #endif
 
 #include <QCloseEvent>
+#include <QBoxLayout>
 #include <QComboBox>
 #include <QFileDialog>
 #include <QMessageBox>
@@ -149,6 +152,7 @@
 #include <QImageReader>
 #include <QRegularExpression>
 #include <QSignalMapper>
+#include <QSignalBlocker>
 #include <QShortcut>
 #include <QTimer>
 #include <QToolButton>
@@ -650,6 +654,11 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     connect(mBMPBrushSizePlus, &QAction::triggered, this, &MainWindow::brushSizePlus);
     addAction(mBMPBrushSizePlus);
 
+    mDepthMapEditorAction = new QAction(tr("Depth Map Editor..."), this);
+    mDepthMapEditorAction->setToolTip(
+                tr("Edit Build 42 tileGeometry.txt primitives and "
+                   "DEPTH_<tileset>.png atlases"));
+
     initActionManager();
     QString CONTEXT_TOOL = QStringLiteral("Tool");
     QString CATEGORY_TOOL_TILE = QStringLiteral("Tile");
@@ -747,6 +756,50 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     mUi->menuView->addAction(mLevelsDock->toggleViewAction());
     mUi->menuView->addAction(mWorldEdDock->toggleViewAction());
     mUi->menuView->addAction(mMapsDock->toggleViewAction());
+    mUi->menuView->addSeparator();
+    mNightPreviewAction = new QAction(tr("Night Preview"), this);
+    mNightPreviewAction->setCheckable(true);
+    mNightPreviewAction->setToolTip(
+                tr("Dim the map and preview tiledef lights and powered rooms"));
+    mSettings.setValue(QLatin1String("NightPreview/Enabled"), false);
+    mNightPreviewAction->setChecked(false);
+    // Keep the prototype available in the source, but do not expose a
+    // renderer that cannot reproduce the game's lighting pipeline.
+    mNightPreviewAction->setVisible(false);
+    mNightPreviewAction->setEnabled(false);
+    mUi->menuView->addAction(mNightPreviewAction);
+    QToolButton *nightPreviewButton =
+            new QToolButton(mUi->statusBarFrame);
+    nightPreviewButton->setCheckable(true);
+    nightPreviewButton->setText(tr("DAY"));
+    nightPreviewButton->setToolTip(
+                tr("Toggle day/night and tiledef lighting preview"));
+    nightPreviewButton->setAutoRaise(false);
+    nightPreviewButton->setVisible(false);
+    nightPreviewButton->setStyleSheet(QStringLiteral(
+        "QToolButton { padding: 2px 7px; border: 1px solid #68717d;"
+        " border-radius: 4px; font-weight: bold; }"
+        "QToolButton:checked { border: 2px solid #76c7ff;"
+        " background: #235c84; color: white; }"));
+    if (QBoxLayout *statusLayout =
+            qobject_cast<QBoxLayout *>(mUi->statusBarFrame->layout()))
+        statusLayout->addWidget(nightPreviewButton);
+    connect(nightPreviewButton, &QToolButton::toggled,
+            mNightPreviewAction, &QAction::setChecked);
+    connect(mNightPreviewAction, &QAction::toggled,
+            nightPreviewButton, [nightPreviewButton](bool enabled) {
+        const QSignalBlocker blocker(nightPreviewButton);
+        nightPreviewButton->setChecked(enabled);
+        nightPreviewButton->setText(enabled
+                                    ? QObject::tr("NIGHT")
+                                    : QObject::tr("DAY"));
+    });
+    connect(mNightPreviewAction, &QAction::toggled, this,
+            [this](bool enabled) {
+        mSettings.setValue(QLatin1String("NightPreview/Enabled"), enabled);
+        if (MapScene *scene = mDocumentManager->currentMapScene())
+            scene->setNightPreviewEnabled(enabled);
+    });
 #endif
 
     connect(mClipboardManager, &ClipboardManager::hasMapChanged, this, &MainWindow::updateActions);
@@ -806,6 +859,10 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     mUi->actionEnflatulator->setVisible(false); // !!!
     connect(mUi->actionEnflatulator, &QAction::triggered, this, &MainWindow::enflatulator);
     connect(mUi->actionSnowEditor, &QAction::triggered, this, &MainWindow::snowEditor);
+    mUi->menuTools->insertAction(mUi->actionWorldEd,
+                                 mDepthMapEditorAction);
+    connect(mDepthMapEditorAction, &QAction::triggered,
+            this, &MainWindow::depthMapEditor);
     connect(mUi->actionWorldEd, &QAction::triggered,
             this, &MainWindow::launchWorldEd);
 #endif
@@ -1013,11 +1070,24 @@ bool MainWindow::openFile(const QString &fileName,
     QList<Tileset*> usedTilesets = map->usedTilesets().values();
     usedTilesets.removeAll(TilesetManager::instance()->invisibleTileset());
     usedTilesets.removeAll(TilesetManager::instance()->missingTileset());
+    QList<Tileset*> declaredTilesets = map->tilesets();
+    declaredTilesets.removeAll(TilesetManager::instance()->invisibleTileset());
+    declaredTilesets.removeAll(TilesetManager::instance()->missingTileset());
     qInfo() << "TMX tilesets:"
             << "declared" << map->tilesets().size()
             << "used" << usedTilesets.size();
-    TileMetaInfoMgr::instance()->loadTilesets(usedTilesets, true, &progress);
-    TilesetManager::instance()->waitForTilesets(usedTilesets);
+    // BMP rules, blend layers and adjacent-cell rendering can reference a
+    // tileset without storing one of its gids in a normal tile layer. Loading
+    // only Map::usedTilesets() therefore leaves valid procedural tiles red
+    // until the user clicks that sheet in the Tilesets dock. Preserve the
+    // complete ordered header and make every declared sheet ready before the
+    // document is exposed to the renderer. The shared image cache prevents a
+    // second decode when another cell declares the same sheet.
+    if (!declaredTilesets.isEmpty()) {
+        TileMetaInfoMgr::instance()->loadTilesets(
+                    declaredTilesets, true, &progress);
+        TilesetManager::instance()->waitForTilesets(declaredTilesets);
+    }
 #endif
 
     addMapDocument(new MapDocument(map, fileName));
@@ -1195,9 +1265,6 @@ bool MainWindow::InitConfigFiles(QWidget *parent)
     qInfo() << "Loaded tileset catalog metadata:"
             << TileMetaInfoMgr::instance()->tilesets().size() << "entries";
 
-    const bool buildingEditorMode =
-            QCoreApplication::applicationName().compare(
-                QLatin1String("BuildingEd"), Qt::CaseInsensitive) == 0;
     progress.update(tr("Discovering additional tilesets..."));
     qInfo().noquote() << "Scanning for additional tilesets in"
                       << QDir::toNativeSeparators(
@@ -1210,17 +1277,20 @@ bool MainWindow::InitConfigFiles(QWidget *parent)
     }
     qInfo() << "Tileset discovery complete:"
             << TileMetaInfoMgr::instance()->tilesets().size() << "entries";
-    if (buildingEditorMode) {
-        // Resolve availability while the object/category views are still
-        // empty. Doing the same bulk pass after BuildingTiles.txt and
-        // BuildingFurniture.txt had populated them caused every source-change
-        // notification to rebuild the views again.
-        progress.update(tr("Checking available tileset images..."));
-        TileMetaInfoMgr::instance()->resolveTilesets(
-                    TileMetaInfoMgr::instance()->tilesets());
-        qInfo() << "BuildingEd registered the complete tileset catalog; "
-                   "PNG sheets will be decoded on demand";
-    }
+
+    // PZ mapping rules can use any installed sheet without putting one of its
+    // gids in the currently-open TMX. Make the entire discovered catalogue
+    // ready before TileZed or BuildingEd exposes a renderer or palette.
+    // TilesetManager resolves every name through 2x first and falls back to 1x
+    // only when no readable 2x image exists.
+    progress.update(tr("Loading complete tileset catalog..."));
+    const QList<Tileset *> completeTilesetCatalog =
+            TileMetaInfoMgr::instance()->tilesets();
+    TileMetaInfoMgr::instance()->loadTilesets(
+                completeTilesetCatalog, true, &progress);
+    TilesetManager::instance()->waitForTilesets(completeTilesetCatalog);
+    qInfo() << "Loaded complete tileset catalog before editor startup:"
+            << completeTilesetCatalog.size() << "entries";
 
     progress.update(tr("Building configuration [1/4]: Reading %1...")
                     .arg(BuildingTMX::instance()->txtName()));
@@ -2117,6 +2187,26 @@ void MainWindow::snowEditor()
     }
 }
 
+void MainWindow::depthMapEditor()
+{
+    Tile *tile = mTilesetDock->currentTile();
+    if (!tile || !tile->tileset()) {
+        QMessageBox::information(
+            this, tr("Depth Map Editor"),
+            tr("Select a tile in the Tilesets panel first. The editor "
+               "uses that tile's complete tileset as its source."));
+        return;
+    }
+
+    if (!mDepthMapEditor)
+        mDepthMapEditor = new DepthMapEditor(this);
+    if (!mDepthMapEditor->setTileset(tile->tileset(), tile->id()))
+        return;
+    mDepthMapEditor->show();
+    mDepthMapEditor->raise();
+    mDepthMapEditor->activateWindow();
+}
+
 void MainWindow::launchWorldEd()
 {
     QString path = QApplication::applicationDirPath();
@@ -2240,6 +2330,9 @@ void MainWindow::initActionManager()
     actionManager->registerAction(mUi->actionTileOverlays, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.OtherOverlays"));
     actionManager->registerAction(mUi->actionRearrangeTiles, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.RearrangeTiles"));
     actionManager->registerAction(mUi->actionSnowEditor, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.SnowEditor"));
+    actionManager->registerAction(mDepthMapEditorAction, CONTEXT_MENU,
+                                  CATEGORY_MENU_TOOLS,
+                                  QStringLiteral("Menu.Tools.DepthMapEditor"));
     actionManager->registerAction(mUi->actionWorldEd, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.WorldEd"));
     actionManager->registerAction(mUi->actionLuaScript, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.LuaConsole"));
 
@@ -3816,6 +3909,13 @@ void MainWindow::mapDocumentChanged(MapDocument *mapDocument)
             mZoomable->connectToComboBox(mZoomComboBox);
         }
     }
+#ifdef ZOMBOID
+    if (mNightPreviewAction) {
+        if (MapScene *scene = mDocumentManager->currentMapScene())
+            scene->setNightPreviewEnabled(
+                        mNightPreviewAction->isChecked());
+    }
+#endif
     updateWindowTitle();
     updateActions();
 #ifdef ZOMBOID

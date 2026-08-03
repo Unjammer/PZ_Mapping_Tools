@@ -52,6 +52,9 @@ public:
 
     bool read(const QString &fileName);
     bool write(const QString &fileName, const QList<TileDefTileset*> &tilesets);
+    bool write(const QString &fileName,
+               const QList<TileDefTileset*> &tilesets,
+               const QMap<QString,int> &idOverrides);
 
     QString directory() const;
 

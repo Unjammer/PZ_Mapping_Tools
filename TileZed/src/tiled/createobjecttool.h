@@ -48,6 +48,7 @@ public:
 
     void activate(MapScene *scene);
     void deactivate(MapScene *scene);
+    void selectedByUser();
 
     void mouseEntered();
     void mouseMoved(const QPointF &pos,

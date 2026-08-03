@@ -116,8 +116,12 @@ void CreateObjectTool::activate(MapScene *scene)
         if (!selected.first()->type().isEmpty())
             mObjectType = selected.first()->type();
     }
+}
 
-    editObjectPreset();
+void CreateObjectTool::selectedByUser()
+{
+    if (mMode == CreateArea && mapDocument())
+        editObjectPreset();
 }
 
 void CreateObjectTool::deactivate(MapScene *scene)

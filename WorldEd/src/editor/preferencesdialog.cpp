@@ -24,6 +24,7 @@
 #include "../portablesettings.h"
 
 #include <QFileDialog>
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -44,6 +45,8 @@ PreferencesDialog::PreferencesDialog(WorldDocument *worldDoc, QWidget *parent)
     , mRoadPointSpacingTrail(new QSpinBox(this))
     , mRoadSimplificationRailway(new QDoubleSpinBox(this))
     , mRoadPointSpacingRailway(new QSpinBox(this))
+    , mSyncThemeCheckBox(new QCheckBox(
+          tr("Apply to TileZed, BuildingEd and WorldEd"), this))
 {
     ui->setupUi(this);
     connect(ui->sharedPathsButton, &QAbstractButton::clicked,
@@ -69,8 +72,19 @@ PreferencesDialog::PreferencesDialog(WorldDocument *worldDoc, QWidget *parent)
     ui->themeCombo->addItems(prefs->availableThemes());
     const int themeIndex = ui->themeCombo->findText(prefs->theme(), Qt::MatchFixedString);
     ui->themeCombo->setCurrentIndex(themeIndex >= 0 ? themeIndex : 0);
+    mSyncThemeCheckBox->setChecked(
+                PortableSettings::syncThemeAcrossApplications());
+    mSyncThemeCheckBox->setToolTip(tr(
+                "Store the selected theme in the shared portable settings "
+                "and apply it to all three applications on their next start."));
+    ui->themeLayout->addWidget(mSyncThemeCheckBox);
     connect(ui->themeCombo, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &PreferencesDialog::themeChanged);
+    connect(mSyncThemeCheckBox, &QAbstractButton::toggled,
+            this, [this](bool enabled) {
+        PortableSettings::setSyncThemeAcrossApplications(
+                    enabled, ui->themeCombo->currentText());
+    });
 
     mTilesDirectory = prefs->tilesDirectory();
     ui->tilesDirectory->setText(QDir::toNativeSeparators(mTilesDirectory));

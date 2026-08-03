@@ -29,6 +29,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QAction;
 class QLineEdit;
 class QSpinBox;
 class QSplitter;
@@ -129,6 +130,7 @@ private slots:
     void tilesetBackgroundColorChanged(const QColor& color);
 
     void reassignTilesetIDs();
+    void splitForB42Mods();
 
     void updateUI();
 
@@ -203,6 +205,10 @@ private:
 #endif
 
     int uniqueTilesetID();
+    int maximumTilesetID() const;
+    int maximumTilesPerTileset() const;
+    void setBaseGameTarget(bool baseGame);
+    bool validateCurrentTarget(QString *error = nullptr) const;
 
 private:
     struct LabelField
@@ -258,6 +264,10 @@ private:
 
     QUndoGroup *mUndoGroup;
     QUndoStack *mUndoStack;
+    QAction *mModTargetAction;
+    QAction *mBaseGameTargetAction;
+    QAction *mSplitForB42ModsAction;
+    bool mBaseGameTarget;
     QToolButton *mUndoButton;
     QToolButton *mRedoButton;
 

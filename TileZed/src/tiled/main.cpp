@@ -21,6 +21,8 @@
  */
 
 #include "commandlineparser.h"
+#include "bmptool.h"
+#include "depthmapeditor.h"
 #include "mainwindow.h"
 #include "languagemanager.h"
 #include "preferences.h"
@@ -36,23 +38,28 @@
 #include "BuildingEditor/buildingfurnituredock.h"
 #include "BuildingEditor/buildinglua.h"
 #include "BuildingEditor/buildingmap.h"
+#include "BuildingEditor/buildingpreferences.h"
 #include "BuildingEditor/buildingtemplates.h"
 #include "BuildingEditor/buildingtiles.h"
 #include "BuildingEditor/buildingtilesetdock.h"
 #include "BuildingEditor/categorydock.h"
 #include "BuildingEditor/furnituregroups.h"
 #include "tilemetainfomgr.h"
+#include "tiledeffile.h"
 #include "tilesetmanager.h"
 #include "worlded/worldedmgr.h"
 #include "zprogress.h"
 #include "tile.h"
+#include "tilelayer.h"
 #include "tileset.h"
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QSettings>
 #include <QSet>
 #include <QTemporaryFile>
+#include <QTemporaryDir>
 #include <QUndoStack>
 #endif
 
@@ -80,6 +87,51 @@ bool gStartupBlockRendering = true;
 namespace {
 
 #ifdef ZOMBOID
+static bool validateSingleRowTilesetCatalog(QString *errorString)
+{
+    TileMetaInfoMgr *manager = TileMetaInfoMgr::instance();
+    Tiled::Tileset *giblet =
+            manager->tileset(QStringLiteral("Giblet_00"));
+    if (!giblet) {
+        *errorString = QStringLiteral(
+                    "Giblet_00 is absent from the loaded tileset catalogue");
+        return false;
+    }
+    if (giblet->tileCount() != 8) {
+        *errorString = QStringLiteral(
+                    "Giblet_00 has %1 tiles instead of 8")
+                .arg(giblet->tileCount());
+        return false;
+    }
+
+    // Reproduce the legacy failure directly. Valid one-row sheets sometimes
+    // reached the metadata writer with their column count reset to zero after
+    // an image refresh even though all eight tiles and the PNG geometry were
+    // still present.
+    giblet->setColumnCount(0);
+    QTemporaryDir temporary;
+    if (!temporary.isValid()) {
+        *errorString = QStringLiteral(
+                    "Could not create a temporary catalogue directory");
+        return false;
+    }
+    const QString outputFile =
+            temporary.filePath(QStringLiteral("Tilesets.txt"));
+    if (!manager->writeTxt(outputFile,
+                           manager->revision() + 1,
+                           manager->sourceRevision())) {
+        *errorString = manager->errorString();
+        return false;
+    }
+    if (giblet->columnCount() != 8) {
+        *errorString = QStringLiteral(
+                    "Giblet_00 recovery returned %1 columns instead of 8")
+                .arg(giblet->columnCount());
+        return false;
+    }
+    return true;
+}
+
 static void addEntryTiles(QSet<BuildingEditor::BuildingTile *> &tiles,
                           BuildingEditor::BuildingTileEntry *entry)
 {
@@ -189,6 +241,173 @@ static bool validateAllBuildingTemplates(QString *errorString)
 
     qInfo() << "Validated all building templates:"
             << templates->templateCount();
+    return true;
+}
+
+static bool validateBrushUndoBuffers(QString *errorString)
+{
+    Tiled::Tileset tileset(QStringLiteral("brush-validation"), 64, 128);
+    Tiled::Tile tile(64, 128, 0, &tileset);
+    Tiled::TileLayer layer(QStringLiteral("brush-undo"), 0, 0, 1, 1);
+    const Tiled::Cell paintedCell(&tile);
+    layer.setCell(0, 0, paintedCell);
+
+    QElapsedTimer elapsed;
+    elapsed.start();
+    for (int size = 2; size <= 300; ++size) {
+        // This mirrors a diagonal brush stroke whose merged undo buffer grows
+        // by one row and one column for each new tile.
+        layer.resize(QSize(size, size), QPoint(1, 1));
+        layer.setCell(0, 0, paintedCell);
+    }
+    const qint64 elapsedMs = elapsed.elapsed();
+
+    for (int i = 0; i < 300; ++i) {
+        if (layer.cellAt(i, i) != paintedCell) {
+            *errorString = QStringLiteral(
+                        "Merged brush undo buffer lost the tile at %1,%1")
+                    .arg(i);
+            return false;
+        }
+    }
+    if (!layer.cellAt(0, 1).isEmpty() ||
+            !layer.cellAt(298, 299).isEmpty()) {
+        *errorString = QStringLiteral(
+                    "Merged brush undo buffer moved a tile off the stroke");
+        return false;
+    }
+    if (!layer.usedTilesets().contains(&tileset)) {
+        *errorString = QStringLiteral(
+                    "Merged brush undo buffer lost its tileset references");
+        return false;
+    }
+
+    QImage brushImage(32, 32, QImage::Format_ARGB32);
+    brushImage.fill(Qt::transparent);
+    brushImage.setPixel(0, 0, qRgba(0, 0, 0, 255));
+    brushImage.setPixel(16, 16, qRgba(16, 16, 16, 255));
+    brushImage.setPixel(31, 31, qRgba(0, 0, 0, 255));
+    brushImage.setPixel(2, 2, qRgba(255, 255, 255, 255));
+    const QRegion mask = BmpBrushTool::regionFromBrushImage(brushImage);
+    if (!mask.contains(QPoint(0, 0))
+            || !mask.contains(QPoint(16, 16))
+            || !mask.contains(QPoint(31, 31))
+            || mask.contains(QPoint(2, 2))
+            || mask.contains(QPoint(3, 3))) {
+        *errorString = QStringLiteral(
+                    "Custom PNG brush mask did not preserve dark/transparent pixels");
+        return false;
+    }
+
+    BmpBrushTool *brushTool = BmpBrushTool::instance();
+    brushTool->setCustomBrush(mask, brushImage.size(),
+                             QStringLiteral("self-test"));
+    const QRegion translated = brushTool->brushRegionAt(QPoint(100, 100));
+    if (!translated.contains(QPoint(84, 84))
+            || !translated.contains(QPoint(100, 100))
+            || !translated.contains(QPoint(115, 115))
+            || translated.contains(QPoint(86, 86))) {
+        *errorString = QStringLiteral(
+                    "Custom PNG brush mask was not centered correctly");
+        brushTool->setBrushShape(BmpBrushTool::BrushShape::Square);
+        return false;
+    }
+    brushTool->setBrushShape(BmpBrushTool::BrushShape::Square);
+
+    qInfo() << "Validated 300-tile diagonal brush undo growth in"
+            << elapsedMs << "ms and a centered 32x32 PNG brush mask";
+    return true;
+}
+
+static bool validateTileDefSplitting(QString *errorString)
+{
+    TileDefFile oversized;
+    for (int index = 0;
+         index < TileDefFile::MAX_TILESET_ID_MODS + 1;
+         ++index) {
+        TileDefTileset *tileset = new TileDefTileset;
+        tileset->mName = QStringLiteral("validation_%1")
+                .arg(index, 4, 10, QLatin1Char('0'));
+        tileset->mImageSource = tileset->mName
+                + QLatin1String(".png");
+        tileset->mColumns = 1;
+        tileset->mRows = 1;
+        tileset->mID = index + 1;
+        tileset->mTiles += new TileDefTile(tileset, 0);
+        oversized.insertTileset(
+                    oversized.tilesets().size(), tileset);
+    }
+
+    QString validationError;
+    if (oversized.validate(TileDefFile::ModFormat,
+                           &validationError)) {
+        *errorString = QStringLiteral(
+                    "An oversized mod tiledef unexpectedly validated");
+        return false;
+    }
+
+    QTemporaryDir temporaryDirectory;
+    if (!temporaryDirectory.isValid()) {
+        *errorString = QStringLiteral(
+                    "Could not create the temporary tiledef directory");
+        return false;
+    }
+    const QString outputFile =
+            QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("legacy.tiles"));
+    QStringList outputs;
+    if (!oversized.writeModSeries(outputFile, &outputs)) {
+        *errorString = oversized.errorString();
+        return false;
+    }
+    if (outputs.size() != 2
+            || !outputs.at(0).endsWith(
+                QLatin1String("legacy_1.tiles"))
+            || !outputs.at(1).endsWith(
+                QLatin1String("legacy_2.tiles"))) {
+        *errorString = QStringLiteral(
+                    "Unexpected split output names: %1")
+                .arg(outputs.join(QStringLiteral(", ")));
+        return false;
+    }
+
+    const int expectedCounts[] = {
+        TileDefFile::MAX_TILESET_ID_MODS, 1
+    };
+    for (int part = 0; part < outputs.size(); ++part) {
+        TileDefFile repaired;
+        if (!repaired.read(outputs.at(part))) {
+            *errorString = repaired.errorString();
+            return false;
+        }
+        if (repaired.tilesets().size() != expectedCounts[part]
+                || !repaired.validate(TileDefFile::ModFormat,
+                                      &validationError)) {
+            *errorString = QStringLiteral(
+                        "Split part %1 is invalid: %2")
+                    .arg(part + 1).arg(validationError);
+            return false;
+        }
+        if (repaired.tilesets().first()->mID != 1
+                || repaired.tilesets().last()->mID
+                != expectedCounts[part]) {
+            *errorString = QStringLiteral(
+                        "Split part %1 did not receive sequential IDs")
+                    .arg(part + 1);
+            return false;
+        }
+        if (!QFileInfo(outputs.at(part)
+                       + QLatin1String(".txt")).isFile()) {
+            *errorString = QStringLiteral(
+                        "Split part %1 has no text companion")
+                    .arg(part + 1);
+            return false;
+        }
+    }
+
+    qInfo() << "Validated B42 tiledef split:"
+            << oversized.tilesets().size() << "tilesets ->"
+            << outputs.size() << "files";
     return true;
 }
 
@@ -302,12 +521,20 @@ public:
     bool showedVersion;
     bool disableOpenGL;
     bool validateBuildingCategories;
+    bool validateBrushPerformance;
+    bool validateDepthMapEditor;
+    bool validateTileDefSplit;
+    bool validateTilesetCatalog;
 
 private:
     void showVersion();
     void justQuit();
     void setDisableOpenGL();
     void setValidateBuildingCategories();
+    void setValidateBrushPerformance();
+    void setValidateDepthMapEditor();
+    void setValidateTileDefSplit();
+    void setValidateTilesetCatalog();
 
     // Convenience wrapper around registerOption
     template <void (CommandLineHandler::*memberFunction)()>
@@ -330,6 +557,10 @@ CommandLineHandler::CommandLineHandler()
     , showedVersion(false)
     , disableOpenGL(false)
     , validateBuildingCategories(false)
+    , validateBrushPerformance(false)
+    , validateDepthMapEditor(false)
+    , validateTileDefSplit(false)
+    , validateTilesetCatalog(false)
 {
     option<&CommandLineHandler::showVersion>(
                 QLatin1Char('v'),
@@ -351,6 +582,26 @@ CommandLineHandler::CommandLineHandler()
                 QChar(),
                 QLatin1String("--validate-building-categories"),
                 QLatin1String("Load and validate every BuildingEd tile category"));
+
+    option<&CommandLineHandler::setValidateBrushPerformance>(
+                QChar(),
+                QLatin1String("--validate-brush-performance"),
+                QLatin1String("Validate sparse undo growth for tile painting"));
+
+    option<&CommandLineHandler::setValidateDepthMapEditor>(
+                QChar(),
+                QLatin1String("--validate-depthmap-editor"),
+                QLatin1String("Validate Build 42 depth atlas editing and PNG output"));
+
+    option<&CommandLineHandler::setValidateTileDefSplit>(
+                QChar(),
+                QLatin1String("--validate-tiledef-split"),
+                QLatin1String("Validate B42 mod tiledef limits and splitting"));
+
+    option<&CommandLineHandler::setValidateTilesetCatalog>(
+                QChar(),
+                QLatin1String("--validate-tileset-catalog"),
+                QLatin1String("Validate one-row tileset catalogue recovery"));
 }
 
 void CommandLineHandler::showVersion()
@@ -376,6 +627,26 @@ void CommandLineHandler::setDisableOpenGL()
 void CommandLineHandler::setValidateBuildingCategories()
 {
     validateBuildingCategories = true;
+}
+
+void CommandLineHandler::setValidateBrushPerformance()
+{
+    validateBrushPerformance = true;
+}
+
+void CommandLineHandler::setValidateDepthMapEditor()
+{
+    validateDepthMapEditor = true;
+}
+
+void CommandLineHandler::setValidateTileDefSplit()
+{
+    validateTileDefSplit = true;
+}
+
+void CommandLineHandler::setValidateTilesetCatalog()
+{
+    validateTilesetCatalog = true;
 }
 
 #if !defined(QT_NO_DEBUG) && defined(ZOMBOID) && defined(_MSC_VER)
@@ -449,10 +720,41 @@ int main(int argc, char *argv[])
         return 0;
     if (commandLine.quit)
         return 0;
+    if (commandLine.validateBrushPerformance) {
+        QString error;
+        const bool valid = validateBrushUndoBuffers(&error);
+        qInfo().noquote()
+                << "TileZed brush-performance validation:"
+                << (valid ? QStringLiteral("PASS")
+                          : QStringLiteral("FAIL: %1").arg(error));
+        return valid ? 0 : 1;
+    }
+    if (commandLine.validateDepthMapEditor) {
+        QString error;
+        const bool valid = DepthMapEditor::runFormatSelfTest(&error);
+        qInfo().noquote()
+                << "TileZed depth-map editor validation:"
+                << (valid ? QStringLiteral("PASS")
+                          : QStringLiteral("FAIL: %1").arg(error));
+        return valid ? 0 : 1;
+    }
+    if (commandLine.validateTileDefSplit) {
+        QString error;
+        const bool valid = validateTileDefSplitting(&error);
+        qInfo().noquote()
+                << "TileZed tiledef-split validation:"
+                << (valid ? QStringLiteral("PASS")
+                          : QStringLiteral("FAIL: %1").arg(error));
+        return valid ? 0 : 1;
+    }
     if (!FirstLaunchDialog::ensureSharedPaths())
         return 0;
-    if (commandLine.disableOpenGL)
+    if (commandLine.disableOpenGL) {
         Preferences::instance()->setUseOpenGL(false);
+        if (buildingEditorMode)
+            BuildingEditor::BuildingPreferences::instance()
+                    ->setUseOpenGL(false);
+    }
 
 #ifdef ZOMBOID
     Preferences::instance()->applyTheme();
@@ -469,6 +771,18 @@ int main(int argc, char *argv[])
                     !buildingEditor.Startup()) {
                 buildingEditor.close();
                 QCoreApplication::quit();
+                return;
+            }
+
+            if (commandLine.validateTilesetCatalog) {
+                QString error;
+                const bool valid =
+                        validateSingleRowTilesetCatalog(&error);
+                qInfo().noquote()
+                        << "BuildingEd one-row tileset validation:"
+                        << (valid ? QStringLiteral("PASS")
+                                  : QStringLiteral("FAIL: %1").arg(error));
+                QCoreApplication::exit(valid ? 0 : 3);
                 return;
             }
 
@@ -612,6 +926,16 @@ int main(int argc, char *argv[])
 
     if (!w.InitConfigFiles())
         return 0;
+
+    if (commandLine.validateTilesetCatalog) {
+        QString error;
+        const bool valid = validateSingleRowTilesetCatalog(&error);
+        qInfo().noquote()
+                << "TileZed one-row tileset validation:"
+                << (valid ? QStringLiteral("PASS")
+                          : QStringLiteral("FAIL: %1").arg(error));
+        return valid ? 0 : 3;
+    }
 
     QSettings sessionSettings(QSettings::IniFormat, QSettings::UserScope,
                               QLatin1String("TheIndieStone"),

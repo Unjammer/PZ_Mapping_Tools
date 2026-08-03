@@ -1,0 +1,102 @@
+PZ Mapping Tools - third-party notices
+======================================
+
+This file is a component index. The complete license texts are distributed in
+the adjacent "licenses" directory. Copyright notices in the source files remain
+authoritative.
+
+PZWorldEd, TileZed, BuildingEd, and editor code
+------------------------------------------------
+Copyright Tim Baker and the contributors identified in the source files.
+License: GNU GPL version 2 or, where the source notice says so, any later
+version.
+License text: licenses/GPL-2.0.txt
+Upstream:
+  https://github.com/timbaker/pzworlded
+  https://github.com/timbaker/tiled
+
+Tiled libtiled and tmxviewer components
+---------------------------------------
+Copyright Thorbjorn Lindeijer and other contributors identified in AUTHORS.txt
+and the source files.
+License: Simplified BSD license.
+License text: licenses/BSD-2-Clause.txt
+
+Qt 5.14.2 runtime
+-----------------
+Copyright The Qt Company Ltd. and Qt contributors.
+The release dynamically links against Qt 5.14.2 libraries. Qt is available
+under commercial and open-source terms; this distribution uses the applicable
+GNU LGPL v3 / GNU GPL v3 terms described in the included notice.
+License text: licenses/Qt-5-LGPL-3.0-GPL-3.0.txt
+Corresponding upstream source:
+  https://download.qt.io/archive/qt/5.14/5.14.2/single/
+
+Qt Solutions: QtSingleApplication / QtLockedFile
+------------------------------------------------
+Copyright Digia Plc and/or its subsidiaries.
+License: 3-clause BSD license.
+License text: licenses/Qt-Solutions-BSD-3-Clause.txt
+
+QuaZip 1.1
+----------
+Copyright Sergey A. Tachenov and QuaZip contributors.
+License: GNU LGPL v2.1 with the QuaZip static-linking exception.
+License text: licenses/QuaZip-LGPL-2.1-with-exception.txt
+
+Lua 5.2
+-------
+Copyright (C) 1994-2012 Lua.org, PUC-Rio.
+License: MIT-style Lua license.
+License text: licenses/Lua-5.2.txt
+
+zlib 1.2.8
+----------
+Copyright (C) 1995-2013 Jean-loup Gailly and Mark Adler.
+License: zlib license.
+License text: licenses/zlib-1.2.8.txt
+
+Clipper 6.4.2
+-------------
+Copyright Angus Johnson 2010-2017.
+License: Boost Software License 1.0.
+License text: licenses/Boost-1.0.txt
+
+BreezeStyleSheets
+-----------------
+Copyright Colin Duquesnoy and Alex Huszagh.
+License: MIT license.
+License text: licenses/BreezeStyleSheets-MIT.md
+
+QDarkStyleSheet
+---------------
+Copyright Colin Duquesnoy and Daniel Cosmo Pizetta.
+License: MIT for code and Creative Commons Attribution 4.0 for images.
+License text: licenses/QDarkStyle-LICENSE.rst
+
+Texture atlas helper
+--------------------
+Copyright (C) 2020 Joao Henrique.
+License: 2-clause BSD license.
+The complete notice is retained in the source file
+WorldEd/src/libtiled/texture_atlas.h and is also reproduced in
+licenses/Texture-Atlas-BSD-2-Clause.txt.
+
+Action/shortcut editor
+----------------------
+Copyright (C) 2022 Laszlo Papp.
+License: 3-clause BSD license.
+License text: licenses/ActionManager-BSD-3-Clause.txt
+
+JSON parser
+-----------
+Copyright (c) 2010 Girish Ramakrishnan and contributors.
+Use, modification, and distribution are allowed without limitation, warranty,
+liability, or support of any kind. The notice is retained in the qjsonparser
+source files.
+
+Sprite Sheet Packer-derived rectangle packing code
+---------------------------------------------------
+Copyright (c) 2009 Nick Gravelyn and Markus Ewald.
+License: MIT. The attribution is retained in
+TileZed/src/tiled/texturepacker.h.

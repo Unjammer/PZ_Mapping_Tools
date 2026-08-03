@@ -865,8 +865,15 @@ class TileDefFile : public QObject
 {
     Q_OBJECT
 public:
+    enum TargetFormat {
+        ModFormat,
+        BaseGameFormat
+    };
+
     static const int MAX_TILESET_ID_GAME = 1024;
     static const int MAX_TILESET_ID_MODS = 512;
+    static const int MAX_TILES_PER_TILESET_GAME = 1024;
+    static const int MAX_TILES_PER_TILESET_MODS = 512;
 
     TileDefFile();
     ~TileDefFile();
@@ -879,6 +886,15 @@ public:
 
     bool read(const QString &fileName);
     bool write(const QString &fileName);
+    bool write(const QString &fileName, TargetFormat target);
+    bool writeModSeries(const QString &fileName,
+                        QStringList *writtenFiles = nullptr);
+
+    static TargetFormat inferredTargetFormat(const QString &fileName);
+    static int maximumTilesets(TargetFormat target);
+    static int maximumTilesPerTileset(TargetFormat target);
+    bool validate(TargetFormat target, QString *error = nullptr) const;
+    QStringList modSeriesFileNames(const QString &fileName) const;
 
     QString directory() const;
 
@@ -908,6 +924,12 @@ public:
     { return mError; }
 
 private:
+    bool writeTilesets(const QString &fileName,
+                       const QList<TileDefTileset*> &tilesets,
+                       TargetFormat target,
+                       const QMap<QString,int> &idOverrides =
+                           QMap<QString,int>());
+
     QList<TileDefTileset*> mTilesets;
     QMap<QString,TileDefTileset*> mTilesetByName;
     QString mFileName;

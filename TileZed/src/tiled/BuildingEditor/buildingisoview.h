@@ -38,6 +38,7 @@ class TileLayer;
 class Tileset;
 
 namespace Internal {
+class NightPreviewItem;
 class Zoomable;
 }
 
@@ -234,6 +235,8 @@ public:
     void setCursorPosition(const QPoint &pos);
 
     void calculateUnlitRoomMask();
+    void setNightPreviewEnabled(bool enabled);
+    void rebuildNightPreview();
 
 private:
     void BuildingToMap();
@@ -303,6 +306,8 @@ private:
     QMap<int,CompositeLayerGroupItem*> mLayerGroupItems;
     bool mLoading;
     QGraphicsRectItem *mDarkRectangle;
+    Tiled::Internal::NightPreviewItem *mNightPreviewItem;
+    bool mNightPreviewEnabled;
     BaseTool *mCurrentTool;
     CompositeLayerGroup *mLayerGroupWithToolTiles;
     Tiled::TileLayer mToolTiles;

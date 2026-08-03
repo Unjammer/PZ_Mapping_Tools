@@ -248,6 +248,8 @@ Preferences::Preferences()
     mTilesetBackgroundColor = QColor(mSettings->value(QLatin1String("TilesetBackgroundColor"), QColor(Qt::white).name()).toString());
     mShowCellBorder = mSettings->value(QLatin1String("ShowCelLBorder"), true).toBool();
     mTheme = mSettings->value(QLatin1String("Theme"), QLatin1String("Default")).toString();
+    if (PortableSettings::syncThemeAcrossApplications())
+        mTheme = PortableSettings::sharedTheme(mTheme);
 #endif
     mSettings->endGroup();
 #ifdef ZOMBOID
@@ -866,10 +868,14 @@ void Preferences::setShowCellBorder(bool show)
 void Preferences::setTheme(const QString &theme)
 {
     if (mTheme == theme) {
+        if (PortableSettings::syncThemeAcrossApplications())
+            PortableSettings::setThemeForAllApplications(theme);
         return;
     }
     mTheme = theme;
     applyTheme();
+    if (PortableSettings::syncThemeAcrossApplications())
+        PortableSettings::setThemeForAllApplications(theme);
 }
 
 void Preferences::setRestoreLastSession(bool restore)

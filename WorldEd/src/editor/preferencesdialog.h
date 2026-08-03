@@ -23,6 +23,7 @@
 class WorldDocument;
 
 class QListWidgetItem;
+class QCheckBox;
 class QDoubleSpinBox;
 class QSpinBox;
 
@@ -54,6 +55,7 @@ private:
     QSpinBox *mRoadPointSpacingTrail;
     QDoubleSpinBox *mRoadSimplificationRailway;
     QSpinBox *mRoadPointSpacingRailway;
+    QCheckBox *mSyncThemeCheckBox;
 };
 
 #endif // PREFERENCESDIALOG_H

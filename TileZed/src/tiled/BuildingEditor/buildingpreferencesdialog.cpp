@@ -19,8 +19,14 @@
 #include "ui_buildingpreferencesdialog.h"
 
 #include "buildingpreferences.h"
+#include "preferences.h"
+#include "../../portablesettings.h"
 
+#include <QCheckBox>
+#include <QComboBox>
 #include <QFileDialog>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QMessageBox>
 #include <QSettings>
 
@@ -28,7 +34,10 @@ using namespace BuildingEditor;
 
 BuildingPreferencesDialog::BuildingPreferencesDialog(QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::BuildingPreferencesDialog)
+    ui(new Ui::BuildingPreferencesDialog),
+    mThemeCombo(new QComboBox(this)),
+    mSyncThemeCheckBox(new QCheckBox(
+          tr("Apply to TileZed, BuildingEd and WorldEd"), this))
 {
     ui->setupUi(this);
 
@@ -36,6 +45,34 @@ BuildingPreferencesDialog::BuildingPreferencesDialog(QWidget *parent) :
     ui->configDirEdit->setText(QDir::toNativeSeparators(configPath));
 
     ui->gridColor->setColor(BuildingPreferences::instance()->gridColor());
+
+    QHBoxLayout *themeLayout = new QHBoxLayout;
+    themeLayout->addWidget(new QLabel(tr("Theme:"), this));
+    mThemeCombo->addItems(
+                Tiled::Internal::Preferences::instance()->availableThemes());
+    const int themeIndex = mThemeCombo->findText(
+                Tiled::Internal::Preferences::instance()->theme(),
+                Qt::MatchFixedString);
+    mThemeCombo->setCurrentIndex(themeIndex >= 0 ? themeIndex : 0);
+    themeLayout->addWidget(mThemeCombo);
+    mSyncThemeCheckBox->setChecked(
+                PortableSettings::syncThemeAcrossApplications());
+    mSyncThemeCheckBox->setToolTip(tr(
+                "Store the selected theme in the shared portable settings "
+                "and apply it to all three applications on their next start."));
+    themeLayout->addWidget(mSyncThemeCheckBox);
+    themeLayout->addStretch();
+    ui->gridLayout->addLayout(themeLayout, 1, 0);
+    connect(mThemeCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+        Tiled::Internal::Preferences::instance()->setTheme(
+                    mThemeCombo->currentText());
+    });
+    connect(mSyncThemeCheckBox, &QAbstractButton::toggled,
+            this, [this](bool enabled) {
+        PortableSettings::setSyncThemeAcrossApplications(
+                    enabled, mThemeCombo->currentText());
+    });
 
     mUseOpenGL = prefs()->useOpenGL();
     ui->useOpenGL->setChecked(mUseOpenGL);

@@ -1,0 +1,28 @@
+PZ Mapping Tools - corresponding source offer
+==============================================
+
+The complete corresponding source code for the PZ Mapping Tools executables
+in this distribution, including the scripts and project files used to build
+them, is available without charge at:
+
+    https://github.com/Unjammer/PZ_Mapping_Tools
+
+Use the source revision identified by the release tag or commit accompanying
+this binary release.
+
+The portable Windows build dynamically links against Qt 5.14.2. The matching
+unmodified Qt source archive is available at:
+
+    https://download.qt.io/archive/qt/5.14/5.14.2/single/
+
+If either source download becomes unavailable, any recipient of this binary
+distribution may request the corresponding source through:
+
+    https://github.com/Unjammer/PZ_Mapping_Tools/issues
+
+For a period of at least three years after this release, the maintainer will
+provide that source on a customary durable medium for no more than the
+reasonable physical cost of performing the distribution.
+
+This offer supplements, and does not replace or restrict, the rights granted
+by the applicable GPL and LGPL license texts included with this distribution.

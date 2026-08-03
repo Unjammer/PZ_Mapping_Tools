@@ -64,6 +64,7 @@ macx {
 #OBJECTS_DIR = .obj
 
 SOURCES += aboutdialog.cpp \
+    nightpreviewitem.cpp \
     BuildingEditor/attributeeditmode.cpp \
     BuildingEditor/attributeeditmode_p.cpp \
     BuildingEditor/buildingattributesdock.cpp \
@@ -102,6 +103,8 @@ SOURCES += aboutdialog.cpp \
     commanddialog.cpp \
     commandlineparser.cpp \
     createobjecttool.cpp \
+    depthgeometry.cpp \
+    depthmapeditor.cpp \
     documentmanager.cpp \
     editpolygontool.cpp \
     eraser.cpp \
@@ -300,6 +303,7 @@ SOURCES += aboutdialog.cpp \
     BuildingEditor/roofhiding.cpp
 
 HEADERS += aboutdialog.h \
+    nightpreviewitem.h \
     ../firstlaunchdialog.h \
     ../portablesettings.h \
     BuildingEditor/attributeeditmode.h \
@@ -341,6 +345,8 @@ HEADERS += aboutdialog.h \
     command.h \
     commandlineparser.h \
     createobjecttool.h \
+    depthgeometry.h \
+    depthmapeditor.h \
     documentmanager.h \
     editpolygontool.h \
     eraser.h \

@@ -20,6 +20,9 @@
 
 #include <QDialog>
 
+class QCheckBox;
+class QComboBox;
+
 namespace Ui {
 class BuildingPreferencesDialog;
 }
@@ -46,6 +49,8 @@ public slots:
 private:
     Ui::BuildingPreferencesDialog *ui;
     bool mUseOpenGL;
+    QComboBox *mThemeCombo;
+    QCheckBox *mSyncThemeCheckBox;
 };
 
 } // BuildingEditor
