@@ -163,6 +163,17 @@ void BMPToTMXDialog::apply()
 
 bool BMPToTMXDialog::validate()
 {
+    // Line edits are user-editable; do not rely solely on Browse button
+    // callbacks to update the backing values.
+    mExportDir = QDir::fromNativeSeparators(
+                ui->exportEdit->text().trimmed());
+    mRulesFile = QDir::fromNativeSeparators(
+                ui->rulesEdit->text().trimmed());
+    mBlendsFile = QDir::fromNativeSeparators(
+                ui->blendsEdit->text().trimmed());
+    mMapBaseFile = QDir::fromNativeSeparators(
+                ui->mapbaseEdit->text().trimmed());
+
     QDir dir(mExportDir);
     if (mExportDir.isEmpty() || !dir.exists()) {
         QMessageBox::warning(this, tr("Map Generation Error"),

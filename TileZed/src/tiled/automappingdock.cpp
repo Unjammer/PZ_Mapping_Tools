@@ -85,18 +85,34 @@ void AutomappingDock::refresh()
 {
     AutomappingManager *manager = AutomappingManager::instance();
     const QString rulesPath = manager->rulesFilePath();
+    const QString worldEdRulesPath =
+            manager->worldEdRulesFilePath();
     const QVector<AutomappingRuleInfo> rules = manager->ruleInfos();
 
     mRulesPathLabel->setText(rulesPath.isEmpty()
-            ? tr("Rules: save or open a TMX first")
-            : tr("Rules: %1").arg(QDir::toNativeSeparators(rulesPath)));
+            ? tr("Automapper manifest: save or open a TMX first")
+            : tr("Automapper manifest: %1")
+              .arg(QDir::toNativeSeparators(rulesPath)));
+    mRulesPathLabel->setToolTip(QString());
 
     if (!manager->hasMapDocument()) {
         mStatusLabel->setText(tr("No map is open."));
+    } else if (!worldEdRulesPath.isEmpty()
+               && !QFileInfo::exists(rulesPath)) {
+        mStatusLabel->setText(
+                    tr("The nearby Rules.txt is a WorldEd terrain/BMP "
+                       "definition and is intentionally ignored. Create "
+                       "automapping-rules.txt beside this TMX to use "
+                       "Automapper."));
+        mRulesPathLabel->setToolTip(
+                    tr("Ignored WorldEd file: %1")
+                    .arg(QDir::toNativeSeparators(
+                             worldEdRulesPath)));
     } else if (!manager->isLoaded()) {
         mStatusLabel->setText(QFileInfo::exists(rulesPath)
-                ? tr("Rules are available but not loaded.")
-                : tr("No rules.txt exists beside this TMX."));
+                ? tr("An Automapper manifest is available but not loaded.")
+                : tr("No automapping-rules.txt or compatible legacy "
+                     "rules.txt exists beside this TMX."));
     } else {
         int patternCount = 0;
         for (const AutomappingRuleInfo &rule : rules)
@@ -122,7 +138,10 @@ void AutomappingDock::refresh()
         mInteractiveCheckBox->setChecked(
                     Preferences::instance()->automappingDrawing());
     }
-    mInteractiveCheckBox->setEnabled(manager->hasMapDocument());
+    mInteractiveCheckBox->setEnabled(
+                manager->hasMapDocument()
+                && QFileInfo::exists(rulesPath)
+                && worldEdRulesPath.isEmpty());
     mReloadButton->setEnabled(manager->hasMapDocument() && !rulesPath.isEmpty());
     mApplyButton->setEnabled(manager->hasMapDocument());
 }

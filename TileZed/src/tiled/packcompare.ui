@@ -6,64 +6,110 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
-    <height>600</height>
+    <width>1280</width>
+    <height>820</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>.pack Comparator</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="0">
-     <layout class="QHBoxLayout" name="horizontalLayout">
-      <item>
-       <widget class="QLabel" name="packLabel1">
-        <property name="text">
-         <string>Pack 1:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="packEdit1"/>
-      </item>
-      <item>
-       <widget class="QToolButton" name="packBrowse1">
-        <property name="text">
-         <string>...</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QGroupBox" name="inputGroup">
+      <property name="title">
+       <string>Pack files (read-only)</string>
+      </property>
+      <layout class="QGridLayout" name="inputLayout">
+       <item row="0" column="0">
+        <widget class="QLabel" name="packLabel1">
+         <property name="text">
+          <string>Pack 1 / baseline:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLineEdit" name="packEdit1"/>
+       </item>
+       <item row="0" column="2">
+        <widget class="QToolButton" name="packBrowse1">
+         <property name="text">
+          <string>...</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1" colspan="2">
+        <widget class="QLabel" name="packSummary1">
+         <property name="text">
+          <string>Not loaded</string>
+         </property>
+         <property name="textInteractionFlags">
+          <set>Qt::TextSelectableByMouse</set>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="packLabel2">
+         <property name="text">
+          <string>Pack 2 / candidate:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QLineEdit" name="packEdit2"/>
+       </item>
+       <item row="2" column="2">
+        <widget class="QToolButton" name="packBrowse2">
+         <property name="text">
+          <string>...</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1" colspan="2">
+        <widget class="QLabel" name="packSummary2">
+         <property name="text">
+          <string>Not loaded</string>
+         </property>
+         <property name="textInteractionFlags">
+          <set>Qt::TextSelectableByMouse</set>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
     </item>
-    <item row="1" column="0">
-     <layout class="QHBoxLayout" name="horizontalLayout_2">
+    <item>
+     <layout class="QHBoxLayout" name="commandLayout">
       <item>
-       <widget class="QLabel" name="packLabel2">
+       <widget class="QPushButton" name="compareButton">
         <property name="text">
-         <string>Pack 2:</string>
+         <string>Compare and hash</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QLineEdit" name="packEdit2"/>
-      </item>
-      <item>
-       <widget class="QToolButton" name="packBrowse2">
+       <widget class="QPushButton" name="swapButton">
         <property name="text">
-         <string>...</string>
+         <string>Swap packs</string>
         </property>
        </widget>
       </item>
-     </layout>
-    </item>
-    <item row="5" column="0">
-     <widget class="QTextBrowser" name="textBrowser"/>
-    </item>
-    <item row="3" column="0">
-     <layout class="QHBoxLayout" name="horizontalLayout_3">
       <item>
-       <spacer name="horizontalSpacer">
+       <widget class="QPushButton" name="exportButton">
+        <property name="text">
+         <string>Export CSV...</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="copyButton">
+        <property name="text">
+         <string>Copy report</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="commandSpacer">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>
         </property>
@@ -76,32 +122,183 @@
        </spacer>
       </item>
       <item>
-       <widget class="QPushButton" name="compare">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
+       <widget class="QLabel" name="searchLabel">
         <property name="text">
-         <string>Compare</string>
+         <string>Search:</string>
         </property>
        </widget>
       </item>
       <item>
-       <spacer name="horizontalSpacer_2">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+       <widget class="QLineEdit" name="searchEdit">
+        <property name="placeholderText">
+         <string>Texture name</string>
         </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>40</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="statusFilter"/>
       </item>
      </layout>
+    </item>
+    <item>
+     <widget class="QLabel" name="comparisonSummary">
+      <property name="text">
+       <string>Choose two packs to compare.</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLabel" name="visibleSummary">
+      <property name="text">
+       <string>0 textures shown</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QSplitter" name="mainSplitter">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+      <widget class="QTableWidget" name="comparisonTable">
+       <property name="alternatingRowColors">
+        <bool>true</bool>
+       </property>
+       <property name="sortingEnabled">
+        <bool>true</bool>
+       </property>
+       <column>
+        <property name="text">
+         <string>Status</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Texture</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Pack 1 page</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Pack 2 page</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Canvas 1 / 2</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Pixel SHA-256 1</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Pixel SHA-256 2</string>
+        </property>
+       </column>
+      </widget>
+      <widget class="QWidget" name="previewPanel">
+       <layout class="QVBoxLayout" name="previewPanelLayout">
+        <item>
+         <widget class="QLabel" name="detailLabel">
+          <property name="text">
+           <string>Select a texture to inspect it.</string>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+          <property name="textInteractionFlags">
+           <set>Qt::TextSelectableByMouse</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="previewsLayout">
+          <item>
+           <widget class="QGroupBox" name="previewGroup1">
+            <property name="title">
+             <string>Pack 1</string>
+            </property>
+            <layout class="QVBoxLayout" name="previewLayout1">
+             <item>
+              <widget class="QLabel" name="preview1">
+               <property name="minimumSize">
+                <size>
+                 <width>260</width>
+                 <height>180</height>
+                </size>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">background-color: #34373b; border: 1px solid #666;</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="previewGroup2">
+            <property name="title">
+             <string>Pack 2</string>
+            </property>
+            <layout class="QVBoxLayout" name="previewLayout2">
+             <item>
+              <widget class="QLabel" name="preview2">
+               <property name="minimumSize">
+                <size>
+                 <width>260</width>
+                 <height>180</height>
+                </size>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">background-color: #34373b; border: 1px solid #666;</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="previewDiffGroup">
+            <property name="title">
+             <string>Difference (green added, red removed, magenta changed)</string>
+            </property>
+            <layout class="QVBoxLayout" name="previewDiffLayout">
+             <item>
+              <widget class="QLabel" name="previewDiff">
+               <property name="minimumSize">
+                <size>
+                 <width>260</width>
+                 <height>180</height>
+                </size>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">background-color: #34373b; border: 1px solid #666;</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </widget>
     </item>
    </layout>
   </widget>
@@ -110,7 +307,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>800</width>
+     <width>1280</width>
      <height>21</height>
     </rect>
    </property>
@@ -118,10 +315,18 @@
     <property name="title">
      <string>File</string>
     </property>
+    <addaction name="actionExportReport"/>
+    <addaction name="separator"/>
     <addaction name="actionClose"/>
    </widget>
    <addaction name="menuFile"/>
   </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionExportReport">
+   <property name="text">
+    <string>Export comparison report...</string>
+   </property>
+  </action>
   <action name="actionClose">
    <property name="text">
     <string>Close</string>

@@ -4,7 +4,7 @@ This document describes the functional differences between the current PZTools
 Unofficial suite and the Tim Baker `basements` branches used as its clean upstream
 bases.
 
-Reference date: August 2, 2026.
+Reference date: August 3, 2026.
 
 | Project | Initial Tim Baker baseline | Local branch | Committed local revision |
 |---|---|---|---|
@@ -13,6 +13,188 @@ Reference date: August 2, 2026.
 
 This changelog includes the current working trees under `integration/WorldEd`
 and `integration/TileZed`. No public repository has been modified or pushed.
+
+## August 3, 2026 / Automapper manifest isolation
+
+- Added the unambiguous `automapping-rules.txt` filename, preferred beside a
+  target TMX, while preserving legacy Automapper `rules.txt` manifests.
+- A WorldEd terrain/BMP `Rules.txt` is recognized by its structured syntax and
+  ignored by Automapper instead of treating `version`, `alias`, braces, and
+  tile names as missing paths.
+- Failed or unavailable rule loading is remembered until explicit Reload or a
+  document change. Interactive Automapping therefore no longer reparses the
+  same bad file, freezes painting, and repeats a modal error for every stroke.
+- Added `--validate-automapper-rules` and updated the Automapper documentation.
+
+## August 3, 2026 / Editing-path audit and documentation index
+
+- Audited TileZed edit-signal consumers after the Automapper and minimap
+  regressions. Document/Undo updates, renderer synchronization, active Lua
+  tools, and the named background minimap worker remain intentional.
+- Hidden Tile Layers panels no longer rebuild their model for every cursor or
+  paint update. Visible panels refresh only for their inspected square and
+  current level, then resynchronize when shown.
+- Tileset usage/status decoration is visibility-aware and debounced for 150 ms
+  rather than rebuilding every catalogue icon and tooltip for each changed
+  region.
+- Added a global source documentation index and an offline distribution index
+  organized by application, workflow, format, and symptom.
+- Added a complete logs/diagnostics/reporting reference and expanded the main
+  guide with WorldGen, loot, PNG warning policy, validators, and focused
+  troubleshooting.
+- Automapper documentation now includes a minimal rule-map tutorial, manifest
+  layout, layer-name mapping, pipeline/performance guidance, diagnostic
+  behavior, and a documented seven-stage sewer example with a preferred
+  manifest.
+- WorldGen, loot, pack, and TileDef references explicitly distinguish
+  game-confirmed structures, tool-enforced limits, representative previews,
+  and unsupported scope.
+
+## August 3, 2026 / Advanced `.pack` comparison and extraction
+
+- TileZed's comparator now classifies added, removed, decoded-pixel changed,
+  metadata changed, combined, duplicate-name, and unchanged textures instead
+  of only listing names unique to either input.
+- It computes complete-file SHA-256, normalized reconstructed-canvas pixel
+  SHA-256, and atlas/page/trim/canvas metadata SHA-256 separately. Search and
+  status filters, sorting, pack summaries, detailed geometry, side-by-side
+  previews, a color-coded pixel difference view, clipboard output, and atomic
+  CSV export are included.
+- The Pack Viewer extractor now offers checked selection, multiple
+  semicolon-aware filter modes, thumbnails and hashes, reconstructed
+  individual textures, automatic/1x/2x/custom tileset sheets, matching atlas
+  pages, flat/page/tileset output layouts, safe rename/skip/overwrite
+  policies, and an optional JSON provenance manifest.
+- Extractor construction is now visible and cancellable while per-texture
+  previews and hashes are indexed. The current atlas page/texture is shown,
+  and extraction reports validation, individual/page/sheet, and manifest
+  phases instead of blocking without feedback.
+- The common reader accepts legacy version 0 and current `PZPK` version 1,
+  retains the page alpha flag, and rejects excessive counts/strings, truncated
+  PNG payloads, failed PNG decoding, out-of-page rectangles, and invalid
+  reconstructed-canvas geometry. PNG/sheet allocations are bounded, and new
+  `.pack` writes are atomic.
+- Added deterministic self-tests and GUI render validators:
+  `--validate-pack-tools`, `--render-pack-comparator`, and
+  `--render-pack-extractor`.
+- The exact libpng incorrect-sRGB-profile warning is omitted as non-fatal,
+  unactionable color-profile noise. Distinct PNG warnings and errors remain
+  logged.
+- Added `TileZed/docs/PZ-Pack-Comparator-and-Extractor.md`.
+- Binary `.tiles` loading no longer groups invalid dimensions, tileset ID,
+  and stored tile count under one ambiguous message. TileZed/BuildingEd and
+  WorldEd now enumerate the exact failed constraints, show the stored values
+  and computed grid capacity together with format-specific limits, and offer
+  targeted repair guidance. Unterminated strings, truncated headers, numeric
+  metadata, property counts, and property name/value fields are distinguished
+  before those values are used and include their positions.
+- The `.tiles` comparator now performs exhaustive property and structural
+  analysis, including file hashes, unique tilesets, changed IDs/images/grids/
+  counts, and one-sided tile records. Search/status filters, dual previews,
+  highlighted property details, merge decisions, and copy/export reporting
+  replace the former summary-only interface.
+- The Snow Editor is now a general Snow / Replacement Editor with presets,
+  custom-key persistence, batch and same-ID mapping, unresolved-reference
+  visualization, accurate modified-state handling, and safer open/save/close
+  behavior.
+
+## August 3, 2026 / Procedural loot viewer and editor
+
+- TileZed and BuildingEd now share a visual editor for the Build 42
+  `SuburbsDistributions` RoomDef/container registry and
+  `ProceduralDistributions.list`.
+- Game `Distribution_*.lua`, `Distributions.lua`, and
+  `ProceduralDistributions.lua` files are loaded as isolated read-only
+  references. Every effective entry is labelled **Game** or **Project**.
+- TileZed passes the selected tile's `container` property when available;
+  BuildingEd passes the current room's internal RoomDef name.
+- Direct item and junk lists show chance per roll, neutral cumulative
+  probability, and duplicate independent entries. Procedural selectors show
+  relative weights, neutral eligible share, min/max, forced selectors, and
+  missing-reference diagnostics.
+- New definitions and overrides are stored atomically outside the game below
+  `<project-or-mod>/media/lua/server/Items` as
+  `PZToolsLootEditor.json` and generated `PZToolsLootDefinitions.lua`.
+- The generated definitions apply during `Events.OnPostDistributionMerge`,
+  before final item-picker parsing. The editor refuses output inside the
+  selected game installation.
+- Added `--validate-loot-distributions <game-root> [project-root]`,
+  `--render-loot-distributions <game-root> <output.png> [project-root]`, and
+  the format/workflow reference
+  `TileZed/docs/PZ-B42.20-Procedural-Loot-Editor.md`.
+
+## August 3, 2026 / Project WorldGen editor and preview
+
+- WorldEd now provides two independent windows only while a saved map project
+  is loaded: **Tools > WorldGen Biome Editor / Preview...** and **Tools >
+  WorldGen Prefab Editor...**. Biome preview/rules/features and true
+  static-prefab inspection/import/painting/staging are not mixed in one UI.
+  The installed Project Zomboid `media/lua/server/WorldGen` tree is labelled
+  and enforced as a read-only source.
+- New and edited definitions are stored outside the game under
+  `<map-project>/media/lua/server/WorldGen`. Writes are atomic and use
+  validated Lua-safe definition names.
+- The isolated loader executes game/project biome features, true static
+  prefabs, subbiomes, and game/project biomes in dependency order. The
+  complete game catalogue and parent chains remain available while UI
+  selectors expose **Game** or **Project** provenance.
+- The biome editor supports new procedural and map biomes, parent selection,
+  `generate`, the simple selection parameters, and weighted biome-feature lists.
+  Game definitions are never edited in place: editing one creates a project
+  child variant with editable effective values and inherited advanced rules.
+- Probabilistic 1x1 through 8x8 patterns are now labelled correctly as
+  **biome features**. Their editor supports new or copied project features,
+  and resolved sprite cells display their actual Tiles icon.
+- Added a separate editor for actual `worldgen.prefabs`: the four z=0 engine
+  slots, dimensions and zombie chance are editable with a visual Tiles palette
+  and a composited isometric preview. Sprites are depth-sorted for tall and
+  XL/XXL overlap, and orange inspection guides remain visible over complete
+  Floor coverage at 8x8 chunk boundaries.
+- Added guarded TMX and one-floor TBX import. Conversion rejects unsupported z
+  levels and tile stacks instead of reporting a lossy conversion as complete.
+  The legacy map reader now rejects a version-2 layer with no PZ `level`
+  attribute cleanly instead of passing a null layer to `Map::addLayer`.
+- Added **Stage for Game / Mod...**. The destination must remain outside the
+  selected game installation; the tool writes the prefab and a marked
+  static-module `WorldGenOverride.lua` block while preserving unrelated
+  override content. Placement reports inclusive square, chunk, and 256-cell
+  bounds.
+- Advanced subbiome, placement, protection, and replacement structures remain
+  inspected and inherited, not rewritten. Project files containing such
+  hand-authored rules are protected from lossy in-place editing.
+- The isolated Lua loader discovers all feature registries, procedural
+  biomes, map biomes, and subbiomes, then resolves parent inheritance into an
+  inspectable effective definition. Lua file/system/package access is not
+  opened and an instruction limit guards malformed definitions.
+- A deterministic representative preview renders a forced biome on the
+  Build 42 16 x 16-square generation block using the shared Tiles catalogue.
+  The 2 x 2 chunk boundary, category visibility, feature weights, pattern
+  sizes, and per-square sprite provenance are visible.
+- JUMBO, JUMBOXL, and JUMBOXXL use their declared custom tile geometry.
+  XL/XXL previews draw the runtime main-sprite `N` plus treetop `N+6` pair,
+  with a fitted canvas sized for their full visual footprint. Incompatible
+  custom-sheet dimensions are reported and rejected instead of producing
+  mis-sliced, floating, or clipped trees.
+- Map-biome authored-terrain replacement, `$subbiome` marker expansion,
+  game-save noise parity, complete mod packaging/export, roads, and erosion
+  are deliberately not claimed by this editing stage.
+- `--validate-worldgen-preview=<path>` verifies loading, inheritance, and
+  concrete preview output. A GUI screenshot path is also available for
+  release regression testing after the complete Tiles catalogue is ready.
+- `--validate-worldgen-project-overlay=<game>::<project>` verifies merged
+  loading and project-definition provenance.
+- `--validate-worldgen-prefab-import=<source>` checks strict TMX/TBX
+  conversion, while `--render-worldgen-prefab=<path>` captures the real
+  isometric prefab-editor path after Tiles loading.
+- `--render-worldgen-prefab-window=<path>` captures the independent prefab
+  catalogue/inspector window with no biome preview or biome-feature controls.
+- Added a full format and workflow reference at
+  `WorldEd/docs/PZ-B42.20-WorldGen-Editor-and-Prefabs.md`.
+- BMP-to-TMX now recognizes when a legacy/misconfigured `mapbasefile` points
+  to `Rules.txt`, where `alias` is valid. It recovers through the portable
+  `MapBaseXML.txt` instead of producing the misleading “Unknown block name
+  'alias'” error. Directly typed file paths in the generation dialog now
+  update the saved values as well as Browse-button selections.
 
 ## August 2, 2026 / Distribution licensing
 

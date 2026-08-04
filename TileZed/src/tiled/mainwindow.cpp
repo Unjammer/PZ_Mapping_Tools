@@ -91,6 +91,7 @@
 #include "checkbuildingswindow.h"
 #include "checkmapswindow.h"
 #include "containeroverlaydialog.h"
+#include "lootdistributiondialog.h"
 #include "converttolotdialog.h"
 #include "convertorientationdialog.h"
 #include "createpackdialog.h"
@@ -855,6 +856,8 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
             this, &MainWindow::comparePackFiles);
     connect(mUi->actionContainerOverlays, &QAction::triggered,
             this, &MainWindow::containerOverlayDialog);
+    connect(mUi->actionProceduralLootEditor, &QAction::triggered,
+            this, &MainWindow::proceduralLootEditor);
     connect(mUi->actionTileOverlays, &QAction::triggered, this, &MainWindow::tileOverlayDialog);
     mUi->actionEnflatulator->setVisible(false); // !!!
     connect(mUi->actionEnflatulator, &QAction::triggered, this, &MainWindow::enflatulator);
@@ -2187,6 +2190,23 @@ void MainWindow::snowEditor()
     }
 }
 
+void MainWindow::proceduralLootEditor()
+{
+    QString containerType;
+    if (Tile *tile = mTilesetDock->currentTile())
+        containerType = tile->property(QStringLiteral("container"));
+
+    QString suggestedProjectRoot;
+    if (mMapDocument && !mMapDocument->fileName().isEmpty()) {
+        QDir directory(QFileInfo(mMapDocument->fileName()).absolutePath());
+        suggestedProjectRoot = directory.absolutePath();
+    }
+
+    LootDistributionDialog dialog(
+                this, QString(), containerType, suggestedProjectRoot);
+    dialog.exec();
+}
+
 void MainWindow::depthMapEditor()
 {
     Tile *tile = mTilesetDock->currentTile();
@@ -2327,6 +2347,7 @@ void MainWindow::initActionManager()
     actionManager->registerAction(mUi->actionPackViewer, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.PackViewer"));
     actionManager->registerAction(mUi->actionComparePack, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.ComparePack"));
     actionManager->registerAction(mUi->actionContainerOverlays, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.ContainerOverlays"));
+    actionManager->registerAction(mUi->actionProceduralLootEditor, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.ProceduralLootEditor"));
     actionManager->registerAction(mUi->actionTileOverlays, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.OtherOverlays"));
     actionManager->registerAction(mUi->actionRearrangeTiles, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.RearrangeTiles"));
     actionManager->registerAction(mUi->actionSnowEditor, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.SnowEditor"));

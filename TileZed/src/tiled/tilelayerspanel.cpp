@@ -712,6 +712,9 @@ void TileLayersPanel::setTilePosition(const QPoint &tilePos)
 
 void TileLayersPanel::setList()
 {
+    if (!mDocument || !isVisible())
+        return;
+
     mCurrentLevel = mDocument->currentLevel();
 
     mView->clear();
@@ -830,7 +833,8 @@ void TileLayersPanel::layerChanged(int index)
 
 void TileLayersPanel::regionAltered(const QRegion &region, Layer *layer)
 {
-    if (layer->asTileLayer() && (layer->level() == mDocument->currentLevel())
+    if (mDocument && isVisible() && layer && layer->asTileLayer()
+            && (layer->level() == mDocument->currentLevel())
             && region.contains(mTilePos))
         setList();
 }
@@ -838,12 +842,14 @@ void TileLayersPanel::regionAltered(const QRegion &region, Layer *layer)
 void TileLayersPanel::noBlendPainted(MapNoBlend *noBlend, const QRegion &rgn)
 {
     Q_UNUSED(noBlend)
-    Q_UNUSED(rgn)
-    if (mDocument->currentLevel() == 0)
+    if (mDocument && isVisible() && mDocument->currentLevel() == 0
+            && rgn.contains(mTilePos))
         setList();
 }
 
 void TileLayersPanel::showTileLayersPanelChanged(bool show)
 {
     setVisible(show);
+    if (show)
+        setList();
 }

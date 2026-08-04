@@ -23,12 +23,16 @@
 #include <QMap>
 
 class QListWidget;
+class QCloseEvent;
+class QComboBox;
+class QPushButton;
 
 namespace Ui {
 class SnowEditor;
 }
 
 namespace Tiled {
+class Tile;
 class Tileset;
 namespace Internal {
 class MixedTilesetView;
@@ -45,6 +49,9 @@ public:
     explicit SnowEditor(QWidget *parent = nullptr);
     ~SnowEditor();
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private slots:
     void manageTilesets();
     void tileDroppedAt(const QString &tilesetName, int tileId, int row, int column, const QModelIndex &parent);
@@ -53,6 +60,9 @@ private slots:
     void tilesetFilterTargetEdited(const QString &text);
     void tilesetSelectionChangedSource();
     void tilesetSelectionChangedTarget();
+    void propertyPresetChanged(int index);
+    void assignSourceToSelected();
+    void assignMatchingIds();
     void syncUI();
 
     void tilesetAdded(Tiled::Tileset *tileset);
@@ -73,6 +83,11 @@ private:
     void tilesetSelectionChanged(QListWidget *tilesetNamesList, Tiled::Internal::MixedTilesetView *tilesetView, Tiled::Tileset **tilesetPtr);
     void clearOverlayTiles();
     void setOverlayTiles();
+    bool setTileMapping(Tiled::Tile *targetTile,
+                        const QString &replacementName);
+    void markDirty();
+    void updateWindowTitle();
+    void updateStatus();
     void fileOpen(const QString& filePath);
     bool fileSave(const QString& filePath);
     bool confirmSave();
@@ -84,7 +99,13 @@ private:
     Tiled::Tileset *mCurrentTilesetTarget = nullptr;
     Tiled::Tileset *mCurrentTilesetSource = nullptr;
     Tiled::Internal::Zoomable *mZoomable = nullptr;
+    QComboBox *mPropertyPreset = nullptr;
+    QPushButton *mAssignSelectedButton = nullptr;
+    QPushButton *mAssignMatchingButton = nullptr;
     QString mPropertyName;
+    bool mDirty = false;
+    int mMappedCurrent = 0;
+    int mUnresolvedCurrent = 0;
 };
 
 #endif // SNOWEDITOR_H

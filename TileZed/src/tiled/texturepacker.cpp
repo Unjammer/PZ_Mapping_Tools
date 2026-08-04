@@ -182,7 +182,10 @@ bool TexturePacker::pack(const TexturePackSettings &settings)
     }
 
     progress.update(tr("Saving %1").arg(QFileInfo(mSettings.mPackFileName).fileName()));
-    packFile.write(mSettings.mPackFileName);
+    if (!packFile.write(mSettings.mPackFileName)) {
+        mError = packFile.errorString();
+        return false;
+    }
 
     // Create a second pack file with floor tiles only.
     PackFile packFileFloor;
@@ -221,7 +224,13 @@ bool TexturePacker::pack(const TexturePackSettings &settings)
     if (pageNum > 0) {
         QFileInfo fileInfo(mSettings.mPackFileName);
         progress.update(tr("Saving %1").arg(fileInfo.fileName()));
-        packFileFloor.write(fileInfo.absolutePath() + QLatin1String("/") + fileInfo.baseName() + QLatin1String(".floor.") + fileInfo.suffix());
+        if (!packFileFloor.write(
+                fileInfo.absolutePath() + QLatin1String("/") +
+                fileInfo.baseName() + QLatin1String(".floor.") +
+                fileInfo.suffix())) {
+            mError = packFileFloor.errorString();
+            return false;
+        }
     }
 
     return true;

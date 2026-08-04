@@ -171,6 +171,7 @@ class QMenu;
 class QSettings;
 class QSplitter;
 class QToolBar;
+class QTimer;
 class QToolButton;
 
 namespace Tiled {
@@ -290,6 +291,7 @@ private:
     Tileset *currentTileset() const;
 
     MapDocument *mMapDocument;
+    QTimer *mStatusRefreshTimer;
     QList<Tileset*> mTilesets;
     QMultiMap<QString,Tileset*> mTilesetByName;
     QToolBar *mToolBar;

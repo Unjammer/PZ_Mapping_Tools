@@ -732,6 +732,7 @@ void TilesetDock::refreshTilesetMenu()
 #include <QMimeData>
 #include <QScrollBar>
 #include <QSplitter>
+#include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
 #include <QUrl>
@@ -890,6 +891,7 @@ private:
 TilesetDock::TilesetDock(QWidget *parent):
     QDockWidget(parent),
     mMapDocument(0),
+    mStatusRefreshTimer(new QTimer(this)),
     mToolBar(new QToolBar),
     mCurrentTileset(0),
     mCurrentTile(0),
@@ -911,6 +913,18 @@ TilesetDock::TilesetDock(QWidget *parent):
     mFilter(new QLineEdit(this))
 {
     setObjectName(QLatin1String("TilesetDock"));
+
+    mStatusRefreshTimer->setInterval(150);
+    mStatusRefreshTimer->setSingleShot(true);
+    connect(mStatusRefreshTimer, &QTimer::timeout,
+            this, &TilesetDock::refreshTilesetStatus);
+    connect(this, &QDockWidget::visibilityChanged,
+            this, [this](bool visible) {
+        if (visible)
+            refreshTilesetStatus();
+        else
+            mStatusRefreshTimer->stop();
+    });
 
     mTilesetView->setModel(new TilesetModel(0, mTilesetView));
     mTilesetNamesView->setIconSize(QSize(24, 24));
@@ -1083,6 +1097,7 @@ void TilesetDock::setMapDocument(MapDocument *mapDocument)
     if (mMapDocument == mapDocument)
         return;
 
+    mStatusRefreshTimer->stop();
     setCurrentTiles(nullptr);
     setCurrentTile(nullptr);
 
@@ -1109,9 +1124,15 @@ void TilesetDock::setMapDocument(MapDocument *mapDocument)
         connect(mMapDocument, &MapDocument::tilesetFileNameChanged,
                 this, &TilesetDock::updateActions);
         connect(mMapDocument, &MapDocument::mapChanged,
-                this, &TilesetDock::refreshTilesetStatus);
+                this, [this]() {
+            if (isVisible())
+                mStatusRefreshTimer->start();
+        });
         connect(mMapDocument, &MapDocument::regionAltered,
-                this, [this]() { refreshTilesetStatus(); });
+                this, [this]() {
+            if (isVisible())
+                mStatusRefreshTimer->start();
+        });
 
         QString cacheName = mCurrentTilesets.take(mMapDocument);
         if (mTilesetByName.contains(cacheName)) {

@@ -595,6 +595,40 @@ bool BMPToTMX::LoadBaseXML()
         return false;
     }
 
+    // Some older or manually-edited projects ended up with Rules.txt in the
+    // MapBaseXML setting.  "alias" and "rule" are valid Rules.txt blocks, but
+    // they can never describe the TMX layer template.  Recover with the
+    // portable MapBaseXML.txt instead of reporting the misleading
+    // "Unknown block name 'alias'" error.
+    bool looksLikeRulesFile = false;
+    foreach (SimpleFileBlock block, simple.blocks) {
+        if (block.name == QLatin1String("alias")
+                || block.name == QLatin1String("rule")) {
+            looksLikeRulesFile = true;
+            break;
+        }
+    }
+    if (looksLikeRulesFile) {
+        const QString configuredPath = path;
+        path = defaultMapBaseXMLFile();
+        SimpleFile fallback;
+        if (QFileInfo(configuredPath) == QFileInfo(path)
+                || !fallback.read(path)) {
+            mError = tr(
+                "The MapBaseXML setting points to a Rules.txt definition "
+                "(block '%1'). Choose MapBaseXML.txt for the map template "
+                "and Rules.txt for terrain colors.\n%2")
+                    .arg(simple.blocks.isEmpty()
+                         ? QStringLiteral("rule")
+                         : simple.blocks.first().name,
+                         QDir::toNativeSeparators(configuredPath));
+            return false;
+        }
+        qWarning() << "BMP to TMX: MapBaseXML setting pointed to Rules.txt;"
+                   << "using portable template" << path;
+        simple = fallback;
+    }
+
     mLayers.clear();
 
     foreach (SimpleFileBlock block, simple.blocks) {

@@ -384,6 +384,8 @@
     <addaction name="separator"/>
     <addaction name="actionTerrainImageEditor"/>
     <addaction name="actionGenerateBiomeMap"/>
+    <addaction name="actionWorldGenPreview"/>
+    <addaction name="actionWorldGenPrefabEditor"/>
    </widget>
    <widget class="QMenu" name="menuInGameMap">
     <property name="title">
@@ -870,6 +872,28 @@
    </property>
    <property name="toolTip">
     <string>Paint Rules.txt colors into multi-cell Map.png and Map_veg.png files</string>
+   </property>
+  </action>
+  <action name="actionWorldGenPreview">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>WorldGen Biome Editor / Preview...</string>
+   </property>
+   <property name="toolTip">
+    <string>Edit biome features and preview game plus project biomes on a 2x2-chunk block</string>
+   </property>
+  </action>
+  <action name="actionWorldGenPrefabEditor">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>WorldGen Prefab Editor...</string>
+   </property>
+   <property name="toolTip">
+    <string>View, create, import, edit and stage static WorldGen prefabs without biome controls</string>
    </property>
   </action>
   <action name="actionWriteObjects">

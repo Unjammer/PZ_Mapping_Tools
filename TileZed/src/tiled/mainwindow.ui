@@ -177,6 +177,7 @@
     <addaction name="actionCompareTileDef"/>
     <addaction name="menu_pack_files"/>
     <addaction name="menuOverlays"/>
+    <addaction name="actionProceduralLootEditor"/>
     <addaction name="actionRearrangeTiles"/>
     <addaction name="actionEnflatulator"/>
     <addaction name="actionSnowEditor"/>
@@ -615,7 +616,7 @@
   </action>
   <action name="actionPackViewer">
    <property name="text">
-    <string>Pack Viewer</string>
+    <string>.pack Viewer / Extractor...</string>
    </property>
   </action>
   <action name="actionCreatePack">
@@ -625,12 +626,20 @@
   </action>
   <action name="actionComparePack">
    <property name="text">
-    <string>Compare .pack files...</string>
+    <string>Advanced .pack Comparator...</string>
    </property>
   </action>
   <action name="actionContainerOverlays">
    <property name="text">
     <string>Container Overlays...</string>
+   </property>
+  </action>
+  <action name="actionProceduralLootEditor">
+   <property name="text">
+    <string>Procedural Loot Viewer / Editor...</string>
+   </property>
+   <property name="toolTip">
+    <string>Inspect game RoomDef/container loot and edit project-owned procedural distributions</string>
    </property>
   </action>
   <action name="actionCompareTileDef">

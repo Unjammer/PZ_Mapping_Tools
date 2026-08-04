@@ -124,6 +124,7 @@
     <li><a href="#settings">Settings, layouts and logs</a></li>
     <li><a href="#themes">Themes</a></li>
     <li><a href="#grids">300 and 256 projects</a></li>
+    <li><a href="#worldgen">WorldGen biomes and prefabs</a></li>
     <li><a href="#terrain-editor">Terrain image editor</a></li>
     <li><a href="#worlded-navigation">WorldEd navigation</a></li>
     <li><a href="#thumbnails">WorldEd thumbnails</a></li>
@@ -132,6 +133,7 @@
     <li><a href="#heatmap">Zombie Heatmap editor</a></li>
     <li><a href="#features">InGameMap features</a></li>
     <li><a href="#mod-export">Complete mod export</a></li>
+    <li><a href="#loot">Procedural loot</a></li>
     <li><a href="#tilesets">TileZed tilesets</a></li>
     <li><a href="#tiledefs">TileDefs</a></li>
     <li><a href="#automapper">Automapper</a></li>
@@ -240,8 +242,15 @@
 
   <h3>Logs</h3>
   <p>Logs live in the portable installation instead of a user-profile directory.
-  They record tileset loading, missing images, Building catalog loading, invalid
-  PNG profiles, biomemap warnings and InGameMap geometry repairs.</p>
+  A new UTF-8 file is created for each run, and the newest 20 files per
+  application are retained. Lines contain severity, PID, thread ID and an
+  optional worker name. They record selected paths, tileset loading, missing
+  images, Building catalogs, Automapper diagnostics, WorldGen/loot loading,
+  biomemap warnings, geometry repairs, validators, and caught crashes.</p>
+  <p>Only the exact non-fatal libpng incorrect-sRGB-profile warning is omitted;
+  other PNG warnings and errors remain visible. See
+  <a href="../Diagnostics-and-Logs.md">Logs, diagnostics, and useful issue
+  reports</a> for interpretation, validator commands, and a report checklist.</p>
 
   <h3>Changing shared paths</h3>
   <p>The initial setup assistant stores the catalog and extracted game Tiles
@@ -301,6 +310,44 @@
 
   <p>TMX 2.0 is independent from the grid choice. A map without basements may
   have no negative levels even though the file format supports them.</p>
+
+  <h2 id="worldgen">WorldGen biome preview/editor and static prefabs</h2>
+  <p>WorldEd exposes two separate windows after a saved map project is loaded:
+  <strong>Tools &gt; WorldGen Biome Editor / Preview...</strong> and
+  <strong>Tools &gt; WorldGen Prefab Editor...</strong>. The first resolves
+  procedural/map biomes, weighted biome features, inheritance, and a
+  representative 16x16-square preview. The second edits true z=0 static
+  prefabs with the four runtime slots, a Tiles palette, strict TMX/TBX import,
+  and staging.</p>
+  <ul>
+    <li>The selected game WorldGen tree is always read-only.</li>
+    <li>Project definitions are saved under
+      <code>&lt;map-project&gt;/media/lua/server/WorldGen</code>.</li>
+    <li>Selectors identify effective <strong>Game</strong> and
+      <strong>Project</strong> provenance.</li>
+    <li>Biome features are probabilistic 1x1 through 8x8 patterns; they are not
+      static prefabs.</li>
+    <li>The biome preview covers 2x2 game chunks. It is deterministic and
+      representative, not a captured save.</li>
+    <li>Static prefabs apply at z=0 and contain only
+      <code>Floor</code>, <code>FloorFurniture</code>,
+      <code>FloorOverlay</code>, and <code>Furniture</code>.</li>
+    <li>JUMBO, JUMBOXL, and JUMBOXXL sprites retain their complete visual
+      footprint; incompatible custom-sheet geometry is rejected explicitly.</li>
+  </ul>
+  <div class="note">
+    The 8x8 chunk, 16x16 pending area, feature tiers, biome registries, and
+    four prefab slots are confirmed against Build 42.20. The editor's 256x256
+    prefab cap, strict import failures, atomic writes, and refusal to write
+    inside the game installation are tool safety policies.
+  </div>
+  <p>Road generation is deliberately excluded while that runtime system is
+  unfinished. Erosion is treated as a potential separate module. Authored-map
+  replacement context, complete save-noise parity, and complete mod packaging
+  are not claimed by the preview.</p>
+  <p>Read <a href="../PZ-B42.20-WorldGen-Editor-and-Prefabs.md">Build 42.20
+  WorldGen editor, biome preview, and prefabs</a> before importing or staging
+  a prefab.</p>
 
   <h2 id="terrain-editor">Terrain and vegetation image editor</h2>
   <p>WorldEd includes a small Qt paint editor for the two source images used to
@@ -426,16 +473,28 @@
     <tbody>
       <tr><td><code>Map.png</code></td><td>Base biome source</td><td>Required.</td></tr>
       <tr><td><code>Map_veg.png</code></td><td>Vegetation contribution to biome classification</td><td>Required; it is not copied as the output green channel.</td></tr>
-      <tr><td>WorldEd Zone objects</td><td>Foraging-zone IDs in the output green channel</td><td>Rasterized from the current project.</td></tr>
+      <tr><td>Seven Biomemap Zone types</td><td>Foraging-zone IDs in the output green channel</td><td>Rasterized from the current project.</td></tr>
       <tr><td>Zone PNG</td><td>Alternative exact green-channel IDs</td><td>Grayscale or green-channel values; must match Map.png dimensions.</td></tr>
     </tbody>
   </table>
 
   <h3>Zone-source choices</h3>
-  <p><strong>Rasterize zone objects</strong> is convenient when the PZW contains
-  authoritative zones. <strong>Read exact zone IDs from PNG</strong> is useful
-  after a Zone-to-PNG workflow or when another program generated the zone layer.
-  Both produce the same kind of green-channel data.</p>
+  <p><strong>Rasterize zone objects</strong> reads only
+  <code>Vegitation</code>, <code>DeepForest</code>, <code>Forest</code>,
+  <code>TownZone</code>, <code>Farm</code>, <code>FarmLand</code>, and
+  <code>TrailerPark</code>. These are the seven types that the game's
+  <code>metazoneHandler</code> deliberately ignores in
+  <code>objects.lua</code> because their data is expected in the Biomemap green
+  channel. <strong>Read exact zone IDs from PNG</strong> supplies that same
+  channel from an external image.</p>
+
+  <div class="warning">
+    Do not move other WorldEd objects into the Biomemap. Vehicle zones,
+    geometries, WorldGen, <code>WaterZone</code>, and every other vector
+    zone/object type must still be exported through <code>objects.lua</code>.
+    The generator excludes them from the image and reports the actual project
+    types assigned to each path after generation.
+  </div>
 
   <h3>In-game map stacking and Vanilla fallback</h3>
   <p>Project Zomboid loads the selected map folder together with the folders
@@ -466,9 +525,10 @@
   IDs. File selection and Vanilla fallback happen for the complete 256 x 256
   image; after that selection, the game requests zone values on its 8 x 8 chunk
   grid. It does not perform a second Vanilla fallback for uncovered chunks
-  inside a selected mod image. WorldEd zone objects are an authoring source for
-  the green channel; after generation, the game consumes the exported biomemap
-  PNG files rather than the PZW objects.</p>
+  inside a selected mod image. The seven Biomemap-managed WorldEd zone types
+  are an authoring source for the green channel; after generation, the game
+  consumes those values from the exported PNG files. All other vector objects
+  continue to come from <code>objects.lua</code>.</p>
 
   <h3>Dimension validation</h3>
   <p>The input must cover the project using its own cell size. A legacy project
@@ -477,9 +537,10 @@
   biome and zone data.</p>
 
   <h3>Warnings</h3>
-  <p>Unknown source colors preserve their red byte and are listed. Zone types
-  without a known biomemap ID are ignored and reported. Treat these warnings as
-  data-review items rather than image-decoding failures.</p>
+  <p>Unknown source colors preserve their red byte and are listed. Invalid
+  green-channel IDs stop generation. WorldEd types outside the seven
+  Biomemap-managed zones are intentionally excluded from the image and listed
+  as <code>objects.lua</code> types rather than reported as errors.</p>
 
   <h2 id="heatmap">Zombie Heatmap editor</h2>
   <p>First enable <strong>View &gt; ZombieMap</strong>. The painting tool remains
@@ -580,6 +641,33 @@
   data. The export uses the current 8 × 8 layout. Existing files in a chosen mod
   directory should be backed up before replacement.</p>
 
+  <h2 id="loot">Procedural loot viewer and editor</h2>
+  <p>The same visual tool is available from <strong>TileZed &gt; Tools &gt;
+  Procedural Loot Viewer / Editor...</strong> and <strong>BuildingEd &gt;
+  Building &gt; Procedural Loot Viewer / Editor...</strong>. TileZed can focus
+  the selected tile's <code>container</code> property; BuildingEd can focus the
+  current room's internal RoomDef name.</p>
+  <ul>
+    <li>Game <code>Distribution_*.lua</code>,
+      <code>Distributions.lua</code>, and
+      <code>ProceduralDistributions.lua</code> are read-only references.</li>
+    <li>RoomDef/container mappings and reusable procedural distributions show
+      <strong>Game</strong> or <strong>Project</strong> provenance.</li>
+    <li>Direct items and junk show raw chance per roll. The neutral cumulative
+      estimate is labelled as a preview, not an in-game guarantee.</li>
+    <li>Procedural rows expose relative weights, min/max, force selectors, and
+      unresolved references.</li>
+    <li>Project output is written atomically below
+      <code>&lt;project-or-mod&gt;/media/lua/server/Items</code>; output inside
+      the selected game installation is rejected.</li>
+  </ul>
+  <p>The editable JSON manifest and generated post-merge Lua are PZTools-owned
+  output formats. They do not replace or rewrite the base-game registries.
+  Vehicle distributions, item scripts, sandbox settings, and complete mod
+  packaging remain out of scope. See
+  <a href="../PZ-B42.20-Procedural-Loot-Editor.md">the complete procedural
+  loot reference</a>.</p>
+
   <h2 id="tilesets">TileZed tilesets and tiles</h2>
 
   <h3>Understanding list status</h3>
@@ -637,6 +725,11 @@
     <li>Pack Extractor supports exact full-name searches and multiple prefixes,
       reducing unwanted matches in large packs.</li>
   </ul>
+  <p>Opening the Versatile Pack Extractor now shows cancellable progress while
+  texture previews and hashes are prepared, including the current page and
+  texture. Extraction phases are reported as files are validated and written.
+  See <code>PZ-Pack-Comparator-and-Extractor.md</code> for the comparator,
+  hash, filter, reconstruction, and output details.</p>
 
   <h2 id="tiledefs">TileDefs and property help</h2>
   <p>TileDefs are tile properties consumed by Project Zomboid. Many exist in
@@ -655,6 +748,23 @@
     <li>whether IDs and definitions remain consistent after importing tiles.</li>
   </ul>
 
+  <h3>Comparing definitions</h3>
+  <p>The enhanced <strong>Compare .tiles Files</strong> window reports complete
+  file SHA-256, unique tilesets, structural ID/image/grid/count differences,
+  changed properties, and tile records found on only one side. Search and
+  status filters can be combined. Selecting a result shows both tile images
+  and a highlighted property table. File 2 is the merge base; structural
+  differences are reported without being silently inserted.</p>
+
+  <h3>Snow and replacement mappings</h3>
+  <p>The Snow / Replacement Editor supports <code>SnowTile</code>,
+  <code>BurntTile</code>, and custom mapping keys. Drag one source tile,
+  assign it to several selected targets, or match selected targets to source
+  tiles with the same ID. Blue overlays are resolved; red outlines identify
+  unresolved references. See
+  <code>PZ-TileDef-Comparator-and-Snow-Editor.md</code> for the complete
+  workflow.</p>
+
   <h2 id="automapper">Automapper</h2>
   <p class="muted">This section describes the current in-integration Automapper
   panel.</p>
@@ -663,9 +773,16 @@
   matching, output alternatives, and troubleshooting.</p>
 
   <h3>Rule discovery</h3>
-  <p>A saved target TMX uses a nearby <code>rules.txt</code>. Each non-comment
+  <p>A saved target TMX first uses a nearby
+  <code>automapping-rules.txt</code>. A legacy <code>rules.txt</code> remains
+  compatible when it is actually an Automapper manifest. Each non-comment
   entry may point to a rule-map <code>.tmx</code> or another <code>.txt</code>
   list. Relative paths are resolved from the list containing them.</p>
+  <p>A WorldEd terrain/BMP <code>Rules.txt</code> contains
+  <code>version</code>, <code>alias</code>, <code>rule</code>, and tile blocks.
+  It is detected and ignored rather than interpreted as hundreds of missing
+  Automapper paths. Create <code>automapping-rules.txt</code> beside the TMX
+  when both systems are used in the same project.</p>
 
   <ul>
     <li><strong>Reload</strong> rereads lists and rule maps.</li>
@@ -677,9 +794,10 @@
 
   <h3>Safety checks</h3>
   <p>Recursive list inclusion is skipped with a warning. The same rule map is not
-  loaded twice. Unsupported extensions are reported. Unsaved target maps cannot
-  reliably resolve a neighboring <code>rules.txt</code> and are rejected
-  explicitly.</p>
+  loaded twice. Unsupported extensions are reported. A failed or absent
+  manifest is not retried for every brush stroke; after correcting it, use
+  <strong>Reload</strong>. Unsaved target maps cannot reliably resolve a
+  neighboring manifest and are rejected explicitly.</p>
 
   <h3>Tile and object inputs</h3>
   <p><code>input</code> and <code>inputnot</code> may be tile layers or Object
@@ -759,6 +877,10 @@
       <tr><td>BuildingEd appears frozen at first launch</td><td>Large tileset/Building catalog load.</td><td>Progress window and portable log.</td></tr>
       <tr><td>BuildingEd asks for a Tiles directory</td><td>No valid extracted game Tiles path is configured.</td><td>Restart an editor to open initial setup, or select Tiles from editor preferences, then restart BuildingEd.</td></tr>
       <tr><td>Catalog changes seem to be ignored</td><td>The wrong directory was selected as Configuration catalogs.</td><td>Use packaged <code>config</code>, not <code>settings</code>.</td></tr>
+      <tr><td>Painting pauses and Rules.txt errors repeat</td><td>A legacy Automapper looked at WorldEd terrain rules, or an invalid Automapper manifest is loaded.</td><td>Use <code>automapping-rules.txt</code>, press Reload once, and test with Interactive disabled.</td></tr>
+      <tr><td>WorldGen or loot Save targets the game</td><td>The selected output root is inside the read-only game installation.</td><td>Select the map project or mod root; project Lua belongs below its own <code>media/lua/server</code>.</td></tr>
+      <tr><td>Biome preview differs from a save</td><td>The preview is representative and lacks save noise or authored-map replacement context.</td><td>Review the WorldGen scope section and validate the staged result in-game.</td></tr>
+      <tr><td>No incorrect-sRGB-profile warning appears</td><td>The exact non-fatal libpng iCCP warning is intentionally suppressed.</td><td>Other PNG warnings/errors remain logged; report a visible decode failure, not the absent profile warning.</td></tr>
       <tr><td>InGameMap export drops a polygon</td><td>Degenerate or unrepresentable geometry.</td><td>Search logs for the cell, feature index and rejection reason.</td></tr>
     </tbody>
   </table>
@@ -766,8 +888,10 @@
   <div class="success">
     When reporting a problem, include the application name, project grid format,
     exact menu action, affected cell/TMX path and the matching portable log
-    lines. That is usually enough to distinguish bad source data from an editor
-    regression.
+    lines. For the complete checklist and regression commands, use
+    <a href="../Diagnostics-and-Logs.md">Logs, diagnostics, and useful issue
+    reports</a>. That is usually enough to distinguish bad source data from an
+    editor regression.
   </div>
 </body>
 </html>

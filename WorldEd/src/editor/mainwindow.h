@@ -195,6 +195,8 @@ public slots:
 
     void generateBiomeMap();
     void terrainImageEditor();
+    void worldGenPreview();
+    void worldGenPrefabEditor();
 
     void readOldWaterDotLua();
 

@@ -32,11 +32,16 @@
 #include "BuildingEditor/buildingtiles.h"
 
 #include <QDebug>
+#include <QCloseEvent>
+#include <QComboBox>
 #include <QDir>
 #include <QFileDialog>
+#include <QLabel>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QScrollBar>
 #include <QSettings>
+#include <QSignalBlocker>
 
 using namespace Tiled;
 using namespace Internal;
@@ -48,6 +53,7 @@ SnowEditor::SnowEditor(QWidget *parent) :
     mZoomable(new Zoomable(this))
 {
     ui->setupUi(this);
+    resize(qMax(width(), 1100), qMax(height(), 680));
 
     connect(ui->actionOpen, &QAction::triggered, this, qOverload<>(&SnowEditor::fileOpen));
     connect(ui->actionSave, &QAction::triggered, this, qOverload<>(&SnowEditor::fileSave));
@@ -58,6 +64,48 @@ SnowEditor::SnowEditor(QWidget *parent) :
     ui->propertyName->setEnabled(false);
     connect(ui->propertyName, &QLineEdit::textEdited, this,
             &SnowEditor::propertyNameEdited);
+
+    ui->horizontalLayout->addWidget(
+                new QLabel(tr("Preset:"), this));
+    mPropertyPreset = new QComboBox(this);
+    mPropertyPreset->addItem(tr("Snow replacement"),
+                             QStringLiteral("SnowTile"));
+    mPropertyPreset->addItem(tr("Burnt replacement"),
+                             QStringLiteral("BurntTile"));
+    mPropertyPreset->addItem(tr("Custom property"), QString());
+    ui->horizontalLayout->addWidget(mPropertyPreset);
+    connect(mPropertyPreset,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &SnowEditor::propertyPresetChanged);
+
+    mAssignSelectedButton = new QPushButton(
+                tr("Assign source to selected targets"), this);
+    mAssignSelectedButton->setToolTip(
+                tr("Assign the currently selected source tile to every "
+                   "selected target tile."));
+    ui->horizontalLayout->addWidget(mAssignSelectedButton);
+    connect(mAssignSelectedButton, &QAbstractButton::clicked,
+            this, &SnowEditor::assignSourceToSelected);
+
+    mAssignMatchingButton = new QPushButton(
+                tr("Match selected by tile ID"), this);
+    mAssignMatchingButton->setToolTip(
+                tr("For every selected target, use the tile with the same "
+                   "numeric ID from the selected source tileset."));
+    ui->horizontalLayout->addWidget(mAssignMatchingButton);
+    connect(mAssignMatchingButton, &QAbstractButton::clicked,
+            this, &SnowEditor::assignMatchingIds);
+
+    QSettings snowSettings;
+    mPropertyName = snowSettings.value(
+                QStringLiteral("SnowEditor/PropertyName"),
+                QStringLiteral("SnowTile")).toString().trimmed();
+    if (mPropertyName.isEmpty())
+        mPropertyName = QStringLiteral("SnowTile");
+    ui->propertyName->setText(mPropertyName);
+    mPropertyPreset->setCurrentIndex(
+                mPropertyName == QStringLiteral("SnowTile") ? 0
+                : mPropertyName == QStringLiteral("BurntTile") ? 1 : 2);
 
     ui->filterEditSource->setClearButtonEnabled(true);
     ui->filterEditSource->setEnabled(false);
@@ -74,6 +122,8 @@ SnowEditor::SnowEditor(QWidget *parent) :
     connect(ui->targetView->model(), &MixedTilesetModel::tileDroppedAt,
             this, &SnowEditor::tileDroppedAt);
     connect(ui->targetView->selectionModel(), &QItemSelectionModel::selectionChanged,
+            this, &SnowEditor::syncUI);
+    connect(ui->sourceView->selectionModel(), &QItemSelectionModel::selectionChanged,
             this, &SnowEditor::syncUI);
 
     ui->targetView->setZoomable(mZoomable);
@@ -113,7 +163,16 @@ SnowEditor::SnowEditor(QWidget *parent) :
 
 SnowEditor::~SnowEditor()
 {
+    delete mTileDefFile;
     delete ui;
+}
+
+void SnowEditor::closeEvent(QCloseEvent *event)
+{
+    if (confirmSave())
+        event->accept();
+    else
+        event->ignore();
 }
 
 void SnowEditor::manageTilesets()
@@ -129,21 +188,25 @@ void SnowEditor::manageTilesets()
 
 void SnowEditor::tileDroppedAt(const QString &tilesetName, int tileId, int row, int column, const QModelIndex &parent)
 {
+    if (mTileDefFile == nullptr || mPropertyName.isEmpty())
+        return;
     MixedTilesetModel *model = ui->targetView->model();
     QModelIndex index = model->index(row, column, parent);
     Tile* targetTile = model->tileAt(index);
-    if (targetTile == nullptr) {
+    if (targetTile == nullptr)
         return;
+    const QString replacementName =
+            BuildingTilesMgr::instance()->nameForTile2(
+                tilesetName, tileId);
+    if (setTileMapping(targetTile, replacementName)) {
+        markDirty();
+        setOverlayTiles();
+    } else {
+        statusBar()->showMessage(
+                    tr("Could not assign %1: the target tile is not present "
+                       "in the loaded definition.")
+                    .arg(replacementName), 7000);
     }
-    QString snowName = BuildingTilesMgr::instance()->nameForTile2(tilesetName, tileId);
-    if (TileDefTileset *tdts = mTileDefFile->tileset(targetTile->tileset()->name())) {
-        if (TileDefTile *tdt = tdts->tileAt(targetTile->id())) {
-            if (tdt->mPropertyUI.property(mPropertyName) != nullptr) {
-                tdt->mPropertyUI.ChangePropertiesV(mPropertyName, snowName);
-            }
-        }
-    }
-    setOverlayTiles();
 }
 
 void SnowEditor::propertyNameEdited(const QString &text)
@@ -153,7 +216,102 @@ void SnowEditor::propertyNameEdited(const QString &text)
         return;
     }
     mPropertyName = trimmed;
+    QSettings().setValue(QStringLiteral("SnowEditor/PropertyName"),
+                         mPropertyName);
+    {
+        const QSignalBlocker blocker(mPropertyPreset);
+        mPropertyPreset->setCurrentIndex(
+                    mPropertyName == QStringLiteral("SnowTile") ? 0
+                    : mPropertyName == QStringLiteral("BurntTile") ? 1 : 2);
+    }
     setOverlayTiles();
+    syncUI();
+}
+
+void SnowEditor::propertyPresetChanged(int index)
+{
+    const QString property =
+            mPropertyPreset->itemData(index).toString();
+    if (property.isEmpty())
+        return;
+    ui->propertyName->setText(property);
+    propertyNameEdited(property);
+}
+
+void SnowEditor::assignSourceToSelected()
+{
+    if (mTileDefFile == nullptr || mPropertyName.isEmpty())
+        return;
+    Tile *sourceTile = ui->sourceView->model()->tileAt(
+                ui->sourceView->currentIndex());
+    const QModelIndexList targets =
+            ui->targetView->selectionModel()->selectedIndexes();
+    if (sourceTile == nullptr || targets.isEmpty()) {
+        statusBar()->showMessage(
+                    tr("Select one source tile and at least one target tile."),
+                    5000);
+        return;
+    }
+
+    const QString replacementName =
+            BuildingTilesMgr::instance()->nameForTile2(
+                sourceTile->tileset()->name(), sourceTile->id());
+    int changed = 0;
+    for (const QModelIndex &index : targets) {
+        if (setTileMapping(
+                ui->targetView->model()->tileAt(index),
+                replacementName)) {
+            ++changed;
+        }
+    }
+    if (changed > 0) {
+        markDirty();
+        setOverlayTiles();
+    }
+    statusBar()->showMessage(
+                tr("Assigned %1 to %2 target tile(s).")
+                .arg(replacementName).arg(changed), 5000);
+}
+
+void SnowEditor::assignMatchingIds()
+{
+    if (mTileDefFile == nullptr || mPropertyName.isEmpty() ||
+            mCurrentTilesetSource == nullptr) {
+        return;
+    }
+    const QModelIndexList targets =
+            ui->targetView->selectionModel()->selectedIndexes();
+    if (targets.isEmpty()) {
+        statusBar()->showMessage(
+                    tr("Select at least one target tile."), 5000);
+        return;
+    }
+
+    int changed = 0;
+    int unavailable = 0;
+    for (const QModelIndex &index : targets) {
+        Tile *targetTile = ui->targetView->model()->tileAt(index);
+        Tile *sourceTile = targetTile == nullptr
+                ? nullptr
+                : mCurrentTilesetSource->tileAt(targetTile->id());
+        if (sourceTile == nullptr) {
+            ++unavailable;
+            continue;
+        }
+        const QString replacementName =
+                BuildingTilesMgr::instance()->nameForTile2(
+                    mCurrentTilesetSource->name(), sourceTile->id());
+        if (setTileMapping(targetTile, replacementName))
+            ++changed;
+    }
+    if (changed > 0) {
+        markDirty();
+        setOverlayTiles();
+    }
+    statusBar()->showMessage(
+                tr("Mapped %1 target tile(s) by ID; %2 source ID(s) "
+                   "were unavailable.")
+                .arg(changed).arg(unavailable), 7000);
 }
 
 void SnowEditor::tilesetFilterSourceEdited(const QString &text)
@@ -180,7 +338,10 @@ void SnowEditor::tilesetFilterEdited(QListWidget *tilesetNamesList, const QStrin
 {
     for (int row = 0; row < tilesetNamesList->count(); row++) {
         QListWidgetItem* item = tilesetNamesList->item(row);
-        item->setHidden(text.trimmed().isEmpty() ? false : !item->text().contains(text));
+        item->setHidden(text.trimmed().isEmpty()
+                        ? false
+                        : !item->text().contains(
+                              text.trimmed(), Qt::CaseInsensitive));
     }
 
     QListWidgetItem* current = tilesetNamesList->currentItem();
@@ -250,14 +411,18 @@ void SnowEditor::tilesetSelectionChanged(QListWidget *tilesetNamesList, Tiled::I
 
 void SnowEditor::clearOverlayTiles()
 {
+    mMappedCurrent = 0;
+    mUnresolvedCurrent = 0;
     if (mCurrentTilesetTarget == nullptr) {
         return;
     }
     MixedTilesetModel *model = ui->targetView->model();
     for (int tileId = 0; tileId < mCurrentTilesetTarget->tileCount(); tileId++) {
         Tile *tile = mCurrentTilesetTarget->tileAt(tileId);
-        model->clearCategoryBounds(model->index(tile));
-        model->setOverlayTile(model->index(tile), nullptr);
+        const QModelIndex index = model->index(tile);
+        model->clearCategoryBounds(index);
+        model->setOverlayTile(index, nullptr);
+        model->setData(index, QString(), Qt::ToolTipRole);
     }
     ui->targetView->update();
 }
@@ -280,25 +445,47 @@ void SnowEditor::setOverlayTiles()
         TileDefTile *tdt = tdts->tileAt(tileId);
         if (tdt == nullptr)
             continue;
-        UIProperties::UIProperty *property = tdt->property(mPropertyName);
-        if (property == nullptr)
+        const QString replacementName =
+                tdt->mProperties.value(mPropertyName).trimmed();
+        if (replacementName.isEmpty())
             continue;
-        if (property->getString().isEmpty())
-            continue;
-        QString snowTileName =property->getString();
+        ++mMappedCurrent;
         QString snowTilesetName;
-        int snowTileId;
-        if (BuildingTilesMgr::instance()->parseTileName(snowTileName, snowTilesetName, snowTileId)) {
+        int snowTileId = -1;
+        Tile *tile = mCurrentTilesetTarget->tileAt(tileId);
+        const QModelIndex index = model->index(tile);
+        bool resolved = false;
+        if (BuildingTilesMgr::instance()->parseTileName(
+                replacementName, snowTilesetName, snowTileId)) {
             if (Tileset *snowTileset = TileMetaInfoMgr::instance()->tileset(snowTilesetName)) {
                 if (Tile *snowTile = snowTileset->tileAt(snowTileId)) {
-                    Tile *tile = mCurrentTilesetTarget->tileAt(tileId);
-                    model->setOverlayTile(model->index(tile), snowTile);
+                    model->setOverlayTile(index, snowTile);
                     model->setCategoryBounds(tile, QRect(0, 0, 1, 1));
+                    model->setData(index, QBrush(QColor(96, 180, 255, 96)),
+                                   MixedTilesetModel::CategoryBgRole);
+                    model->setData(
+                                index,
+                                tr("%1 = %2").arg(
+                                    mPropertyName, replacementName),
+                                Qt::ToolTipRole);
+                    resolved = true;
                 }
             }
         }
+        if (!resolved) {
+            ++mUnresolvedCurrent;
+            model->setCategoryBounds(tile, QRect(0, 0, 1, 1));
+            model->setData(index, QBrush(QColor(230, 80, 80, 120)),
+                           MixedTilesetModel::CategoryBgRole);
+            model->setData(
+                        index,
+                        tr("Unresolved %1 reference: %2")
+                        .arg(mPropertyName, replacementName),
+                        Qt::ToolTipRole);
+        }
     }
     ui->targetView->update();
+    updateStatus();
 }
 
 void SnowEditor::syncUI()
@@ -306,7 +493,17 @@ void SnowEditor::syncUI()
     bool bHasFile = mTileDefFile != nullptr;
     ui->actionSave->setEnabled(bHasFile);
     ui->propertyName->setEnabled(bHasFile);
-    ui->actionReset->setEnabled(bHasFile && ui->targetView->selectionModel()->hasSelection());
+    mPropertyPreset->setEnabled(bHasFile);
+    const bool hasTargets = bHasFile &&
+            !mPropertyName.isEmpty() &&
+            ui->targetView->selectionModel()->hasSelection();
+    ui->actionReset->setEnabled(hasTargets);
+    mAssignSelectedButton->setEnabled(
+                hasTargets && ui->sourceView->currentIndex().isValid());
+    mAssignMatchingButton->setEnabled(
+                hasTargets && mCurrentTilesetSource != nullptr);
+    updateWindowTitle();
+    updateStatus();
 }
 
 void SnowEditor::setTilesetList(QLineEdit *lineEdit, QListWidget *tilesetNamesList)
@@ -329,23 +526,44 @@ void SnowEditor::setTilesetList(QLineEdit *lineEdit, QListWidget *tilesetNamesLi
 
     lineEdit->setFixedWidth(tilesetNamesList->width());
     lineEdit->setEnabled(tilesetNamesList->count() > 0);
-    tilesetFilterSourceEdited(lineEdit->text());
+    tilesetFilterEdited(tilesetNamesList, lineEdit->text());
 }
 
 void SnowEditor::fileOpen(const QString &filePath)
 {
-    PROGRESS progress(tr("Reading %1").arg(QFileInfo(filePath).fileName()));
-    mTileDefFile = new TileDefFile();
+    PROGRESS progress(tr("Reading %1")
+                      .arg(QFileInfo(filePath).fileName()), this);
+    TileDefFile *loadedFile = new TileDefFile();
     TileDefFileReader reader;
-    if (!reader.read(filePath, *mTileDefFile)) {
-        QMessageBox::warning(this, tr("Error"), mTileDefFile->errorString());
-        delete mTileDefFile;
-        mTileDefFile = nullptr;
+    if (!reader.read(filePath, *loadedFile)) {
+        QMessageBox::warning(this, tr("Error"),
+                             loadedFile->errorString());
+        delete loadedFile;
         return;
     }
 
+    delete mTileDefFile;
+    mTileDefFile = loadedFile;
+    mDirty = false;
     setTilesetTargetList();
     setTilesetSourceList();
+
+    int initialRow = -1;
+    for (TileDefTileset *definition : mTileDefFile->tilesets()) {
+        if (Tileset *tileset =
+                TileMetaInfoMgr::instance()->tileset(
+                    definition->mName)) {
+            initialRow = TileMetaInfoMgr::instance()->indexOf(tileset);
+            if (!tileset->isMissing())
+                break;
+        }
+    }
+    if (initialRow >= 0) {
+        ui->tilesetListTarget->setCurrentRow(initialRow);
+        ui->tilesetListSource->setCurrentRow(initialRow);
+    }
+    updateWindowTitle();
+    setOverlayTiles();
 }
 
 bool SnowEditor::fileSave(const QString &filePath)
@@ -361,12 +579,15 @@ bool SnowEditor::fileSave(const QString &filePath)
         QMessageBox::warning(this, tr("Error"), textFile.errorString());
         return false;
     }
+    mDirty = false;
+    updateWindowTitle();
+    updateStatus();
     return true;
 }
 
 bool SnowEditor::confirmSave()
 {
-    if (mTileDefFile == nullptr)
+    if (mTileDefFile == nullptr || !mDirty)
         return true;
 
     int ret = QMessageBox::warning(
@@ -387,7 +608,8 @@ QString SnowEditor::getSaveLocation()
 {
     QSettings settings;
     QString key = QLatin1String("SnowEditor/LastOpenPath");
-    QString suggestedFileName = QLatin1String("newtiledefintiions.tiles");
+    QString suggestedFileName = settings.value(
+                key, QStringLiteral("newtiledefinitions.tiles")).toString();
     if (mTileDefFile != nullptr) {
         suggestedFileName = mTileDefFile->fileName();
     }
@@ -479,19 +701,92 @@ bool SnowEditor::fileSave()
 
 void SnowEditor::clearProperties()
 {
-    if (mCurrentTilesetTarget == nullptr)
+    if (mCurrentTilesetTarget == nullptr ||
+            mTileDefFile == nullptr || mPropertyName.isEmpty())
         return;
     TileDefTileset *tdts = mTileDefFile->tileset(mCurrentTilesetTarget->name());
+    if (tdts == nullptr)
+        return;
     const QModelIndexList selection = ui->targetView->selectionModel()->selectedIndexes();
+    int cleared = 0;
     for (const QModelIndex& index : selection) {
         Tile *tile = ui->targetView->model()->tileAt(index);
         if (tile == nullptr)
             continue;
         if (TileDefTile *tdt = tdts->tileAt(tile->id())) {
-            if (UIProperties::UIProperty *property = tdt->mPropertyUI.property(mPropertyName)) {
-                tdt->mPropertyUI.ChangePropertiesV(mPropertyName, property->defaultValue());
+            if (tdt->mProperties.remove(mPropertyName) > 0) {
+                tdt->mPropertyUI.FromProperties(tdt->mProperties);
+                ++cleared;
             }
         }
     }
+    if (cleared > 0)
+        markDirty();
     setOverlayTiles();
+    statusBar()->showMessage(
+                tr("Cleared %1 %2 value(s).")
+                .arg(cleared).arg(mPropertyName), 5000);
+}
+
+bool SnowEditor::setTileMapping(
+        Tile *targetTile, const QString &replacementName)
+{
+    if (mTileDefFile == nullptr || targetTile == nullptr ||
+            mPropertyName.isEmpty() || replacementName.isEmpty()) {
+        return false;
+    }
+    TileDefTileset *definition = mTileDefFile->tileset(
+                targetTile->tileset()->name());
+    TileDefTile *definitionTile = definition == nullptr
+            ? nullptr : definition->tileAt(targetTile->id());
+    if (definitionTile == nullptr)
+        return false;
+    if (definitionTile->mProperties.value(mPropertyName) ==
+            replacementName) {
+        return false;
+    }
+    definitionTile->mProperties[mPropertyName] = replacementName;
+    definitionTile->mPropertyUI.FromProperties(
+                definitionTile->mProperties);
+    return true;
+}
+
+void SnowEditor::markDirty()
+{
+    if (!mDirty) {
+        mDirty = true;
+        updateWindowTitle();
+    }
+    updateStatus();
+}
+
+void SnowEditor::updateWindowTitle()
+{
+    const QString fileName = mTileDefFile == nullptr
+            ? tr("No definition loaded")
+            : QFileInfo(mTileDefFile->fileName()).fileName();
+    setWindowTitle(tr("%1%2 - Snow / Replacement Editor")
+                   .arg(fileName, mDirty ? QStringLiteral("*")
+                                         : QString()));
+}
+
+void SnowEditor::updateStatus()
+{
+    if (mTileDefFile == nullptr) {
+        statusBar()->showMessage(
+                    tr("Open a .tiles or .tiles.txt definition to begin."));
+        return;
+    }
+    const int selectedTargets =
+            ui->targetView->selectionModel()->selectedIndexes().size();
+    const QString targetName = mCurrentTilesetTarget == nullptr
+            ? tr("no target tileset")
+            : mCurrentTilesetTarget->name();
+    statusBar()->showMessage(
+                tr("%1 | Property: %2 | %3 mapped, %4 unresolved | "
+                   "%5 target tile(s) selected%6")
+                .arg(targetName, mPropertyName)
+                .arg(mMappedCurrent).arg(mUnresolvedCurrent)
+                .arg(selectedTargets)
+                .arg(mDirty ? tr(" | Modified") : QString()));
 }

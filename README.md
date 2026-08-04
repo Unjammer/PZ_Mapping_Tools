@@ -13,6 +13,10 @@ mapping automation, stability fixes, and current Project Zomboid data support.
 This is a community project. It is not an official The Indie Stone release.
 Project Zomboid game assets are not included.
 
+Current release documentation: [August 3, 2026 changes](RELEASE_CHANGELOG.md),
+[feature reference](docs/Feature-Reference.md), and
+[logs/diagnostics](docs/Diagnostics-and-Logs.md).
+
 ![WorldEd displaying a generated terrain cell](docs/images/worlded-overview.png)
 
 ## Why do unofficial mapping tools exist?
@@ -120,6 +124,23 @@ and `settings/logs` report the total, loaded, missing, and unresolved entries.
 Missing or corrupt images use an explicit placeholder instead of causing a
 silent empty palette.
 
+### Editing-path responsiveness
+
+Routine painting no longer starts unrelated catalogue work:
+
+- the minimap renderer reuses the ready shared tileset catalogue instead of
+  reloading it after map edits;
+- a missing or invalid Automapper manifest is attempted once per document,
+  not once per brush stroke;
+- the Tile Layers panel rebuilds only while visible and only when the edited
+  region contains its inspected square; and
+- tileset usage/status icons are refreshed only while their dock is visible
+  and are grouped with a short debounce during a stroke.
+
+The minimap still receives map changes through its named background worker,
+and visible docks still catch up when shown. The audit intentionally preserves
+required document, Undo, renderer, and Lua-tool updates.
+
 ### 300 × 300 and 256 × 256 projects
 
 World geometry is stored per project as either:
@@ -133,6 +154,107 @@ tools, LOT generation, InGameMap export, and Lua placement. Existing 300-cell
 projects remain supported.
 
 ## WorldEd
+
+### Project WorldGen biome and prefab editors
+
+Two independent commands are available after a saved WorldEd map project is
+loaded:
+
+- **Tools > WorldGen Biome Editor / Preview...**
+- **Tools > WorldGen Prefab Editor...**
+
+The biome window contains biome rules, biome features, and the representative
+2x2-chunk preview. The prefab window contains only true static-prefab
+inspection, creation, TMX/TBX conversion, painting, and staging. Biome and
+prefab controls are never mixed in the same window.
+
+The game WorldGen directory is always identified as a read-only source.
+Project-owned Lua is kept separately under:
+
+`<map-project>/media/lua/server/WorldGen`
+
+- The loader reads biome features, static prefabs, procedural biomes, map
+  biomes, subbiomes, parent relationships, selection parameters, placements,
+  protections, and replacements in an isolated Lua state with no file,
+  package, operating-system, or network libraries.
+- Game definitions are loaded before project definitions. Biome-feature,
+  static-prefab, and biome selectors identify every entry as **Game** or
+  **Project**.
+- New procedural or map biomes can be created with a parent, generation flag,
+  selection parameters, and weighted biome features. A game biome is edited safely
+  by creating a project variant that inherits its advanced rules. Project
+  biomes created by the editor can be edited in place.
+- Biome features use the engine's 1x1 through 8x8 pattern format. Their visual
+  editor shows the resolved Tiles sprite in every pattern cell.
+- True `worldgen.prefabs` are edited separately as z=0 schematics with the four
+  engine slots `Floor`, `FloorFurniture`, `FloorOverlay`, and `Furniture`.
+  The editor supports dimensions through 256x256, a Tiles palette, direct
+  painting, zombie chance, and a depth-sorted isometric preview with visible
+  8x8 chunk lines and full-height XL/XXL sprite footprints.
+- Restricted TMX and one-floor TBX sources can be converted to prefabs. The
+  converter accepts explicit Project Zomboid z=0 TMX layers and stops on
+  upper/lower levels, multiple Floor tiles, or more tile layers per square
+  than the four-slot runtime format can preserve; ignored object/building
+  metadata is always disclosed before saving.
+- **Stage for Game / Mod** writes the prefab and a marked static-module block
+  in `media/maps/<MapName>/WorldGenOverride.lua`. Existing unmarked override
+  content is preserved. The target must be a project/mod root outside the
+  Project Zomboid installation.
+- A selected biome is resolved through its parent chain and rendered with the
+  configured Tiles catalogue on the game's 16 x 16-square generation unit,
+  equivalent to 2 x 2 Build 42 chunks.
+- Ground, plant, bush, tree, and ore categories can be hidden independently.
+  The definition tree displays feature probabilities and pattern dimensions;
+  clicking a preview square identifies its sprites and source features.
+- JUMBO, JUMBOXL, and JUMBOXXL sheets use their declared custom tile
+  geometry. XL and XXL trees reconstruct the game's main-sprite `N` plus
+  treetop `N+6` pair, and the fitted canvas reserves enough space for their
+  full height and width. A custom sheet whose pixel dimensions do not match
+  its declared geometry is reported as unavailable instead of being
+  mis-sliced into floating or clipped trees.
+
+Format distinctions, runtime limits, conversion rules, project paths, and the
+staging workflow are documented in
+[`WorldGen Preview, Biomes, Features, and Prefabs`](WorldEd/docs/PZ-B42.20-WorldGen-Editor-and-Prefabs.md).
+- Procedural and `biomes_map` registries can be inspected separately. Map
+  biomes currently use an empty synthetic surface, so placement, protection,
+  and replacement behavior that depends on an authored map is reported but
+  is not yet reproduced.
+- Advanced `subbiomes`, `placements`, `protected`, and `replacements` tables
+  are inspected and inherited but are not rewritten by this first editor.
+  A project biome containing such hand-authored rules is copied to a child
+  variant instead of being overwritten in place.
+- The current deterministic preview seed is representative. It is not yet a
+  pixel-identical simulation of a Project Zomboid save seed. Roads and erosion
+  are intentionally outside this module.
+
+## TileZed and BuildingEd
+
+### Procedural loot viewer and editor
+
+The same Build 42 loot tool is available through **TileZed > Tools >
+Procedural Loot Viewer / Editor...** and **BuildingEd > Building > Procedural
+Loot Viewer / Editor...**.
+
+- It loads the game's `Distribution_*.lua`, `Distributions.lua`, and
+  `ProceduralDistributions.lua` as read-only references.
+- RoomDef/container mappings and reusable procedural distributions are shown
+  together with their **Game** or **Project** provenance.
+- TileZed can open on the selected tile's `container` property. BuildingEd can
+  open on the current room's internal RoomDef name.
+- Item values are labelled **Chance / roll**. A separate neutral cumulative
+  preview is shown without claiming exact in-game probability.
+- Procedural `weightChance` values are shown as relative selector weights.
+  `min`, `max`, and force-by-item/zone/tile/room constraints remain visible.
+- New entries and cloned overrides are written outside the game below
+  `<project-or-mod>/media/lua/server/Items` as an editor manifest plus
+  generated post-merge Lua.
+- The project root is rejected when it points into the selected game
+  installation.
+
+The format, probability semantics, workflow, limits, and validation command are
+documented in
+[`Build 42.20 procedural loot viewer and editor`](TileZed/docs/PZ-B42.20-Procedural-Loot-Editor.md).
 
 ### Terrain and vegetation image editor
 
@@ -180,8 +302,38 @@ project.
 
 - Import Project Zomboid tilesets directly from PNG.
 - Custom tile dimensions up to 4096 pixels and Jumbo tiles in pack tools.
-- Restored advanced Pack Extractor, tileset identification, ID reconstruction,
-  and tile-to-PNG export utilities.
+- Added an advanced `.pack` comparator with pack/pixel/metadata SHA-256,
+  added/removed/modified/duplicate statuses, filters, sortable results,
+  side-by-side tile previews, a color-coded pixel difference view, and CSV
+  export.
+- Expanded the Pack Viewer extractor with checked texture selection, multiple
+  filter modes, per-texture previews and hashes, reconstructed individual
+  sprites, automatic/1x/2x/custom tileset sheets, complete atlas-page export,
+  safe conflict policies, output grouping, and an optional JSON manifest.
+- Opening the Versatile Pack Extractor now displays cancellable page/texture
+  progress while thumbnails and hashes are prepared; extraction phases are
+  reported too, so large packs no longer look like a frozen application.
+- `.pack` version 0 and Build 42 version 1 input is bounds-checked before
+  decoding. Truncated PNG data and invalid packed/canvas geometry are rejected
+  explicitly.
+- See `TileZed/docs/PZ-Pack-Comparator-and-Extractor.md` for the workflow and
+  exact hash semantics.
+- Invalid binary `.tiles` metadata now identifies the exact failing value
+  instead of combining dimensions, ID, and tile count into one generic error.
+  The diagnostic shows the tileset entry, stored grid/capacity, ID, record
+  count, format limits, file path, and targeted repair guidance. Truncated
+  strings, numeric metadata, property counts, and property name/value fields
+  are reported separately with their tileset, tile, and property positions.
+- The `.tiles` comparator now reports complete file SHA-256, unique tilesets,
+  structural ID/image/grid/count changes, modified and one-sided tile records,
+  searchable status filters, side-by-side tile previews, highlighted property
+  values, explicit File 1/File 2 merge choices, and copy/export reports.
+- The Snow / Replacement Editor defaults to `SnowTile`, supports `BurntTile`
+  and custom mapping keys, batch assignment and same-ID matching, blue resolved
+  previews, red unresolved-reference diagnostics, accurate dirty tracking, and
+  save prompts only after real changes.
+- See `TileZed/docs/PZ-TileDef-Comparator-and-Snow-Editor.md` for both
+  workflows and the comparator's structure-safe merge boundary.
 - Tile names, numeric IDs, resolution, and loaded/missing status are visible in
   editor palettes.
 - B42 TileDef properties were audited against game sources and supplemented
@@ -189,6 +341,12 @@ project.
 - The restored Automapping panel accepts TMX rule maps and nested TXT rule
   lists, detects recursion and duplicate loading, and supports Object Groups,
   property wildcards, and object add/change/remove triggers.
+- Automapper now prefers the unambiguous `automapping-rules.txt` manifest and
+  keeps legacy `rules.txt` manifests compatible. WorldEd terrain/BMP
+  `Rules.txt` files are recognized and ignored instead of producing one
+  missing-file error per terrain-rule line. Missing or invalid manifests are
+  attempted once per document, so interactive Automapping cannot stall every
+  brush stroke; press Reload after correcting a manifest.
 
 ### Build 42 depth geometry
 
@@ -273,6 +431,7 @@ PZTools/
 ├── translations/
 ├── settings/        created at runtime; shared INI files and logs
 └── Tiles/           optional local game Tiles; not included
+    ├── 1x/          optional
     ├── 2x/          optional
     └── custom/      optional
 ```
@@ -282,14 +441,25 @@ or TileZed. BuildingEd consumes the same shared setting.
 
 ## Documentation and issue reports
 
+- [Complete documentation index](DOCUMENTATION.md)
+- [Offline documentation home](docs/index.html)
+- [User-facing feature reference](docs/Feature-Reference.md)
 - [PZTools user guide](docs/TileZed/PZToolsGuide.html)
 - [Lua scripting reference](docs/TileZed/LuaScripting.html)
 - [Automapper guide](docs/TileZed/Automapper.html)
+- [WorldGen biome and prefab editor](WorldEd/docs/PZ-B42.20-WorldGen-Editor-and-Prefabs.md)
+- [Procedural loot editor](TileZed/docs/PZ-B42.20-Procedural-Loot-Editor.md)
+- [Pack comparator and extractor](TileZed/docs/PZ-Pack-Comparator-and-Extractor.md)
+- [TileDef comparator and Snow/Replacement editor](TileZed/docs/PZ-TileDef-Comparator-and-Snow-Editor.md)
+- [Logs, diagnostics, validators, and issue reports](docs/Diagnostics-and-Logs.md)
 - [Upstream history and source provenance](UPSTREAM-HISTORY.md)
 - [Detailed fork changelog](CHANGELOG-PZTOOLS.md)
 - [Current release changes](RELEASE_CHANGELOG.md)
 
-Logs are written to `settings/logs`. A useful issue report includes:
+The documentation distinguishes game-confirmed structures, tool-enforced
+safety policies, representative previews, and deliberate scope exclusions.
+Logs are written to `settings/logs`; the newest 20 runs per application are
+retained. A useful issue report includes:
 
 - application name and exact steps to reproduce;
 - the newest matching log file;

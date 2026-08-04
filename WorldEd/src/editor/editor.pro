@@ -70,6 +70,7 @@ SOURCES += main.cpp\
     biomemapitem.cpp \
     biomemapimageprocessor.cpp \
     terrainimageeditordialog.cpp \
+    worldgenpreviewdialog.cpp \
     BuildingEditor/buildingfurniturefile.cpp \
     BuildingEditor/buildingtilesfile.cpp \
     exportlotsprogressdialog.cpp \
@@ -204,6 +205,7 @@ HEADERS  += mainwindow.h \
     biomemapitem.h \
     biomemapimageprocessor.h \
     terrainimageeditordialog.h \
+    worldgenpreviewdialog.h \
     BuildingEditor/buildingfurniturefile.h \
     BuildingEditor/buildingtilesfile.h \
     exportlotsprogressdialog.h \

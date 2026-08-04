@@ -1,0 +1,9 @@
+# Preferred TileZed Automapper manifest.
+# Paths are relative to this file and are applied in this order.
+rule_001.tmx
+rule_002.tmx
+rule_003.tmx
+rule_004.tmx
+rule_005.tmx
+rule_006.tmx
+rule_007.tmx

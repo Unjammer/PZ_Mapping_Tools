@@ -45,6 +45,7 @@
 #include "world.h"
 #include "worlddocument.h"
 #include "zlevelrenderer.h"
+#include "worldgenpreviewdialog.h"
 using namespace Tiled;
 using namespace Tiled::Internal;
 #endif
@@ -73,7 +74,92 @@ int main(int argc, char *argv[])
 
     const QStringList commandLineArguments = a.arguments().mid(1);
     QString validateBmpGenerationProject;
+    QString validateWorldGenPrefabImport;
+    QString renderWorldGenPreviewRoot;
+    QString renderWorldGenPrefabRoot;
+    QString renderWorldGenPrefabWindowRoot;
+    QString renderWorldGenPreviewOutput;
     for (const QString &argument : commandLineArguments) {
+        const QString renderWorldGenPrefabWindowPrefix =
+                QLatin1String("--render-worldgen-prefab-window=");
+        if (argument.startsWith(renderWorldGenPrefabWindowPrefix)) {
+            renderWorldGenPrefabWindowRoot =
+                    argument.mid(renderWorldGenPrefabWindowPrefix.size());
+            continue;
+        }
+        const QString renderWorldGenPreviewPrefix =
+                QLatin1String("--render-worldgen-preview=");
+        if (argument.startsWith(renderWorldGenPreviewPrefix)) {
+            renderWorldGenPreviewRoot =
+                    argument.mid(renderWorldGenPreviewPrefix.size());
+            continue;
+        }
+        const QString renderWorldGenPrefabPrefix =
+                QLatin1String("--render-worldgen-prefab=");
+        if (argument.startsWith(renderWorldGenPrefabPrefix)) {
+            renderWorldGenPrefabRoot =
+                    argument.mid(renderWorldGenPrefabPrefix.size());
+            continue;
+        }
+        const QString worldGenPreviewOutputPrefix =
+                QLatin1String("--worldgen-preview-output=");
+        if (argument.startsWith(worldGenPreviewOutputPrefix)) {
+            renderWorldGenPreviewOutput =
+                    argument.mid(worldGenPreviewOutputPrefix.size());
+            continue;
+        }
+        const QString worldGenValidationPrefix =
+                QLatin1String("--validate-worldgen-preview=");
+        if (argument.startsWith(worldGenValidationPrefix)) {
+            const QString path =
+                    argument.mid(worldGenValidationPrefix.size());
+            QString summary;
+            QString error;
+            if (!WorldGenPreviewDialog::validateDefinitions(
+                        path, &summary, &error)) {
+                qCritical().noquote()
+                        << "WorldGen preview validation failed:"
+                        << error;
+                return 10;
+            }
+            qInfo().noquote()
+                    << "WorldGen preview validation passed:"
+                    << summary;
+            return 0;
+        }
+        const QString prefabImportValidationPrefix =
+                QLatin1String("--validate-worldgen-prefab-import=");
+        if (argument.startsWith(prefabImportValidationPrefix)) {
+            validateWorldGenPrefabImport =
+                    argument.mid(prefabImportValidationPrefix.size());
+            continue;
+        }
+        const QString worldGenOverlayValidationPrefix =
+                QLatin1String("--validate-worldgen-project-overlay=");
+        if (argument.startsWith(worldGenOverlayValidationPrefix)) {
+            const QString paths =
+                    argument.mid(worldGenOverlayValidationPrefix.size());
+            const int separator = paths.indexOf(QLatin1String("::"));
+            if (separator <= 0 || separator + 2 >= paths.size()) {
+                qCritical() << "WorldGen project-overlay validation expects "
+                               "<game-path>::<project-overlay-path>";
+                return 13;
+            }
+            QString summary;
+            QString error;
+            if (!WorldGenPreviewDialog::validateProjectOverlay(
+                        paths.left(separator), paths.mid(separator + 2),
+                        &summary, &error)) {
+                qCritical().noquote()
+                        << "WorldGen project-overlay validation failed:"
+                        << error;
+                return 14;
+            }
+            qInfo().noquote()
+                    << "WorldGen project-overlay validation passed:"
+                    << summary;
+            return 0;
+        }
         const QString inGameMapValidationPrefix =
                 QLatin1String("--validate-ingamemap=");
         if (argument.startsWith(inGameMapValidationPrefix)) {
@@ -192,6 +278,77 @@ int main(int argc, char *argv[])
 
     if (!w.InitConfigFiles())
         return 0;
+
+    if (!renderWorldGenPreviewRoot.isEmpty()) {
+        if (renderWorldGenPreviewOutput.isEmpty()) {
+            qCritical() << "WorldGen preview render requires "
+                           "--worldgen-preview-output=<PNG>";
+            return 11;
+        }
+        QString error;
+        if (!WorldGenPreviewDialog::renderValidationPreview(
+                    renderWorldGenPreviewRoot,
+                    renderWorldGenPreviewOutput, &error)) {
+            qCritical().noquote()
+                    << "WorldGen preview render failed:" << error;
+            return 12;
+        }
+        qInfo() << "WorldGen preview render passed:"
+                << renderWorldGenPreviewOutput;
+        return 0;
+    }
+
+    if (!renderWorldGenPrefabRoot.isEmpty()) {
+        if (renderWorldGenPreviewOutput.isEmpty()) {
+            qCritical() << "WorldGen prefab render requires "
+                           "--worldgen-preview-output=<PNG>";
+            return 15;
+        }
+        QString error;
+        if (!WorldGenPreviewDialog::renderValidationPrefabEditor(
+                    renderWorldGenPrefabRoot,
+                    renderWorldGenPreviewOutput, &error)) {
+            qCritical().noquote()
+                    << "WorldGen prefab-editor render failed:" << error;
+            return 16;
+        }
+        qInfo() << "WorldGen prefab-editor render passed:"
+                << renderWorldGenPreviewOutput;
+        return 0;
+    }
+
+    if (!renderWorldGenPrefabWindowRoot.isEmpty()) {
+        if (renderWorldGenPreviewOutput.isEmpty()) {
+            qCritical() << "WorldGen prefab-window render requires "
+                           "--worldgen-preview-output=<PNG>";
+            return 18;
+        }
+        QString error;
+        if (!WorldGenPrefabDialog::renderValidationWindow(
+                    renderWorldGenPrefabWindowRoot,
+                    renderWorldGenPreviewOutput, &error)) {
+            qCritical().noquote()
+                    << "WorldGen prefab-window render failed:" << error;
+            return 19;
+        }
+        qInfo() << "WorldGen prefab-window render passed:"
+                << renderWorldGenPreviewOutput;
+        return 0;
+    }
+
+    if (!validateWorldGenPrefabImport.isEmpty()) {
+        QString summary;
+        QString error;
+        if (!WorldGenPreviewDialog::validatePrefabImport(
+                    validateWorldGenPrefabImport, &summary, &error)) {
+            qCritical().noquote()
+                    << "WorldGen prefab import validation failed:" << error;
+            return 17;
+        }
+        qInfo().noquote()
+                << "WorldGen prefab import validation passed:" << summary;
+        return 0;
+    }
 
     if (!validateBmpGenerationProject.isEmpty()) {
         if (!w.openFile(validateBmpGenerationProject)) {

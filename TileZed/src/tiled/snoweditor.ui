@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>867</width>
-    <height>557</height>
+    <width>1100</width>
+    <height>680</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -23,7 +23,7 @@
       <item>
        <widget class="QLineEdit" name="filterEditSource">
         <property name="placeholderText">
-         <string>tileset name</string>
+         <string>Source/replacement tileset filter</string>
         </property>
         <property name="clearButtonEnabled">
          <bool>true</bool>
@@ -47,7 +47,7 @@
       <item>
        <widget class="QLineEdit" name="filterEditTarget">
         <property name="placeholderText">
-         <string>tileset name</string>
+         <string>Target/base tileset filter</string>
         </property>
         <property name="clearButtonEnabled">
          <bool>true</bool>
@@ -84,7 +84,7 @@
       <item>
        <widget class="QLineEdit" name="propertyName">
         <property name="placeholderText">
-         <string>ex. BurntTile, SnowTile</string>
+         <string>SnowTile, BurntTile, or a custom replacement property</string>
         </property>
        </widget>
       </item>
@@ -103,7 +103,7 @@
     <item row="0" column="0" colspan="4">
      <widget class="QLabel" name="label">
       <property name="text">
-       <string>Open a .tiles file.  Enter a property name. Drag tiles from the right side to the left side to assign the name of the dragged tile to the property of the tile on the left.</string>
+       <string>Open a .tiles or .tiles.txt definition. TARGET/base tiles are on the left; SOURCE/replacement tiles are on the right. Drag a source tile onto a target, assign one source to several selected targets, or match selected targets to source tiles with the same numeric ID. Blue overlays are resolved mappings; red outlines are unresolved references.</string>
       </property>
       <property name="wordWrap">
        <bool>true</bool>

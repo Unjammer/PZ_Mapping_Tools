@@ -284,12 +284,16 @@ Map *MapReaderPrivate::readMap()
             mMap->mergeProperties(readProperties());
         else if (xml.name() == QLatin1String("tileset"))
             mMap->addTileset(readTileset());
-        else if (xml.name() == QLatin1String("layer"))
-            mMap->addLayer(readLayer());
-        else if (xml.name() == QLatin1String("objectgroup"))
-            mMap->addLayer(readObjectGroup());
-        else if (xml.name() == QLatin1String("imagelayer"))
-            mMap->addLayer(readImageLayer());
+        else if (xml.name() == QLatin1String("layer")) {
+            if (Layer *layer = readLayer())
+                mMap->addLayer(layer);
+        } else if (xml.name() == QLatin1String("objectgroup")) {
+            if (Layer *layer = readObjectGroup())
+                mMap->addLayer(layer);
+        } else if (xml.name() == QLatin1String("imagelayer")) {
+            if (Layer *layer = readImageLayer())
+                mMap->addLayer(layer);
+        }
 #ifdef ZOMBOID
         else if (xml.name() == QLatin1String("bmp-settings"))
             readBmpSettings();

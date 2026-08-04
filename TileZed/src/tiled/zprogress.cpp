@@ -92,14 +92,20 @@ void ZProgressManager::begin(const QString &text, bool cancellable)
         mDialog->show();
         mDialog->raise();
     }
-    qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
+    qApp->processEvents(
+                mCancellableDepth > 0
+                ? QEventLoop::AllEvents
+                : QEventLoop::ExcludeUserInputEvents);
 }
 
 void ZProgressManager::update(const QString &text)
 {
     Q_ASSERT(mDepth > 0);
     mLabel->setText(text);
-    qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
+    qApp->processEvents(
+                mCancellableDepth > 0
+                ? QEventLoop::AllEvents
+                : QEventLoop::ExcludeUserInputEvents);
 }
 
 void ZProgressManager::end(bool cancellable)

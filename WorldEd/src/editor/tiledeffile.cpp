@@ -42,20 +42,21 @@ TileDefFile::~TileDefFile()
     qDeleteAll(mTilesets);
 }
 
-static QString ReadString(QDataStream &in)
+static const int MAX_TILEDEF_STRING_LENGTH = 1024 * 1024;
+
+static bool ReadString(QDataStream &in, QString *value)
 {
-    QString str;
-    quint8 c = ' ';
-    while (c != '\n') {
+    value->clear();
+    while (value->size() < MAX_TILEDEF_STRING_LENGTH) {
+        quint8 c = 0;
         in >> c;
-        if (in.status() != QDataStream::Status::Ok) {
-            qDebug() << "ReadString read past end of file?";
-            break;
-        }
-        if (c != '\n')
-            str += QLatin1Char(c);
+        if (in.status() != QDataStream::Ok)
+            return false;
+        if (c == '\n')
+            return true;
+        *value += QLatin1Char(c);
     }
-    return str;
+    return false;
 }
 
 #define VERSION0 0
@@ -64,6 +65,8 @@ static QString ReadString(QDataStream &in)
 
 bool TileDefFile::read(const QString &fileName)
 {
+    mError.clear();
+    mFileName.clear();
     qDeleteAll(mTilesets);
     mTilesets.clear();
     mTilesetByName.clear();
@@ -84,6 +87,11 @@ bool TileDefFile::read(const QString &fileName)
     in >> tdef[1];
     in >> tdef[2];
     in >> tdef[3];
+    if (in.status() != QDataStream::Ok) {
+        mError = tr("The tile-definition header is truncated or unreadable.\n"
+                    "File: %1").arg(QDir::toNativeSeparators(fileName));
+        return false;
+    }
     int version = VERSION0;
     if (memcmp(tdef, "tdef", 4) == 0) {
         in >> version;
@@ -95,8 +103,14 @@ bool TileDefFile::read(const QString &fileName)
     } else
         file.seek(0);
 
-    int numTilesets;
+    qint32 numTilesets = 0;
     in >> numTilesets;
+    if (in.status() != QDataStream::Ok) {
+        mError = tr("The tile-definition file ends before the tileset count "
+                    "can be read.\nFile: %1")
+                .arg(QDir::toNativeSeparators(fileName));
+        return false;
+    }
     const bool gameVersion1 = version == VERSION1;
     const bool primaryDefinitions = QFileInfo(fileName).fileName().compare(
                 QLatin1String("newtiledefinitions.tiles"),
@@ -110,9 +124,19 @@ bool TileDefFile::read(const QString &fileName)
     }
     for (int i = 0; i < numTilesets; i++) {
         TileDefTileset *ts = new TileDefTileset;
-        ts->mName = ReadString(in);
-        ts->mImageSource = ReadString(in); // no path, just file + extension
-        qint32 columns, rows;
+        if (!ReadString(in, &ts->mName) ||
+                !ReadString(in, &ts->mImageSource)) {
+            mError = tr("Tileset entry %1 of %2 has a truncated name or "
+                        "image-source field. A valid field must end with a "
+                        "newline and be shorter than %3 bytes.\nFile: %4")
+                    .arg(i + 1).arg(numTilesets)
+                    .arg(MAX_TILEDEF_STRING_LENGTH)
+                    .arg(QDir::toNativeSeparators(fileName));
+            delete ts;
+            return false;
+        }
+        qint32 columns = 0;
+        qint32 rows = 0;
         in >> columns;
         in >> rows;
 
@@ -120,17 +144,81 @@ bool TileDefFile::read(const QString &fileName)
         if (version > VERSION0)
             in >> id;
 
-        qint32 tileCount;
+        qint32 tileCount = 0;
         in >> tileCount;
+        if (in.status() != QDataStream::Ok) {
+            mError = tr("Tileset \"%1\" (entry %2 of %3) has truncated "
+                        "numeric metadata. Expected columns, rows, %4and tile "
+                        "count after the image-source field.\nFile: %5")
+                    .arg(ts->mName).arg(i + 1).arg(numTilesets)
+                    .arg(version > VERSION0 ? tr("ID, ") : QString())
+                    .arg(QDir::toNativeSeparators(fileName));
+            delete ts;
+            return false;
+        }
         const qint64 imageTileCount = qint64(columns) * qint64(rows);
-        if (columns < 0 || rows < 0 || imageTileCount > 1024 * 1024
-                || tileCount < 0 || tileCount > imageTileCount
-                || (gameVersion1 && (id < 1 || id > maxTilesets
-                                     || tileCount > maxTiles))) {
-            mError = tr("Invalid dimensions, ID, or tile count in tileset "
-                        "\"%1\" (%2x%3, ID %4, %5 tiles).\n%6")
-                    .arg(ts->mName).arg(columns).arg(rows).arg(id)
-                    .arg(tileCount).arg(fileName);
+        QStringList problems;
+        if (columns < 0) {
+            problems += tr("Column count is %1; it must be zero or greater.")
+                    .arg(columns);
+        }
+        if (rows < 0) {
+            problems += tr("Row count is %1; it must be zero or greater.")
+                    .arg(rows);
+        }
+        if (imageTileCount > 1024 * 1024) {
+            problems += tr("The %1 x %2 grid contains %3 slots; the safe "
+                           "per-tileset limit is %4.")
+                    .arg(columns).arg(rows).arg(imageTileCount)
+                    .arg(1024 * 1024);
+        }
+        if (tileCount < 0) {
+            problems += tr("Stored tile count is %1; it must be zero or "
+                           "greater.").arg(tileCount);
+        }
+        if (columns >= 0 && rows >= 0 &&
+                tileCount > imageTileCount) {
+            problems += tr("Stored tile count %1 exceeds the grid capacity "
+                           "of %2 (%3 columns x %4 rows).")
+                    .arg(tileCount).arg(imageTileCount)
+                    .arg(columns).arg(rows);
+        }
+        if (gameVersion1 && (id < 1 || id > maxTilesets)) {
+            problems += tr("Tileset ID is %1; this version-1 file requires "
+                           "an ID from 1 to %2.")
+                    .arg(id).arg(maxTilesets);
+        }
+        if (gameVersion1 && tileCount > maxTiles) {
+            problems += tr("Stored tile count is %1; this version-1 file "
+                           "allows at most %2 tile records per tileset.")
+                    .arg(tileCount).arg(maxTiles);
+        }
+        if (!problems.isEmpty()) {
+            mError = tr(
+                        "Cannot load tileset \"%1\" (entry %2 of %3).\n"
+                        "File: %4\n\n"
+                        "Values stored in the .tiles file:\n"
+                        "  Grid: %5 columns x %6 rows = %7 tile slots\n"
+                        "  Tileset ID: %8\n"
+                        "  Stored tile records: %9\n"
+                        "  File format: version %10\n\n"
+                        "Invalid value(s):\n- %11\n\n"
+                        "For this file, version-1 tileset IDs must be 1-%12 "
+                        "and each tileset may contain at most %13 stored tile "
+                        "records. The stored count also cannot exceed the "
+                        "grid capacity (columns x rows). These values come "
+                        "from the binary .tiles file, not from the current "
+                        "PNG dimensions. Re-export the definition from its "
+                        "original source, or open it in TileZed's Tile "
+                        "Definitions editor and use File > Repair / Split "
+                        "for B42 Mods when repair loading is possible.")
+                    .arg(ts->mName)
+                    .arg(i + 1).arg(numTilesets)
+                    .arg(QDir::toNativeSeparators(fileName))
+                    .arg(columns).arg(rows).arg(imageTileCount)
+                    .arg(id).arg(tileCount).arg(version)
+                    .arg(problems.join(QStringLiteral("\n- ")))
+                    .arg(maxTilesets).arg(maxTiles);
             delete ts;
             return false;
         }
@@ -142,12 +230,50 @@ bool TileDefFile::read(const QString &fileName)
         QVector<TileDefTile*> tiles(columns * rows);
         for (int j = 0; j < tileCount; j++) {
             TileDefTile *tile = new TileDefTile(ts, j);
-            qint32 numProperties;
+            qint32 numProperties = 0;
             in >> numProperties;
+            if (in.status() != QDataStream::Ok) {
+                mError = tr("Tile record %1 of %2 in tileset \"%3\" has a "
+                            "truncated property-count field.\nFile: %4")
+                        .arg(j + 1).arg(tileCount).arg(ts->mName)
+                        .arg(QDir::toNativeSeparators(fileName));
+                delete tile;
+                qDeleteAll(tiles);
+                delete ts;
+                return false;
+            }
+            if (numProperties < 0 ||
+                    numProperties > 1024 * 1024) {
+                mError = tr("Tile record %1 of %2 in tileset \"%3\" stores "
+                            "an invalid property count of %4 (expected "
+                            "0-%5).\nFile: %6")
+                        .arg(j + 1).arg(tileCount).arg(ts->mName)
+                        .arg(numProperties).arg(1024 * 1024)
+                        .arg(QDir::toNativeSeparators(fileName));
+                delete tile;
+                qDeleteAll(tiles);
+                delete ts;
+                return false;
+            }
             QMap<QString,QString> properties;
             for (int k = 0; k < numProperties; k++) {
-                QString propertyName = ReadString(in);
-                QString propertyValue = ReadString(in);
+                QString propertyName;
+                QString propertyValue;
+                if (!ReadString(in, &propertyName) ||
+                        !ReadString(in, &propertyValue)) {
+                    mError = tr("Property %1 of %2 in tile record %3 of %4, "
+                                "tileset \"%5\", has a truncated name or "
+                                "value. Each field must end with a newline "
+                                "and be shorter than %6 bytes.\nFile: %7")
+                            .arg(k + 1).arg(numProperties)
+                            .arg(j + 1).arg(tileCount).arg(ts->mName)
+                            .arg(MAX_TILEDEF_STRING_LENGTH)
+                            .arg(QDir::toNativeSeparators(fileName));
+                    delete tile;
+                    qDeleteAll(tiles);
+                    delete ts;
+                    return false;
+                }
                 properties[propertyName] = propertyValue;
             }
 #ifndef WORLDED

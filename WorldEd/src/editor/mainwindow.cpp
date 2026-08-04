@@ -81,6 +81,7 @@
 #include "biomemapimageprocessor.h"
 #include "biomemapitem.h"
 #include "terrainimageeditordialog.h"
+#include "worldgenpreviewdialog.h"
 
 #include "InGameMap/ingamemapfeaturegenerator.h"
 #include "InGameMap/ingamemapdock.h"
@@ -861,6 +862,10 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::generateBiomeMap);
     connect(ui->actionTerrainImageEditor, &QAction::triggered,
             this, &MainWindow::terrainImageEditor);
+    connect(ui->actionWorldGenPreview, &QAction::triggered,
+            this, &MainWindow::worldGenPreview);
+    connect(ui->actionWorldGenPrefabEditor, &QAction::triggered,
+            this, &MainWindow::worldGenPrefabEditor);
 //    connect(ui->actionReadOldWaterDotLua, &QAction::triggered, this, &MainWindow::readOldWaterDotLua);
 
     connect(ui->actionAboutQt, &QAction::triggered, qApp, &QApplication::aboutQt);
@@ -1952,6 +1957,26 @@ void MainWindow::terrainImageEditor()
         return;
 
     TerrainImageEditorDialog dialog(worldDocument, this);
+    dialog.exec();
+}
+
+void MainWindow::worldGenPreview()
+{
+    WorldDocument *worldDocument = currentWorldDocument();
+    if (!worldDocument || worldDocument->fileName().isEmpty())
+        return;
+
+    WorldGenPreviewDialog dialog(worldDocument, this);
+    dialog.exec();
+}
+
+void MainWindow::worldGenPrefabEditor()
+{
+    WorldDocument *worldDocument = currentWorldDocument();
+    if (!worldDocument || worldDocument->fileName().isEmpty())
+        return;
+
+    WorldGenPrefabDialog dialog(worldDocument, this);
     dialog.exec();
 }
 
@@ -4269,6 +4294,12 @@ void MainWindow::updateActions()
     ui->actionCreateWorldImage->setEnabled(hasDoc);
     ui->actionGenerateBiomeMap->setEnabled(hasDoc);
     ui->actionTerrainImageEditor->setEnabled(currentWorldDoc != nullptr);
+    ui->actionWorldGenPreview->setEnabled(
+                currentWorldDoc != nullptr
+                && !currentWorldDoc->fileName().isEmpty());
+    ui->actionWorldGenPrefabEditor->setEnabled(
+                currentWorldDoc != nullptr
+                && !currentWorldDoc->fileName().isEmpty());
 
     ui->actionSnapToGrid->setEnabled(cellDoc != 0);
     ui->actionShowCoordinates->setEnabled(worldDoc != 0);

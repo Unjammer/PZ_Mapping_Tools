@@ -320,6 +320,7 @@ private slots:
 public slots:
     void floorsDialog();
     void roomsDialog();
+    void proceduralLootEditor();
     void tilesDialog();
     void templateFromBuilding();
 

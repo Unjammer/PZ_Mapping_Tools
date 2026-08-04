@@ -18,74 +18,91 @@
 #include "texturepackfile.h"
 
 #include <QBuffer>
-#include <QDebug>
+#include <QCryptographicHash>
 #include <QDataStream>
+#include <QDebug>
 #include <QFile>
+#include <QFileInfo>
+#include <QImageReader>
+#include <QPainter>
+#include <QSaveFile>
 
 static const int VERSION1 = 1;
 static const int VERSION_LATEST = VERSION1;
+static const int MAX_PAGE_COUNT = 10000;
+static const int MAX_ENTRY_COUNT = 1000000;
+static const int MAX_STRING_LENGTH = 1024 * 1024;
+static const int MAX_IMAGE_DIMENSION = 32768;
+static const qint64 MAX_IMAGE_PIXELS = 128LL * 1024 * 1024;
 
 PackFile::PackFile()
 {
-
 }
 
 PackFile::~PackFile()
 {
-
 }
 
-static int readInt(QDataStream &in)
+static bool readInt(QDataStream &stream, qint32 *value)
 {
-    qint32 ret;
-    in >> ret;
-    return ret;
+    stream >> *value;
+    return stream.status() == QDataStream::Ok;
 }
 
-static int chl1 = 0;
-static int chl2 = 0;
-static int chl3 = 0;
-static int chl4 = 0;
-static int readIntByte(QDataStream &in)
+static bool readString(QDataStream &stream, QString *value)
 {
-    int ch1 = chl2;
-    int ch2 = chl3;
-    int ch3 = chl4;
-    quint8 ch;
-    in >> ch;
-    int ch4 = ch;
-    chl1 = ch1;
-    chl2 = ch2;
-    chl3 = ch3;
-    chl4 = ch4;
-//    if ((ch1 | ch2 | ch3 | ch4) < 0)
-//        throw new EOFException();
-
-    return ((ch1 << 0) + (ch2 << 8) + (ch3 << 16) + (ch4 << 24));
-}
-
-static QString ReadString(QDataStream &in)
-{
-    QString str;
-    int len = readInt(in);
-    for (int n = 0; n < len; n++) {
-        quint8 c;
-        in >> c;
-        str += QLatin1Char(c);
+    qint32 length = 0;
+    if (!readInt(stream, &length) ||
+            length < 0 || length > MAX_STRING_LENGTH) {
+        return false;
     }
-    return str;
+
+    QByteArray bytes;
+    bytes.resize(length);
+    if (length > 0 &&
+            stream.readRawData(bytes.data(), length) != length) {
+        return false;
+    }
+    *value = QString::fromLatin1(bytes);
+    return stream.status() == QDataStream::Ok;
 }
 
-static void SaveString(QDataStream &out, const QString &str)
+static void saveString(QDataStream &stream, const QString &value)
 {
-    out << (qint32) str.length();
-    for (int i = 0; i < str.length(); i++)
-        out << (quint8) str.at(i).toLatin1();
+    const QByteArray bytes = value.toLatin1();
+    stream << qint32(bytes.size());
+    if (!bytes.isEmpty())
+        stream.writeRawData(bytes.constData(), bytes.size());
+}
+
+static bool validImageSize(const QSize &size)
+{
+    return size.width() > 0 && size.height() > 0 &&
+            size.width() <= MAX_IMAGE_DIMENSION &&
+            size.height() <= MAX_IMAGE_DIMENSION &&
+            qint64(size.width()) * size.height() <= MAX_IMAGE_PIXELS;
+}
+
+static bool validTextureGeometry(const PackPage &page,
+                                 const PackSubTexInfo &texture)
+{
+    return texture.x >= 0 && texture.y >= 0 &&
+            texture.w > 0 && texture.h > 0 &&
+            texture.ox >= 0 && texture.oy >= 0 &&
+            texture.fx > 0 && texture.fy > 0 &&
+            validImageSize(QSize(texture.fx, texture.fy)) &&
+            qint64(texture.x) + texture.w <= page.image.width() &&
+            qint64(texture.y) + texture.h <= page.image.height() &&
+            qint64(texture.ox) + texture.w <= texture.fx &&
+            qint64(texture.oy) + texture.h <= texture.fy;
 }
 
 bool PackFile::read(const QString &fileName)
 {
     mPages.clear();
+    mError.clear();
+    mFileName.clear();
+    mVersion = 0;
 
     QFile file(fileName);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -93,144 +110,299 @@ bool PackFile::read(const QString &fileName)
         return false;
     }
 
-//    QDir dir = QFileInfo(fileName).absoluteDir();
+    QDataStream stream(&file);
+    stream.setByteOrder(QDataStream::LittleEndian);
 
-    QDataStream in(&file);
-    in.setByteOrder(QDataStream::LittleEndian);
-
-    in.startTransaction();
-    qint8 m1, m2, m3, m4;
-    in >> m1;
-    in >> m2;
-    in >> m3;
-    in >> m4;
-    int version = 0;
-    int numPages = 0;
-    if (m1 == 'P' && m2 == 'Z' && m3 == 'P' && m4 == 'K') {
-        in.commitTransaction();
-        version = readInt(in);
-        numPages = readInt(in);
-        if (version < VERSION1 || version > VERSION_LATEST) {
-            mError = tr("Invalid version number %1.\n%2").arg(version).arg(fileName);
+    const QByteArray magic = file.peek(4);
+    qint32 version = 0;
+    qint32 pageCount = 0;
+    if (magic == QByteArrayLiteral("PZPK")) {
+        char header[4];
+        if (stream.readRawData(header, 4) != 4 ||
+                !readInt(stream, &version) ||
+                !readInt(stream, &pageCount)) {
+            mError = tr("Truncated .pack header.\n%1").arg(fileName);
             return false;
         }
-    } else {
-        in.rollbackTransaction();
-        numPages = readInt(in);
+        if (version < VERSION1 || version > VERSION_LATEST) {
+            mError = tr("Invalid version number %1.\n%2")
+                    .arg(version).arg(fileName);
+            return false;
+        }
+    } else if (!readInt(stream, &pageCount)) {
+        mError = tr("Truncated legacy .pack header.\n%1").arg(fileName);
+        return false;
     }
 
-    qDebug() << "PackFile: reading" << numPages << "pages";
-    for (int i = 0; i < numPages; i++) {
+    if (pageCount < 0 || pageCount > MAX_PAGE_COUNT) {
+        mError = tr("Invalid page count %1.\n%2")
+                .arg(pageCount).arg(fileName);
+        return false;
+    }
+
+    qDebug() << "PackFile: reading" << pageCount << "pages";
+    for (int pageIndex = 0; pageIndex < pageCount; ++pageIndex) {
         PackPage page;
-        page.name = ReadString(in);
-        int numEntries = readInt(in);
-        bool mask = readInt(in) != 0;
-        (void) mask;
-        qDebug() << "PackFile: page=" << page.name << "numEntries=" << numEntries;
-
-        for (int n = 0; n < numEntries; n++) {
-            QString entryName = ReadString(in);
-            qDebug() << entryName;
-            int x = readInt(in);
-            int y = readInt(in);
-            int w = readInt(in);
-            int h = readInt(in);
-            int ox = readInt(in);
-            int oy = readInt(in);
-            int fx = readInt(in);
-            int fy = readInt(in);
-            page.mInfo += PackSubTexInfo(x, y, w, h, ox, oy, fx, fy, entryName);
+        qint32 entryCount = 0;
+        qint32 maskValue = 0;
+        if (!readString(stream, &page.name) ||
+                !readInt(stream, &entryCount) ||
+                !readInt(stream, &maskValue)) {
+            mError = tr("Truncated metadata for page %1.\n%2")
+                    .arg(pageIndex).arg(fileName);
+            return false;
         }
+        if (entryCount < 0 || entryCount > MAX_ENTRY_COUNT) {
+            mError = tr("Invalid texture count %1 on page %2.\n%3")
+                    .arg(entryCount).arg(page.name).arg(fileName);
+            return false;
+        }
+        page.mask = maskValue != 0;
+        qDebug() << "PackFile: page=" << page.name
+                 << "numEntries=" << entryCount;
 
-        if (version == 0) {
-            QBuffer buf;
-            buf.buffer().reserve(250 * 1024);
-            buf.open(QBuffer::ReadWrite);
-            while (true) {
-                quint32 ii = readIntByte(in);
-                if (ii == 0xDEADBEEF)
-                    break;
-                char ch = ((ii >> 24) & 0xFF);
-                int n = buf.write(&ch, 1);
-                if (n != 1)
-                    break;
+        for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex) {
+            QString entryName;
+            qint32 x = 0;
+            qint32 y = 0;
+            qint32 w = 0;
+            qint32 h = 0;
+            qint32 ox = 0;
+            qint32 oy = 0;
+            qint32 fx = 0;
+            qint32 fy = 0;
+            if (!readString(stream, &entryName) ||
+                    !readInt(stream, &x) || !readInt(stream, &y) ||
+                    !readInt(stream, &w) || !readInt(stream, &h) ||
+                    !readInt(stream, &ox) || !readInt(stream, &oy) ||
+                    !readInt(stream, &fx) || !readInt(stream, &fy)) {
+                mError = tr("Truncated texture metadata on page %1, "
+                            "entry %2.\n%3")
+                        .arg(page.name).arg(entryIndex).arg(fileName);
+                return false;
             }
-
-            qDebug() << "Creating PNG" << page.name << "size=" << buf.size();
-            page.image.loadFromData(buf.buffer(), "PNG");
-
-//            quint32 magic = readInt(in);
-//            if (magic != 0xDEADBEEF) {
-//                mError = tr("Expected 0xDEADBEEF after PNG data");
-//                return false;
-//            }
-        } else {
-            qint32 length = readInt(in);
-            uchar *data = new uchar[length];
-            in.readRawData((char*) data, length);
-
-            qDebug() << "Creating PNG" << page.name << "size=" << length;
-            page.image.loadFromData(data, length, "PNG");
-            delete [] data;
+            page.mInfo += PackSubTexInfo(
+                        x, y, w, h, ox, oy, fx, fy, entryName);
         }
 
+        QByteArray pngData;
+        if (version == 0) {
+            const QByteArray marker = QByteArray::fromHex("efbeadde");
+            bool markerFound = false;
+            pngData.reserve(250 * 1024);
+            while (!stream.atEnd()) {
+                char byte = 0;
+                if (stream.readRawData(&byte, 1) != 1)
+                    break;
+                pngData.append(byte);
+                if (pngData.size() >= marker.size() &&
+                        pngData.endsWith(marker)) {
+                    pngData.chop(marker.size());
+                    markerFound = true;
+                    break;
+                }
+            }
+            if (!markerFound) {
+                mError = tr("Missing legacy page terminator for %1.\n%2")
+                        .arg(page.name).arg(fileName);
+                return false;
+            }
+        } else {
+            qint32 pngLength = 0;
+            if (!readInt(stream, &pngLength) || pngLength <= 0 ||
+                    qint64(pngLength) > file.size() - file.pos()) {
+                mError = tr("Invalid PNG length on page %1.\n%2")
+                        .arg(page.name).arg(fileName);
+                return false;
+            }
+            pngData.resize(pngLength);
+            if (stream.readRawData(pngData.data(), pngLength) != pngLength) {
+                mError = tr("Truncated PNG on page %1.\n%2")
+                        .arg(page.name).arg(fileName);
+                return false;
+            }
+        }
+
+        QBuffer pngBuffer(&pngData);
+        if (pngData.isEmpty() ||
+                !pngBuffer.open(QIODevice::ReadOnly)) {
+            mError = tr("Invalid PNG on page %1.\n%2")
+                    .arg(page.name).arg(fileName);
+            return false;
+        }
+        QImageReader imageReader(&pngBuffer, "PNG");
+        if (!validImageSize(imageReader.size())) {
+            mError = tr("PNG dimensions on page %1 exceed safe limits.\n%2")
+                    .arg(page.name).arg(fileName);
+            return false;
+        }
+        page.image = imageReader.read();
+        if (page.image.isNull()) {
+            mError = tr("Invalid PNG on page %1: %2\n%3")
+                    .arg(page.name, imageReader.errorString(), fileName);
+            return false;
+        }
+        qDebug() << "PackFile: decoded" << page.name
+                 << page.image.size() << "bytes=" << pngData.size();
+
+        for (const PackSubTexInfo &texture : std::as_const(page.mInfo)) {
+            if (!validTextureGeometry(page, texture)) {
+                mError = tr("Texture %1 has invalid geometry on page %2.\n%3")
+                        .arg(texture.name).arg(page.name).arg(fileName);
+                return false;
+            }
+        }
         mPages += page;
     }
 
+    mVersion = version;
+    mFileName = QFileInfo(fileName).absoluteFilePath();
     return true;
 }
 
 bool PackFile::write(const QString &fileName)
 {
-    QFile file(fileName);
+    mError.clear();
+    QSaveFile file(fileName);
     if (!file.open(QIODevice::WriteOnly)) {
         mError = tr("Error opening file for writing.\n%1").arg(fileName);
         return false;
     }
 
-    QDataStream out(&file);
-    out.setByteOrder(QDataStream::LittleEndian);
+    QDataStream stream(&file);
+    stream.setByteOrder(QDataStream::LittleEndian);
+    stream << quint8('P') << quint8('Z') << quint8('P') << quint8('K');
+    stream << qint32(VERSION_LATEST);
+    stream << qint32(mPages.size());
 
-    out << quint8('P') << quint8('Z') << quint8('P') << quint8('K');
-    out << qint32(VERSION_LATEST);
-
-    out << (qint32) mPages.size();
-
-    for (const PackPage& page : std::as_const(mPages)) {
-        SaveString(out, page.name);
-        out << (qint32) page.mInfo.size();
-        out << (qint32) 1; // FIXME: mask???
-        for (const PackSubTexInfo& info : page.mInfo) {
-            SaveString(out, info.name);
-            out << (qint32) info.x;
-            out << (qint32) info.y;
-            out << (qint32) info.w;
-            out << (qint32) info.h;
-            out << (qint32) info.ox;
-            out << (qint32) info.oy;
-            out << (qint32) info.fx;
-            out << (qint32) info.fy;
+    for (const PackPage &page : std::as_const(mPages)) {
+        if (page.image.isNull() || !validImageSize(page.image.size())) {
+            mError = tr("Page %1 has no image or exceeds safe limits.\n%2")
+                    .arg(page.name).arg(fileName);
+            return false;
         }
-        QBuffer b;
-        b.buffer().reserve(250 * 1024);
-        b.open(QIODevice::WriteOnly);
-//        b.open(QIODevice::ReadWrite);
-        page.image.save(&b, "PNG", -1);
-        out << qint32(b.buffer().length());
-        out.writeRawData(b.buffer().data(), b.buffer().length());
-#if 0
-        b.seek(0L);
-        QDataStream in(&b);
-        long length = b.buffer().length();
-        long read = 0L;
-        while (read < length) {
-            quint32 ii = readIntByte(in);
-            if (ii == 0xDEADBEEF)
-                break;
-            read++;
+        for (const PackSubTexInfo &texture : page.mInfo) {
+            if (!validTextureGeometry(page, texture)) {
+                mError = tr("Texture %1 has invalid geometry on page %2.\n%3")
+                        .arg(texture.name).arg(page.name).arg(fileName);
+                return false;
+            }
         }
-#endif
+
+        saveString(stream, page.name);
+        stream << qint32(page.mInfo.size());
+        stream << qint32(page.mask ? 1 : 0);
+        for (const PackSubTexInfo &texture : page.mInfo) {
+            saveString(stream, texture.name);
+            stream << qint32(texture.x) << qint32(texture.y)
+                   << qint32(texture.w) << qint32(texture.h)
+                   << qint32(texture.ox) << qint32(texture.oy)
+                   << qint32(texture.fx) << qint32(texture.fy);
+        }
+
+        QByteArray pngData;
+        QBuffer buffer(&pngData);
+        if (!buffer.open(QIODevice::WriteOnly) ||
+                !page.image.save(&buffer, "PNG", -1)) {
+            mError = tr("Could not encode page %1 as PNG.\n%2")
+                    .arg(page.name).arg(fileName);
+            return false;
+        }
+        stream << qint32(pngData.size());
+        if (stream.writeRawData(pngData.constData(), pngData.size()) !=
+                pngData.size()) {
+            mError = tr("Could not write page %1.\n%2")
+                    .arg(page.name).arg(fileName);
+            return false;
+        }
     }
 
+    if (stream.status() != QDataStream::Ok) {
+        mError = tr("Error while writing .pack file.\n%1").arg(fileName);
+        return false;
+    }
+    if (!file.commit()) {
+        mError = tr("Could not commit .pack file.\n%1").arg(fileName);
+        return false;
+    }
+
+    mVersion = VERSION_LATEST;
+    mFileName = QFileInfo(fileName).absoluteFilePath();
     return true;
+}
+
+int PackFile::textureCount() const
+{
+    int count = 0;
+    for (const PackPage &page : mPages)
+        count += page.mInfo.size();
+    return count;
+}
+
+QByteArray PackFile::fileSha256() const
+{
+    if (mFileName.isEmpty())
+        return QByteArray();
+    QFile file(mFileName);
+    if (!file.open(QIODevice::ReadOnly))
+        return QByteArray();
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    if (!hash.addData(&file))
+        return QByteArray();
+    return hash.result();
+}
+
+QImage PackFile::extractTexture(const PackPage &page,
+                                const PackSubTexInfo &texture)
+{
+    if (texture.fx <= 0 || texture.fy <= 0 || page.image.isNull())
+        return QImage();
+    QImage image(texture.fx, texture.fy, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.drawImage(texture.ox, texture.oy, page.image,
+                      texture.x, texture.y, texture.w, texture.h);
+    return image;
+}
+
+QByteArray PackFile::textureSha256(const PackPage &page,
+                                   const PackSubTexInfo &texture)
+{
+    const QImage extracted = extractTexture(page, texture)
+            .convertToFormat(QImage::Format_RGBA8888);
+    if (extracted.isNull())
+        return QByteArray();
+
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    const qint32 width = extracted.width();
+    const qint32 height = extracted.height();
+    hash.addData(reinterpret_cast<const char *>(&width), sizeof(width));
+    hash.addData(reinterpret_cast<const char *>(&height), sizeof(height));
+    for (int y = 0; y < extracted.height(); ++y) {
+        hash.addData(
+                    reinterpret_cast<const char *>(
+                        extracted.constScanLine(y)),
+                    extracted.width() * 4);
+    }
+    return hash.result();
+}
+
+QByteArray PackFile::metadataSha256(const PackPage &page,
+                                    const PackSubTexInfo &texture)
+{
+    QByteArray metadata;
+    QDataStream stream(&metadata, QIODevice::WriteOnly);
+    stream.setByteOrder(QDataStream::LittleEndian);
+    stream << page.name << page.mask
+           << qint32(texture.x) << qint32(texture.y)
+           << qint32(texture.w) << qint32(texture.h)
+           << qint32(texture.ox) << qint32(texture.oy)
+           << qint32(texture.fx) << qint32(texture.fy);
+    return QCryptographicHash::hash(
+                metadata, QCryptographicHash::Sha256);
+}
+
+QString PackFile::sha256Text(const QByteArray &hash)
+{
+    return QString::fromLatin1(hash.toHex());
 }

@@ -284,6 +284,7 @@ SOURCES += aboutdialog.cpp \
     luatiletool.cpp \
     luatooldialog.cpp \
     luatooloptions.cpp \
+    lootdistributiondialog.cpp \
     undoredobuttons.cpp \
     textureunpacker.cpp \
     enflatulatordialog.cpp \
@@ -532,6 +533,7 @@ HEADERS += aboutdialog.h \
     luatiletool.h \
     luatooldialog.h \
     luatooloptions.h \
+    lootdistributiondialog.h \
     undoredobuttons.h \
     textureunpacker.h \
     enflatulatordialog.h \

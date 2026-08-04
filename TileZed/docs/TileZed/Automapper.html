@@ -10,10 +10,12 @@
     pre { overflow: auto; padding: 12px; background: #eee; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 7px 9px; border: 1px solid #aaa; text-align: left; vertical-align: top; }
-    .warning { padding: 10px 14px; border-left: 4px solid #c58a00; background: #fff4d9; }
+    .note, .warning { padding: 10px 14px; border-left: 4px solid #3977b8; background: #eef6ff; }
+    .warning { border-left-color: #c58a00; background: #fff4d9; }
     @media (prefers-color-scheme: dark) {
       body { color: #eee; background: #202225; }
       code, pre { background: #151719; }
+      .note { background: #203246; }
       .warning { background: #493b1d; }
     }
   </style>
@@ -26,9 +28,68 @@ corresponding output from one or more rule-map TMX files. The Automapper dock
 shows loaded files, target layers, pattern counts, map properties, warnings,
 and errors.</p>
 
+<h2>The mental model</h2>
+<p>Automapper does not generate a map from a script. It compares a small
+example map against the map being edited:</p>
+<ol>
+  <li>The <strong>target TMX</strong> is the real map being edited.</li>
+  <li>A <strong>rule-map TMX</strong> contains one or more small examples.</li>
+  <li><code>Input_*</code> layers describe what must already exist in the
+  target map.</li>
+  <li><code>InputNot_*</code> layers describe what must not exist.</li>
+  <li><code>Output_*</code> layers describe what Automapper will place.</li>
+  <li>A <code>Regions</code> layer separates the rule-map into connected
+  patterns. Automapper slides each pattern over the target map and applies its
+  output wherever its complete input matches.</li>
+</ol>
+<p>The text manifest only establishes load order. The actual matching rules
+live in the referenced TMX files.</p>
+<div class="note">
+  This reference describes and is checked against the Automapper
+  implementation shipped in this TileZed build. The preferred manifest name
+  and WorldEd-file isolation are PZTools compatibility policies; they do not
+  change the rule-map matching format.
+</div>
+
+<h2>Smallest useful project</h2>
+<pre><code>my-map/
+  town.tmx
+  automapping-rules.txt
+  rules/
+    grass-border.tmx</code></pre>
+<p><code>automapping-rules.txt</code> contains:</p>
+<pre><code># Load order matters.
+rules/grass-border.tmx</code></pre>
+<p>The target <code>town.tmx</code> and rule map both need a tile layer named
+<code>Ground</code>. The rule map then uses these layers:</p>
+<table>
+<tr><th>Rule-map layer</th><th>What to paint in it</th></tr>
+<tr><td><code>Regions</code></td><td>Any visible marker tile over the complete area used by the example. The marker tile itself is never copied.</td></tr>
+<tr><td><code>Input_Ground</code></td><td>The ground tiles that must be present in the target map.</td></tr>
+<tr><td><code>InputNot_Ground</code></td><td>Optional ground tiles that reject the match.</td></tr>
+<tr><td><code>Output_Ground</code></td><td>The replacement or additional ground tiles to copy to the target map.</td></tr>
+</table>
+<p>For a first rule, paint one connected marker area in
+<code>Regions</code>, put one known tile at the same coordinate in
+<code>Input_Ground</code>, and put the desired result at that coordinate in
+<code>Output_Ground</code>. Save both maps, open <strong>View >
+Automapping</strong>, press <strong>Reload</strong>, inspect the rule entry,
+and use <strong>Apply</strong>. Once the full-map result is correct, enable
+<strong>Interactive</strong> if the workflow benefits from it.</p>
+<div class="note">
+  The layer suffix is the target layer name, not an arbitrary rule label.
+  <code>Input_Ground</code> reads target layer <code>Ground</code>;
+  <code>Output_Furniture</code> writes target layer
+  <code>Furniture</code>. Names and layer types must match.
+</div>
+
 <h2>Loading rules</h2>
 <p>Save the target map first. TileZed searches beside it for
-<code>rules.txt</code>. Each non-empty line that does not begin with
+<code>automapping-rules.txt</code>. For compatibility, an existing
+<code>rules.txt</code> is accepted when it is an Automapper manifest. The
+explicit <code>automapping-rules.txt</code> name always wins when both files
+exist.</p>
+<p>Each non-empty line that does not begin with
 <code>#</code> or <code>//</code> names either a rule-map <code>.tmx</code> or
 another <code>.txt</code> list:</p>
 <pre><code># paths are relative to this list
@@ -38,6 +99,12 @@ C:/shared-rules/signs.tmx</code></pre>
 <p>Relative paths are resolved against the list containing them. Nested lists
 are supported. Recursive includes, duplicate rule maps, missing files, and
 unsupported extensions are reported rather than loaded repeatedly.</p>
+<div class="note">
+  WorldEd terrain/BMP files also use the name <code>Rules.txt</code>, but their
+  <code>version</code>, <code>alias</code>, <code>rule</code>, and tile-block
+  syntax is not an Automapper manifest. TileZed recognizes and ignores that
+  file. It does not turn each terrain-rule line into a missing filename.
+</div>
 
 <h2>Rule-map layer names</h2>
 <table>
@@ -101,7 +168,7 @@ pattern rejects the rule.</p>
 
 <h2>Applying and interactive mode</h2>
 <ul>
-  <li><strong>Reload</strong> rereads rules.txt, nested lists, and rule TMX files.</li>
+  <li><strong>Reload</strong> rereads the manifest, nested lists, and rule TMX files.</li>
   <li><strong>Apply</strong> runs all loaded rules on the complete target map.</li>
   <li><strong>Interactive</strong> reruns relevant rules when tile regions or
   map objects are added, changed, or removed.</li>
@@ -116,15 +183,61 @@ to following rules, allowing multi-stage pipelines. Application is stored as
   output dependencies.
 </div>
 
+<h2>Working example included with the source</h2>
+<p><code>TileZed/examples/sewer_automap</code> is a complete multi-stage
+example. Open <code>sewers.tmx</code>. Its manifest loads seven rule maps in
+order:</p>
+<ol>
+  <li>fill the marked sewer region;</li>
+  <li>choose transition tiles;</li>
+  <li>place straight walls;</li>
+  <li>place inner corners;</li>
+  <li>place outer corners;</li>
+  <li>correct ambiguous corners with <code>InputNot_set</code>;</li>
+  <li>choose final corner stones from alternative inputs.</li>
+</ol>
+<p><code>rule_001.tmx</code> is the best starting point. It demonstrates
+<code>Regions</code>, <code>Input_set</code>, three tile outputs, an Object
+Group output, <code>DeleteTiles</code>, and
+<code>AutomappingRadius</code>. Disable later lines in the manifest and apply
+the maps one at a time to see how each stage changes the output.</p>
+
+<h2>Design and performance guidelines</h2>
+<ul>
+  <li>Start with <strong>Apply</strong> and a copy of the target map. Enable
+  interactive mode only after the complete pipeline is predictable.</li>
+  <li>Keep <code>AutomappingRadius</code> as small as the largest pattern that
+  must react around a changed tile.</li>
+  <li>Put broad classification rules before detail and correction rules.</li>
+  <li>Avoid having a late output recreate the input of an expensive early
+  stage unless the pipeline intentionally needs that dependency.</li>
+  <li>Use separate indexed outputs only for true random alternatives. Give
+  layers the same output index when they must be applied together.</li>
+  <li>Use <code>DeleteTiles</code> only after confirming which output area is
+  owned by the rule.</li>
+</ul>
+
+<h2>Where diagnostics appear</h2>
+<p>The Automapping dock shows the selected manifest, every loaded rule map,
+pattern counts, output layers, radius, properties, warnings, and errors.
+The same messages are written to the current TileZed log under
+<code>settings/logs</code>. A missing or invalid manifest is attempted once
+per document; after correcting it, press <strong>Reload</strong>. This prevents
+ordinary brush strokes from repeatedly parsing the same bad file.</p>
+
 <h2>Troubleshooting</h2>
 <table>
 <tr><th>Message or symptom</th><th>Check</th></tr>
-<tr><td>No rules loaded</td><td>The target TMX is saved and rules.txt is beside it.</td></tr>
+<tr><td>No rules loaded</td><td>The target TMX is saved and <code>automapping-rules.txt</code>, or a compatible legacy <code>rules.txt</code>, is beside it.</td></tr>
+<tr><td>Nearby Rules.txt is ignored</td><td>It is a valid WorldEd terrain/BMP definition. Keep it and create a separate <code>automapping-rules.txt</code>.</td></tr>
+<tr><td>Brush pauses after a manifest error</td><td>A failed automatic load is attempted once per document. Correct the manifest, then press Reload; normal painting no longer retries it for every stroke.</td></tr>
 <tr><td>No input/output region layer</td><td>Add Regions, or both RegionsInput and RegionsOutput.</td></tr>
 <tr><td>Layer not recognized</td><td>Check the underscore and accepted prefix.</td></tr>
 <tr><td>Rule never matches</td><td>Verify target layer type/name, non-empty cells, input grouping, and InputNot exclusions.</td></tr>
 <tr><td>Unexpected random output</td><td>Different Output indexes are alternatives.</td></tr>
 <tr><td>Old output remains</td><td>Enable DeleteTiles in the owning rule map.</td></tr>
+<tr><td>Output layer is skipped</td><td>Check the log for a duplicate or conflicting destination layer. The output suffix and layer type must identify one valid target; a genuinely missing output layer is normally created automatically.</td></tr>
+<tr><td>A small edit changes a large area</td><td>Reduce AutomappingRadius and check whether earlier rule outputs trigger later stages.</td></tr>
 </table>
 <p>A complete sample is installed under <code>examples/sewer_automap</code>.</p>
 </body>

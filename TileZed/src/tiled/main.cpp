@@ -21,12 +21,17 @@
  */
 
 #include "commandlineparser.h"
+#include "automappingmanager.h"
 #include "bmptool.h"
 #include "depthmapeditor.h"
+#include "lootdistributiondialog.h"
 #include "mainwindow.h"
+#include "packcompare.h"
+#include "packextractdialog.h"
 #include "languagemanager.h"
 #include "preferences.h"
 #include "tiledapplication.h"
+#include "tiledefcompare.h"
 #include "../firstlaunchdialog.h"
 #include "../portablesettings.h"
 #ifdef ZOMBOID
@@ -52,8 +57,10 @@
 #include "tile.h"
 #include "tilelayer.h"
 #include "tileset.h"
+#include <QDataStream>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QSettings>
@@ -321,6 +328,83 @@ static bool validateBrushUndoBuffers(QString *errorString)
 
 static bool validateTileDefSplitting(QString *errorString)
 {
+    QTemporaryDir malformedDirectory;
+    if (!malformedDirectory.isValid()) {
+        *errorString = QStringLiteral(
+                    "Could not create the malformed tiledef test directory");
+        return false;
+    }
+    const QString malformedPath =
+            malformedDirectory.filePath(
+                QStringLiteral("invalid-values.tiles"));
+    QFile malformedFile(malformedPath);
+    if (!malformedFile.open(QIODevice::WriteOnly)) {
+        *errorString = QStringLiteral(
+                    "Could not create the malformed tiledef test file");
+        return false;
+    }
+    QDataStream malformedStream(&malformedFile);
+    malformedStream.setByteOrder(QDataStream::LittleEndian);
+    malformedStream.writeRawData("tdef", 4);
+    malformedStream << qint32(1) << qint32(1);
+    const QByteArray invalidName("validation_invalid\n");
+    const QByteArray invalidImage("validation_invalid.png\n");
+    malformedStream.writeRawData(
+                invalidName.constData(), invalidName.size());
+    malformedStream.writeRawData(
+                invalidImage.constData(), invalidImage.size());
+    malformedStream << qint32(2) << qint32(2)
+                    << qint32(0) << qint32(5);
+    malformedFile.close();
+
+    TileDefFile malformed;
+    if (malformed.read(malformedPath)) {
+        *errorString = QStringLiteral(
+                    "A tiledef with invalid ID/count unexpectedly loaded");
+        return false;
+    }
+    const QString malformedError = malformed.errorString();
+    if (!malformedError.contains(
+                QStringLiteral(
+                    "Stored tile count 5 exceeds the grid capacity of 4 "
+                    "(2 columns x 2 rows).")) ||
+            !malformedError.contains(
+                QStringLiteral(
+                    "Tileset ID is 0; version-1 IDs must start at 1.")) ||
+            !malformedError.contains(
+                QStringLiteral("Values stored in the .tiles file:"))) {
+        *errorString = QStringLiteral(
+                    "Detailed tiledef diagnostics are incomplete:\n%1")
+                .arg(malformedError);
+        return false;
+    }
+
+    const QString truncatedPath =
+            malformedDirectory.filePath(
+                QStringLiteral("truncated-field.tiles"));
+    QFile truncatedFile(truncatedPath);
+    if (!truncatedFile.open(QIODevice::WriteOnly)) {
+        *errorString = QStringLiteral(
+                    "Could not create the truncated tiledef test file");
+        return false;
+    }
+    QDataStream truncatedStream(&truncatedFile);
+    truncatedStream.setByteOrder(QDataStream::LittleEndian);
+    truncatedStream.writeRawData("tdef", 4);
+    truncatedStream << qint32(1) << qint32(1);
+    truncatedStream.writeRawData("unterminated-name", 17);
+    truncatedFile.close();
+    TileDefFile truncated;
+    if (truncated.read(truncatedPath) ||
+            !truncated.errorString().contains(
+                QStringLiteral("truncated name or image-source field"))) {
+        *errorString = QStringLiteral(
+                    "A truncated tiledef string did not produce the "
+                    "targeted diagnostic:\n%1")
+                .arg(truncated.errorString());
+        return false;
+    }
+
     TileDefFile oversized;
     for (int index = 0;
          index < TileDefFile::MAX_TILESET_ID_MODS + 1;
@@ -405,9 +489,17 @@ static bool validateTileDefSplitting(QString *errorString)
         }
     }
 
-    qInfo() << "Validated B42 tiledef split:"
+    QString comparatorSummary;
+    if (!TileDefCompare::runSelfTest(
+            &comparatorSummary, errorString)) {
+        return false;
+    }
+    qInfo() << "Validated detailed malformed-value/truncated-field "
+               "diagnostics, enhanced comparator analysis, and B42 "
+               "tiledef split:"
             << oversized.tilesets().size() << "tilesets ->"
-            << outputs.size() << "files";
+            << outputs.size() << "files;"
+            << comparatorSummary;
     return true;
 }
 
@@ -523,6 +615,13 @@ public:
     bool validateBuildingCategories;
     bool validateBrushPerformance;
     bool validateDepthMapEditor;
+    bool validateLootDistributions;
+    bool validatePackTools;
+    bool validateAutomapperRules;
+    bool renderPackComparator;
+    bool renderPackExtractor;
+    bool renderTileDefComparator;
+    bool renderLootDistributions;
     bool validateTileDefSplit;
     bool validateTilesetCatalog;
 
@@ -533,6 +632,13 @@ private:
     void setValidateBuildingCategories();
     void setValidateBrushPerformance();
     void setValidateDepthMapEditor();
+    void setValidateLootDistributions();
+    void setValidatePackTools();
+    void setValidateAutomapperRules();
+    void setRenderPackComparator();
+    void setRenderPackExtractor();
+    void setRenderTileDefComparator();
+    void setRenderLootDistributions();
     void setValidateTileDefSplit();
     void setValidateTilesetCatalog();
 
@@ -559,6 +665,13 @@ CommandLineHandler::CommandLineHandler()
     , validateBuildingCategories(false)
     , validateBrushPerformance(false)
     , validateDepthMapEditor(false)
+    , validateLootDistributions(false)
+    , validatePackTools(false)
+    , validateAutomapperRules(false)
+    , renderPackComparator(false)
+    , renderPackExtractor(false)
+    , renderTileDefComparator(false)
+    , renderLootDistributions(false)
     , validateTileDefSplit(false)
     , validateTilesetCatalog(false)
 {
@@ -592,6 +705,48 @@ CommandLineHandler::CommandLineHandler()
                 QChar(),
                 QLatin1String("--validate-depthmap-editor"),
                 QLatin1String("Validate Build 42 depth atlas editing and PNG output"));
+
+    option<&CommandLineHandler::setValidateLootDistributions>(
+                QChar(),
+                QLatin1String("--validate-loot-distributions"),
+                QLatin1String("Validate game loot registries; pass game root "
+                              "and optional project root as file arguments"));
+
+    option<&CommandLineHandler::setValidatePackTools>(
+                QChar(),
+                QLatin1String("--validate-pack-tools"),
+                QLatin1String("Validate .pack reading, comparison, hashing "
+                              "and extraction"));
+
+    option<&CommandLineHandler::setValidateAutomapperRules>(
+                QChar(),
+                QLatin1String("--validate-automapper-rules"),
+                QLatin1String("Validate Automapper manifest selection and "
+                              "WorldEd Rules.txt isolation"));
+
+    option<&CommandLineHandler::setRenderPackComparator>(
+                QChar(),
+                QLatin1String("--render-pack-comparator"),
+                QLatin1String("Render the enhanced .pack comparator; pass "
+                              "the output PNG as a file argument"));
+
+    option<&CommandLineHandler::setRenderPackExtractor>(
+                QChar(),
+                QLatin1String("--render-pack-extractor"),
+                QLatin1String("Render the versatile .pack extractor; pass "
+                              "the output PNG as a file argument"));
+
+    option<&CommandLineHandler::setRenderTileDefComparator>(
+                QChar(),
+                QLatin1String("--render-tiledef-comparator"),
+                QLatin1String("Render the enhanced .tiles comparator; pass "
+                              "the output PNG as a file argument"));
+
+    option<&CommandLineHandler::setRenderLootDistributions>(
+                QChar(),
+                QLatin1String("--render-loot-distributions"),
+                QLatin1String("Render the loot editor; pass game root, "
+                              "output PNG and optional project root"));
 
     option<&CommandLineHandler::setValidateTileDefSplit>(
                 QChar(),
@@ -637,6 +792,41 @@ void CommandLineHandler::setValidateBrushPerformance()
 void CommandLineHandler::setValidateDepthMapEditor()
 {
     validateDepthMapEditor = true;
+}
+
+void CommandLineHandler::setValidateLootDistributions()
+{
+    validateLootDistributions = true;
+}
+
+void CommandLineHandler::setValidatePackTools()
+{
+    validatePackTools = true;
+}
+
+void CommandLineHandler::setValidateAutomapperRules()
+{
+    validateAutomapperRules = true;
+}
+
+void CommandLineHandler::setRenderPackComparator()
+{
+    renderPackComparator = true;
+}
+
+void CommandLineHandler::setRenderPackExtractor()
+{
+    renderPackExtractor = true;
+}
+
+void CommandLineHandler::setRenderTileDefComparator()
+{
+    renderTileDefComparator = true;
+}
+
+void CommandLineHandler::setRenderLootDistributions()
+{
+    renderLootDistributions = true;
 }
 
 void CommandLineHandler::setValidateTileDefSplit()
@@ -735,6 +925,131 @@ int main(int argc, char *argv[])
         qInfo().noquote()
                 << "TileZed depth-map editor validation:"
                 << (valid ? QStringLiteral("PASS")
+                          : QStringLiteral("FAIL: %1").arg(error));
+        return valid ? 0 : 1;
+    }
+    if (commandLine.validateLootDistributions) {
+        const QStringList paths = commandLine.filesToOpen();
+        if (paths.isEmpty()) {
+            qCritical() << "Loot-distribution validation expects a game "
+                           "directory argument.";
+            return 1;
+        }
+        QString summary;
+        QString error;
+        const bool valid = LootDistributionDialog::validateDefinitions(
+                    paths.first(),
+                    paths.size() > 1 ? paths.at(1) : QString(),
+                    &summary, &error);
+        qInfo().noquote()
+                << "Procedural loot validation:"
+                << (valid ? QStringLiteral("PASS: %1").arg(summary)
+                          : QStringLiteral("FAIL: %1").arg(error));
+        return valid ? 0 : 1;
+    }
+    if (commandLine.validatePackTools) {
+        QString compareSummary;
+        QString extractSummary;
+        QString error;
+        const bool compareValid =
+                PackCompare::runSelfTest(&compareSummary, &error);
+        if (!compareValid) {
+            qInfo().noquote()
+                    << "TileZed pack-tools validation:"
+                    << QStringLiteral("FAIL: %1").arg(error);
+            return 1;
+        }
+        const bool extractValid =
+                PackExtractDialog::runSelfTest(
+                    &extractSummary, &error);
+        const bool valid = compareValid && extractValid;
+        qInfo().noquote()
+                << "TileZed pack-tools validation:"
+                << (valid
+                    ? QStringLiteral("PASS: %1; %2")
+                      .arg(compareSummary, extractSummary)
+                    : QStringLiteral("FAIL: %1").arg(error));
+        return valid ? 0 : 1;
+    }
+    if (commandLine.validateAutomapperRules) {
+        QString summary;
+        QString error;
+        const bool valid =
+                AutomappingManager::runRuleListSelfTest(
+                    &summary, &error);
+        qInfo().noquote()
+                << "TileZed Automapper-rules validation:"
+                << (valid
+                    ? QStringLiteral("PASS: %1").arg(summary)
+                    : QStringLiteral("FAIL: %1").arg(error));
+        return valid ? 0 : 1;
+    }
+    if (commandLine.renderPackComparator) {
+        const QStringList paths = commandLine.filesToOpen();
+        if (paths.isEmpty()) {
+            qCritical() << "Pack-comparator rendering expects an "
+                           "output PNG argument.";
+            return 1;
+        }
+        QString error;
+        const bool valid = PackCompare::renderValidation(
+                    paths.first(), &error);
+        qInfo().noquote()
+                << "TileZed pack-comparator render:"
+                << (valid
+                    ? QStringLiteral("PASS: %1").arg(paths.first())
+                    : QStringLiteral("FAIL: %1").arg(error));
+        return valid ? 0 : 1;
+    }
+    if (commandLine.renderPackExtractor) {
+        const QStringList paths = commandLine.filesToOpen();
+        if (paths.isEmpty()) {
+            qCritical() << "Pack-extractor rendering expects an "
+                           "output PNG argument.";
+            return 1;
+        }
+        QString error;
+        const bool valid = PackExtractDialog::renderValidation(
+                    paths.first(), &error);
+        qInfo().noquote()
+                << "TileZed pack-extractor render:"
+                << (valid
+                    ? QStringLiteral("PASS: %1").arg(paths.first())
+                    : QStringLiteral("FAIL: %1").arg(error));
+        return valid ? 0 : 1;
+    }
+    if (commandLine.renderTileDefComparator) {
+        const QStringList paths = commandLine.filesToOpen();
+        if (paths.isEmpty()) {
+            qCritical() << ".tiles-comparator rendering expects an "
+                           "output PNG argument.";
+            return 1;
+        }
+        QString error;
+        const bool valid = TileDefCompare::renderValidation(
+                    paths.first(), &error);
+        qInfo().noquote()
+                << "TileZed .tiles-comparator render:"
+                << (valid
+                    ? QStringLiteral("PASS: %1").arg(paths.first())
+                    : QStringLiteral("FAIL: %1").arg(error));
+        return valid ? 0 : 1;
+    }
+    if (commandLine.renderLootDistributions) {
+        const QStringList paths = commandLine.filesToOpen();
+        if (paths.size() < 2) {
+            qCritical() << "Loot editor rendering expects a game directory "
+                           "and output PNG argument.";
+            return 1;
+        }
+        QString error;
+        const bool valid = LootDistributionDialog::renderValidation(
+                    paths.at(0),
+                    paths.size() > 2 ? paths.at(2) : QString(),
+                    paths.at(1), &error);
+        qInfo().noquote()
+                << "Procedural loot editor render:"
+                << (valid ? QStringLiteral("PASS: %1").arg(paths.at(1))
                           : QStringLiteral("FAIL: %1").arg(error));
         return valid ? 0 : 1;
     }

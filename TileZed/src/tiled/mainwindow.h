@@ -251,6 +251,7 @@ public slots:
     void comparePackFiles();
     void containerOverlayDialog();
     void tileOverlayDialog();
+    void proceduralLootEditor();
     void enflatulator();
     void snowEditor();
     void depthMapEditor();

@@ -18,14 +18,24 @@
 #ifndef TEXTUREPACKFILE_H
 #define TEXTUREPACKFILE_H
 
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QImage>
 
 class PackSubTexInfo
 {
 public:
-    PackSubTexInfo(int x, int y, int w, int h, int ox, int oy, int fx, int fy, QString name) :
-        x(x), y(y), w(w), h(h), ox(ox), oy(oy), fx(fx), fy(fy), name(name)
+    PackSubTexInfo(int x, int y, int w, int h, int ox, int oy,
+                   int fx, int fy, QString name)
+        : x(x)
+        , y(y)
+        , w(w)
+        , h(h)
+        , ox(ox)
+        , oy(oy)
+        , fx(fx)
+        , fy(fy)
+        , name(name)
     {
     }
 
@@ -43,11 +53,12 @@ public:
 class PackPage
 {
 public:
-    const QList<PackSubTexInfo> &subTextures() { return mInfo; }
+    const QList<PackSubTexInfo> &subTextures() const { return mInfo; }
 
     QString name;
     QList<PackSubTexInfo> mInfo;
     QImage image;
+    bool mask = true;
 };
 
 class PackFile
@@ -60,14 +71,29 @@ public:
     bool read(const QString &fileName);
     bool write(const QString &fileName);
 
-    QString errorString() { return mError; }
+    QString errorString() const { return mError; }
 
     void addPage(PackPage &page) { mPages += page; }
     const QList<PackPage> &pages() const { return mPages; }
+    int version() const { return mVersion; }
+    bool isLegacyFormat() const { return mVersion == 0; }
+    QString fileName() const { return mFileName; }
+    int textureCount() const;
+    QByteArray fileSha256() const;
+
+    static QImage extractTexture(const PackPage &page,
+                                 const PackSubTexInfo &texture);
+    static QByteArray textureSha256(const PackPage &page,
+                                    const PackSubTexInfo &texture);
+    static QByteArray metadataSha256(const PackPage &page,
+                                     const PackSubTexInfo &texture);
+    static QString sha256Text(const QByteArray &hash);
 
 private:
     QList<PackPage> mPages;
     QString mError;
+    QString mFileName;
+    int mVersion = 0;
 };
 
 #endif // TEXTUREPACKFILE_H

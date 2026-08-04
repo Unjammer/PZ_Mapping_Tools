@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PZTools Unofficial documentation</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f4f5f7; --panel:#fff; --text:#20242a; --muted:#59616c; --line:#cdd2d9; --accent:#b31c2c; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#191b1e; --panel:#24272b; --text:#eee; --muted:#bcc2ca; --line:#4b5058; --accent:#ff6978; } }
+    body { max-width:1180px; margin:0 auto; padding:28px; font:15px/1.55 "Segoe UI",Arial,sans-serif; color:var(--text); background:var(--bg); }
+    h1 { margin:0; } h2 { margin-top:2em; border-bottom:1px solid var(--line); padding-bottom:.25em; }
+    a { color:var(--accent); } .lead,.muted { color:var(--muted); }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+    .card { padding:16px 18px; border:1px solid var(--line); border-radius:7px; background:var(--panel); }
+    .card h3 { margin:.1em 0 .55em; } ul { padding-left:1.3em; } code { padding:.08em .3em; background:var(--bg); }
+    table { width:100%; border-collapse:collapse; background:var(--panel); } th,td { padding:8px 10px; border:1px solid var(--line); text-align:left; vertical-align:top; }
+  </style>
+</head>
+<body>
+<h1>PZTools Unofficial documentation</h1>
+<p class="lead">Offline reference for PZWorldEd, TileZed, and BuildingEd.
+Start with the user guide, then use the feature or troubleshooting page that
+matches the current task.</p>
+
+<div class="grid">
+  <section class="card">
+    <h3>Start here</h3>
+    <ul>
+      <li><a href="TileZed/PZToolsGuide.html">Complete user guide</a></li>
+      <li><a href="Feature-Reference.md">Feature reference by application</a></li>
+      <li><a href="Diagnostics-and-Logs.md">Logs, validators, and issue reports</a></li>
+      <li><a href="../README.md">Release README</a></li>
+      <li><a href="../RELEASE_CHANGELOG.md">Changes in this release</a></li>
+    </ul>
+  </section>
+  <section class="card">
+    <h3>WorldEd</h3>
+    <ul>
+      <li><a href="PZ-B42.20-WorldGen-Editor-and-Prefabs.md">WorldGen biomes and prefabs</a></li>
+      <li><a href="PZ-B42.20-Jumbo-Trees.md">Jumbo, XL, and XXL trees</a></li>
+      <li><a href="TileZed/PZToolsGuide.html#terrain-editor">Terrain/vegetation images</a></li>
+      <li><a href="TileZed/PZToolsGuide.html#biomemap">Biomemap</a></li>
+      <li><a href="TileZed/PZToolsGuide.html#heatmap">Zombie Heatmap</a></li>
+      <li><a href="TileZed/PZToolsGuide.html#features">InGameMap features</a></li>
+    </ul>
+  </section>
+  <section class="card">
+    <h3>TileZed</h3>
+    <ul>
+      <li><a href="TileZed/Automapper.html">Automapper guide and example</a></li>
+      <li><a href="PZ-B42.20-Procedural-Loot-Editor.md">Procedural loot</a></li>
+      <li><a href="TileZed/PZ-Pack-Comparator-and-Extractor.md">Pack comparator/extractor</a></li>
+      <li><a href="TileZed/PZ-TileDef-Comparator-and-Snow-Editor.md">TileDef comparator and replacements</a></li>
+      <li><a href="TileZed/LuaScripting.html">Lua scripting</a></li>
+      <li><a href="TileZed/BMPTools.html">BMP tools</a></li>
+    </ul>
+  </section>
+  <section class="card">
+    <h3>BuildingEd</h3>
+    <ul>
+      <li><a href="BuildingEd/index.html">BuildingEd manual</a></li>
+      <li><a href="BuildingEd/Tools.html">Drawing and object tools</a></li>
+      <li><a href="BuildingEd/TilesDialog.html">Tiles dialog and categories</a></li>
+      <li><a href="BuildingEd/TileEditingMode.html">Tile mode</a></li>
+      <li><a href="BuildingEd/LuaScripting.html">Lua scripting</a></li>
+      <li><a href="PZ-B42.20-Procedural-Loot-Editor.md">Procedural loot</a></li>
+    </ul>
+  </section>
+</div>
+
+<h2>Find a document by task</h2>
+<table>
+<tr><th>I want to...</th><th>Read</th></tr>
+<tr><td>Understand a warning, crash, pause, missing tile, or failed validation</td><td><a href="Diagnostics-and-Logs.md">Logs and diagnostics</a></td></tr>
+<tr><td>Create automatic transitions or multi-stage tile rules</td><td><a href="TileZed/Automapper.html">Automapper</a></td></tr>
+<tr><td>Preview/edit a biome or create/import a WorldGen prefab</td><td><a href="PZ-B42.20-WorldGen-Editor-and-Prefabs.md">WorldGen editor</a></td></tr>
+<tr><td>Inspect or override room/container loot</td><td><a href="PZ-B42.20-Procedural-Loot-Editor.md">Procedural loot editor</a></td></tr>
+<tr><td>Compare packs or reconstruct images/sheets</td><td><a href="TileZed/PZ-Pack-Comparator-and-Extractor.md">Pack tools</a></td></tr>
+<tr><td>Compare TileDefs or map snow/burnt/custom replacements</td><td><a href="TileZed/PZ-TileDef-Comparator-and-Snow-Editor.md">TileDef tools</a></td></tr>
+<tr><td>Automate map or building edits</td><td><a href="TileZed/LuaScripting.html">TileZed Lua</a> or <a href="BuildingEd/LuaScripting.html">BuildingEd Lua</a></td></tr>
+</table>
+
+<h2>How limits are described</h2>
+<p><strong>Game-confirmed</strong> structures were checked against the bundled
+Build 42.20 reference. <strong>Tool-enforced</strong> limits are safety or
+authoring policies and are not presented as engine constants.
+<strong>Representative preview</strong> means useful authoring output without
+claiming pixel-identical game-save parity. Every deliberate omission is
+listed as <strong>out of scope</strong> in the relevant feature reference.</p>
+
+<p class="muted">For source provenance and port history, see
+<a href="../UPSTREAM-HISTORY.md">UPSTREAM-HISTORY.md</a> and
+<a href="../CHANGELOG-PZTOOLS.md">CHANGELOG-PZTOOLS.md</a>.</p>
+</body>
+</html>

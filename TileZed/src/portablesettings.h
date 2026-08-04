@@ -427,6 +427,11 @@ inline void messageHandler(QtMsgType type,
                            const QMessageLogContext &context,
                            const QString &message)
 {
+    if (type == QtWarningMsg &&
+            message == QStringLiteral(
+                "libpng warning: iCCP: known incorrect sRGB profile"))
+        return;
+
     const QString source = context.file
             ? QStringLiteral(" (%1:%2)")
               .arg(QString::fromUtf8(context.file))
@@ -440,9 +445,9 @@ inline void messageHandler(QtMsgType type,
             .arg(QDateTime::currentDateTime().toString(
                      QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz")))
             .arg(QString::fromLatin1(messageTypeName(type)))
-            .arg(QCoreApplication::applicationPid())
-            .arg(reinterpret_cast<quintptr>(QThread::currentThreadId()), 0, 16)
-            .arg(threadLabel, message, source);
+             .arg(QCoreApplication::applicationPid())
+             .arg(reinterpret_cast<quintptr>(QThread::currentThreadId()), 0, 16)
+             .arg(threadLabel, message, source);
     const QByteArray encoded = line.toUtf8();
 
     {

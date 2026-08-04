@@ -93,6 +93,11 @@ public:
 
     bool reloadRules();
 
+    QString worldEdRulesFilePath() const;
+
+    static bool runRuleListSelfTest(QString *summary,
+                                    QString *errorString);
+
 signals:
     /**
      * This signal is emited after automapping was done and an error occurred.
@@ -170,6 +175,7 @@ private:
      * loaded.
      */
     bool mLoaded;
+    bool mLoadAttempted;
     bool mApplying;
 
     /**

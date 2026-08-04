@@ -29,6 +29,7 @@
 #include <QGraphicsDropShadowEffect>
 #include <QGraphicsPixmapItem>
 #include <QGraphicsSceneHoverEvent>
+#include <QMessageBox>
 #include <QSettings>
 #include <QToolTip>
 
@@ -72,6 +73,9 @@ PackViewer::PackViewer(QWidget *parent) :
     connect(ui->actionSaveAllPages, &QAction::triggered, this, &PackViewer::saveAllPages);
     connect(ui->actionClose, &QAction::triggered, this, &QWidget::close);
 
+    ui->actionExtractImages->setEnabled(false);
+    ui->actionSaveAllPages->setEnabled(false);
+
     QSettings settings;
     QVariant v = settings.value(KEY_BG, QColor(Qt::lightGray));
     if (v.canConvert<QColor>())
@@ -82,6 +86,7 @@ PackViewer::PackViewer(QWidget *parent) :
 
 PackViewer::~PackViewer()
 {
+    writeSettings();
     delete ui;
 }
 
@@ -98,8 +103,12 @@ void PackViewer::openPack()
 
     PROGRESS *progress = new PROGRESS(tr("Loading %1").arg(QFileInfo(fileName).completeBaseName()), this);
 
-    if (!mPackFile.read(fileName))
+    if (!mPackFile.read(fileName)) {
+        delete progress;
+        QMessageBox::warning(this, tr("Error reading .pack file"),
+                             mPackFile.errorString());
         return;
+    }
 
     ui->listWidget->clear();
     int numImages = 0;
@@ -111,6 +120,10 @@ void PackViewer::openPack()
         ui->listWidget->setCurrentRow(0);
 
     ui->label->setText(QString::fromLatin1("%1 images").arg(numImages));
+    setWindowTitle(tr("%1 - .pack Viewer / Extractor")
+                   .arg(QFileInfo(fileName).fileName()));
+    ui->actionExtractImages->setEnabled(numImages > 0);
+    ui->actionSaveAllPages->setEnabled(!mPackFile.pages().isEmpty());
 
     delete progress;
     qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
@@ -155,8 +168,20 @@ void PackViewer::setBackgroundColor(const QColor &color)
 
 void PackViewer::extractImages()
 {
-    PackExtractDialog d(mPackFile, this);
-    d.exec();
+    PackExtractDialog *dialog = nullptr;
+    {
+        PROGRESS progress(
+                    tr("Opening the Versatile .pack Extractor...\n"
+                       "Preparing texture previews and hashes."),
+                    this, true);
+        dialog = new PackExtractDialog(mPackFile, this, &progress);
+        if (dialog->initializationCanceled()) {
+            delete dialog;
+            return;
+        }
+    }
+    dialog->exec();
+    delete dialog;
 }
 
 void PackViewer::saveAllPages()

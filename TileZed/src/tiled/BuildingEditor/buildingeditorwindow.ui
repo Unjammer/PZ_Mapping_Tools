@@ -116,6 +116,7 @@
     <addaction name="actionKeyValues"/>
     <addaction name="actionGrime"/>
     <addaction name="actionRooms"/>
+    <addaction name="actionProceduralLootEditor"/>
     <addaction name="actionTemplates"/>
     <addaction name="actionTiles"/>
     <addaction name="separator"/>
@@ -148,6 +149,14 @@
    <addaction name="menuFloor"/>
    <addaction name="menuHelp"/>
   </widget>
+  <action name="actionProceduralLootEditor">
+   <property name="text">
+    <string>Procedural Loot Viewer / Editor...</string>
+   </property>
+   <property name="toolTip">
+    <string>Inspect loot for RoomDefs and edit project-owned procedural distributions</string>
+   </property>
+  </action>
   <action name="actionClose">
    <property name="text">
     <string>Close</string>

@@ -52,6 +52,7 @@
 #include "templatefrombuildingdialog.h"
 #include "tileeditmode.h"
 #include "tiledeffile.h"
+#include "lootdistributiondialog.h"
 #include "welcomemode.h"
 
 #include "fancytabwidget.h"
@@ -626,6 +627,8 @@ BuildingEditorWindow::BuildingEditorWindow(QWidget *parent) :
     connect(ui->actionGrime, &QAction::triggered,
             this, &BuildingEditorWindow::buildingGrime);
     connect(ui->actionRooms, &QAction::triggered, this, &BuildingEditorWindow::roomsDialog);
+    connect(ui->actionProceduralLootEditor, &QAction::triggered,
+            this, &BuildingEditorWindow::proceduralLootEditor);
     connect(ui->actionTemplates, &QAction::triggered, this, &BuildingEditorWindow::templatesDialog);
     connect(ui->actionTiles, &QAction::triggered, this, &BuildingEditorWindow::tilesDialog);
     connect(ui->actionTemplateFromBuilding, &QAction::triggered,
@@ -1864,6 +1867,19 @@ void BuildingEditorWindow::roomsDialog()
 #endif
 }
 
+void BuildingEditorWindow::proceduralLootEditor()
+{
+    const QString roomName = currentRoom()
+            ? currentRoom()->internalName : QString();
+    const QString projectRoot = mCurrentDocument
+            && !mCurrentDocument->fileName().isEmpty()
+            ? QFileInfo(mCurrentDocument->fileName()).absolutePath()
+            : QString();
+    LootDistributionDialog dialog(
+                this, roomName, QString(), projectRoot);
+    dialog.exec();
+}
+
 void BuildingEditorWindow::roomAdded(Room *room)
 {
     Q_UNUSED(room)
@@ -2568,6 +2584,7 @@ void BuildingEditorWindow::initActionManager()
     actionManager->registerAction(ui->actionKeyValues, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.KeyValues"));
     actionManager->registerAction(ui->actionGrime, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.Grime"));
     actionManager->registerAction(ui->actionRooms, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.Rooms"));
+    actionManager->registerAction(ui->actionProceduralLootEditor, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.ProceduralLootEditor"));
     actionManager->registerAction(ui->actionTemplates, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.Templates"));
     actionManager->registerAction(ui->actionTiles, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.Tiles"));
     actionManager->registerAction(ui->actionTemplateFromBuilding, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.TemplateFrom"));
