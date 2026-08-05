@@ -20,14 +20,14 @@ Sources de référence :
 
 | Source | Nombre | Rôle |
 | --- | ---: | --- |
-| Contrôles dans `TileProperties.txt` | 211 | Interface visible |
-| Noms effectivement écrits par ces contrôles | 255 | Inclut les enums avec `ValueAsPropertyName` |
+| Contrôles dans `TileProperties.txt` | 208 | Interface visible |
+| Noms effectivement écrits par ces contrôles | 249 | Inclut les enums avec `ValueAsPropertyName` |
 | `IsoPropertyType` | 228 | Ancien registre de propriétés |
 | `IsoFlagType` | 111 | Ancien registre de drapeaux (hors `MAX`) |
 | `TilePropertyKey` | 278 | Nouveau registre B42 |
-| Clés `TilePropertyKey` encore absentes de l'interface | 35 | Comparaison exacte après résolution des enums UI |
+| Clés `TilePropertyKey` encore absentes de l'interface | 37 | Comparaison exacte après résolution des enums UI |
 
-Les 211 contrôles ont tous un `ToolTip` anglais. Les nouveaux champs indiquent
+Les 208 contrôles ont tous un `ToolTip` anglais. Les nouveaux champs indiquent
 également leur clé moteur, leur format et les risques d'une saisie manuelle.
 
 ## Propriétés maintenant exposées
@@ -38,13 +38,11 @@ Les 211 contrôles ont tous un `ToolTip` anglais. Les nouveaux champs indiquent
 | `SpriteGridLevel` | entier optionnel sous forme de chaîne | préserve la différence entre absence et niveau `0` explicite |
 | `Noffset`, `Woffset`, `Soffset`, `Eoffset` | entiers signés | utilisés par le script des moveables pour retrouver les quatre orientations |
 | `LinkedOffset`, `LinkedLocIs` | entier signé et chaîne | lus dans les métadonnées des moveables ; marqués « Advanced B42 » |
-| `connectX`, `connectY` | entiers signés | relient les éléments adjacents d'un objet poussable multi-tile dans `CellLoader` |
 | `EntityScript`, `EntityScriptName` | booléen et chaîne | branche le nouveau pipeline d'entités ; normalement généré par `SpriteConfigManager` |
 | `halfheight` | booléen | modifie les tests de murs, de vision et le placement vertical |
 | `unlit` | booléen | rend le sprite à pleine luminosité sans créer de source lumineuse |
 | `FasciaEdgeReversible` | booléen | autorise le repli d'attachement des fascias nord/ouest |
 | `UnbreakableWindowN/W/NW` | enum directionnel exclusif | construit les variantes de fenêtres incassables sans combinaisons contradictoires |
-| `LadderS/E/N/W` | enum directionnel exclusif | expose les quatre drapeaux d'échelle présents dans les TileDefs B42 |
 
 `EntityScript` et `EntityScriptName` restent explicitement avancés : une clé de
 script inconnue provoque une erreur de création d'entité dans
@@ -70,6 +68,7 @@ tiles, ou exportées dans son fichier dédié.
 - `DoorWallNW`, `DoorWallNWTrans` ;
 - `windowFN`, `windowFW` ;
 - `attachtostairs`, `blocksight`, `blueprint`, `canPathN`, `canPathW` ;
+- `connectX`, `connectY` ;
 - `hidewalls`, `interior`, `isMoveAbleObject`, `tableN`.
 
 `FloorHeightOneThird` et `FloorHeightTwoThirds` ne doivent pas être ajoutées en
@@ -112,10 +111,10 @@ Ces 17 noms existent encore dans `IsoFlagType` sans entrée équivalente dans
 Une migration automatique basée uniquement sur `TilePropertyKey` ferait donc
 perdre des drapeaux historiques encore compris par le moteur.
 
-## Liste exhaustive des 35 clés encore absentes
+## Liste exhaustive des 37 clés encore absentes
 
 `AttachedFloor`, `attachtostairs`, `blocksight`, `blueprint`, `burning`,
-`burntOut`, `canPathN`, `canPathW`, `CurtainOffset`,
+`burntOut`, `canPathN`, `canPathW`, `connectX`, `connectY`, `CurtainOffset`,
 `DoorWallNW`, `DoorWallNWTrans`, `firerequirement`, `FloorHeightOneThird`,
 `FloorHeightTwoThirds`, `forcedLocked`, `HasRaindrop`, `HasRainSplashes`,
 `hidewalls`, `interior`, `isMoveAbleObject`, `jukebox`, `name`, `noStart`,

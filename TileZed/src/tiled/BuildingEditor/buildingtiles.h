@@ -888,6 +888,8 @@ public:
     static QString nameForTile(Tiled::Tile *tile);
     static bool parseTileName(const QString &tileName, QString &tilesetName, int &index);
     static bool legalTileName(const QString &tileName);
+    static bool validateTileName(const QString &tileName,
+                                 QString *errorString = nullptr);
     static QString adjustTileNameIndex(const QString &tileName, int offset);
     static QString normalizeTileName(const QString &tileName);
 

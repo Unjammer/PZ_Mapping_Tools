@@ -120,6 +120,7 @@ private:
     QList<WelcomeModeNS::LinkItem*> mAutoSaveItems;
     QStringList mLegendStrings;
     QStringList mRoomToneStrings;
+    QString mRoomToneError;
     bool mSynchLegend = false;
     bool mSynchRoomTone = false;
 };

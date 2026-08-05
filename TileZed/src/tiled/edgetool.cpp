@@ -558,10 +558,42 @@ bool EdgeFile::read(const QString &fileName)
             Edges *edges = new Edges;
             edges->mLabel = block.value("label");
             edges->mLayer = block.value("layer");
+            auto validateTileValues =
+                    [this, edges, &path](SimpleFileBlock &tileBlock,
+                                       const QStringList &tileKeys) {
+                for (const QString &key : tileKeys) {
+                    SimpleFileKeyValue value;
+                    if (!tileBlock.keyValue(key, value)
+                            || value.value.trimmed().isEmpty()) {
+                        continue;
+                    }
+                    QString detail;
+                    if (!BuildingEditor::BuildingTilesMgr::validateTileName(
+                                value.value, &detail)) {
+                        mError = tr(
+                                    "Line %1: Edge preset '%2' has an invalid "
+                                    "'%3/%4' tile reference '%5'.\n%6\n\n%7")
+                                .arg(value.lineNumber)
+                                .arg(edges->mLabel, tileBlock.name, key,
+                                     value.value, detail, path);
+                        return false;
+                    }
+                }
+                return true;
+            };
             if (block.hasValue("first")) {
 
             } else {
-                // TODO: validate tile names
+                const QStringList cardinalKeys = {
+                    QLatin1String("w"),
+                    QLatin1String("n"),
+                    QLatin1String("e"),
+                    QLatin1String("s")
+                };
+                if (!validateTileValues(block, cardinalKeys)) {
+                    delete edges;
+                    return false;
+                }
                 edges->mTileNames[Edges::EdgeW] = block.value("w");
                 edges->mTileNames[Edges::EdgeN] = block.value("n");
                 edges->mTileNames[Edges::EdgeE] = block.value("e");
@@ -575,6 +607,10 @@ bool EdgeFile::read(const QString &fileName)
                     if (block2.name == QLatin1String("inner")) {
                         if (!validKeys(block2, keys))
                             return false;
+                        if (!validateTileValues(block2, keys)) {
+                            delete edges;
+                            return false;
+                        }
                         edges->mTileNames[Edges::InnerNW] = block2.value("nw");
                         edges->mTileNames[Edges::InnerNE] = block2.value("ne");
                         edges->mTileNames[Edges::InnerSE] = block2.value("se");
@@ -582,6 +618,10 @@ bool EdgeFile::read(const QString &fileName)
                     } else if (block2.name == QLatin1String("outer")) {
                         if (!validKeys(block2, keys))
                             return false;
+                        if (!validateTileValues(block2, keys)) {
+                            delete edges;
+                            return false;
+                        }
                         edges->mTileNames[Edges::OuterNW] = block2.value("nw");
                         edges->mTileNames[Edges::OuterNE] = block2.value("ne");
                         edges->mTileNames[Edges::OuterSE] = block2.value("se");

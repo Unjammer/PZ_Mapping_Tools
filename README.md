@@ -13,7 +13,7 @@ mapping automation, stability fixes, and current Project Zomboid data support.
 This is a community project. It is not an official The Indie Stone release.
 Project Zomboid game assets are not included.
 
-Current release documentation: [August 3, 2026 changes](RELEASE_CHANGELOG.md),
+Current release documentation: [August 4, 2026 changes](RELEASE_CHANGELOG.md),
 [feature reference](docs/Feature-Reference.md), and
 [logs/diagnostics](docs/Diagnostics-and-Logs.md).
 
@@ -155,6 +155,38 @@ projects remain supported.
 
 ## WorldEd
 
+### Project Doctor for tiles and paths
+
+**Tools > Project Doctor: Tiles and Paths...** gives a saved project a
+two-step **Check project / Fix safely** workflow:
+
+- normal results use a four-column table: status, file, plain-language
+  meaning, and what the mapper can do next. Clean files are grouped, while the
+  complete parser report stays behind **Show support details**;
+- the loaded PZW folder is selected automatically and Downloads, OneDrive,
+  game-installation, absolute, missing, and outside-project paths are reported
+  in plain language;
+- the interface explains that TMX maps belong to TileZed and TBX buildings
+  belong to BuildingEd instead of assuming knowledge of the file formats;
+- TMX object references to TBX files are resolved relative to their map and
+  only existing in-project paths are normalized automatically;
+- missing used tilesets and missing/external TBX dependencies are preserved
+  and shown as work the mapper must resolve;
+- stale TMX declarations are removed only when the sheet is both unused and
+  unresolved. Valid unused sheets remain in the complete ordered header for
+  deterministic legacy compatibility;
+- retained inline TMX image paths are normalized to the same readable 2x,
+  then 1x/custom PNG selected by the shared tools; and
+- TBX cleanup uses BuildingEd's object model to rebuild the ordered
+  `tile_entry`, `user_tiles`, and furniture ID tables and remap every
+  reference. A second canonical round trip must be byte-stable.
+
+Fixes are atomic and every changed file is first copied below the project in a
+dated `.pztools-backups/tileset-cleanup-*` directory. Backup trees are excluded
+from subsequent scans. The complete safety policy and recovery procedure are
+documented in
+[Project Doctor: TMX, TBX, tiles, and paths](docs/PZ-Project-Doctor-Tiles-and-Paths.md).
+
 ### Project WorldGen biome and prefab editors
 
 Two independent commands are available after a saved WorldEd map project is
@@ -215,7 +247,7 @@ Project-owned Lua is kept separately under:
 
 Format distinctions, runtime limits, conversion rules, project paths, and the
 staging workflow are documented in
-[`WorldGen Preview, Biomes, Features, and Prefabs`](WorldEd/docs/PZ-B42.20-WorldGen-Editor-and-Prefabs.md).
+[`WorldGen Preview, Biomes, Features, and Prefabs`](docs/PZ-B42.20-WorldGen-Editor-and-Prefabs.md).
 - Procedural and `biomes_map` registries can be inspected separately. Map
   biomes currently use an empty synthetic surface, so placement, protection,
   and replacement behavior that depends on an authored map is reported but
@@ -254,7 +286,7 @@ Loot Viewer / Editor...**.
 
 The format, probability semantics, workflow, limits, and validation command are
 documented in
-[`Build 42.20 procedural loot viewer and editor`](TileZed/docs/PZ-B42.20-Procedural-Loot-Editor.md).
+[`Build 42.20 procedural loot viewer and editor`](docs/PZ-B42.20-Procedural-Loot-Editor.md).
 
 ### Terrain and vegetation image editor
 
@@ -444,13 +476,15 @@ or TileZed. BuildingEd consumes the same shared setting.
 - [Complete documentation index](DOCUMENTATION.md)
 - [Offline documentation home](docs/index.html)
 - [User-facing feature reference](docs/Feature-Reference.md)
+- [Shared configuration files and Build 42.20 catalogue audit](docs/PZTools-Configuration-Files.md)
 - [PZTools user guide](docs/TileZed/PZToolsGuide.html)
 - [Lua scripting reference](docs/TileZed/LuaScripting.html)
 - [Automapper guide](docs/TileZed/Automapper.html)
-- [WorldGen biome and prefab editor](WorldEd/docs/PZ-B42.20-WorldGen-Editor-and-Prefabs.md)
-- [Procedural loot editor](TileZed/docs/PZ-B42.20-Procedural-Loot-Editor.md)
-- [Pack comparator and extractor](TileZed/docs/PZ-Pack-Comparator-and-Extractor.md)
-- [TileDef comparator and Snow/Replacement editor](TileZed/docs/PZ-TileDef-Comparator-and-Snow-Editor.md)
+- [Project Doctor for PZW/TMX/TBX tiles and paths](docs/PZ-Project-Doctor-Tiles-and-Paths.md)
+- [WorldGen biome and prefab editor](docs/PZ-B42.20-WorldGen-Editor-and-Prefabs.md)
+- [Procedural loot editor](docs/PZ-B42.20-Procedural-Loot-Editor.md)
+- [Pack comparator and extractor](docs/PZ-Pack-Comparator-and-Extractor.md)
+- [TileDef comparator and Snow/Replacement editor](docs/PZ-TileDef-Comparator-and-Snow-Editor.md)
 - [Logs, diagnostics, validators, and issue reports](docs/Diagnostics-and-Logs.md)
 - [Upstream history and source provenance](UPSTREAM-HISTORY.md)
 - [Detailed fork changelog](CHANGELOG-PZTOOLS.md)
@@ -475,28 +509,18 @@ application can create its normal log.
 
 ## Building from source
 
-The supported source target is Windows x64 with qmake and Qt 5.14.2. The
-current release is tested with the `msvc2017_64` Qt package and a compatible
-MSVC x64 toolchain.
+The supported source target is Windows x64 with qmake, Qt 5.14.2, and an MSVC
+x64 toolchain. The complete maintainer procedure now documents prerequisites,
+out-of-source configuration, incremental and clean builds, portable release
+assembly, SHA-256 verification, deployed validators, and the required source
+and license files:
 
-From a Visual Studio x64 Native Tools command prompt:
+- [Building PZ Mapping Tools](BUILDING.md)
+- [Linux and macOS build feasibility audit](PLATFORM-BUILD-AUDIT.md)
 
-```bat
-mkdir build-worlded
-cd build-worlded
-qmake ..\WorldEd\PZWorldEd.pro -spec win32-msvc CONFIG+=release
-nmake
-```
-
-```bat
-mkdir build-tilezed
-cd build-tilezed
-qmake ..\TileZed\tiled.pro -spec win32-msvc CONFIG+=release
-nmake
-```
-
-The TileZed build also produces BuildingEd and the Tiled format plugins. Keep
-executables and their matching libraries together when assembling a release.
+The qmake projects contain useful Unix/macOS branches, but those platforms are
+not yet release-tested. The audit records the remaining work instead of
+presenting the obsolete distribution scripts as supported recipes.
 
 ## Repository layout
 
@@ -506,10 +530,24 @@ executables and their matching libraries together when assembling a release.
 ├── TileZed/                 TileZed and BuildingEd source tree
 ├── docs/images/             README screenshots
 ├── UPSTREAM-HISTORY.md      exact upstream baselines and port registry
+├── BUILDING.md              supported build and release procedure
+├── PLATFORM-BUILD-AUDIT.md  Linux/macOS feasibility and validation gates
 ├── CHANGELOG-PZTOOLS.md     detailed differences from upstream
 ├── RELEASE_CHANGELOG.md     concise current-release notes
 └── README.md
 ```
+
+## Credits and special thanks
+
+- **Tim Baker** for the original WorldEd and TileZed work that remains the
+  upstream foundation of these tools.
+- **Petro**, **Pabbiqo [pq]**, **Dane**, **! 𝕮𝖆ç𝖆𝖉𝖔𝖗**, **Kyber**, **шакалоблок** and
+  The Project Zomboid mapping and modding community for reproducible reports,
+  test projects, screenshots, logs, and practical workflow feedback.
+
+This section records direct technical contributions and special thanks. Legal
+authorship and third-party attribution remain documented in `AUTHORS.txt`,
+`UPSTREAM-HISTORY.md`, and the bundled license notices.
 
 ## Upstream, licenses, and assets
 

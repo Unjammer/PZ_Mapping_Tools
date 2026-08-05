@@ -428,6 +428,11 @@ inline void messageHandler(QtMsgType type,
                            const QMessageLogContext &context,
                            const QString &message)
 {
+    if (type == QtWarningMsg &&
+            message == QStringLiteral(
+                "libpng warning: iCCP: known incorrect sRGB profile"))
+        return;
+
     const QString source = context.file
             ? QStringLiteral(" (%1:%2)")
               .arg(QString::fromUtf8(context.file))

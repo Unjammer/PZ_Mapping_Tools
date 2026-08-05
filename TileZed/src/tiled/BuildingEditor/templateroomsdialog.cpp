@@ -36,6 +36,7 @@
 
 #include <QCompleter>
 #include <QDebug>
+#include <QDir>
 #include <QFileInfo>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -177,15 +178,19 @@ void TemplateRoomsDialog::readRoomNamesDotTxt(QList<RoomName> &rooms)
 {
     mRoomColorSet.clear();
 
-    QString filePath;
+    Tiled::Internal::Preferences *preferences =
+            Tiled::Internal::Preferences::instance();
+    const QString fileName = QStringLiteral("RoomNames.txt");
+    const QString applicationFile =
+            QDir(preferences->appConfigPath()).filePath(fileName);
+    const QString userFile = preferences->configPath(fileName);
 
-    // Read the application's RoomNames.txt
-    filePath = Tiled::Internal::Preferences::instance()->appConfigPath(QStringLiteral("RoomNames.txt"));
-    readRoomNamesDotTxt(filePath, rooms);
-
-    // Read the user's optional RoomNames.txt
-    filePath = Tiled::Internal::Preferences::instance()->configPath(QStringLiteral("RoomNames.txt"));
-    readRoomNamesDotTxt(filePath, rooms);
+    readRoomNamesDotTxt(applicationFile, rooms);
+    if (QDir::cleanPath(QFileInfo(applicationFile).absoluteFilePath())
+            .compare(QDir::cleanPath(QFileInfo(userFile).absoluteFilePath()),
+                     Qt::CaseInsensitive) != 0) {
+        readRoomNamesDotTxt(userFile, rooms);
+    }
 }
 
 void TemplateRoomsDialog::readRoomNamesDotTxt(const QString &fileName, QList<RoomName> &rooms)
@@ -194,38 +199,65 @@ void TemplateRoomsDialog::readRoomNamesDotTxt(const QString &fileName, QList<Roo
     if (!simpleFile.read(fileName)) {
         if (QFileInfo::exists(fileName)) {
             QMessageBox::warning(this, QStringLiteral("Error reading RoomNames.txt"),
-                                 QStringLiteral("Failed to open %1").arg(fileName));
+                                 QStringLiteral("%1\n\n%2")
+                                 .arg(QDir::toNativeSeparators(fileName),
+                                      simpleFile.errorString()));
         }
         return;
     }
 
-    QRandomGenerator *generator = QRandomGenerator::global();
     for (const SimpleFileBlock &block : simpleFile.blocks) {
-        if (block.name == QStringLiteral("room")) {
-            RoomName roomName;
-            roomName.internalName = block.value("internal").trimmed();
-            roomName.label = block.value("label").trimmed();
-            if (block.hasValue("color") && !block.value("color").trimmed().isEmpty()) {
-                QColor color = QColor(block.value("color").trimmed());
-                if (color.isValid()) {
-                    roomName.color = color;
-                }
+        if (block.name != QStringLiteral("room")) {
+            qWarning() << "Ignoring unknown RoomNames.txt block"
+                       << block.name << "at line" << block.lineNumber
+                       << "in" << fileName;
+            continue;
+        }
+
+        RoomName roomName;
+        roomName.internalName = block.value("internal").trimmed();
+        roomName.label = block.value("label").trimmed();
+        if (roomName.internalName.isEmpty() || roomName.label.isEmpty()) {
+            qWarning() << "Ignoring incomplete RoomNames.txt entry at line"
+                       << block.lineNumber << "in" << fileName
+                       << "(both internal and label are required)";
+            continue;
+        }
+
+        const QString colorText = block.value("color").trimmed();
+        if (!colorText.isEmpty())
+            roomName.color = QColor(colorText);
+        if (!roomName.color.isValid()) {
+            const uint hash = qHash(roomName.internalName.toCaseFolded());
+            roomName.color = QColor(64 + int(hash & 0x7f),
+                                    64 + int((hash >> 8) & 0x7f),
+                                    64 + int((hash >> 16) & 0x7f));
+            int attempt = 0;
+            while (mRoomColorSet.find(roomName.color)
+                   != mRoomColorSet.end()) {
+                roomName.color = QColor::fromHsv(
+                            int((hash + uint(++attempt * 47)) % 360),
+                            160, 200);
             }
-            if (!roomName.color.isValid()) {
-                QColor randomColor;
-                do {
-                    int red = generator->bounded(256); // 0 to 255
-                    int green = generator->bounded(256); // 0 to 255
-                    int blue = generator->bounded(256); // 0 to 255
-                    randomColor = QColor(red, green, blue);
-                } while (mRoomColorSet.find(randomColor) != mRoomColorSet.end());
-                roomName.color = randomColor;
-            }
-            mRoomColorSet.insert(roomName.color);
-            if (!roomName.label.isEmpty() && !roomName.internalName.isEmpty()) {
-                rooms += roomName;
+            qWarning() << "RoomNames.txt entry" << roomName.internalName
+                       << "at line" << block.lineNumber
+                       << "has a missing or invalid color" << colorText
+                       << "- using deterministic fallback"
+                       << roomName.color.name();
+        }
+
+        for (int index = rooms.size() - 1; index >= 0; --index) {
+            if (rooms.at(index).internalName.compare(
+                        roomName.internalName,
+                        Qt::CaseInsensitive) == 0) {
+                qInfo() << "RoomNames.txt entry overridden:"
+                        << roomName.internalName << "by" << fileName;
+                mRoomColorSet.erase(rooms.at(index).color);
+                rooms.removeAt(index);
             }
         }
+        mRoomColorSet.insert(roomName.color);
+        rooms += roomName;
     }
 }
 

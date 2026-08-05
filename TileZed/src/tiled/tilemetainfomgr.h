@@ -45,6 +45,10 @@ class TilesetMetaInfo
 {
 public:
     QString mTilesetName;
+    // Some valid game effect sheets are not regular 64x128 atlases. Preserve
+    // the logical Tilesets.txt layout because its order defines stable IDs.
+    int mCatalogColumns = 0;
+    int mCatalogRows = 0;
     QMap<QString,TileMetaInfo> mInfo; // index is "column,row"
 
     static QString key(Tile *tile);

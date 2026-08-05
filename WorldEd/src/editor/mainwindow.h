@@ -197,6 +197,7 @@ public slots:
     void terrainImageEditor();
     void worldGenPreview();
     void worldGenPrefabEditor();
+    void tilesetCleanup();
 
     void readOldWaterDotLua();
 

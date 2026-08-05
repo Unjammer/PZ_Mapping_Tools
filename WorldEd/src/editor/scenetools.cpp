@@ -1624,14 +1624,36 @@ void SpawnPointTool::mousePressEvent(QGraphicsSceneMouseEvent *event)
     // Create the Professions property enum if needed
     PropertyEnum *pe = mScene->world()->propertyEnums().find(QLatin1String("Professions"));
     if (!pe) {
+        // Keep these identifiers and their casing in sync with the base
+        // profession registry in B42 CharacterProfession.java.  "all" is a
+        // WorldEd convenience value expanded by the spawnpoint exporter.
         QStringList professions;
         professions << QLatin1String("all")
-                    << QLatin1String("unemployed")
-                    << QLatin1String("policeofficer")
+                    << QLatin1String("burglar")
+                    << QLatin1String("burgerflipper")
+                    << QLatin1String("carpenter")
+                    << QLatin1String("chef")
                     << QLatin1String("constructionworker")
-                    << QLatin1String("securityguard")
+                    << QLatin1String("doctor")
+                    << QLatin1String("electrician")
+                    << QLatin1String("engineer")
+                    << QLatin1String("farmer")
+                    << QLatin1String("fireofficer")
+                    << QLatin1String("fisherman")
+                    << QLatin1String("fitnessInstructor")
+                    << QLatin1String("lumberjack")
+                    << QLatin1String("mechanics")
+                    << QLatin1String("metalworker")
+                    << QLatin1String("nurse")
                     << QLatin1String("parkranger")
-                    << QLatin1String("fireofficer");
+                    << QLatin1String("policeofficer")
+                    << QLatin1String("rancher")
+                    << QLatin1String("repairman")
+                    << QLatin1String("securityguard")
+                    << QLatin1String("smither")
+                    << QLatin1String("tailor")
+                    << QLatin1String("unemployed")
+                    << QLatin1String("veteran");
         mScene->worldDocument()->addPropertyEnum(QLatin1String("Professions"), professions, true);
         pe = mScene->world()->propertyEnums().find(QLatin1String("Professions"));
     }

@@ -6,6 +6,7 @@
 #include "BuildingEditor/simplefile.h"
 #endif
 
+#include <QDir>
 #include <QFileInfo>
 #include <QSet>
 #include <QScopedPointer>
@@ -80,16 +81,29 @@ bool TilesetsTxtFile::read(const QString &path)
                 mError = tr("No-name tilesets aren't allowed.");
                 return false;
             }
+            tilesetFileName =
+                    QDir::fromNativeSeparators(tilesetFileName.trimmed());
+            const QString cleanFileName = QDir::cleanPath(tilesetFileName);
+            if (QFileInfo(cleanFileName).isAbsolute()
+                    || cleanFileName == QLatin1String("..")
+                    || cleanFileName.startsWith(QLatin1String("../"))) {
+                mError = tr(
+                            "Tileset path '%1' must be relative to the "
+                            "configured 1x or 2x Tiles directory.")
+                        .arg(tilesetFileName);
+                return false;
+            }
 //            tilesetFileName += QLatin1String(".png");
-            QFileInfo finfo(tilesetFileName); // relative to Tiles directory
+            QFileInfo finfo(cleanFileName); // relative to Tiles directory
             QString tilesetName = finfo.completeBaseName();
-            if (tilesetNameSet.contains(tilesetName)) {
+            const QString tilesetKey = tilesetName.toCaseFolded();
+            if (tilesetNameSet.contains(tilesetKey)) {
                 mError = tr("Duplicate tileset '%1'.").arg(tilesetName);
                 return false;
             }
             QScopedPointer<Tileset> tileset(new Tileset());
             tileset->mName = tilesetName;
-            tileset->mFile = tilesetFileName;
+            tileset->mFile = cleanFileName;
 
             QString size = block.value("size");
             if (!parse2Ints(size, &tileset->mColumns, &tileset->mRows) ||
@@ -99,37 +113,81 @@ bool TilesetsTxtFile::read(const QString &path)
                 return false;
             }
 
+            QSet<QString> tileCoordinates;
             for (const SimpleFileBlock& tileBlock : block.blocks) {
-                if (tileBlock.name == QLatin1String("tile")) {
-                    Tile tile;
-                    for (const SimpleFileKeyValue& kv : tileBlock.values) {
-                        if (kv.name == QLatin1String("xy")) {
-                            int column, row;
-                            if (!parse2Ints(kv.value, &column, &row) ||
-                                    (column < 0) || (row < 0)) {
-                                mError = tr("Invalid %1 = %2").arg(kv.name).arg(kv.value);
-                                return false;
-                            }
-                            tile.mX = column;
-                            tile.mY = row;
-                        } else if (kv.name == QLatin1String("meta-enum")) {
-                            QString enumName = kv.value;
-                            if (!enumNameSet.contains(enumName)) {
-                                mError = tr("Unknown enum '%1'").arg(enumName);
-                                return false;
-                            }
-//                            Q_ASSERT(!coordString.isEmpty());
-                            tile.mMetaEnum = enumName;
-                        } else {
-                            mError = tr("Unknown value name '%1'.").arg(kv.name);
+                if (tileBlock.name != QLatin1String("tile")) {
+                    mError = tr(
+                                "Line %1: Unknown block '%2' inside "
+                                "tileset '%3'.")
+                            .arg(tileBlock.lineNumber)
+                            .arg(tileBlock.name, tilesetName);
+                    return false;
+                }
+                Tile tile;
+                bool hasCoordinate = false;
+                bool hasMetaEnum = false;
+                for (const SimpleFileKeyValue& kv : tileBlock.values) {
+                    if (kv.name == QLatin1String("xy")) {
+                        int column, row;
+                        if (hasCoordinate
+                                || !parse2Ints(kv.value, &column, &row)
+                                || column < 0 || row < 0
+                                || column >= tileset->mColumns
+                                || row >= tileset->mRows) {
+                            mError = tr(
+                                        "Line %1: Invalid or duplicate "
+                                        "xy = %2 in tileset '%3' (%4x%5).")
+                                    .arg(kv.lineNumber)
+                                    .arg(kv.value, tilesetName)
+                                    .arg(tileset->mColumns)
+                                    .arg(tileset->mRows);
                             return false;
                         }
+                        tile.mX = column;
+                        tile.mY = row;
+                        hasCoordinate = true;
+                    } else if (kv.name == QLatin1String("meta-enum")) {
+                        QString enumName = kv.value;
+                        if (hasMetaEnum || !enumNameSet.contains(enumName)) {
+                            mError = tr(
+                                        "Line %1: Unknown or duplicate "
+                                        "meta-enum '%2' in tileset '%3'.")
+                                    .arg(kv.lineNumber)
+                                    .arg(enumName, tilesetName);
+                            return false;
+                        }
+                        tile.mMetaEnum = enumName;
+                        hasMetaEnum = true;
+                    } else {
+                        mError = tr("Line %1: Unknown value name '%2'.")
+                                .arg(kv.lineNumber)
+                                .arg(kv.name);
+                        return false;
                     }
-                    tileset->mTiles += tile;
                 }
+                if (!hasCoordinate || !hasMetaEnum) {
+                    mError = tr(
+                                "Line %1: A tile block in tileset '%2' "
+                                "requires both xy and meta-enum.")
+                            .arg(tileBlock.lineNumber)
+                            .arg(tilesetName);
+                    return false;
+                }
+                const QString coordinateKey =
+                        QStringLiteral("%1,%2").arg(tile.mX).arg(tile.mY);
+                if (tileCoordinates.contains(coordinateKey)) {
+                    mError = tr(
+                                "Line %1: Duplicate tile coordinate %2 "
+                                "in tileset '%3'.")
+                            .arg(tileBlock.lineNumber)
+                            .arg(coordinateKey, tilesetName);
+                    return false;
+                }
+                tileCoordinates += coordinateKey;
+                tileset->mTiles += tile;
             }
 
-            tilesetNameSet += tileset->mName;
+            tilesetNameSet += tilesetKey;
             mTilesets += tileset.take();
         } else {
             mError = tr("Unknown block name '%1'.\n%2")

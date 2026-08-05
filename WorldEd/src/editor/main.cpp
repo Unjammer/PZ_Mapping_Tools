@@ -21,6 +21,7 @@
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QSettings>
+#include <QTimer>
 #include <QXmlStreamReader>
 
 #include <limits>
@@ -32,10 +33,12 @@
 #include "documentmanager.h"
 #include "document.h"
 #include "bmptotmx.h"
+#include "defaultsfile.h"
 #include "toolmanager.h"
 #include "preferences.h"
 #include "mapimagemanager.h"
 #include "mapmanager.h"
+#include "lotfilesmanager256.h"
 #include "progress.h"
 #include "tilemetainfomgr.h"
 #include "tilesetmanager.h"
@@ -46,6 +49,7 @@
 #include "worlddocument.h"
 #include "zlevelrenderer.h"
 #include "worldgenpreviewdialog.h"
+#include "tilesetcleanupdialog.h"
 using namespace Tiled;
 using namespace Tiled::Internal;
 #endif
@@ -78,8 +82,69 @@ int main(int argc, char *argv[])
     QString renderWorldGenPreviewRoot;
     QString renderWorldGenPrefabRoot;
     QString renderWorldGenPrefabWindowRoot;
+    QString renderTilesetCleanupRoot;
     QString renderWorldGenPreviewOutput;
+    QString auditTilesetCleanupPath;
+    QString rebuildTilesetCatalogPath;
+    bool validateTilesetCleanup = false;
     for (const QString &argument : commandLineArguments) {
+        if (argument == QLatin1String(
+                    "--validate-native-256-lot-geometry")) {
+            QString error;
+            if (!LotFilesManager256::validateNative256Geometry(&error)) {
+                qCritical().noquote()
+                        << "Native-256 lot geometry validation failed:"
+                        << error;
+                return 18;
+            }
+            qInfo() << "Native-256 lot geometry validation passed";
+            return 0;
+        }
+        const QString defaultsValidationPrefix =
+                QLatin1String("--validate-world-defaults=");
+        if (argument.startsWith(defaultsValidationPrefix)) {
+            const QString path =
+                    argument.mid(defaultsValidationPrefix.size());
+            DefaultsFile defaults;
+            if (!defaults.read(path)) {
+                qCritical().noquote()
+                        << "WorldDefaults.txt validation failed:"
+                        << defaults.errorString();
+                return 25;
+            }
+            qInfo() << "WorldDefaults.txt validation passed:"
+                    << defaults.mEnums.size() << "enum(s),"
+                    << defaults.mPropertyDefs.size() << "property definition(s),"
+                    << defaults.mTemplates.size() << "template(s),"
+                    << defaults.mObjectTypes.size() << "object type(s),"
+                    << defaults.mObjectGroups.size() << "object group(s)";
+            return 0;
+        }
+        if (argument == QLatin1String("--validate-tileset-cleanup")) {
+            validateTilesetCleanup = true;
+            continue;
+        }
+        const QString rebuildCatalogPrefix =
+                QLatin1String("--rebuild-tileset-catalog=");
+        if (argument.startsWith(rebuildCatalogPrefix)) {
+            rebuildTilesetCatalogPath =
+                    argument.mid(rebuildCatalogPrefix.size());
+            continue;
+        }
+        const QString auditTilesetCleanupPrefix =
+                QLatin1String("--audit-tileset-cleanup=");
+        if (argument.startsWith(auditTilesetCleanupPrefix)) {
+            auditTilesetCleanupPath =
+                    argument.mid(auditTilesetCleanupPrefix.size());
+            continue;
+        }
+        const QString renderTilesetCleanupPrefix =
+                QLatin1String("--render-tileset-cleanup=");
+        if (argument.startsWith(renderTilesetCleanupPrefix)) {
+            renderTilesetCleanupRoot =
+                    argument.mid(renderTilesetCleanupPrefix.size());
+            continue;
+        }
         const QString renderWorldGenPrefabWindowPrefix =
                 QLatin1String("--render-worldgen-prefab-window=");
         if (argument.startsWith(renderWorldGenPrefabWindowPrefix)) {
@@ -276,8 +341,113 @@ int main(int argc, char *argv[])
     w.show();
     w.readSettings();
 
-    if (!w.InitConfigFiles())
+    const bool configuredCommand =
+            !renderWorldGenPreviewRoot.isEmpty()
+            || !renderWorldGenPrefabRoot.isEmpty()
+            || !renderWorldGenPrefabWindowRoot.isEmpty()
+            || !validateWorldGenPrefabImport.isEmpty()
+            || !validateBmpGenerationProject.isEmpty()
+            || !auditTilesetCleanupPath.isEmpty()
+            || !rebuildTilesetCatalogPath.isEmpty()
+            || !renderTilesetCleanupRoot.isEmpty()
+            || validateTilesetCleanup;
+    if (configuredCommand && !w.InitConfigFiles())
         return 0;
+
+    if (validateTilesetCleanup) {
+        QString summary;
+        QString error;
+        if (!TilesetCleanup::validate(&summary, &error)) {
+            qCritical().noquote()
+                    << "Tileset cleanup validation failed:" << error;
+            return 19;
+        }
+        qInfo().noquote()
+                << "Tileset cleanup validation passed:" << summary;
+        return 0;
+    }
+
+    if (!rebuildTilesetCatalogPath.isEmpty()) {
+        int added = 0;
+        int updated = 0;
+        int removed = 0;
+        if (!TileMetaInfoMgr::instance()->rebuildTilesetsTxt(
+                    &added, &updated, &removed, true, true,
+                    rebuildTilesetCatalogPath)) {
+            qCritical().noquote()
+                    << "Tilesets.txt rebuild failed:"
+                    << TileMetaInfoMgr::instance()->errorString();
+            return 24;
+        }
+        qInfo() << "Tilesets.txt rebuild passed:"
+                << added << "added,"
+                << updated << "updated,"
+                << removed << "removed";
+        return 0;
+    }
+
+    if (!auditTilesetCleanupPath.isEmpty()) {
+        const QFileInfo target(auditTilesetCleanupPath);
+        QStringList files;
+        QString scanRoot;
+        if (target.isFile()) {
+            files += target.absoluteFilePath();
+            scanRoot = target.absolutePath();
+        } else if (target.isDir()) {
+            scanRoot = target.absoluteFilePath();
+            files = TilesetCleanup::filesUnder(scanRoot, true);
+        } else {
+            qCritical().noquote()
+                    << "Tileset cleanup audit target does not exist:"
+                    << auditTilesetCleanupPath;
+            return 20;
+        }
+
+        TilesetCleanupOptions options;
+        QList<TilesetCleanupResult> results;
+        bool hasErrors = false;
+        for (const QString &fileName : files) {
+            const TilesetCleanupResult result =
+                    TilesetCleanup::processFile(
+                        fileName, scanRoot, options, false);
+            hasErrors = hasErrors || !result.error.isEmpty();
+            results += result;
+        }
+        qInfo().noquote()
+                << "Tileset cleanup audit:"
+                << TilesetCleanup::report(results);
+        return hasErrors ? 21 : 0;
+    }
+
+    if (!renderTilesetCleanupRoot.isEmpty()) {
+        if (renderWorldGenPreviewOutput.isEmpty()) {
+            qCritical() << "Project Doctor render requires "
+                           "--worldgen-preview-output=<PNG>";
+            return 22;
+        }
+        QString projectFile;
+        const QStringList projects = QDir(renderTilesetCleanupRoot)
+                .entryList(QStringList() << QStringLiteral("*.pzw"),
+                           QDir::Files);
+        if (projects.size() == 1) {
+            projectFile = QDir(renderTilesetCleanupRoot)
+                    .filePath(projects.first());
+        }
+        TilesetCleanupDialog dialog(
+                    renderTilesetCleanupRoot, projectFile);
+        dialog.show();
+        QMetaObject::invokeMethod(
+                    &dialog, "analyze", Qt::DirectConnection);
+        a.processEvents();
+        if (!dialog.grab().save(renderWorldGenPreviewOutput)) {
+            qCritical() << "Could not save Project Doctor render:"
+                        << renderWorldGenPreviewOutput;
+            return 23;
+        }
+        qInfo() << "Project Doctor render saved:"
+                << renderWorldGenPreviewOutput;
+        return 0;
+    }
 
     if (!renderWorldGenPreviewRoot.isEmpty()) {
         if (renderWorldGenPreviewOutput.isEmpty()) {
@@ -385,72 +555,91 @@ int main(int argc, char *argv[])
     sessionSettings.setValue(cleanExitKey, false);
     sessionSettings.sync();
 
-    bool openedCommandLineFile = false;
-    QPoint commandLineCell(-1, -1);
-    for (const QString &argument : commandLineArguments) {
-        if (argument.startsWith(QLatin1String("--cell="))) {
-            const QStringList coordinates =
-                    argument.mid(7).split(QLatin1Char(','));
-            bool xOk = false;
-            bool yOk = false;
-            if (coordinates.size() == 2) {
-                const int x = coordinates.at(0).toInt(&xOk);
-                const int y = coordinates.at(1).toInt(&yOk);
-                if (xOk && yOk)
-                    commandLineCell = QPoint(x, y);
+    // Let the event loop paint the main window before the complete tileset
+    // catalogue is decoded. InitConfigFiles keeps deterministic preloading,
+    // while its progress dialog now remains visible and responsive.
+    QTimer::singleShot(
+                10, &w,
+                [&w, commandLineArguments,
+                 previousSessionClosedCleanly]() {
+        qInfo() << "WorldEd interactive startup tasks begin";
+        if (!w.InitConfigFiles()) {
+            qCritical() << "WorldEd interactive startup configuration failed";
+            qApp->quit();
+            return;
+        }
+
+        bool openedCommandLineFile = false;
+        QPoint commandLineCell(-1, -1);
+        for (const QString &argument : commandLineArguments) {
+            if (argument.startsWith(QLatin1String("--cell="))) {
+                const QStringList coordinates =
+                        argument.mid(7).split(QLatin1Char(','));
+                bool xOk = false;
+                bool yOk = false;
+                if (coordinates.size() == 2) {
+                    const int x = coordinates.at(0).toInt(&xOk);
+                    const int y = coordinates.at(1).toInt(&yOk);
+                    if (xOk && yOk)
+                        commandLineCell = QPoint(x, y);
+                }
+                continue;
             }
-            continue;
+            if (QFileInfo(argument).isFile()) {
+                openedCommandLineFile = w.openFile(argument)
+                        || openedCommandLineFile;
+            }
         }
-        if (QFileInfo(argument).isFile()) {
-            openedCommandLineFile = w.openFile(argument)
-                    || openedCommandLineFile;
-        }
-    }
-    if (openedCommandLineFile
-            && commandLineCell.x() >= 0
-            && commandLineCell.y() >= 0) {
-        Document *document =
-                DocumentManager::instance()->currentDocument();
-        WorldDocument *worldDocument =
-                document ? document->asWorldDocument() : nullptr;
-        if (worldDocument
-                && worldDocument->world()->cellAt(
-                    commandLineCell.x(), commandLineCell.y())) {
-            qInfo() << "Command line opening cell"
-                    << commandLineCell.x() << commandLineCell.y();
-            worldDocument->editCell(
-                        commandLineCell.x(), commandLineCell.y());
-        } else {
-            qCritical() << "Command-line cell is outside the opened world:"
+        if (openedCommandLineFile
+                && commandLineCell.x() >= 0
+                && commandLineCell.y() >= 0) {
+            Document *document =
+                    DocumentManager::instance()->currentDocument();
+            WorldDocument *worldDocument =
+                    document ? document->asWorldDocument() : nullptr;
+            if (worldDocument
+                    && worldDocument->world()->cellAt(
+                        commandLineCell.x(), commandLineCell.y())) {
+                qInfo() << "Command line opening cell"
+                        << commandLineCell.x() << commandLineCell.y();
+                worldDocument->editCell(
+                            commandLineCell.x(), commandLineCell.y());
+            } else {
+                qCritical()
+                        << "Command-line cell is outside the opened world:"
                         << commandLineCell;
+            }
         }
-    }
 
-    if (!openedCommandLineFile
-            && Preferences::instance()->restoreLastSession()) {
-        if (previousSessionClosedCleanly) {
-            w.openLastFiles();
-        } else {
-            qWarning() << "Automatic session restore skipped after an "
-                          "unclean WorldEd shutdown.";
-            QMessageBox::warning(
-                        &w, QObject::tr("WorldEd Session Recovery"),
-                        QObject::tr(
-                            "WorldEd did not close cleanly last time.\n\n"
-                            "Automatic document restore was skipped to prevent "
-                            "a startup crash loop. Your project files were not "
-                            "changed. Open the required project manually after "
-                            "checking the latest log in settings/logs."));
+        if (!openedCommandLineFile
+                && Preferences::instance()->restoreLastSession()) {
+            if (previousSessionClosedCleanly) {
+                w.openLastFiles();
+            } else {
+                qWarning() << "Automatic session restore skipped after an "
+                              "unclean WorldEd shutdown.";
+                QMessageBox::warning(
+                            &w, QObject::tr("WorldEd Session Recovery"),
+                            QObject::tr(
+                                "WorldEd did not close cleanly last time.\n\n"
+                                "Automatic document restore was skipped to "
+                                "prevent a startup crash loop. Your project "
+                                "files were not changed. Open the required "
+                                "project manually after checking the latest "
+                                "log in settings/logs."));
+            }
         }
-    }
 
-    // Tile loading and session restoration can change dock size hints after
-    // the initial restore. Reapply the persisted layout once startup is done.
-    w.readSettings();
+        // Tile loading and session restoration can change dock size hints
+        // after the initial restore. Reapply the persisted layout once
+        // startup is done.
+        w.readSettings();
 
-    // Do not overwrite the saved layout/session while tilesets and the
-    // previous session are still being restored.
-    w.startSettingsAutoSave();
+        // Do not overwrite the saved layout/session while tilesets and the
+        // previous session are still being restored.
+        w.startSettingsAutoSave();
+        qInfo() << "WorldEd interactive startup tasks complete";
+    });
 
     int ret = a.exec();
 

@@ -23,8 +23,10 @@
 #include "world.h"
 #include "worldcell.h"
 
+#include <QColor>
 #include <QDir>
 #include <QMessageBox>
+#include <QSet>
 
 void DefaultsFile::newWorld(World *world)
 {
@@ -185,10 +187,42 @@ bool DefaultsFile::read(const QString &fileName)
     for (SimpleFileBlock block : simpleFile.blocks) {
         SimpleFileKeyValue kv;
         if (block.name == QLatin1String("enum")) {
+            const QString name = block.value("name").trimmed();
+            if (name.isEmpty()) {
+                mError = tr("Line %1: enum name missing")
+                        .arg(block.lineNumber);
+                return false;
+            }
+            if (mEnums.find(name) != nullptr) {
+                mError = tr("Line %1: Duplicate enum '%2'")
+                        .arg(block.lineNumber)
+                        .arg(name);
+                return false;
+            }
             QStringList values;
             if (block.keyValue("values", kv))
                 values = kv.values();
-            PropertyEnum* propEnum = new PropertyEnum(block.value("name"), values,
+            QSet<QString> seenValues;
+            for (const QString &value : std::as_const(values)) {
+                const QString trimmed = value.trimmed();
+                if (trimmed.isEmpty()) {
+                    mError = tr("Line %1: Enum '%2' contains an empty value")
+                            .arg(kv.lineNumber)
+                            .arg(name);
+                    return false;
+                }
+                const QString key = trimmed.toCaseFolded();
+                if (seenValues.contains(key)) {
+                    mError = tr(
+                                "Line %1: Enum '%2' contains duplicate "
+                                "value '%3'")
+                            .arg(kv.lineNumber)
+                            .arg(name, trimmed);
+                    return false;
+                }
+                seenValues += key;
+            }
+            PropertyEnum* propEnum = new PropertyEnum(name, values,
                                                       block.value("multi").compare(QLatin1String("true"), Qt::CaseInsensitive) == 0);
             mEnums += propEnum;
         } else if (block.name == QLatin1String("objecttype")) {
@@ -229,9 +263,30 @@ bool DefaultsFile::read(const QString &fileName)
                     return false;
                 }
             }
-            WorldObjectGroup* objGroup = new WorldObjectGroup(objType, block.value("name"), block.value("color"));
+            const QString colorText = block.value("color").trimmed();
+            if (!colorText.isEmpty() && !QColor(colorText).isValid()) {
+                mError = tr(
+                            "Line %1: objectgroup '%2' has invalid color '%3'")
+                        .arg(block.lineNumber)
+                        .arg(name, colorText);
+                return false;
+            }
+            WorldObjectGroup* objGroup = new WorldObjectGroup(
+                        objType, block.value("name"), colorText);
             mObjectGroups += objGroup;
         } else if (block.name == QLatin1String("property")) {
+            const QString name = block.value("name").trimmed();
+            if (name.isEmpty()) {
+                mError = tr("Line %1: property name missing")
+                        .arg(block.lineNumber);
+                return false;
+            }
+            if (mPropertyDefs.findPropertyDef(name) != nullptr) {
+                mError = tr("Line %1: Duplicate property '%2'")
+                        .arg(block.lineNumber)
+                        .arg(name);
+                return false;
+            }
             PropertyEnum* propEnum = nullptr;
             if (block.keyValue("enum", kv)) {
                 propEnum = mEnums.find(kv.value);
@@ -242,12 +297,24 @@ bool DefaultsFile::read(const QString &fileName)
                     return false;
                 }
             }
-            PropertyDef* def = new PropertyDef(block.value("name"), block.value("default"),
+            PropertyDef* def = new PropertyDef(name, block.value("default"),
                                                block.value("description"), propEnum);
             mPropertyDefs += def;
         } else if (block.name == QLatin1String("template")) {
+            const QString name = block.value("name").trimmed();
+            if (name.isEmpty()) {
+                mError = tr("Line %1: template name missing")
+                        .arg(block.lineNumber);
+                return false;
+            }
+            if (mTemplates.find(name) != nullptr) {
+                mError = tr("Line %1: Duplicate template '%2'")
+                        .arg(block.lineNumber)
+                        .arg(name);
+                return false;
+            }
             PropertyTemplate* propTemplate = new PropertyTemplate();
-            propTemplate->mName = block.value("name");
+            propTemplate->mName = name;
             propTemplate->mDescription = block.value("description");
             for (SimpleFileBlock child : block.blocks) {
                 if (child.name == QLatin1String("property")) {

@@ -244,6 +244,48 @@ bool BuildingTilesMgr::legalTileName(const QString &tileName)
     return parseTileName(tileName, tilesetName, index);
 }
 
+bool BuildingTilesMgr::validateTileName(const QString &tileName,
+                                        QString *errorString)
+{
+    QString tilesetName;
+    int index = -1;
+    if (!parseTileName(tileName.trimmed(), tilesetName, index)) {
+        if (errorString) {
+            *errorString = tr(
+                        "'%1' is not a valid tile reference. Expected "
+                        "<tileset>_<numeric tile ID>, for example "
+                        "fencing_01_35.")
+                    .arg(tileName);
+        }
+        return false;
+    }
+
+    Tileset *tileset =
+            TileMetaInfoMgr::instance()->tileset(tilesetName);
+    if (!tileset) {
+        if (errorString) {
+            *errorString = tr(
+                        "Tileset '%1' is not present in the loaded "
+                        "Tilesets.txt catalogue or discovered Tiles tree.")
+                    .arg(tilesetName);
+        }
+        return false;
+    }
+    if (index < 0 || index >= tileset->tileCount()) {
+        if (errorString) {
+            *errorString = tr(
+                        "Tile ID %1 is outside tileset '%2'. This sheet "
+                        "contains %3 tiles, so valid IDs are 0 through %4.")
+                    .arg(index)
+                    .arg(tilesetName)
+                    .arg(tileset->tileCount())
+                    .arg(qMax(0, tileset->tileCount() - 1));
+        }
+        return false;
+    }
+    return true;
+}
+
 QString BuildingTilesMgr::adjustTileNameIndex(const QString &tileName, int offset)
 {
     QString tilesetName;

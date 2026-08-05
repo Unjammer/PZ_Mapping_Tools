@@ -21,6 +21,7 @@
 #include "lotfilesmanager.h"
 #include "threads.h"
 #include "worldcell.h"
+#include "worldgeometry.h"
 
 #include <QTimer>
 
@@ -42,15 +43,20 @@ public:
     void moveToThread(MapComposite *mapComposite, QThread *thread);
     bool lotOverlaps(WorldCellLot *lot, int cell256X, int cell256Y, const QPoint &worldOrigin);
 
+    static QRect outputCellRect(WorldGridFormat format, const QRect &sourceCellRect);
+    static QRect sourceCellRect(WorldGridFormat format, const QRect &outputCellRect);
     static QRect toCellRect256(const QRect& cellRect300);
     static QRect toCellRect300(const QRect& cellRect256);
 
     int mCell256X;
     int mCell256Y;
-    int mMinCell300X;
-    int mMinCell300Y;
+    int mMinSourceCellX;
+    int mMinSourceCellY;
     int mCellsWidth;
     int mCellsHeight;
+    int mSourceCellSize;
+    int mSourceChunksPerCell;
+    int mSourceChunkSize;
     QList<WorldCell*> mCells;
     WorldCellLotList mLotsOverlappingCellBounds;
     DelayedMapLoader mLoader;
@@ -156,9 +162,11 @@ public:
     bool generateCell(LotFilesWorker256 *worker, WorldCell *cell, int cell256X, int cell256Y);
 
     bool overwriteSpawnMap(WorldDocument *worldDoc, GenerateMode mode);
-    bool overwriteSpawnMap300(int cell300X, int cell300Y);
+    bool overwriteSpawnMapSourceCell(int sourceCellX, int sourceCellY);
     bool overwriteSpawnMap256(int cell256X, int cell256Y);
     void writeZombieIntensity(QDataStream &out, int cell256X, int cell256Y);
+
+    static bool validateNative256Geometry(QString *error);
 
     QString errorString() const { return mError; }
 

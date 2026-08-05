@@ -224,6 +224,14 @@ The same messages are written to the current TileZed log under
 <code>settings/logs</code>. A missing or invalid manifest is attempted once
 per document; after correcting it, press <strong>Reload</strong>. This prevents
 ordinary brush strokes from repeatedly parsing the same bad file.</p>
+<div class="note">
+  <strong>Import Rules followed by Reload in the BMP Tool is not this
+  Automapper reload.</strong> It loads WorldEd terrain/vegetation rules and
+  activates BMP blending on the rule target layers. If painting becomes slow
+  only after that sequence, report it as a BMP Blender performance issue and
+  include the map, terrain <code>Rules.txt</code>, <code>Blends.txt</code>, and
+  newest TileZed log.
+</div>
 
 <h2>Troubleshooting</h2>
 <table>
@@ -231,6 +239,7 @@ ordinary brush strokes from repeatedly parsing the same bad file.</p>
 <tr><td>No rules loaded</td><td>The target TMX is saved and <code>automapping-rules.txt</code>, or a compatible legacy <code>rules.txt</code>, is beside it.</td></tr>
 <tr><td>Nearby Rules.txt is ignored</td><td>It is a valid WorldEd terrain/BMP definition. Keep it and create a separate <code>automapping-rules.txt</code>.</td></tr>
 <tr><td>Brush pauses after a manifest error</td><td>A failed automatic load is attempted once per document. Correct the manifest, then press Reload; normal painting no longer retries it for every stroke.</td></tr>
+<tr><td>Brush pauses after BMP Tool Import Rules + Reload</td><td>This is the separate BMP Blender path, not Automapper manifest loading. Attach the terrain Rules/Blends files and check the log for a slow dirty-region recalculation warning.</td></tr>
 <tr><td>No input/output region layer</td><td>Add Regions, or both RegionsInput and RegionsOutput.</td></tr>
 <tr><td>Layer not recognized</td><td>Check the underscore and accepted prefix.</td></tr>
 <tr><td>Rule never matches</td><td>Verify target layer type/name, non-empty cells, input grouping, and InputNot exclusions.</td></tr>

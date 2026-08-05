@@ -63,8 +63,10 @@ void ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *map
 
     quint8 *bitsArray = new quint8[CHUNK_SIZE_256 * CHUNK_SIZE_256];
 
-    int cellMinX256 = combinedMaps.mCell256X * CELL_SIZE_256 - combinedMaps.mMinCell300X * CELL_WIDTH;
-    int cellMinY256 = combinedMaps.mCell256Y * CELL_SIZE_256 - combinedMaps.mMinCell300Y * CELL_HEIGHT;
+    const int cellMinX256 = combinedMaps.mCell256X * CELL_SIZE_256
+            - combinedMaps.mMinSourceCellX * combinedMaps.mSourceCellSize;
+    const int cellMinY256 = combinedMaps.mCell256Y * CELL_SIZE_256
+            - combinedMaps.mMinSourceCellY * combinedMaps.mSourceCellSize;
 
     TempVars256 vars;
 

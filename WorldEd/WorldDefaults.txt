@@ -12,11 +12,76 @@ enum
     multi = false
 }
 
+enum
+{
+    name = Professions
+    values = [
+        all
+        burglar
+        burgerflipper
+        carpenter
+        chef
+        constructionworker
+        doctor
+        electrician
+        engineer
+        farmer
+        fireofficer
+        fisherman
+        fitnessInstructor
+        lumberjack
+        mechanics
+        metalworker
+        nurse
+        parkranger
+        policeofficer
+        rancher
+        repairman
+        securityguard
+        smither
+        tailor
+        unemployed
+        veteran
+    ]
+    multi = true
+}
+
 property
 {
     name = Direction
     default = N
     enum = Direction
+}
+
+property
+{
+    name = Professions
+    default = all
+    description = Professions allowed to use this spawn point. Choose one or more values; all allows every profession.
+    enum = Professions
+}
+
+template
+{
+    name = SpawnPoint
+    description = Default properties for a player spawn point.
+    property
+    {
+        name = Professions
+        value = all
+    }
+}
+
+objecttype
+{
+    name = SpawnPoint
+}
+
+objectgroup
+{
+    name = SpawnPoint
+    color = #00b7ff
+    defaulttype = SpawnPoint
 }
 
 property
@@ -110,6 +175,31 @@ objecttype
     name = FarmLand
 }
 
+objecttype
+{
+    name = LootZone
+}
+
+objecttype
+{
+    name = NoPowerOrWater
+}
+
+objecttype
+{
+    name = Ranch
+}
+
+objecttype
+{
+    name = ZombiesType
+}
+
+objecttype
+{
+    name = ZoneStory
+}
+
 objectgroup
 {
     name = ParkingStall
@@ -171,6 +261,41 @@ objectgroup
     name = FarmLand
     color = #bcff7d
     defaulttype = FarmLand
+}
+
+objectgroup
+{
+    name = LootZone
+    color = #c060ff
+    defaulttype = LootZone
+}
+
+objectgroup
+{
+    name = NoPowerOrWater
+    color = #7f7f7f
+    defaulttype = NoPowerOrWater
+}
+
+objectgroup
+{
+    name = Ranch
+    color = #ff8000
+    defaulttype = Ranch
+}
+
+objectgroup
+{
+    name = ZombiesType
+    color = #ff4040
+    defaulttype = ZombiesType
+}
+
+objectgroup
+{
+    name = ZoneStory
+    color = #b05080
+    defaulttype = ZoneStory
 }
 
 
@@ -375,18 +500,272 @@ enum
     name = RoomTone
     values = [
         Generic
+        AbandonedGrainmill
+        Airport
+        AirstripOffice
+        AnimalsanctuaryKennels
+        AnimalsanctuaryMain
+        AnimalShelter
+        ApartmentBuilding
+        Arena01Derby
+        Arena02Stables
+        Arena04Publicbathroom
+        Arena07Offices
+        Arena08Changerooms
+        Arena10Broadcasting
+        Arena12Baseball
+        Arena13Indoors
+        Bakery
+        Bank
+        BarWood
+        BarStone
+        Bargnclothes
         Barn
-        Mall
-        Warehouse
-        Prison
+        BasementApartmnetBuilding
+        BasementBank
+        BasementBar
+        BasementDestroyedBuilding
+        BasementChurch
+        BasementColdwarBunker
+        BasementConstruction01Factory
+        BasementDetentionCentre
+        BasementFactoryAbandoned
+        BasementFirestation
+        BasementGas
+        BasementGeneralstore
+        BasementGovernmentSecret
+        BasementGunclub
+        BasementHouse
+        BasementHouseEastereggSpiffo
+        BasementIndustrialMedium
+        BasementOffices
+        BasementPaddlewheeler
+        BasementPlaza
+        BasementPolice
+        BasementRestaurant
+        BasementSchool
+        BasementStorefront
+        Bedandbreakfast
+        Boatclub
+        Boathouse
+        Bookstore
+        Bowlingalley
+        Brewery
+        BrownbrickTownhouse
+        BuildingDestroyed
+        Busshelter
+        Cabin
+        CabinAbandoned
+        Cardealership
+        Carsupplystore
+        Cattleauction
+        Cattlelot
+        Changerooms
         Church
-        Office
+        ChurchAbandoned
+        ChurchBurnt
+        CivilianMedia
+        CivilianTent
+        Cleaningservices
+        Clothesstore
+        Coffeeshop
+        CaldwarBunker
+        CommunityCentre
+        ConvenienceStoreBurnt
+        ConventionHall
+        Cornerstore
+        Countryclub
+        CountryclubGolfcarts
+        CountryclubMaintenance
+        CountryclubMechanic
+        CountryclubClubhouse
+        CountryclubChangerooms
+        CountryclubSauna
+        CountryclubSnackbar
+        CountryclubGuardbooth
+        Departmentstore
+        Depository
+        Detentioncenter
+        Diner
+        Distillery
+        Dock
+        Emptystore
         Factory
-        MovieTheater
-        Basement
-        Bunker
-        House
-        Commercial
+        FarmStorage
+        Farmhouse
+        Farmhousing
+        Farmstore
+        Firestation
+        Fishbait
+        Fitnesscenter
+        Freight
+        Funeralhome
+        Furniturestore
+        Gallery
+        GarageBurnt
+        Garage
+        Garagestorage
+        Gardenstore
+        Gas
+        GasBurnt
+        Gatehouse
+        Generalstore
+        Government
+        Greenhouse
+        Grocery
+        Groundskeeper
+        Guardbooth
+        Gunclub
+        Gym
+        Hairdresser
+        Hanger
+        Hayshipping
+        HighriseMgCenter
+        HorseridingCentre
+        Hospital
+        Hotel
+        HouseAbandoned
+        HouseBurnt
+        HouseCountry
+        HouseDestroyed
+        HouseGarage
+        HouseGarageDamaged
+        HouseLake
+        HouseLarge
+        HouseMedium
+        HouseMediumDamaged
+        HouseSmall
+        HouseSmallDamaged
+        HouseSuburb
+        HouseSuburbGarage
+        HouseTrapper
+        IndustrialWarehouse
+        IndustryDorm
+        Kicthenshowroom
+        Lakehouse
+        Lasertag
+        Laundromat
+        LaundromatBurnt
+        Library
+        LibraryBurnt
+        Liquorstore
+        Lofts
+        Mall
+        Mansion
+        Mausoleum
+        Mechanic
+        Medical
+        MilitaryApartments
+        MilitaryBorder
+        MilitaryCommunications
+        MilitaryHouse
+        MilitaryTent
+        MilitaryTower
+        MilitaryTownhouse
+        MilitaryTrailer
+        Motel
+        MotelDestroyed
+        Movierental
+        MusicfestivalTower
+        MusicfestivalTrailer
+        Musicstore
+        Nursinghome
+        Office
+        Offices
+        Officesupplies
+        Optometrist
+        Outhouse
+        Paddlewheeler
+        Paintshop
+        ParkTreehouse
+        ParkRestrooms
+        ParkPlayhouse
+        Pawnshop
+        Paybooth
+        Pharmacy
+        Photobooth
+        Pizzawhirled
+        PizaawhirledBurnt
+        Plaza
+        PlazaBurnt
+        Police
+        PoliceBurnt
+        Portacabin
+        Post
+        Prison
+        PrisonGuardbooth
+        PrisonGuardtower
+        Publicwashroom
+        RadioTowerHouse
+        RadioTowerStation
+        Radiostation
+        Rangerstation
+        Reccenter
+        Recordingstudio
+        RedbrickTownhouse
+        Refinery
+        Resort
+        ResortCabin
+        RestareaBathrooms
+        Restaurant
+        Rollerrink
+        Sanatorium
+        School
+        SchoolColege
+        SchoolDorms
+        ScrapyardGarage
+        Security
+        Shack
+        Shed
+        Shelter
+        Shootingrange
+        ShopCamping
+        ShopHunting
+        Singleapartment
+        Slaughterhouse
+        Spa
+        Speedway
+        Sportstore
+        Stables
+        StoreAbandoned
+        Storefront
+        Summercamp
+        Taxi
+        TaxiGarage
+        Theatre
+        Thermalpowerstation
+        Tobaccostore
+        Tollbooth
+        Toolstore
+        Tornadoshelter
+        Townhouse
+        Trailer
+        TrailerBurnt
+        TrailerNice
+        TrailerOffice
+        Traincar
+        Trainstation
+        TrainstationAbadoned
+        Trainyard
+        TrainyardOffice
+        Transportcompany
+        Treehouse
+        Truck
+        Tvstudio
+        Vetrenarian
+        WadsworthBasemenet
+        Warehousestorage
+        WaterpurificationCheckpoint
+        WaterpurificationMainBuilding
+        WaterpurificationOffice
+        Weddingstore
+        Weldingshop
+        Westpointcaboose
+        Wildwestoffice
+        WoodCabin
+        WreckingyardOffice
+        Zippee
+        Victorian
     ]
     multi = false
 }

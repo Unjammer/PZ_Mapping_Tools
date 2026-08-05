@@ -34,6 +34,7 @@
 #include <QApplication>
 #include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QImage>
 #include <QSet>
@@ -136,16 +137,20 @@ void BmpBlender::flush(const MapRenderer *renderer, const QRect &rect, const QPo
         mInitTilesLater = false;
     }
 
-    for (QRect r : dirty) {
-        int x1 = r.left(), x2 = r.right(), y1 = r.top(), y2 = r.bottom();
-        x1 -= 2;
-        x2 += 2;
-        y1 -= 2;
-        y2 += 2;
+    QElapsedTimer timer;
+    timer.start();
+    const int dirtyRectCount = dirty.rectCount();
+    const QRect work = dirty.boundingRect().adjusted(-2, -2, 2, 2);
+    imagesToTileGrids(work.left(), work.top(), work.right(), work.bottom());
+    addEdgeTiles(work.left(), work.top(), work.right(), work.bottom());
+    tileGridsToLayers(work.left(), work.top(), work.right(), work.bottom());
 
-        imagesToTileGrids(x1, y1, x2, y2);
-        addEdgeTiles(x1, y1, x2, y2);
-        tileGridsToLayers(x1, y1, x2, y2);
+    if (timer.elapsed() >= 250) {
+        qWarning() << "BMP-rule redraw was slow:"
+                   << timer.elapsed() << "ms,"
+                   << "dirty rects" << dirtyRectCount
+                   << "dirty bounds" << dirty.boundingRect()
+                   << "work bounds" << work;
     }
 }
 
@@ -161,15 +166,26 @@ void BmpBlender::flush(const QRect &rect)
         mInitTilesLater = false;
     }
 
-    int x1 = rect.left(), x2 = rect.right(), y1 = rect.top(), y2 = rect.bottom();
-    x1 -= 2;
-    x2 += 2;
-    y1 -= 2;
-    y2 += 2;
+    // This overload is used by whole-map consumers such as previews and
+    // exports. The old code intersected mDirtyRegion with rect, but then
+    // regenerated all of rect anyway. After Rules.txt was imported, a
+    // one-tile brush edit could therefore recalculate an entire 300x300 map.
+    QElapsedTimer timer;
+    timer.start();
+    const int dirtyRectCount = dirty.rectCount();
+    const QRect work = dirty.boundingRect().adjusted(-2, -2, 2, 2);
+    imagesToTileGrids(work.left(), work.top(), work.right(), work.bottom());
+    addEdgeTiles(work.left(), work.top(), work.right(), work.bottom());
+    tileGridsToLayers(work.left(), work.top(), work.right(), work.bottom());
 
-    imagesToTileGrids(x1, y1, x2, y2);
-    addEdgeTiles(x1, y1, x2, y2);
-    tileGridsToLayers(x1, y1, x2, y2);
+    if (timer.elapsed() >= 250) {
+        qWarning() << "BMP-rule whole-map redraw was slow:"
+                   << timer.elapsed() << "ms,"
+                   << "requested" << rect
+                   << "dirty rects" << dirtyRectCount
+                   << "dirty bounds" << dirty.boundingRect()
+                   << "work bounds" << work;
+    }
 }
 
 void BmpBlender::tilesetAdded(Tileset *ts)

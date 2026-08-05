@@ -10,6 +10,7 @@ functions. Detailed interaction instructions remain in the linked manuals.
 |---|---|---|---|---|
 | Initial setup | First editor startup | Extracted Tiles tree and packaged catalog directory | `settings/PZTools.ini` | Paths are shared by all three applications. |
 | Change Shared Paths | WorldEd/TileZed preferences | Tiles parent and `config` | Shared portable settings | Restart other open editors after changing a shared path. |
+| Audited configuration catalogues | Portable `config` | Build 42.20 data and configured Tiles tree | Shared definitions for all three applications | [File-by-file configuration reference](PZTools-Configuration-Files.md); project overrides stay outside the game and tool directories. |
 | External themes | Preferences | `themes/*.qss` | Per-application theme choice | Theme changes widgets, not map rendering. |
 | Complete tileset discovery | All three applications | Every valid PNG below 2x, then 1x/custom fallback | In-memory catalogue and startup log | 2x wins when both scales exist; 1x-only and 2x-only sheets remain valid. |
 | Portable logs | Every run | Runtime messages | `settings/logs/<Application>-<timestamp>-<pid>.log` | Newest 20 files per application are retained. |
@@ -18,6 +19,22 @@ functions. Detailed interaction instructions remain in the linked manuals.
 See [Logs, diagnostics, and useful issue reports](Diagnostics-and-Logs.md) and
 the [complete user guide](TileZed/PZToolsGuide.html).
 
+### Common interaction model
+
+New guided tools are designed so that a mapper can use them without first
+learning the internal file formats:
+
+1. the editor identifies the current project and states what it will inspect;
+2. **Check** is read-only and produces a plain-language status;
+3. one recommended action is presented when a safe correction exists;
+4. changes are validated and backed up automatically;
+5. file paths, ordered IDs, parser detail, and logs stay in an optional
+   technical view for support.
+
+An error should explain what is wrong, which file is involved, what remains
+safe, and what the mapper can do next. Compatibility and file ownership are
+shown in the workflow instead of being assumed knowledge.
+
 ## PZWorldEd
 
 | Function | Menu / location | Availability | Main input | Main output or effect |
@@ -25,6 +42,7 @@ the [complete user guide](TileZed/PZToolsGuide.html).
 | New 300/256 world | File > New World | Always | Grid, dimensions, paths | `.pzw` project with project-owned grid format |
 | Terrain/vegetation image editor | Tools > Terrain / Vegetation Image Editor... | Saved project loaded | `Map.png`, `Map_veg.png`, project `Rules.txt` | Atomic PNG pair and optional project attachment |
 | BMP to TMX | World/BMP generation workflow | Project loaded | Main/veg images, WorldEd `Rules.txt`, `Blends.txt`, `MapBaseXML.txt` | Project-sized TMX cells |
+| Project Doctor: Tiles and Paths | Tools > Project Doctor: Tiles and Paths... | Project loaded or project folder selected | PZW paths plus recursive TMX/TBX files | Plain-language summary table, optional support details, or backed-up atomic cleanup with stable TBX ID remapping |
 | WorldGen biome editor/preview | Tools > WorldGen Biome Editor / Preview... | Saved project loaded | Read-only game WorldGen plus project definitions | Project biome/features Lua and representative 16x16 preview |
 | WorldGen prefab editor | Tools > WorldGen Prefab Editor... | Saved project loaded | Game/project prefab or strict z=0 TMX/TBX | Project prefab Lua and optional staged override |
 | Street Names | Street Names dock | World project loaded | `streets.xml` | Validated version-1 street definitions |
@@ -34,12 +52,15 @@ the [complete user guide](TileZed/PZToolsGuide.html).
 | Biomemap painting | View > Show Biomemap, paint tool | Editable biomemap loaded | Biome-channel image | Atomic channel edit with Undo |
 | Zombie Heatmap | View > ZombieMap, paint tool | Heatmap loaded/created | Zombie intensity image | Atomic image, backup, Undo |
 | InGameMap features | Generate Road Features and feature preferences | Project/vector data loaded | Roads, trails, rails, geometry | Validated XML/binary world-map features |
+| Native 256 LOT export | File > Generate Lots 8x8 | Native project with exact 256x256 TMX cells | PZW, TMX, RoomDefs, lots/prefabs, objects | One output cell per project cell with unchanged coordinates and 32x32 chunks of 8x8 |
 | Complete map-mod export | File > Export Complete Mod (8x8)... | Project ready for LOT export | PZW, TMX, map metadata | Mod directory with map files and metadata |
 | Open in TileZed | Cell command | Assigned TMX and sibling TileZed executable | Selected cell | Opens the exact TMX in the deployed TileZed |
 | Raster/OpenGL selection | Preferences / command line | Renderer available | Editor preference | Same project through selected render path |
 
 WorldGen details: [Build 42.20 WorldGen editor](PZ-B42.20-WorldGen-Editor-and-Prefabs.md).
 Jumbo behavior: [Build 42.20 Jumbo trees](PZ-B42.20-Jumbo-Trees.md).
+Project cleanup details:
+[Project Doctor: TMX, TBX, tiles, and paths](PZ-Project-Doctor-Tiles-and-Paths.md).
 
 ## TileZed
 

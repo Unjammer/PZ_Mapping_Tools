@@ -32,6 +32,21 @@ fence
 
 fence
 {
+    label = Tall Wooden 2
+    west1 = fencing_01_72
+    west2 = fencing_01_72
+    gate-space-w =
+    gate-door-w = fixtures_doors_fences_01_12
+    north1 = fencing_01_73
+    north2 = fencing_01_73
+    gate-space-n =
+    gate-door-n = fixtures_doors_fences_01_13
+    nw = fencing_01_75
+    post = fencing_01_74
+}
+
+fence
+{
     label = Short Chainlink
     west1 = fencing_01_27
     west2 = fencing_01_26
@@ -47,6 +62,21 @@ fence
 
 fence
 {
+    label = Tall Chainlink
+    west1 = fencing_01_59
+    west2 = fencing_01_58
+    gate-space-w =
+    gate-door-w =
+    north1 = fencing_01_56
+    north2 = fencing_01_57
+    gate-space-n = fencing_01_63
+    gate-door-n =
+    nw = fencing_01_60
+    post = fencing_01_61
+}
+
+fence
+{
     label = White Picket
     west1 = fencing_01_4
     west2 = fencing_01_4
@@ -58,6 +88,21 @@ fence
     gate-door-n = fixtures_doors_fences_01_9
     nw = fencing_01_6
     post = fencing_01_7
+}
+
+fence
+{
+    label = Short Picket
+    west1 = fencing_01_121
+    west2 = fencing_01_121
+    gate-space-w =
+    gate-door-w =
+    north1 = fencing_01_120
+    north2 = fencing_01_120
+    gate-space-n =
+    gate-door-n =
+    nw = fencing_01_122
+    post = fencing_01_123
 }
 
 fence
@@ -92,6 +137,21 @@ fence
 
 fence
 {
+    label = Tall Black Bars
+    west1 = fencing_01_67
+    west2 = fencing_01_66
+    gate-space-w =
+    gate-door-w =
+    north1 = fencing_01_64
+    north2 = fencing_01_65
+    gate-space-n =
+    gate-door-n =
+    nw = fencing_01_68
+    post = fencing_01_69
+}
+
+fence
+{
     label = Tall Concrete
     west1 = fencing_01_40
     west2 = fencing_01_40
@@ -118,6 +178,36 @@ fence
     gate-door-n = 
     nw = fencing_01_52
     post = fencing_01_53
+}
+
+fence
+{
+    label = Tall Construction
+    west1 = fencing_01_83
+    west2 = fencing_01_82
+    gate-space-w =
+    gate-door-w =
+    north1 = fencing_01_80
+    north2 = fencing_01_81
+    gate-space-n =
+    gate-door-n =
+    nw = fencing_01_84
+    post =
+}
+
+fence
+{
+    label = Tall Construction (Barbed Wire)
+    west1 = fencing_01_91
+    west2 = fencing_01_90
+    gate-space-w =
+    gate-door-w =
+    north1 = fencing_01_88
+    north2 = fencing_01_89
+    gate-space-n =
+    gate-door-n =
+    nw = fencing_01_92
+    post =
 }
 
 

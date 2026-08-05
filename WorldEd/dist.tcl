@@ -70,7 +70,6 @@ copyFile $BIN $DEST zlib1.dll
 
 copyFile $SRC $DEST Blends.txt
 copyFile $SRC $DEST MapBaseXML.txt
-copyFile $SRC $DEST MapToPNG.txt
 copyFile $SRC $DEST Roads.txt
 copyFile $SRC $DEST Rules.txt
 copyFile $SRC $DEST WorldDefaults.txt

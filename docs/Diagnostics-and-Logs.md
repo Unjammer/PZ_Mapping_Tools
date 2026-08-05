@@ -82,6 +82,18 @@ These are different states:
 Do not report only a changing total. Include the nearby paths, summary, and
 first warning or critical line that explains why the total changed.
 
+WorldEd now reports its interactive startup phases after the main window has
+been shown: Tilesets.txt, installed-sheet discovery, complete catalogue
+preparation, Building catalog files, and thumbnail settings. A log containing
+`WorldEd interactive startup tasks begin` but no corresponding completion
+identifies the phase where startup is still working or failed.
+
+TileZed logs a warning when BMP Rules regeneration takes 250 ms or more. The
+message contains the caller's requested rectangle, the true dirty rectangle,
+and the bounded work rectangle. This diagnostic concerns the terrain/BMP
+`Rules.txt` imported through the BMP Tool; it is not an Automapper-manifest
+reload.
+
 ## Reproducing a problem
 
 1. Close unrelated PZTools instances.
@@ -140,7 +152,19 @@ GUI render checks write an explicit PNG:
 .\PZWorldEd.exe --validate-worldgen-preview=<game-or-WorldGen-path>
 .\PZWorldEd.exe --validate-worldgen-prefab-import=<source.tmx-or-tbx>
 .\PZWorldEd.exe --validate-worldgen-project-overlay=<game-path>::<project-overlay-path>
+.\PZWorldEd.exe --validate-world-defaults=..\config\WorldDefaults.txt
+.\PZWorldEd.exe --validate-tileset-cleanup
+.\PZWorldEd.exe --audit-tileset-cleanup=<TMX-TBX-or-project-folder>
 ```
+
+Explicit catalogue maintenance:
+
+```powershell
+.\PZWorldEd.exe --rebuild-tileset-catalog=<Tiles-path>
+```
+
+The rebuild command backs up and rewrites `Tilesets.txt`; it is not a
+read-only validator and is not run during normal startup.
 
 WorldGen render checks:
 
@@ -148,6 +172,7 @@ WorldGen render checks:
 .\PZWorldEd.exe --render-worldgen-preview=<game-or-WorldGen-path> --worldgen-preview-output=<output.png>
 .\PZWorldEd.exe --render-worldgen-prefab=<game-or-WorldGen-path> --worldgen-preview-output=<output.png>
 .\PZWorldEd.exe --render-worldgen-prefab-window=<game-or-WorldGen-path> --worldgen-preview-output=<output.png>
+.\PZWorldEd.exe --render-tileset-cleanup=<project-folder> --worldgen-preview-output=<output.png>
 ```
 
 `--validate-ingamemap` writes
@@ -175,6 +200,9 @@ may return before the process exits and may not provide a useful
 | `--validate-bmp-generation` | Project BMP-to-TMX inputs, including `Rules.txt` versus `MapBaseXML.txt`. |
 | `--validate-worldgen-preview` | WorldGen definitions, inheritance, catalogue counts, and representative preview generation. |
 | `--validate-worldgen-prefab-import` | Strict z=0 TMX/TBX-to-prefab conversion and format limits. |
+| `--validate-world-defaults` | Duplicate-safe parsing and counts for enums, properties, templates, object types, and object groups. |
+| `--validate-tileset-cleanup` | Stale TMX handling, complete valid-header retention, 2x/1x path repair, missing-reference preservation, backup exclusion, and stable TBX ID remapping. |
+| `--audit-tileset-cleanup` | Read-only report for real TMX/TBX files, including missing/outside TBX dependencies; it never applies cleanup. |
 
 ## Minimum useful issue report
 
@@ -191,6 +219,8 @@ Include:
 - whether Raster and OpenGL behave differently, when renderer code is
   involved;
 - whether the problem also occurs with Automapper Interactive disabled;
+- whether the delay begins specifically after **BMP Tool > Import Rules** and
+  **Reload**, and the matching terrain `Rules.txt` / `Blends.txt`;
 - whether the file is game data, project data, or generated output.
 
 For a performance report, also include the approximate map dimensions,

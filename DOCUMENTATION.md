@@ -14,9 +14,15 @@ under `docs/index.html`.
 - [User-facing feature reference](docs/Feature-Reference.md): menu/location,
   prerequisites, inputs, output ownership, and current scope for each major
   function.
+- [Configuration files](docs/PZTools-Configuration-Files.md): which catalogue
+  each tool uses, the audited Build 42.20 state, and safe customization rules.
 - [Current release changes](RELEASE_CHANGELOG.md): user-facing release notes.
 - [Complete unofficial changelog](CHANGELOG-PZTOOLS.md): detailed differences
   from the maintained Tim Baker baselines.
+- [Building PZ Mapping Tools](BUILDING.md): supported Windows build,
+  deployment, hash verification, and regression procedure.
+- [Linux and macOS build feasibility audit](PLATFORM-BUILD-AUDIT.md):
+  confirmed portability blockers and validation gates.
 - [Upstream history](UPSTREAM-HISTORY.md): source provenance and selectively
   ported upstream work.
 
@@ -24,8 +30,10 @@ under `docs/index.html`.
 
 | Subject | Reference |
 |---|---|
-| WorldGen biomes, 2x2-chunk preview, biome features, static prefabs, TMX/TBX conversion, and staging | [Build 42.20 WorldGen editor](WorldEd/docs/PZ-B42.20-WorldGen-Editor-and-Prefabs.md) |
-| Jumbo, XL, and XXL tree behavior | [Deterministic Jumbo trees](WorldEd/docs/PZ-B42.20-Jumbo-Trees.md) |
+| Guided PZW/TMX/TBX health check, stale tilesets, path repair, backups, and TBX ID remapping | [Project Doctor: tiles and paths](docs/PZ-Project-Doctor-Tiles-and-Paths.md) |
+| Shared configuration catalogues, Tiles resolution, audited counts, and safe customization | [PZTools configuration files](docs/PZTools-Configuration-Files.md) |
+| WorldGen biomes, 2x2-chunk preview, biome features, static prefabs, TMX/TBX conversion, and staging | [Build 42.20 WorldGen editor](docs/PZ-B42.20-WorldGen-Editor-and-Prefabs.md) |
+| Jumbo, XL, and XXL tree behavior | [Deterministic Jumbo trees](docs/PZ-B42.20-Jumbo-Trees.md) |
 | Terrain/vegetation image editor, project grids, thumbnails, Biomemap, Zombie Heatmap, InGameMap, and export | [PZTools user guide](docs/TileZed/PZToolsGuide.html) |
 
 ## TileZed
@@ -33,10 +41,10 @@ under `docs/index.html`.
 | Subject | Reference |
 |---|---|
 | Automapper concepts, manifest, layer rules, examples, interactive mode, and troubleshooting | [Automapper](docs/TileZed/Automapper.html) |
-| Build 42 procedural loot viewer/editor shared with BuildingEd | [Procedural loot editor](TileZed/docs/PZ-B42.20-Procedural-Loot-Editor.md) |
-| Advanced `.pack` comparison, hashes, previews, extraction, and JSON provenance | [Pack comparator and extractor](TileZed/docs/PZ-Pack-Comparator-and-Extractor.md) |
-| `.tiles` comparison and Snow/Burnt/custom replacement editing | [TileDef comparator and Snow editor](TileZed/docs/PZ-TileDef-Comparator-and-Snow-Editor.md) |
-| TileDef property meanings | [Tile properties](TileZed/docs/TileProperties/index.html) |
+| Build 42 procedural loot viewer/editor shared with BuildingEd | [Procedural loot editor](docs/PZ-B42.20-Procedural-Loot-Editor.md) |
+| Advanced `.pack` comparison, hashes, previews, extraction, and JSON provenance | [Pack comparator and extractor](docs/PZ-Pack-Comparator-and-Extractor.md) |
+| `.tiles` comparison and Snow/Burnt/custom replacement editing | [TileDef comparator and Snow editor](docs/PZ-TileDef-Comparator-and-Snow-Editor.md) |
+| TileDef property meanings | [Tile properties](docs/TileZed/TileProperties/index.html) |
 | Terrain BMP tools inside TileZed | [BMP tools](docs/TileZed/BMPTools.html) |
 | Lua batch/interactive mapping API and examples | [Lua scripting](docs/TileZed/LuaScripting.html) |
 | RoomDef tools | [RoomDefecator](docs/TileZed/RoomDefecator.html) |

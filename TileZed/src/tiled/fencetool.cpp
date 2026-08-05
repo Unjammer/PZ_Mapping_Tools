@@ -527,7 +527,6 @@ bool FenceFile::read(const QString &fileName)
             fence->mLabel = block.value("label");
             fence->mLayer = block.value("layer");
 
-            // TODO: validate tile names
             fence->mTileNames[Fence::West1] = block.value("west1");
             fence->mTileNames[Fence::West2] = block.value("west2");
             fence->mTileNames[Fence::North1] = block.value("north1");
@@ -538,6 +537,38 @@ bool FenceFile::read(const QString &fileName)
             fence->mTileNames[Fence::GateDoorW] = block.value("gate-door-w");
             fence->mTileNames[Fence::GateDoorN] = block.value("gate-door-n");
             fence->mTileNames[Fence::Post] = block.value("post");
+
+            const QStringList tileKeys = {
+                QLatin1String("west1"),
+                QLatin1String("west2"),
+                QLatin1String("north1"),
+                QLatin1String("north2"),
+                QLatin1String("gate-space-w"),
+                QLatin1String("gate-space-n"),
+                QLatin1String("gate-door-w"),
+                QLatin1String("gate-door-n"),
+                QLatin1String("nw"),
+                QLatin1String("post")
+            };
+            for (const QString &key : tileKeys) {
+                SimpleFileKeyValue value;
+                if (!block.keyValue(key, value)
+                        || value.value.trimmed().isEmpty()) {
+                    continue; // Gate pieces are optional.
+                }
+                QString detail;
+                if (!BuildingEditor::BuildingTilesMgr::validateTileName(
+                            value.value, &detail)) {
+                    delete fence;
+                    mError = tr(
+                                "Line %1: Fence '%2' has an invalid '%3' "
+                                "tile reference '%4'.\n%5\n\n%6")
+                            .arg(value.lineNumber)
+                            .arg(block.value("label"), key, value.value,
+                                 detail, path);
+                    return false;
+                }
+            }
 
             mFences += fence;
         } else {

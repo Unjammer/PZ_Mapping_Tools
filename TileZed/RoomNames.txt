@@ -4018,7 +4018,101 @@ room
     color = #7532B7
 }
 
+room
+{
+    internal = cells
+    label = cells
+    color = #8DD747
+}
 
+room
+{
+    internal = dinnerkitchen
+    label = dinnerkitchen
+    color = #5E7EA6
+}
 
+room
+{
+    internal = garage_storage
+    label = garage_storage
+    color = #5D4B89
+}
 
+room
+{
+    internal = grocers
+    label = grocers
+    color = #1C96B0
+}
+
+room
+{
+    internal = house_kitchen
+    label = house_kitchen
+    color = #F6AC65
+}
+
+room
+{
+    internal = laumdromat
+    label = laumdromat
+    color = #326D6F
+}
+
+room
+{
+    internal = laundromat
+    label = laundromat
+    color = #326D6F
+}
+
+room
+{
+    internal = locker
+    label = locker
+    color = #AE6F46
+}
+
+room
+{
+    internal = lockers
+    label = lockers
+    color = #AE6F46
+}
+
+room
+{
+    internal = motelbedroom
+    label = motelbedroom
+    color = #669907
+}
+
+room
+{
+    internal = opthroom
+    label = opthroom
+    color = #303B58
+}
+
+room
+{
+    internal = restaurant_dining
+    label = restaurant_dining
+    color = #3C858B
+}
+
+room
+{
+    internal = storageclothes
+    label = storageclothes
+    color = #85D05C
+}
+
+room
+{
+    internal = tech
+    label = tech
+    color = #42825B
+}
 

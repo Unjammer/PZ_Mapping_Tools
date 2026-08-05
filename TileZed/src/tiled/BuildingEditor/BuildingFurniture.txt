@@ -1,5 +1,5 @@
 version = 0
-revision = 47
+revision = 48
 source_revision = 46
 group
 {
@@ -43605,93 +43605,6 @@ group
             0,0 = signs_one-off_05_508
             1,0 = signs_one-off_05_509
             2,0 = signs_one-off_05_510
-        }
-    }
-    furniture
-    {
-        entry
-        {
-            orient = N
-            0,0 = signs_one-off_05_512
-            1,0 = signs_one-off_05_513
-            2,0 = signs_one-off_05_514
-            3,0 = signs_one-off_05_515
-            4,0 = signs_one-off_05_516
-            5,0 = signs_one-off_05_517
-        }
-    }
-    furniture
-    {
-        entry
-        {
-            orient = N
-            0,0 = signs_one-off_05_518
-            1,0 = signs_one-off_05_519
-            2,0 = signs_one-off_05_523
-            3,0 = signs_one-off_05_524
-            4,0 = signs_one-off_05_525
-            5,0 = signs_one-off_05_526
-            6,0 = signs_one-off_05_527
-        }
-    }
-    furniture
-    {
-        entry
-        {
-            orient = W
-            0,0 = signs_one-off_05_533
-            0,1 = signs_one-off_05_532
-            0,2 = signs_one-off_05_531
-            0,3 = signs_one-off_05_530
-        }
-        entry
-        {
-            orient = N
-            0,0 = signs_one-off_05_535
-            0,1 = signs_one-off_05_534
-            0,2 = signs_one-off_05_542
-        }
-    }
-    furniture
-    {
-        entry
-        {
-            orient = W
-            0,0 = signs_one-off_05_541
-            0,1 = signs_one-off_05_540
-            0,2 = signs_one-off_05_539
-            0,3 = signs_one-off_05_538
-            0,4 = signs_one-off_05_537
-            0,5 = signs_one-off_05_536
-        }
-    }
-    furniture
-    {
-        entry
-        {
-            orient = W
-            0,0 = signs_one-off_05_559
-            0,1 = signs_one-off_05_551
-            0,2 = signs_one-off_05_550
-            0,3 = signs_one-off_05_549
-            0,4 = signs_one-off_05_548
-            0,5 = signs_one-off_05_547
-            0,6 = signs_one-off_05_546
-            0,7 = signs_one-off_05_545
-            0,8 = signs_one-off_05_544
-        }
-    }
-    furniture
-    {
-        entry
-        {
-            orient = W
-            0,0 = signs_one-off_05_557
-            0,1 = signs_one-off_05_556
-            0,2 = signs_one-off_05_555
-            0,3 = signs_one-off_05_554
-            0,4 = signs_one-off_05_553
-            0,5 = signs_one-off_05_552
         }
     }
 }

@@ -4,7 +4,7 @@ This document describes the functional differences between the current PZTools
 Unofficial suite and the Tim Baker `basements` branches used as its clean upstream
 bases.
 
-Reference date: August 3, 2026.
+Reference date: August 4, 2026.
 
 | Project | Initial Tim Baker baseline | Local branch | Committed local revision |
 |---|---|---|---|
@@ -13,6 +13,126 @@ Reference date: August 3, 2026.
 
 This changelog includes the current working trees under `integration/WorldEd`
 and `integration/TileZed`. No public repository has been modified or pushed.
+
+## August 4, 2026 / WorldEd Project Doctor
+
+- Added a guided WorldEd project-health window for PZW paths and recursive
+  TMX/TBX checks. The normal interface exposes one read-only check and one
+  backed-up safe-fix action, with plain file-role and Build 42 explanations.
+- The normal result is now a four-column status/file/meaning/action table.
+  Clean files are aggregated, unresolved references are described as items
+  needing the mapper's help rather than a catastrophic failure, and the
+  complete parser report is hidden behind an explicit support-details button.
+- PZW input/cell paths and TMX-to-TBX dependencies are resolved from their
+  owning file. Missing, absolute, Downloads, OneDrive, game-installation, and
+  outside-project sources are differentiated instead of collapsing into a
+  generic missing-file failure.
+- TMX cleanup protects placed layers/objects and BMP aliases/rules/blends.
+  It removes only unused declarations whose PNG is also unresolved, preserves
+  used missing declarations, and retains valid unused declarations so the
+  complete ordered legacy header remains deterministic.
+- Inline TMX image paths use the catalogue's actual readable 2x-first, then
+  1x/custom resolution. Existing in-project TBX paths are normalized without
+  silently moving external dependencies.
+- TBX cleanup deliberately treats `tile_entry`, `user_tiles`, and furniture
+  as ordered ID tables. It performs a BuildingReader/BuildingWriter semantic
+  round trip, remaps all references, and refuses output unless a second
+  canonical round trip is byte-stable.
+- Apply copies every changed source into a project-relative timestamped
+  `.pztools-backups` tree before atomic replacement; recursive scans ignore
+  those backups.
+- Added fixture validation, real-file read-only audit and UI-render commands,
+  and the dedicated Project Doctor workflow/recovery reference.
+
+## August 4, 2026 / Rules painting and upstream crash review
+
+- Credit and special thanks to **Petro** for reducing the brush regression to
+  BMP Tool **Import Rules**, followed by **Reload**, followed by ordinary tile
+  painting.
+- Confirmed from `AutomappingManager` that absent/invalid Automapper manifests
+  are already attempted once per document and retried only by explicit reload
+  or document change. The external diagnosis correctly recognized the symptom
+  but conflated Automapper manifests with WorldEd terrain/BMP Rules.
+- Traced the remaining delay to `BmpBlender::flush()`: it intersected its dirty
+  region with the requested area, then regenerated the full requested area.
+  Rules importing `0_Floor`/`0_Vegetation` targets therefore turned a small
+  brush edit into a common 300 x 300 regeneration.
+- Both flush paths now coalesce to the dirty bounding rectangle, expanded by
+  the two-tile blending neighbourhood and clipped to the request. A 250 ms
+  diagnostic records request, dirty, and work geometry for any remaining slow
+  case.
+- Ported Tim Baker's `MapScene` grid-color lifetime correction. Supplying the
+  scene as the Qt connection context prevents a preferences signal from
+  invoking a lambda after the scene has been deleted.
+
+## August 4, 2026 / WorldEd startup and authoring metadata
+
+- Normal WorldEd configuration and session restoration are queued after the
+  interactive event loop starts. Headless validators remain synchronous.
+- Complete catalogue preload remains intentional and deterministic, but now
+  reports Tilesets.txt, PNG discovery, catalogue, Building catalog, and
+  thumbnail phases through a visible progress dialog and startup log markers.
+- The default missing SpawnPoint `Professions` enum was synchronized with
+  Build 42.20 `CharacterProfession`: `all` plus all 25 registered base-game
+  profession names. Existing project enums are not rewritten.
+- TileDef tooltips now distinguish TileDef file number from tileset ID and
+  tile index, and compute the Build 42 sprite ID using the game-confirmed file
+  1/2/4/5/6/8 offsets. Unknown patch/mod files are not assigned a fabricated
+  absolute ID.
+- Source and deployed `Tilesets.txt` now contain the same 543 unique logical
+  names discovered from 546 installed PNG files. Each resolves to an
+  installed 1x/custom or preferred 2x PNG.
+- `TilesetMetaInfo` retains catalogue columns/rows so a rewrite can preserve
+  valid logical geometry for nonstandard effect canvases when the decoded PNG
+  rectangle alone is insufficient.
+
+## August 4, 2026 / Configuration-catalogue audit
+
+- Audited the shipped `WorldDefaults`, `RoomNames`, `RoomTone`, `Tilesets`,
+  TileDef, BuildingEd, terrain-generation, road, fence/curb/edge, Lua-tool,
+  rearrangement, blend, and base-map catalogues against their parser code,
+  Build 42.20 reference data, and the configured Tiles tree.
+- Synchronized WorldEd's professions to `all` plus the 25 registered Build
+  42.20 values; added current object/zone values; retained 588 unique room
+  names and 267 unique room tones/building types.
+- Corrected 72 obsolete burnt-roof IDs, removed six furniture definitions
+  above the actual `signs_one-off_05` range, added six missing fence presets,
+  and removed two rearrangement groups whose 20 coordinates no longer exist.
+- Verified all remaining static references against catalogue dimensions,
+  including 100 `RearrangeGrid` references, 128 blend definitions, and all
+  shipped Lua tool scripts/icons.
+- Removed dormant legacy files from the deployed `config` directory and added
+  `docs/PZTools-Configuration-Files.md` to explain ownership, safe
+  customization, audited counts, and validator commands.
+
+## August 4, 2026 / Build and platform documentation
+
+- Added `BUILDING.md` with the exact supported Windows x64 Qt 5.14.2/MSVC
+  configure, build, deploy, hash-verification, and validator workflow.
+- Added `PLATFORM-BUILD-AUDIT.md`. The qmake sources are portable enough for a
+  Linux port without a rewrite, but writable settings/logs, RPATH, AppImage
+  paths, sibling launching, and real XCB/Wayland testing remain.
+- A maintained Apple Silicon release additionally requires a Qt 6
+  compatibility pass, app-bundle dependency/link corrections, macOS
+  core-profile renderer tests, and an actual macOS codesign/notarization
+  pipeline. The current Windows host has neither a Linux build environment nor
+  a macOS validation host, so no unsupported binary claim is made.
+
+## August 4, 2026 / Native 256 LOT export
+
+- Credit and special thanks to **шакалоблок** for reporting the Native256
+  LOT-export regression and its incomplete-cell symptom.
+- Native 256 WorldEd cells now follow a strict one-to-one LOT export path:
+  source bounds, output bounds, cell coordinates, and world origins are
+  identical. No 300-to-256 conversion is called for a native project.
+- Combined TMX placement, cross-cell lots/prefabs, RoomDefs, objects,
+  floor-hole checks, and navigation chunk data use the project geometry.
+  Native maps therefore use a 256-square stride while Legacy300 maps keep the
+  established 300-square converter.
+- Native exports validate that every assigned cell TMX is exactly 256 x 256
+  and report the project cell, file, and actual dimensions when it is not.
+- Added `--validate-native-256-lot-geometry` with zero, non-zero, and negative
+  origins, multi-cell bounds, one-to-one round trips, and a legacy-path guard.
 
 ## August 3, 2026 / Automapper manifest isolation
 

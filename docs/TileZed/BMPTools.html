@@ -8,6 +8,18 @@ Every map has 2 images the same size as the map with one pixel per tile position
 The pixel colors of the images are used to automatically generate tiles according to a set of rules.<br>
 A map starts without any rules; the rules must be imported from 2 text files and are saved in the map's .tmx file.<br>
 The text files are the same as those used by WorldEd's BMPToTMX command, Rules.txt and Blends.txt.<br>
+<p><strong>Do not confuse this Rules.txt with the Automapper manifest.</strong>
+The BMP Tool's <strong>Import Rules</strong> and <strong>Reload</strong> actions
+load terrain, vegetation, alias, rule, and tile blocks into the map. Automapper
+instead loads a short <code>automapping-rules.txt</code> list of rule-map TMX
+files. They are separate systems even though older projects may use the
+ambiguous filename <code>rules.txt</code> for an Automapper manifest.</p>
+<p>Once BMP Rules are loaded, changes on a target layer can require nearby
+terrain and blend tiles to be regenerated. PZTools restricts that work to the
+actual dirty bounds plus the two-tile blend border; it does not intentionally
+reprocess the complete 300 x 300 map after each small brush stroke. A remaining
+recalculation of 250 ms or more is written to the TileZed log with the requested,
+dirty, and processed bounds.</p>
 <h2>Setting up your map for the BMP tools</h2>
 <ol>
   <li>Click on one of the BMP tools.&nbsp; This will display the floating Bmp Tool Window.</li>

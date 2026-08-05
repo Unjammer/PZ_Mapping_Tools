@@ -39,6 +39,10 @@ class TilesetMetaInfo
 {
 public:
     QString mTilesetName;
+    // Some valid game effect sheets are not regular 64x128 atlases. Preserve
+    // the logical Tilesets.txt layout because its order defines stable IDs.
+    int mCatalogColumns = 0;
+    int mCatalogRows = 0;
     QMap<QString,TileMetaInfo> mInfo; // index is "column,row"
 
     static QString key(Tile *tile);
@@ -105,7 +109,10 @@ public:
     bool addNewTilesets(bool loadImages = true);
     bool rebuildTilesetsTxt(int *addedCount = nullptr,
                             int *updatedCount = nullptr,
-                            bool updateExisting = true);
+                            int *removedCount = nullptr,
+                            bool updateExisting = true,
+                            bool removeMissing = true,
+                            const QString &catalogPath = QString());
 
     Tileset *loadTileset(const QString &source);
     bool loadTilesetImage(Tileset *ts, const QString &source);

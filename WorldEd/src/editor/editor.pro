@@ -71,6 +71,7 @@ SOURCES += main.cpp\
     biomemapimageprocessor.cpp \
     terrainimageeditordialog.cpp \
     worldgenpreviewdialog.cpp \
+    tilesetcleanupdialog.cpp \
     BuildingEditor/buildingfurniturefile.cpp \
     BuildingEditor/buildingtilesfile.cpp \
     exportlotsprogressdialog.cpp \
@@ -206,6 +207,7 @@ HEADERS  += mainwindow.h \
     biomemapimageprocessor.h \
     terrainimageeditordialog.h \
     worldgenpreviewdialog.h \
+    tilesetcleanupdialog.h \
     BuildingEditor/buildingfurniturefile.h \
     BuildingEditor/buildingtilesfile.h \
     exportlotsprogressdialog.h \
@@ -398,7 +400,6 @@ configTxtFiles.path = $${CONFIG_PREFIX}
 configTxtFiles.files = \
     $${top_srcdir}/Blends.txt \
     $${top_srcdir}/MapBaseXML.txt \
-    $${top_srcdir}/MapToPNG.txt \
     $${top_srcdir}/Rules.txt \
     $${top_srcdir}/WorldDefaults.txt
 INSTALLS += configTxtFiles

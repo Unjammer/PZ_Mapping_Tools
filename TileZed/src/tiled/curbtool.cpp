@@ -731,6 +731,29 @@ bool CurbFile::read(const QString &fileName)
             Curb *curb = new Curb;
             curb->mLabel = block.value("label");
             curb->mLayer = block.value("layer");
+            auto validateTileValues =
+                    [this, curb, &path](SimpleFileBlock &tileBlock,
+                                      const QStringList &tileKeys) {
+                for (const QString &key : tileKeys) {
+                    SimpleFileKeyValue value;
+                    if (!tileBlock.keyValue(key, value)
+                            || value.value.trimmed().isEmpty()) {
+                        continue;
+                    }
+                    QString detail;
+                    if (!BuildingEditor::BuildingTilesMgr::validateTileName(
+                                value.value, &detail)) {
+                        mError = tr(
+                                    "Line %1: Curb '%2' has an invalid "
+                                    "'%3/%4' tile reference '%5'.\n%6\n\n%7")
+                                .arg(value.lineNumber)
+                                .arg(curb->mLabel, tileBlock.name, key,
+                                     value.value, detail, path);
+                        return false;
+                    }
+                }
+                return true;
+            };
 
             foreach (SimpleFileBlock block2, block.blocks) {
                 QStringList keys;
@@ -749,10 +772,13 @@ bool CurbFile::read(const QString &fileName)
                       << QLatin1String("join-e")
                       << QLatin1String("join-n")
                       << QLatin1String("join-s");
-                // TODO: validate tile names
                 if (block2.name == QLatin1String("far")) {
                     if (!validKeys(block2, keys))
                         return false;
+                    if (!validateTileValues(block2, keys)) {
+                        delete curb;
+                        return false;
+                    }
                     curb->mTileNames[Curb::FarE] = block2.value("e");
                     curb->mTileNames[Curb::FarS] = block2.value("s");
                     curb->mTileNames[Curb::FarSE] = block2.value("se");
@@ -763,6 +789,10 @@ bool CurbFile::read(const QString &fileName)
                         if (block3.name == QLatin1String("sunken")) {
                             if (!validKeys(block3, keys2))
                                 return false;
+                            if (!validateTileValues(block3, keys2)) {
+                                delete curb;
+                                return false;
+                            }
                             curb->mTileNames[Curb::FarSunkenW] = block3.value("w");
                             curb->mTileNames[Curb::FarSunkenN] = block3.value("n");
                             curb->mTileNames[Curb::FarSunkenJoinW] = block3.value("join-w");
@@ -780,6 +810,10 @@ bool CurbFile::read(const QString &fileName)
                 } else if (block2.name == QLatin1String("near")) {
                     if (!validKeys(block2, keys))
                         return false;
+                    if (!validateTileValues(block2, keys)) {
+                        delete curb;
+                        return false;
+                    }
                     curb->mTileNames[Curb::NearE] = block2.value("e");
                     curb->mTileNames[Curb::NearS] = block2.value("s");
                     curb->mTileNames[Curb::NearSE] = block2.value("se");
@@ -790,6 +824,10 @@ bool CurbFile::read(const QString &fileName)
                         if (block3.name == QLatin1String("sunken")) {
                             if (!validKeys(block3, keys2))
                                 return false;
+                            if (!validateTileValues(block3, keys2)) {
+                                delete curb;
+                                return false;
+                            }
                             curb->mTileNames[Curb::NearSunkenE] = block3.value("e");
                             curb->mTileNames[Curb::NearSunkenS] = block3.value("s");
                             curb->mTileNames[Curb::NearSunkenJoinW] = block3.value("join-w");

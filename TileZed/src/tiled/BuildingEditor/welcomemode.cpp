@@ -43,6 +43,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QMessageBox>
+#include <QSet>
 
 using namespace BuildingEditor;
 
@@ -304,9 +305,14 @@ WelcomeMode::WelcomeMode(QObject *parent) :
     ui->legendCombo->setDuplicatesEnabled(false);
     ui->legendCombo->addItems(mLegendStrings);
 
-    // TODO: set valid RoomTone values from a .txt file
     mRoomToneStrings += QStringLiteral("<NONE>");
-    readRoomToneTxt();
+    if (!readRoomToneTxt()) {
+        const QString unavailable =
+                tr("<ROOM TONE CONFIGURATION ERROR>");
+        mRoomToneStrings += unavailable;
+        ui->roomToneCombo->setToolTip(mRoomToneError);
+        qWarning().noquote() << mRoomToneError;
+    }
     ui->roomToneCombo->lineEdit()->setPlaceholderText(QStringLiteral("<NONE>"));
     ui->roomToneCombo->setDuplicatesEnabled(false);
     ui->roomToneCombo->addItems(mRoomToneStrings);
@@ -637,29 +643,66 @@ void WelcomeMode::synchRoomToneCombo()
 
 bool WelcomeMode::readRoomToneTxt()
 {
-    QString mError;
+    mRoomToneError.clear();
 
     QString txtPath = Tiled::Internal::Preferences::instance()->appConfigPath(QLatin1String("RoomTone.txt"));
     QFileInfo info(txtPath);
     if (!info.exists()) {
-        mError = tr("The RoomTone.txt file doesn't exist.");
+        mRoomToneError = tr(
+                    "Room tones are unavailable because RoomTone.txt does "
+                    "not exist in the configured catalogue directory:\n%1\n\n"
+                    "Restore the portable config folder or select the correct "
+                    "shared configuration directory in Preferences.")
+                .arg(QDir::toNativeSeparators(info.absoluteFilePath()));
         return false;
     }
 
     QString path = info.absoluteFilePath();
     SimpleFile simple;
     if (!simple.read(path)) {
-        mError = tr("Error reading %1.").arg(path);
+        mRoomToneError = tr(
+                    "Room tones are unavailable because RoomTone.txt could "
+                    "not be parsed:\n%1\n\n%2")
+                .arg(QDir::toNativeSeparators(path),
+                     simple.errorString());
+        return false;
+    }
+    if (simple.version() != 1) {
+        mRoomToneError = tr(
+                    "Room tones are unavailable because RoomTone.txt uses "
+                    "version %1; this build expects version 1.\n%2")
+                .arg(simple.version())
+                .arg(QDir::toNativeSeparators(path));
         return false;
     }
 
+    QSet<QString> seen;
     for (const SimpleFileKeyValue &kv : simple.values) {
         QString str = kv.name.trimmed();
         if (str.compare(QLatin1String("version"), Qt::CaseInsensitive) == 0)
             continue;
         if (str.isEmpty())
             continue;
+        const QString key = str.toCaseFolded();
+        if (seen.contains(key)) {
+            mRoomToneError = tr(
+                        "Room tones are unavailable because RoomTone.txt "
+                        "contains the duplicate value '%1' at line %2:\n%3")
+                    .arg(str)
+                    .arg(kv.lineNumber)
+                    .arg(QDir::toNativeSeparators(path));
+            return false;
+        }
+        seen += key;
         mRoomToneStrings += str;
+    }
+
+    if (seen.isEmpty()) {
+        mRoomToneError = tr(
+                    "Room tones are unavailable because RoomTone.txt does "
+                    "not contain any values:\n%1")
+                .arg(QDir::toNativeSeparators(path));
+        return false;
     }
 
     return true;

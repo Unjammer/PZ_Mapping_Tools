@@ -63,6 +63,37 @@ inline QDebug noise() { return QDebug(QtDebugMsg); }
 using namespace Tiled;
 using namespace Tiled::Internal;
 
+static int baseGameTileDefFileNumber(const QString &fileName)
+{
+    QString name = QFileInfo(fileName).fileName().toLower();
+    if (name.endsWith(QLatin1String(".txt")))
+        name.chop(4);
+
+    if (name == QLatin1String("newtiledefinitions.tiles"))
+        return 1;
+    if (name == QLatin1String("tiledefinitions_erosion.tiles"))
+        return 2;
+    if (name == QLatin1String("tiledefinitions_overlays.tiles"))
+        return 4;
+    if (name == QLatin1String("tiledefinitions_b42chunkcaching.tiles"))
+        return 5;
+    if (name == QLatin1String("jumbo_trees_big.tiles"))
+        return 6;
+    if (name == QLatin1String("jumbo_trees.tiles"))
+        return 8;
+    return -1;
+}
+
+static qint64 baseGameSpriteId(int fileNumber, int tilesetId, int tileId)
+{
+    if (fileNumber == 1)
+        return qint64(tilesetId - 1) * 1024 + tileId;
+    return 0x100000LL
+            + qint64(fileNumber - 2) * 262144
+            + qint64(tilesetId - 1) * 512
+            + tileId;
+}
+
 class MyProxyStyle : public QProxyStyle
 {
 public:
@@ -1855,6 +1886,11 @@ void TileDefDialog::setToolTipEtc(int tileID)
         return;
     TileDefTile *defTile = mCurrentDefTileset->mTiles[tileID];
     QStringList tooltip;
+    tooltip += QStringLiteral("%1_%2")
+            .arg(defTile->tileset()->mName)
+            .arg(defTile->id());
+    tooltip += QLatin1String("");
+
     for (UIProperties::UIProperty *p : defTile->mPropertyUI.nonDefaultProperties()) {
         tooltip += tr("%1 = %2").arg(p->mName).arg(p->valueAsString());
     }
@@ -1909,10 +1945,29 @@ void TileDefDialog::setToolTipEtc(int tileID)
     if (!tooltip.isEmpty()) {
         tooltip += QLatin1String("");
     }
-    if (mTileDefFile->fileName().endsWith(QStringLiteral("newtiledefinitions.tiles"))) {
-        tooltip += QString::fromLatin1("gid %1").arg(defTile->tileset()->mID * 1024 + defTile->id());
+
+    tooltip += tr("Tileset ID: %1").arg(defTile->tileset()->mID);
+    tooltip += tr("Tile index: %1").arg(defTile->id());
+
+    QString definitionName =
+            QFileInfo(mTileDefFile->fileName()).fileName().toLower();
+    if (definitionName.endsWith(QLatin1String(".txt")))
+        definitionName.chop(4);
+    const int fileNumber =
+            baseGameTileDefFileNumber(mTileDefFile->fileName());
+    if (fileNumber > 0 && defTile->tileset()->mID > 0) {
+        tooltip += tr("Tiledef file number: %1").arg(fileNumber);
+        tooltip += tr("Sprite ID: %1")
+                .arg(baseGameSpriteId(
+                         fileNumber,
+                         defTile->tileset()->mID,
+                         defTile->id()));
+    } else if (definitionName.endsWith(
+                   QLatin1String(".patch.tiles"))) {
+        tooltip += tr("Sprite ID: unchanged by this patch file");
     } else {
-        tooltip += QString::fromLatin1("gid %1").arg(defTile->tileset()->mID * 512 + defTile->id());
+        tooltip += tr("Sprite ID: depends on the file number assigned "
+                      "to this mod tiledef");
     }
     m->setToolTip(tileID, tooltip.join(QLatin1String("\n")));
 

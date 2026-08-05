@@ -297,6 +297,8 @@ bool TileMetaInfoMgr::readTxt()
 
             phaseTimer.restart();
             TilesetMetaInfo *info = new TilesetMetaInfo;
+            info->mCatalogColumns = fileTileset->mColumns;
+            info->mCatalogRows = fileTileset->mRows;
             for (const TilesetsTxtFile::Tile& fileTile : fileTileset->mTiles) {
                 QString coordString = QString(QLatin1String("%1,%2")).arg(fileTile.mX).arg(fileTile.mY);
                 info->mInfo[coordString].mMetaGameEnum = fileTile.mMetaEnum;
@@ -359,6 +361,20 @@ bool TileMetaInfoMgr::writeTxt(const QString &fileName, int revision, int source
     for (Tiled::Tileset *tileset : tilesets()) {
         int columns = tileset->columnCount();
         const int tileCount = tileset->tileCount();
+        TilesetMetaInfo *storedInfo =
+                mTilesetInfo.value(tileset->name(), nullptr);
+        if ((columns <= 0 || tileCount % columns != 0) && storedInfo
+                && storedInfo->mCatalogColumns > 0
+                && storedInfo->mCatalogRows > 0
+                && storedInfo->mCatalogColumns
+                   * storedInfo->mCatalogRows == tileCount) {
+            columns = storedInfo->mCatalogColumns;
+            tileset->setColumnCount(columns);
+            qInfo() << "Recovered tileset geometry from Tilesets.txt"
+                    << tileset->name()
+                    << QSize(storedInfo->mCatalogColumns,
+                             storedInfo->mCatalogRows);
+        }
         if (columns <= 0)
             columns = recoverSingleRowColumnCount(tileset);
         if (columns <= 0 || tileCount <= 0
@@ -394,6 +410,12 @@ bool TileMetaInfoMgr::writeTxt(const QString &fileName, int revision, int source
         const int rows = tileCount / columns;
         fileTileset->mColumns = columns;
         fileTileset->mRows = rows;
+        if (!storedInfo) {
+            storedInfo = new TilesetMetaInfo;
+            mTilesetInfo[tileset->name()] = storedInfo;
+        }
+        storedInfo->mCatalogColumns = columns;
+        storedInfo->mCatalogRows = rows;
 
         if (mTilesetInfo.contains(tileset->name())) {
             QMap<QString,TileMetaInfo> &info = mTilesetInfo[tileset->name()]->mInfo;
@@ -522,6 +544,9 @@ bool TileMetaInfoMgr::readTxt()
             addTileset(tileset);
 
             TilesetMetaInfo *info = new TilesetMetaInfo;
+            info->mCatalogColumns = tileset->columnCount();
+            info->mCatalogRows = info->mCatalogColumns > 0
+                    ? tileset->tileCount() / info->mCatalogColumns : 0;
             foreach (SimpleFileBlock tileBlock, block.blocks) {
                 if (tileBlock.name == QLatin1String("tile")) {
                     QString coordString;

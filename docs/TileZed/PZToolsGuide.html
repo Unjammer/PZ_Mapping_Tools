@@ -124,6 +124,7 @@
     <li><a href="#settings">Settings, layouts and logs</a></li>
     <li><a href="#themes">Themes</a></li>
     <li><a href="#grids">300 and 256 projects</a></li>
+    <li><a href="#project-doctor">Project Doctor: tiles and paths</a></li>
     <li><a href="#worldgen">WorldGen biomes and prefabs</a></li>
     <li><a href="#terrain-editor">Terrain image editor</a></li>
     <li><a href="#worlded-navigation">WorldEd navigation</a></li>
@@ -205,6 +206,8 @@
     files and logs. Deleting application INI files resets their preferences;
     shared paths remain in <code>PZTools.ini</code>. The directory must not be
     used as the configuration-catalog directory.
+    See the <a href="../PZTools-Configuration-Files.md">configuration file
+    reference and Build 42.20 audit</a> before changing a catalogue manually.
   </div>
 
   <h2 id="settings">Portable settings, layouts and logs</h2>
@@ -293,6 +296,32 @@
     </tbody>
   </table>
 
+  <p>For LOT generation, <strong>native means one-to-one</strong>. A WorldEd
+  cell at project coordinate <code>x,y</code> produces exactly one
+  <code>x,y.lotheader</code> and one <code>world_x_y.lotpack</code>, after the
+  configured world origin is added once. The origin is never scaled from 300
+  to 256. Adjacent native TMX maps are placed every 256 squares, so no
+  44-square gap or partial extra output cell is introduced.</p>
+
+  <ul>
+    <li>Each native cell TMX must be exactly 256 &times; 256.</li>
+    <li>Each output cell contains 32 &times; 32 chunks of 8 &times; 8
+      squares.</li>
+    <li>RoomDefs, objects, lots/static prefabs that cross a cell boundary, and
+      <code>chunkdata_X_Y.bin</code> use the same 256-square geometry.</li>
+    <li>Legacy 300 projects continue to use the historical 300-to-256
+      converter.</li>
+  </ul>
+
+  <div class="warning">
+    Declaring a project Native does not resize an existing 300 &times; 300
+    TMX. Generate Lots rejects that cell and reports its coordinates, path,
+    and actual dimensions. Convert or recreate the TMX explicitly.
+  </div>
+
+  <p>Release validation command:</p>
+  <pre><code>PZWorldEd.exe --validate-native-256-lot-geometry</code></pre>
+
   <h3>Creating a native 256 project</h3>
   <ol>
     <li>Use <strong>File &gt; New World</strong>.</li>
@@ -310,6 +339,34 @@
 
   <p>TMX 2.0 is independent from the grid choice. A map without basements may
   have no negative levels even though the file format supports them.</p>
+
+  <h2 id="project-doctor">Project Doctor: tiles and paths</h2>
+  <p>Use <strong>WorldEd &gt; Tools &gt; Project Doctor: Tiles and
+  Paths...</strong> when a project contains old paths, missing tiles, or files
+  copied from several locations. <strong>Check project</strong> is read-only.
+  <strong>Fix safely...</strong> creates a dated project backup before making
+  any atomic replacement.</p>
+  <p>The normal result is a short table with <strong>Status</strong>,
+  <strong>File</strong>, <strong>What this means</strong>, and
+  <strong>What you can do</strong>. Clean files are grouped. Technical parser
+  details remain hidden behind <strong>Show support details</strong> unless
+  they are needed for a report.</p>
+  <ul>
+    <li>TMX means a TileZed map; TBX means a BuildingEd building; PZW means the
+      WorldEd project.</li>
+    <li>Missing or outside-project dependencies are reported and kept. The
+      tool never guesses which Download/OneDrive/mod copy is correct.</li>
+    <li>Only unused <em>and missing</em> TMX sheet declarations are removed.
+      Valid unused sheets stay in the complete legacy header.</li>
+    <li>Safe paths are resolved with the tools' normal readable 2x-first,
+      then 1x/custom policy.</li>
+    <li>TBX lists are ID tables. BuildingEd rebuilds them and remaps every
+      reference; direct XML list deletion is never used.</li>
+  </ul>
+  <p>Read the complete
+  <a href="../PZ-Project-Doctor-Tiles-and-Paths.md">Project Doctor safety,
+  path, backup, and recovery reference</a> before applying cleanup to a shared
+  or legacy project.</p>
 
   <h2 id="worldgen">WorldGen biome preview/editor and static prefabs</h2>
   <p>WorldEd exposes two separate windows after a saved map project is loaded:

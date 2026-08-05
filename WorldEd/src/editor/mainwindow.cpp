@@ -82,6 +82,7 @@
 #include "biomemapitem.h"
 #include "terrainimageeditordialog.h"
 #include "worldgenpreviewdialog.h"
+#include "tilesetcleanupdialog.h"
 
 #include "InGameMap/ingamemapfeaturegenerator.h"
 #include "InGameMap/ingamemapdock.h"
@@ -700,8 +701,10 @@ MainWindow::MainWindow(QWidget *parent)
                     this, tr("Update Tilesets.txt"),
                     tr("Scan the configured Tiles directory and add new PNG "
                        "sheets to:\n%1\n\nExisting tile meta-enums are "
-                       "preserved. Changed sheet dimensions are updated and "
-                       "the previous catalog is kept as Tilesets.txt.bak.")
+                       "preserved. Paths and sheet dimensions are refreshed. "
+                       "Entries with no readable PNG anywhere in the 2x or "
+                       "1x Tiles trees are removed. The previous catalog is "
+                       "kept as Tilesets.txt.bak.")
                     .arg(QDir::toNativeSeparators(catalogPath)))
                 != QMessageBox::Yes) {
             return;
@@ -710,8 +713,9 @@ MainWindow::MainWindow(QWidget *parent)
         PROGRESS progress(tr("Scanning Tiles PNG sheets..."), this);
         int added = 0;
         int updated = 0;
+        int removed = 0;
         if (!TileMetaInfoMgr::instance()->rebuildTilesetsTxt(
-                    &added, &updated)) {
+                    &added, &updated, &removed)) {
             QMessageBox::critical(
                         this, tr("Tilesets.txt Update Failed"),
                         TileMetaInfoMgr::instance()->errorString());
@@ -724,12 +728,13 @@ MainWindow::MainWindow(QWidget *parent)
                     TileMetaInfoMgr::instance()->tilesets(), this);
         QMessageBox::information(
                     this, tr("Tilesets.txt Updated"),
-                    tr("%1 new sheet(s) added; %2 existing size(s) updated."
-                       "\n\n%3")
-                    .arg(added).arg(updated)
-                    .arg(updated > 0
+                    tr("%1 new sheet(s) added; %2 existing entries updated; "
+                       "%3 missing entries removed."
+                       "\n\n%4")
+                    .arg(added).arg(updated).arg(removed)
+                    .arg(updated > 0 || removed > 0
                          ? tr("Restart the PZTools applications before "
-                              "editing maps that use resized sheets.")
+                              "editing maps that use the changed catalogue.")
                          : tr("The catalog and live tileset list are current.")));
     });
     connect(ui->actionKeyboardShortcuts, &QAction::triggered, this, &MainWindow::keyboardShortcuts);
@@ -866,6 +871,15 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::worldGenPreview);
     connect(ui->actionWorldGenPrefabEditor, &QAction::triggered,
             this, &MainWindow::worldGenPrefabEditor);
+    QAction *tilesetCleanupAction = new QAction(
+                tr("Project Doctor: Tiles and Paths..."), this);
+    tilesetCleanupAction->setToolTip(
+                tr("Check Build 42 TMX maps, TBX buildings, dependencies, "
+                   "and tile paths; preview safe fixes and create backups"));
+    ui->menuTools->insertAction(ui->actionTerrainImageEditor,
+                                tilesetCleanupAction);
+    connect(tilesetCleanupAction, &QAction::triggered,
+            this, &MainWindow::tilesetCleanup);
 //    connect(ui->actionReadOldWaterDotLua, &QAction::triggered, this, &MainWindow::readOldWaterDotLua);
 
     connect(ui->actionAboutQt, &QAction::triggered, qApp, &QApplication::aboutQt);
@@ -1657,6 +1671,8 @@ bool MainWindow::InitConfigFiles()
             return false;
     }
 
+    PROGRESS progress(tr("Reading Tilesets.txt"), this);
+
     if (!TileMetaInfoMgr::instance()->readTxt()) {
         QMessageBox::critical(this, tr("Tileset Configuration Error"),
                               tr("%1\n(while reading %2)")
@@ -1664,6 +1680,8 @@ bool MainWindow::InitConfigFiles()
                               .arg(TileMetaInfoMgr::instance()->txtName()));
         return false;
     }
+
+    progress.update(tr("Discovering installed tilesets"));
 
     if (!TileMetaInfoMgr::instance()->addNewTilesets(false)) {
         QMessageBox::critical(this, tr("Tileset Configuration Error"),
@@ -1675,6 +1693,7 @@ bool MainWindow::InitConfigFiles()
     // any installed sheet regardless of the normal GIDs in the active TMX.
     // Load the complete discovered catalogue before a project is exposed.
     // Resolution always prefers a readable 2x sheet and falls back to 1x.
+    progress.update(tr("Preparing the complete tileset catalogue"));
     const QList<Tileset *> completeTilesetCatalog =
             TileMetaInfoMgr::instance()->tilesets();
     TileMetaInfoMgr::instance()->resolveTilesets(completeTilesetCatalog);
@@ -1682,6 +1701,8 @@ bool MainWindow::InitConfigFiles()
                 completeTilesetCatalog, this);
     qInfo() << "WorldEd loaded the complete tileset catalog before project startup:"
             << completeTilesetCatalog.size() << "entries";
+
+    progress.update(tr("Reading BuildingTMX.txt"));
 
     if (!BuildingTMX::instance()->readTxt()) {
         QMessageBox::critical(this, tr("Building Configuration Error"),
@@ -1691,6 +1712,8 @@ bool MainWindow::InitConfigFiles()
         return false;
     }
 
+    progress.update(tr("Reading BuildingTiles.txt"));
+
     if (!BuildingTilesMgr::instance()->readTxt()) {
         QMessageBox::critical(this, tr("Building Tiles Error"),
                               tr("Error while reading %1\n%2")
@@ -1698,6 +1721,8 @@ bool MainWindow::InitConfigFiles()
                               .arg(BuildingTilesMgr::instance()->errorString()));
         return false;
     }
+
+    progress.update(tr("Reading FurnitureGroups.txt"));
 
     if (!FurnitureGroups::instance()->readTxt()) {
         QMessageBox::critical(this, tr("Furniture Configuration Error"),
@@ -1707,6 +1732,8 @@ bool MainWindow::InitConfigFiles()
         return false;
     }
 
+    progress.update(tr("Reading BuildingTemplates.txt"));
+
     if (!BuildingTemplates::instance()->readTxt()) {
         QMessageBox::critical(this, tr("Building Templates Error"),
                               tr("Error while reading %1\n%2")
@@ -1714,6 +1741,8 @@ bool MainWindow::InitConfigFiles()
                               .arg(BuildingTemplates::instance()->errorString()));
         return false;
     }
+
+    progress.update(tr("Reading thumbnail settings"));
 
     new ThumbnailSettingsMgr();
     ThumbnailSettingsMgr::instance().readTxt();
@@ -1977,6 +2006,25 @@ void MainWindow::worldGenPrefabEditor()
         return;
 
     WorldGenPrefabDialog dialog(worldDocument, this);
+    dialog.exec();
+}
+
+void MainWindow::tilesetCleanup()
+{
+    QString root;
+    QString projectFile;
+    if (WorldDocument *worldDocument = currentWorldDocument()) {
+        if (!worldDocument->fileName().isEmpty()) {
+            projectFile = worldDocument->fileName();
+            root = QFileInfo(worldDocument->fileName()).absolutePath();
+        }
+    }
+    if (root.isEmpty())
+        root = mSettings.value(QLatin1String("TilesetCleanup/Root")).toString();
+    if (root.isEmpty())
+        root = QDir::currentPath();
+
+    TilesetCleanupDialog dialog(root, projectFile, this);
     dialog.exec();
 }
 
