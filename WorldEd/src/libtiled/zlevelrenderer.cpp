@@ -47,6 +47,12 @@ using namespace Tiled;
 #define DISPLAY_TILE_HEIGHT (map()->tileHeight() * (is2x() ? 2 : 1))
 
 namespace {
+quint64 &frameRenderedTileCount()
+{
+    static thread_local quint64 count = 0;
+    return count;
+}
+
 struct JUMBO
 {
     QString tilesetName;
@@ -67,6 +73,21 @@ static JUMBO s_jumbo[] = {
     { QStringLiteral("e_yellowwood"), true },
 };
 } // namespace anonymous
+
+void ZLevelRenderer::resetRenderedTileCount()
+{
+    frameRenderedTileCount() = 0;
+}
+
+void ZLevelRenderer::addRenderedTileCount(quint64 count)
+{
+    frameRenderedTileCount() += count;
+}
+
+quint64 ZLevelRenderer::renderedTileCount()
+{
+    return frameRenderedTileCount();
+}
 
 QSize ZLevelRenderer::mapSize() const
 {
@@ -669,6 +690,7 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
                         painter->setOpacity(opacities[i] * opacity);
 
                         painter->drawImage(0, 0, img);
+                        addRenderedTileCount();
                         if (overlayTile &&
                                 !overlayTile->image().isNull()) {
                             const QTransform overlayTransform =
@@ -680,6 +702,7 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
                             painter->drawImage(
                                         0, 0,
                                         overlayTile->image());
+                            addRenderedTileCount();
                             painter->setTransform(
                                         transform * baseTransform);
                         }

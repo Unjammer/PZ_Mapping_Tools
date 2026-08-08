@@ -20,6 +20,9 @@
 
 #include <QImage>
 #include <QMainWindow>
+#include <QRect>
+
+#include <functional>
 
 namespace Ui {
 class InGameMapImagePyramidWindow;
@@ -32,8 +35,17 @@ class InGameMapImagePyramidWindow : public QMainWindow
     Q_OBJECT
 
 public:
+    using LogFunction = std::function<void(const QString &)>;
+
     explicit InGameMapImagePyramidWindow(QWidget *parent = nullptr);
     ~InGameMapImagePyramidWindow();
+
+    static bool createPyramidZip(
+            const QImage &image,
+            const QRect &worldBounds,
+            const QString &outputFileName,
+            QString *error = nullptr,
+            const LogFunction &logger = LogFunction());
 
 private slots:
     void chooseInputFile();
@@ -41,8 +53,6 @@ private slots:
     void createZip();
 
 private:
-    void writeImageToZip(QuaZip& zip, const QImage &image, int col, int row, int level);
-    void writePyramidTxt(QuaZip& zip, const QImage &image);
     void log(const QString& str);
 
     Ui::InGameMapImagePyramidWindow *ui;

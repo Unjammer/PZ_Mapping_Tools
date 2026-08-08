@@ -20,10 +20,15 @@
 #include "basegraphicsscene.h"
 #include "preferences.h"
 #include "zoomable.h"
+#include "../portablesettings.h"
+
+#include "zlevelrenderer.h"
 
 #include <QApplication>
 #include <QDebug>
 #include <QImage>
+#include <QLabel>
+#include <QLocale>
 #define PZ_OPENGL_WIDGET 1
 #if PZ_OPENGL_WIDGET
 #include <QOpenGLWidget>
@@ -37,6 +42,23 @@
 #include <QSignalBlocker>
 #include <QToolButton>
 
+using namespace Tiled;
+
+namespace {
+
+QString diagnosticMemoryText(quint64 bytes)
+{
+    if (!bytes)
+        return QObject::tr("unknown");
+    const qreal gibibyte = 1024.0 * 1024.0 * 1024.0;
+    if (bytes >= quint64(gibibyte))
+        return QObject::tr("%1 GiB").arg(bytes / gibibyte, 0, 'f', 2);
+    return QObject::tr("%1 MiB").arg(
+                bytes / (1024.0 * 1024.0), 0, 'f', 1);
+}
+
+}
+
 BaseGraphicsView::BaseGraphicsView(AllowOpenGL openGL, QWidget *parent)
     : QGraphicsView(parent)
     , mHandScrolling(false)
@@ -49,6 +71,13 @@ BaseGraphicsView::BaseGraphicsView(AllowOpenGL openGL, QWidget *parent)
     , mPoweredPreviewButton(new QToolButton(this))
     , mSnowPreviewButton(new QToolButton(this))
     , mJumboPreviewButton(new QToolButton(this))
+    , mRenderDiagnosticsEnabled(QSettings().value(
+          QStringLiteral("RenderDiagnostics/Enabled"), true).toBool())
+    , mRenderDiagnosticsLabel(new QLabel(this))
+    , mDiagnosticsFps(0.0)
+    , mDiagnosticsFrameMs(0.0)
+    , mDiagnosticsRenderedTiles(0)
+    , mDiagnosticsMemoryBytes(0)
 {
     setTransformationAnchor(QGraphicsView::AnchorViewCenter);
 //    setDragMode(QGraphicsView::ScrollHandDrag);
@@ -154,6 +183,19 @@ BaseGraphicsView::BaseGraphicsView(AllowOpenGL openGL, QWidget *parent)
     mPoweredPreviewButton->hide();
     mSnowPreviewButton->hide();
     mJumboPreviewButton->hide();
+
+    mRenderDiagnosticsLabel->setObjectName(
+                QStringLiteral("RenderDiagnosticsBubble"));
+    mRenderDiagnosticsLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    mRenderDiagnosticsLabel->setStyleSheet(QStringLiteral(
+        "QLabel#RenderDiagnosticsBubble {"
+        " background-color: rgba(18, 23, 29, 225);"
+        " color: #f2f5f7; border: 1px solid #5a6978;"
+        " border-left: 3px solid #e49a35; border-radius: 6px;"
+        " padding: 6px 9px; }"));
+    mRenderDiagnosticsLabel->setVisible(mRenderDiagnosticsEnabled);
+    mRenderDiagnosticsLabel->raise();
+    mDiagnosticsMemoryTimer.start();
 
 #ifndef QT_NO_OPENGL
     if (openGL == PreferenceGL) {
@@ -300,6 +342,104 @@ void BaseGraphicsView::setUseOpenGL(bool useOpenGL)
                 ? QStringLiteral("OpenGL 3.3 compatibility")
                 : QStringLiteral("Qt raster (software)"));
 #endif
+}
+
+void BaseGraphicsView::setRenderDiagnosticsEnabled(bool enabled)
+{
+    if (mRenderDiagnosticsEnabled == enabled)
+        return;
+    mRenderDiagnosticsEnabled = enabled;
+    mDiagnosticsPreviousFrame.invalidate();
+    mDiagnosticsFps = 0.0;
+    mDiagnosticsFrameMs = 0.0;
+    mRenderDiagnosticsLabel->setVisible(enabled);
+    if (enabled) {
+        mDiagnosticsMemoryBytes = PortableSettings::currentProcessMemoryBytes();
+        mDiagnosticsMemoryTimer.restart();
+        mRenderDiagnosticsLabel->raise();
+    }
+    viewport()->update();
+}
+
+void BaseGraphicsView::paintEvent(QPaintEvent *event)
+{
+    if (!mRenderDiagnosticsEnabled) {
+        QGraphicsView::paintEvent(event);
+        return;
+    }
+
+    ZLevelRenderer::resetRenderedTileCount();
+    QElapsedTimer renderTimer;
+    renderTimer.start();
+    QGraphicsView::paintEvent(event);
+
+    const qreal renderMs = qMax<qreal>(
+                0.01, renderTimer.nsecsElapsed() / 1000000.0);
+    mDiagnosticsFrameMs = mDiagnosticsFrameMs <= 0.0
+            ? renderMs
+            : mDiagnosticsFrameMs * 0.75 + renderMs * 0.25;
+
+    if (mDiagnosticsPreviousFrame.isValid()) {
+        const qint64 elapsed = mDiagnosticsPreviousFrame.restart();
+        if (elapsed > 0) {
+            const qreal currentFps = 1000.0 / elapsed;
+            mDiagnosticsFps = mDiagnosticsFps <= 0.0
+                    ? currentFps
+                    : mDiagnosticsFps * 0.75 + currentFps * 0.25;
+        }
+    } else {
+        mDiagnosticsPreviousFrame.start();
+    }
+
+    mDiagnosticsRenderedTiles = ZLevelRenderer::renderedTileCount();
+    if (!mDiagnosticsMemoryTimer.isValid() ||
+            mDiagnosticsMemoryTimer.elapsed() >= 1000) {
+        mDiagnosticsMemoryBytes =
+                PortableSettings::currentProcessMemoryBytes();
+        mDiagnosticsMemoryTimer.restart();
+    }
+    updateRenderDiagnosticsLabel();
+}
+
+QString BaseGraphicsView::renderDiagnosticsWorkloadText(
+        quint64 renderedTiles) const
+{
+    return tr("Tiles drawn %1").arg(
+                QLocale().toString(qulonglong(renderedTiles)));
+}
+
+void BaseGraphicsView::updateRenderDiagnosticsLabel()
+{
+    const bool openGL = qobject_cast<QOpenGLWidget *>(viewport());
+    const QString text = tr("FPS %1   Render %2 ms\n"
+                            "%3   RAM %4\n"
+                            "Zoom %5%   %6   %7 x %8")
+            .arg(mDiagnosticsFps, 0, 'f', 1)
+            .arg(mDiagnosticsFrameMs, 0, 'f', 2)
+            .arg(renderDiagnosticsWorkloadText(mDiagnosticsRenderedTiles))
+            .arg(diagnosticMemoryText(mDiagnosticsMemoryBytes))
+            .arg(mZoomable->scale() * 100.0, 0, 'f', 0)
+            .arg(openGL ? tr("OpenGL") : tr("Raster"))
+            .arg(viewport()->width())
+            .arg(viewport()->height());
+    if (mRenderDiagnosticsLabel->text() != text) {
+        mRenderDiagnosticsLabel->setText(text);
+        mRenderDiagnosticsLabel->adjustSize();
+    }
+    positionRenderDiagnosticsLabel();
+    mRenderDiagnosticsLabel->raise();
+}
+
+void BaseGraphicsView::positionRenderDiagnosticsLabel()
+{
+    if (!mRenderDiagnosticsLabel || !viewport())
+        return;
+    const QPoint viewportOrigin = viewport()->mapTo(this, QPoint(0, 0));
+    const int x = viewportOrigin.x() + 10;
+    const int y = qMax(viewportOrigin.y() + 10,
+                       viewportOrigin.y() + viewport()->height()
+                       - mRenderDiagnosticsLabel->height() - 10);
+    mRenderDiagnosticsLabel->move(x, y);
 }
 
 void BaseGraphicsView::setNightPreviewEnabled(bool enabled)
@@ -526,6 +666,8 @@ void BaseGraphicsView::resizeEvent(QResizeEvent *event)
     mPoweredPreviewButton->raise();
     mSnowPreviewButton->raise();
     mJumboPreviewButton->raise();
+    positionRenderDiagnosticsLabel();
+    mRenderDiagnosticsLabel->raise();
 }
 
 void BaseGraphicsView::setScene(BaseGraphicsScene *scene)

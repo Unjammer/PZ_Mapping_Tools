@@ -96,12 +96,38 @@ first. Project Doctor therefore uses these rules:
 |---|---|
 | Valid PNG, used | Keep; normalize its image path |
 | Valid PNG, currently unused | Keep for deterministic legacy compatibility; normalize its image path |
-| Missing PNG, used by a tile/object/BMP rule | Keep and report as unresolved |
+| Missing PNG, used by a tile/object/BMP rule | Keep and report as unresolved by default |
 | Missing PNG, not used anywhere | Remove as a stale declaration |
 
 BMP aliases, rules, blends, exclusion lists, placed tile layers, and tile
-objects protect their referenced sheets. A missing used declaration is never
-deleted merely to make the warning disappear.
+objects protect their referenced sheets in the default safe mode. A missing
+used declaration is never deleted merely to make the warning disappear.
+
+### Advanced removal of referenced unresolved tilesets
+
+**Remove referenced tilesets whose PNG cannot be resolved (advanced)** is
+unchecked by default. It exists for old projects that still contain red
+tileset declarations for sheets that were removed permanently.
+
+Before the option can be applied, Project Doctor reports:
+
+- each unresolved tileset declaration that would be removed;
+- how many tile-layer cells use its GID range;
+- how many tile objects use its GID range; and
+- how many embedded Rules/Blends references name it.
+
+The advanced fix clears affected tile cells to GID 0 and removes affected tile
+objects. It preserves the embedded Rules/Blends text, which remains available
+for diagnosis and becomes inactive while the sheet is unavailable. It does
+not renumber unrelated raw GIDs. Tilesets declared later keep their original
+`firstgid`, so removing a declaration cannot reinterpret existing cells as
+tiles from another sheet.
+
+The layer rewrite supports XML tile elements, CSV, base64, base64/gzip, and
+base64/zlib. Project Doctor verifies that the number of transformed cells and
+objects exactly matches the read-only analysis before it creates any output.
+The normal dated backup, atomic replacement, and confirmation remain
+mandatory.
 
 For retained inline declarations, path resolution follows the same shared
 catalogue policy as the editors:
@@ -163,6 +189,13 @@ Removing stale missing declarations and broken dependency paths avoids failed
 lookups, confusing placeholders, and repeated user troubleshooting. It can
 reduce work in project-specific loading paths.
 
+In old TMX files, an unresolved declaration could also feed a placeholder tile
+into the BMP Rule/Blend indexes. Importing a larger current Rules/Blends
+snapshot then multiplied work that could never produce a real tile. Current
+TileZed and WorldEd exclude missing-only Rules and Blends automatically, while
+Project Doctor's advanced option can remove the broken TMX references
+themselves.
+
 It does not disable the intentional complete Tiles catalogue preload. Valid
 unused TMX declarations remain available for compatibility, so Project Doctor
 should not be sold as a universal startup-speed switch.
@@ -178,8 +211,9 @@ The deployed build provides read-only and self-test commands:
 ```
 
 `--validate-tileset-cleanup` checks stale TMX removal, valid-header retention,
-2x/1x path normalization, missing-reference preservation, TBX dependency
-paths, atomic backups, backup exclusion, and stable TBX ID-table remapping.
+2x/1x path normalization, default missing-reference preservation, advanced
+cell/object removal, raw-GID stability, TBX dependency paths, atomic backups,
+backup exclusion, and stable TBX ID-table remapping.
 
 `--audit-tileset-cleanup` never writes the target. The result is recorded in
 the newest PZWorldEd log under `settings/logs`.

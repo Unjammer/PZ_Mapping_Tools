@@ -4,7 +4,7 @@ This document describes the functional differences between the current PZTools
 Unofficial suite and the Tim Baker `basements` branches used as its clean upstream
 bases.
 
-Reference date: August 2, 2026.
+Reference date: August 5, 2026.
 
 | Project | Initial Tim Baker baseline | Local branch | Committed local revision |
 |---|---|---|---|
@@ -13,6 +13,18 @@ Reference date: August 2, 2026.
 
 This changelog includes the current working trees under `integration/WorldEd`
 and `integration/TileZed`. No public repository has been modified or pushed.
+
+## August 5, 2026 / BuildingEd tileset-list synchronization
+
+- Fixed **Building > Tiles** remaining empty when its singleton dialog was
+  constructed before the complete `Tilesets.txt` catalogue was registered.
+- The dialog now rebuilds its names after bulk catalogue load and installed
+  sheet discovery. Closing the tileset metadata manager also forces a refresh,
+  including when reloading an unchanged `Tilesets.txt` produces no individual
+  add or remove signals.
+- `--validate-building-categories` now compares every displayed tileset name
+  and its order against the loaded catalogue, and checks that a valid sheet is
+  selected.
 
 ## August 2, 2026 / TMX opening and one-row tilesets
 

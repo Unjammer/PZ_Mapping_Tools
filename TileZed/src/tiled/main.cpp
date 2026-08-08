@@ -22,7 +22,9 @@
 
 #include "commandlineparser.h"
 #include "automappingmanager.h"
+#include "bmpblender.h"
 #include "bmptool.h"
+#include "bmptooldialog.h"
 #include "depthmapeditor.h"
 #include "lootdistributiondialog.h"
 #include "mainwindow.h"
@@ -46,6 +48,7 @@
 #include "BuildingEditor/buildingpreferences.h"
 #include "BuildingEditor/buildingtemplates.h"
 #include "BuildingEditor/buildingtiles.h"
+#include "BuildingEditor/buildingtilesdialog.h"
 #include "BuildingEditor/buildingtilesetdock.h"
 #include "BuildingEditor/categorydock.h"
 #include "BuildingEditor/furnituregroups.h"
@@ -320,6 +323,11 @@ static bool validateBrushUndoBuffers(QString *errorString)
         return false;
     }
     brushTool->setBrushShape(BmpBrushTool::BrushShape::Square);
+
+    if (!BmpToolDialog::validateReloadEquality(errorString))
+        return false;
+    if (!BmpBlender::validateUnavailableTilesetFiltering(errorString))
+        return false;
 
     qInfo() << "Validated 300-tile diagonal brush undo growth in"
             << elapsedMs << "ms and a centered 32x32 PNG brush mask";
@@ -1154,6 +1162,19 @@ int main(int argc, char *argv[])
                             : QStringLiteral("FAIL: %1")
                               .arg(tileModeError));
 
+                BuildingEditor::BuildingTilesDialog *tilesDialog =
+                        BuildingEditor::BuildingTilesDialog::instance();
+                QString tilesDialogError;
+                const bool tilesDialogValid = tilesDialog
+                        && tilesDialog->validateTilesetCatalog(
+                            &tilesDialogError);
+                qInfo().noquote()
+                        << "BuildingEd Building > Tiles validation:"
+                        << (tilesDialogValid
+                            ? QStringLiteral("PASS")
+                            : QStringLiteral("FAIL: %1")
+                              .arg(tilesDialogError));
+
                 BuildingEditor::BuildingFurnitureDock *furnitureDock =
                         buildingEditor.findChild<
                             BuildingEditor::BuildingFurnitureDock *>();
@@ -1184,6 +1205,7 @@ int main(int argc, char *argv[])
                     categoriesValid = categoriesValid && dockValid;
                 }
                 const bool valid = tileModeValid
+                        && tilesDialogValid
                         && templateTilesValid
                         && furnitureValid
                         && categoriesValid;

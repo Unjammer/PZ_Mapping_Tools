@@ -13,11 +13,74 @@ mapping automation, stability fixes, and current Project Zomboid data support.
 This is a community project. It is not an official The Indie Stone release.
 Project Zomboid game assets are not included.
 
-Current release documentation: [August 4, 2026 changes](RELEASE_CHANGELOG.md),
+Current release documentation: [August 8, 2026 changes](RELEASE_CHANGELOG.md),
 [feature reference](docs/Feature-Reference.md), and
 [logs/diagnostics](docs/Diagnostics-and-Logs.md).
 
 ![WorldEd displaying a generated terrain cell](docs/images/worlded-overview.png)
+
+## August 7 and 8, 2026 update at a glance
+
+The latest two-day integration pass focuses on renderer performance, useful
+live diagnostics, safer conversion, and frequently requested editor workflow
+improvements:
+
+- BuildingEd now coalesces hidden Iso, Tile, and Properties scene updates,
+  batches layer visibility synchronization, and applies the accumulated work
+  only when a view becomes visible. This removes redundant floor-switch work
+  without changing complete tileset preload or the established renderer.
+- **View > Render Diagnostics** adds a saved bubble at the lower-left of
+  TileZed, BuildingEd, WorldEd Cell Renderer, and WorldEd World Renderer. It
+  is visible by default and can be hidden from the View menu. It reports FPS,
+  render time, process RAM, zoom, viewport size, renderer mode, and the actual
+  number of tile instances drawn. The World Renderer reports cells in view
+  because it draws cell thumbnails instead of individual tiles.
+- WorldEd's **InGameMap** menu now separates the Tree and Forest workflow from
+  the other features. **Write Worldmap-Forest** creates the Forest-only XML
+  and binary data, `forest.png`, and the game-ready `forest.pyramid.zip` in
+  one recoverable operation. **Write Worldmap** excludes those Forest
+  polygons, while the advanced **Write Features XML 8x8...** command remains
+  available for custom all-feature exports.
+
+- [Hole Detection and native 256 export](#safer-map-repair-and-native-256-export)
+  now use actual tile presence, support backed-up automatic repair, and stop
+  displaced native-256 LOT output before invalid files are produced.
+- [World and export tools](#world-and-export-tools) now include BMP-to-TMX
+  **Validation & Repair** and the complete Build 42.20 Biomemap configuration,
+  including a direct definition of the `map_forest` surface-deposit selector.
+- [TileZed's older-project workflow](#terrain-rules-and-blends-in-older-tmx-maps)
+  now uses a dockable BMP Tools window, saved placement, a layout reset, and
+  explicit Rules and Blends snapshot replacement. Rules and Blends that can
+  resolve only to missing tilesets are kept in the TMX but excluded from
+  brush evaluation.
+- [Project Doctor](#project-doctor-for-tiles-and-paths) includes an explicit
+  advanced cleanup for unresolved tilesets still referenced by painted cells
+  or tile objects, with an exact impact report and mandatory backup.
+- [Depth Map primitives](#build-42-depth-geometry) can be selected, resized,
+  dimensioned in pixels, snapped to the Build 42 grid, saved as reusable
+  presets, and inserted on similar tiles.
+- [All three file browsers](#portable-shared-configuration) provide compact
+  New Folder buttons with tooltips plus the same action on right-click.
+- WorldEd and TileZed use a narrow arrow-only control to collapse the map or
+  building preview below the Maps browser and remember that choice. The
+  control has no visible label and explains itself through its tooltip.
+  TileZed selects the **Tilesets** dock tab when its lower-right dock group is
+  restored.
+- [Issue logs](#documentation-and-issue-reports) now include useful
+  CPU, RAM, GPU, OS, Qt, and process-architecture context without collecting
+  direct user or machine identifiers.
+- Selectively reviewed upstream fixes add basement-aware WorldEd building and
+  thumbnail handling, multi-tileset removal in TileZed, and macOS Lua-console
+  menu retention without replacing the maintained renderers or catalogues.
+- The deployed August 8 binaries pass the 14-validator non-regression matrix
+  covering the complete tileset catalogue, Rules and Blends performance,
+  Automapper, depth maps, pack tools, TileDefs, BuildingEd categories,
+  preview overlays, Hole Detection repair, Native256 LOT geometry, Project
+  Doctor tileset cleanup, Biomemap configuration, WorldDefaults, and the
+  separate InGameMap Forest export.
+
+The complete cumulative list, regression matrix, and validator results are in
+[the August 8 release notes](RELEASE_CHANGELOG.md).
 
 ## Why do unofficial mapping tools exist?
 
@@ -61,12 +124,12 @@ changes, together with an unambiguous statement that those resources may be
 used in the public mapping workflow.
 
 You can, of course, wait for an official release. It is also worth noticing
-that newer mapping utilities such as the depth-map and street-name editors
-appeared directly inside the game. Whatever the internal reasons, that is a
-strong sign that the in-game Java toolchain became the practical place to
-deliver tools when the separate C++ editors could not evolve quickly enough.
-It does not make WorldEd, TileZed, or BuildingEd obsolete; it demonstrates the
-maintenance gap that unofficial releases have been filling.
+that newer mapping utilities appeared directly inside the game. Whatever the
+internal reasons, that is a strong sign that the in-game Java toolchain became
+the practical place to deliver tools when the separate C++ editors could not
+evolve quickly enough. It does not make WorldEd, TileZed, or BuildingEd
+obsolete; it demonstrates the maintenance gap that unofficial releases have
+been filling.
 
 I still hope that the official tools will catch up with the unofficial ones,
 adopt any ideas that prove useful, and eventually remove the need for this
@@ -95,6 +158,22 @@ You're welcome. It was my pleasure.
 
 ## Highlights
 
+### Safer map repair and native 256 export
+
+- **World > Hole Detection...** can keep detected holes highlighted or repair
+  them automatically with the nearest existing level-zero floor tile. A hole
+  means that no composite tile exists at the coordinate. The check does not
+  require `solidfloor` or loaded TileDefs, so water and personal tiles count as
+  valid map coverage.
+- Automatic hole repair changes only the current TMX `Floor` layer and creates
+  a timestamped project backup before atomic replacement.
+- Native 256 lot export retains direct 1:1 source-cell, output-cell, chunk, and
+  square coordinates. Generation now logs its complete coordinate frame and
+  stops instead of exporting if a source cell is internally displaced.
+- World thumbnails now render basement lots below the cell map and
+  above-ground lots above it. Existing Cell and World renderer implementations
+  remain in place.
+
 ### Portable, shared configuration
 
 - No installer, Registry configuration, `%APPDATA%` dependency, or
@@ -103,6 +182,17 @@ You're welcome. It was my pleasure.
   Tiles directory can be detected.
 - WorldEd, TileZed, and BuildingEd share the same paths through
   `settings/PZTools.ini`.
+- Each editor's Maps browser includes an icon-only **New Folder** button with
+  a tooltip. The same command is available by right-clicking the browser.
+  It creates and selects a subfolder inside the directory currently displayed
+  without changing the shared Maps path. Invalid portable names and collisions
+  are rejected before creation.
+- WorldEd and TileZed place a small arrow-only control between the browser and
+  preview. It has no visible label. Its tooltip explains whether it will
+  collapse or expand the selected map or building preview, and each
+  application remembers its own choice.
+- TileZed raises **Tilesets** as the selected tab in its lower-right dock
+  group after restoring the workspace.
 - Packaged catalogs remain in `config`; runtime preferences and logs remain in
   `settings`.
 - Selecting `Tiles`, `Tiles/1x`, `Tiles/2x`, or `Tiles/custom` is normalized
@@ -124,6 +214,11 @@ and `settings/logs` report the total, loaded, missing, and unresolved entries.
 Missing or corrupt images use an explicit placeholder instead of causing a
 silent empty palette.
 
+BuildingEd's **Building > Tiles** list follows the completed shared catalogue
+load and installed-sheet discovery. Closing the tileset metadata manager also
+refreshes the list, even when the reloaded `Tilesets.txt` contains the same
+names.
+
 ### Editing-path responsiveness
 
 Routine painting no longer starts unrelated catalogue work:
@@ -132,6 +227,9 @@ Routine painting no longer starts unrelated catalogue work:
   reloading it after map edits;
 - a missing or invalid Automapper manifest is attempted once per document,
   not once per brush stroke;
+- terrain Rules with no available tile choice and Blends with an unavailable
+  main or output sheet are excluded from the active BMP indexes while their
+  definitions remain embedded in the TMX;
 - the Tile Layers panel rebuilds only while visible and only when the edited
   region contains its inspected square; and
 - tileset usage/status icons are refreshed only while their dock is visible
@@ -171,10 +269,16 @@ two-step **Check project / Fix safely** workflow:
 - TMX object references to TBX files are resolved relative to their map and
   only existing in-project paths are normalized automatically;
 - missing used tilesets and missing/external TBX dependencies are preserved
-  and shown as work the mapper must resolve;
+  and shown as work the mapper must resolve in the default safe mode;
 - stale TMX declarations are removed only when the sheet is both unused and
   unresolved. Valid unused sheets remain in the complete ordered header for
   deterministic legacy compatibility;
+- an unchecked advanced option can remove a referenced tileset only when no
+  readable PNG resolves for it. Before enabling the fix, Project Doctor
+  reports the exact affected tile cells, tile objects, and embedded BMP
+  references. The fix clears those cells, removes those tile objects, and
+  leaves Rules/Blends text embedded but inactive. All unrelated raw GIDs and
+  later original `firstgid` values remain unchanged;
 - retained inline TMX image paths are normalized to the same readable 2x,
   then 1x/custom PNG selected by the shared tools; and
 - TBX cleanup uses BuildingEd's object model to rebuild the ordered
@@ -317,14 +421,41 @@ project.
   images. Only `Vegitation`, `DeepForest`, `Forest`, `TownZone`, `Farm`,
   `FarmLand`, and `TrailerPark` are written to its green channel; every other
   vector zone/object remains an `objects.lua` export.
+- The generator and red-channel brush now share the complete verified Build
+  42.20 `biome_map_config` metadata. The in-app reference lists Pixel, Biome,
+  Ore Selector, Zone, and Availability. It defines `map_forest` as the
+  procedural surface-deposit selector for boulders, limestone, and flint,
+  while ID 171 remains clearly marked as a map-override-only extension.
+- See the
+  [Build 42.20 BiomeMapConfig reference](docs/PZ-B42.20-BiomeMapConfig.md)
+  for every active ID, channel behavior, validation rule, and the documented
+  ID 171 override.
 - Editable Zombie Heatmap with 300-cell and native 256-cell geometry, brush
   controls, undo, atomic save, and a safety backup.
 - Restored InGameMap road generation for roads, trails, and railways.
+- Reorganized the **InGameMap** menu around the two game export paths:
+  **Generate Tree Features**, **Write Worldmap-Forest**, then the Water, Road,
+  and Building generators followed by **Write Worldmap**. The read, advanced
+  XML writer, overwrite, image, and pyramid tools remain below that workflow.
+- **Write Worldmap-Forest** selects only `natural=forest` polygons and commits
+  `worldmap-forest.xml`, `worldmap-forest.xml.bin`, `forest.png`, and
+  `forest.pyramid.zip` together. The pyramid contains `pyramid.txt` with the
+  project origin and native cell geometry plus the required tiled PNG levels.
+- **Write Worldmap** writes `worldmap.xml` and its binary companion without
+  Forest polygons, matching the game's separate loading of Forest and regular
+  world-map data. Advanced custom XML exports continue to include all feature
+  types.
 - XML and binary InGameMap outputs are validated and committed as one
   recoverable pair.
 - Complete map-mod export using the current 8 × 8 layout.
 - BMP→TMX files are relinked to the shared catalog by tileset name, including
   installations where only the 2x image exists.
+- **BMP To TMX** now includes **Validation & Repair**. Unknown ground and
+  vegetation colors can still be reported, or replaced automatically with
+  separate valid colors chosen from the active `Rules.txt` palette.
+- Automatic repair applies to the bitmap data embedded in newly generated or
+  updated TMX files. It never overwrites the source terrain or vegetation
+  images. The option and both fallback colors are stored in the PZW project.
 - An unclean shutdown no longer creates an automatic project-restore crash
   loop; the following start skips restoration and explains how to recover.
 
@@ -380,6 +511,57 @@ project.
   attempted once per document, so interactive Automapping cannot stall every
   brush stroke; press Reload after correcting a manifest.
 
+### Terrain Rules and Blends in older TMX maps
+
+A PZW remembers the paths to its terrain `Rules.txt` and `Blends.txt`. Each
+generated TMX also embeds one complete snapshot so that an existing map remains
+reproducible when the external files later change. A project that is several
+years old can consequently contain different generations across its TMX files,
+but a single TMX never runs several embedded generations at once.
+
+Older TMX versions can encode the level in the physical layer name, for
+example `0_Floor`. Current TMX versions normally store `name="Floor"` together
+with `level="0"`. The Rules/Blends target keys still deliberately use names
+such as `0_Floor`, `0_Vegetation`, and `0_FloorOverlay`. TileZed resolves that
+compatibility mapping while loading, so the prefix is not proof of an obsolete
+or unused rule.
+
+In **BMP Tools**, **Import Rules** and **Import Blends** compare the chosen file
+with the current TMX snapshot. TileZed skips identical data. When the data is
+different, it shows the old and new counts and asks whether to replace the
+embedded snapshot. Save the TMX after accepting. The saved map contains the
+replacement only, and pressing Reload after Import is unnecessary.
+
+Old maps can also retain red tileset declarations whose PNG files were removed
+years ago. Those declarations previously supplied placeholder tiles to the BMP
+rule and blend indexes. Importing a larger current Rules/Blends snapshot then
+made every affected brush update evaluate work that could never produce a real
+tile. This explains why removing Petro's unresolved red declarations removed
+the lag.
+
+TileZed and WorldEd now keep the unresolved declarations and embedded
+definitions for diagnosis, but they do not activate a Rule whose choices are
+all unavailable or a Blend whose main/output sheet is unavailable. A mixed
+Rule remains active with only its valid choices. This avoids useless
+per-square work without changing the complete valid catalogue policy.
+Project Doctor's advanced unresolved cleanup is available when the mapper also
+wants to remove the broken references from the TMX itself.
+
+**BMP Tools** is a normal dock. It may be moved, tabbed, floated, closed, and
+reopened from **View**, and TileZed remembers its placement. The
+**Validation & Repair** page contains unknown-color replacement because that
+repair depends on the active Rules palette and bitmap warning list. It is not
+a brush-shape option.
+
+Use **Preferences > Reset Interface Layout** to restore TileZed's original
+dock groups and sizes. This layout reset does not delete project settings,
+custom PNG brushes, primitive presets, or other user files.
+
+The normal Qt raster viewport is recommended for Brush Tool work. The
+**Experimental OpenGL viewport** is not WorldEd's native OpenGL renderer and
+can be substantially slower. Existing enabled installations receive one
+safety reset to raster, while manual re-enabling remains available for testing.
+
 ### Build 42 depth geometry
 
 **Tools > Depth Map Editor...** opens a geometry-first editor for the selected
@@ -387,8 +569,15 @@ tileset. It reads and writes Build 42 `tileGeometry.txt` primitives together
 with the matching `DEPTH_<tileset>.png` atlas.
 
 - Add `XY`, `XZ`, or `YZ` polygons, boxes, and cylinders.
-- Select wireframes directly over the source tile, drag them in X/Z, and edit
-  exact translations, rotations, bounds, radii, height, and polygon points.
+- Select wireframes directly over the source tile, drag them in X/Z, or drag a
+  gold corner handle to resize the selected primitive.
+- Edit exact translations, rotations, bounds, radii, height, polygon points,
+  and local primitive dimensions in pixels.
+- Enable pixel-grid snapping to align movement and resizing to Build 42's
+  1/64 tile-plane and 1/96 vertical increments.
+- Save a selected primitive as a portable reusable preset, then insert it into
+  another similar tile or tileset. The preset keeps its source tileset as a
+  reference label.
 - Rasterize one primitive into existing pixels or rebuild the complete depth
   tile from its geometry, optionally restricted by source-tile opacity.
 - Use the separate Pixel Retouch tab for inspection and manual corrections.
@@ -486,6 +675,7 @@ or TileZed. BuildingEd consumes the same shared setting.
 - [Pack comparator and extractor](docs/PZ-Pack-Comparator-and-Extractor.md)
 - [TileDef comparator and Snow/Replacement editor](docs/PZ-TileDef-Comparator-and-Snow-Editor.md)
 - [Logs, diagnostics, validators, and issue reports](docs/Diagnostics-and-Logs.md)
+- [GitHub release updater design](docs/PZTools-Auto-Updater-Design.md)
 - [Upstream history and source provenance](UPSTREAM-HISTORY.md)
 - [Detailed fork changelog](CHANGELOG-PZTOOLS.md)
 - [Current release changes](RELEASE_CHANGELOG.md)
@@ -493,7 +683,10 @@ or TileZed. BuildingEd consumes the same shared setting.
 The documentation distinguishes game-confirmed structures, tool-enforced
 safety policies, representative previews, and deliberate scope exclusions.
 Logs are written to `settings/logs`; the newest 20 runs per application are
-retained. A useful issue report includes:
+retained. Each log records OS/kernel, CPU, logical processor count, total and
+available startup RAM, reported display adapters, Qt ABI, and process bitness.
+It does not record username, hostname, serial number, IP address, or a stable
+machine identifier. A useful issue report includes:
 
 - application name and exact steps to reproduce;
 - the newest matching log file;
@@ -509,18 +702,15 @@ application can create its normal log.
 
 ## Building from source
 
-The supported source target is Windows x64 with qmake, Qt 5.14.2, and an MSVC
-x64 toolchain. The complete maintainer procedure now documents prerequisites,
-out-of-source configuration, incremental and clean builds, portable release
-assembly, SHA-256 verification, deployed validators, and the required source
-and license files:
+The complete build guide explains how to organize the actual source tree,
+create separate compiler-output directories, build all three applications,
+and assemble packages on Windows, Linux, and macOS:
 
-- [Building PZ Mapping Tools](BUILDING.md)
-- [Linux and macOS build feasibility audit](PLATFORM-BUILD-AUDIT.md)
+- [How to build PZ Mapping Tools](BUILDING.md)
 
-The qmake projects contain useful Unix/macOS branches, but those platforms are
-not yet release-tested. The audit records the remaining work instead of
-presenting the obsolete distribution scripts as supported recipes.
+Windows x64 with Qt 5.14.2 and MSVC is the currently tested release target.
+Linux and macOS builds must be compiled and validated on their target systems
+before they are published as supported releases.
 
 ## Repository layout
 
@@ -530,8 +720,7 @@ presenting the obsolete distribution scripts as supported recipes.
 ├── TileZed/                 TileZed and BuildingEd source tree
 ├── docs/images/             README screenshots
 ├── UPSTREAM-HISTORY.md      exact upstream baselines and port registry
-├── BUILDING.md              supported build and release procedure
-├── PLATFORM-BUILD-AUDIT.md  Linux/macOS feasibility and validation gates
+├── BUILDING.md              Windows, Linux, and macOS build procedure
 ├── CHANGELOG-PZTOOLS.md     detailed differences from upstream
 ├── RELEASE_CHANGELOG.md     concise current-release notes
 └── README.md
@@ -541,9 +730,10 @@ presenting the obsolete distribution scripts as supported recipes.
 
 - **Tim Baker** for the original WorldEd and TileZed work that remains the
   upstream foundation of these tools.
-- **Petro**, **Pabbiqo [pq]**, **Dane**, **! 𝕮𝖆ç𝖆𝖉𝖔𝖗**, **Kyber**, **шакалоблок** and
-  The Project Zomboid mapping and modding community for reproducible reports,
-  test projects, screenshots, logs, and practical workflow feedback.
+- **Petro**, **Pabbiqo [pq]**, **Dane**, **! 𝕮𝖆ç𝖆𝖉𝖔𝖗**, **Kyber**,
+  **шакалоблок**, and the Project Zomboid mapping and modding community for
+  reproducible reports, test projects, screenshots, logs, and practical
+  workflow feedback.
 
 This section records direct technical contributions and special thanks. Legal
 authorship and third-party attribution remain documented in `AUTHORS.txt`,

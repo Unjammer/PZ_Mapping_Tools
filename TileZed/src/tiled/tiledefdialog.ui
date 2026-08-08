@@ -789,6 +789,7 @@
    <addaction name="actionGoForward"/>
    <addaction name="actionAddTileset"/>
    <addaction name="actionRemoveTileset"/>
+   <addaction name="actionRemoveTilesets"/>
    <addaction name="separator"/>
    <addaction name="actionCopyProperties"/>
    <addaction name="actionPasteProperties"/>
@@ -897,6 +898,18 @@
    </property>
    <property name="toolTip">
     <string>Remove the selected tileset</string>
+   </property>
+  </action>
+  <action name="actionRemoveTilesets">
+   <property name="icon">
+    <iconset resource="tiled.qrc">
+     <normaloff>:/images/16x16/edit-delete.png</normaloff>:/images/16x16/edit-delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Remove Tilesets...</string>
+   </property>
+   <property name="toolTip">
+    <string>Choose multiple tilesets to remove</string>
    </property>
   </action>
   <action name="actionGoBack">

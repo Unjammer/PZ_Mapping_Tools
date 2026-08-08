@@ -22,6 +22,7 @@
 #include "ui_preferencesdialog.h"
 
 #include "languagemanager.h"
+#include "mainwindow.h"
 #include "objecttypesmodel.h"
 #include "preferences.h"
 #include "utils.h"
@@ -31,8 +32,10 @@
 #include <QColorDialog>
 #include <QCheckBox>
 #include <QFileDialog>
+#include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QPainter>
+#include <QPushButton>
 #include <QStyledItemDelegate>
 
 #ifndef QT_NO_OPENGL
@@ -152,6 +155,14 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) :
 
 #ifdef ZOMBOID
     mUi->tabWidget->setCurrentIndex(0);
+    QPushButton *resetLayoutButton = mUi->buttonBox->addButton(
+                tr("Reset Interface Layout"),
+                QDialogButtonBox::ActionRole);
+    resetLayoutButton->setToolTip(tr(
+                "Restore the original TileZed dock positions and sizes. "
+                "Project settings and user files are not changed."));
+    connect(resetLayoutButton, &QPushButton::clicked,
+            this, &PreferencesDialog::resetInterfaceLayout);
     mUi->themeCombo->clear();
     mUi->themeCombo->addItems(Preferences::instance()->availableThemes());
     const int themeIndex = mUi->themeCombo->findText(Preferences::instance()->theme(),
@@ -353,6 +364,27 @@ void PreferencesDialog::exportObjectTypes()
 }
 
 #ifdef ZOMBOID
+void PreferencesDialog::resetInterfaceLayout()
+{
+    if (QMessageBox::question(
+                this, tr("Reset Interface Layout"),
+                tr("Restore the original TileZed window and dock layout?\n\n"
+                   "This does not remove project settings, custom brushes, "
+                   "or other user files."),
+                QMessageBox::Reset | QMessageBox::Cancel,
+                QMessageBox::Cancel) != QMessageBox::Reset) {
+        return;
+    }
+
+    if (MainWindow *window =
+            qobject_cast<MainWindow *>(parentWidget())) {
+        window->resetInterfaceLayout();
+        QMessageBox::information(
+                    this, tr("Interface Layout Reset"),
+                    tr("The original TileZed dock layout has been restored."));
+    }
+}
+
 void PreferencesDialog::defaultGridColor()
 {
     Preferences::instance()->setGridColor(Qt::black);

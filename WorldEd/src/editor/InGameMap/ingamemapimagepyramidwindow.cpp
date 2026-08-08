@@ -28,8 +28,96 @@
 
 #include <QFileDialog>
 #include <QPainter>
+#include <QTextStream>
 
 #include <cmath>
+
+namespace {
+
+void pyramidLog(
+        const InGameMapImagePyramidWindow::LogFunction &logger,
+        const QString &message)
+{
+    if (logger)
+        logger(message);
+}
+
+bool writePyramidImage(
+        QuaZip &zip, const QImage &image,
+        int col, int row, int level,
+        QString *error,
+        const InGameMapImagePyramidWindow::LogFunction &logger)
+{
+    const QString fileName = QStringLiteral("%1/tile%2x%3.png")
+            .arg(level).arg(col).arg(row);
+    pyramidLog(logger, QObject::tr("Adding %1 to ZIP").arg(fileName));
+
+    QuaZipFile file(&zip);
+    if (!file.open(QIODevice::WriteOnly, QuaZipNewInfo(fileName))) {
+        if (error)
+            *error = QObject::tr("Could not create %1 in the pyramid ZIP.")
+                    .arg(fileName);
+        return false;
+    }
+    if (!image.save(&file, "PNG")) {
+        if (error)
+            *error = QObject::tr("Could not encode %1 in the pyramid ZIP.")
+                    .arg(fileName);
+        file.close();
+        return false;
+    }
+    file.close();
+    if (file.getZipError() != 0) {
+        if (error)
+            *error = QObject::tr("Could not finish %1 in the pyramid ZIP "
+                                "(ZIP error %2).")
+                    .arg(fileName).arg(file.getZipError());
+        return false;
+    }
+    return true;
+}
+
+bool writePyramidDescription(
+        QuaZip &zip, const QImage &image,
+        const QRect &worldBounds, QString *error,
+        const InGameMapImagePyramidWindow::LogFunction &logger)
+{
+    const QString fileName = QStringLiteral("pyramid.txt");
+    pyramidLog(logger, QObject::tr("Writing %1").arg(fileName));
+    QuaZipFile file(&zip);
+    if (!file.open(QIODevice::WriteOnly, QuaZipNewInfo(fileName))) {
+        if (error)
+            *error = QObject::tr("Could not create pyramid.txt in the ZIP.");
+        return false;
+    }
+    QTextStream stream(&file);
+    stream << "VERSION=1\n";
+    stream << QStringLiteral("bounds=%1 %2 %3 %4\n")
+              .arg(worldBounds.x())
+              .arg(worldBounds.y())
+              .arg(worldBounds.x() + worldBounds.width())
+              .arg(worldBounds.y() + worldBounds.height());
+    stream << QStringLiteral("imageSize=%1 %2")
+              .arg(image.width()).arg(image.height());
+    stream.flush();
+    if (stream.status() != QTextStream::Ok) {
+        if (error)
+            *error = QObject::tr("Could not write pyramid.txt in the ZIP.");
+        file.close();
+        return false;
+    }
+    file.close();
+    if (file.getZipError() != 0) {
+        if (error)
+            *error = QObject::tr("Could not finish pyramid.txt in the ZIP "
+                                "(ZIP error %1).")
+                    .arg(file.getZipError());
+        return false;
+    }
+    return true;
+}
+
+}
 
 InGameMapImagePyramidWindow::InGameMapImagePyramidWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -91,92 +179,115 @@ void InGameMapImagePyramidWindow::chooseOutputFile()
 void InGameMapImagePyramidWindow::createZip()
 {
     ui->logText->clear();
-    QString inputFileName = ui->inputNameEdit->text();
+    const QString inputFileName = ui->inputNameEdit->text();
     log(QStringLiteral("Reading %1").arg(inputFileName));
-    QImage image(inputFileName);
+    const QImage image(inputFileName);
     if (image.isNull()) {
         log(QStringLiteral("Error reading %1").arg(inputFileName));
         return;
     }
-
-    QuaZip zip(ui->outputNameEdit->text());
-    if (zip.open(QuaZip::Mode::mdCreate) == false) {
-        log(QStringLiteral("Error creating %1").arg(ui->outputNameEdit->text()));
+    const QRect worldBounds(
+                ui->xMin->value(), ui->yMin->value(),
+                ui->xMax->value() - ui->xMin->value(),
+                ui->yMax->value() - ui->yMin->value());
+    QString error;
+    if (!createPyramidZip(
+                image, worldBounds, ui->outputNameEdit->text(), &error,
+                [this](const QString &message) { log(message); })) {
+        log(tr("ERROR: %1").arg(error));
         return;
     }
-
-    QSize size(std::ceil(image.width() / 16.0f) * 16, std::ceil(image.height() / 16.0f) * 16);
-    QImage image1(size, image.format());
-    image1.fill(Qt::transparent);
-    QPainter painter(&image1);
-    painter.drawImage(QPoint(), image);
-    painter.end();
-
-    int tileSize = 256;
-    int levels = 5;
-    for (int level = 0; level < levels; level++) {
-        float width = float(image1.width()) / (1 << level);
-        float height = float(image1.height()) / (1 << level);
-        QImage scaledImage = image1.scaled(width, height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-        int columns = std::ceil(width / tileSize);
-        int rows = std::ceil(height / tileSize);
-        log(QStringLiteral("Creating images for level %1. width x height = %2 x %3").arg(level).arg(columns).arg(rows));
-        for (int row = 0; row < rows; row++) {
-            for (int col = 0; col < columns; col++) {
-                QImage subImage = scaledImage.copy(col * tileSize, row * tileSize, tileSize, tileSize);
-                writeImageToZip(zip, subImage, col, row, level);
-            }
-        }
-        if (width <= tileSize && height <= tileSize) {
-            break;
-        }
-    }
-
-    writePyramidTxt(zip, image);
-
-    zip.close();
-
     log(QStringLiteral("FINISHED."));
 }
 
-void InGameMapImagePyramidWindow::writeImageToZip(QuaZip &zip, const QImage &image, int col, int row, int level)
+bool InGameMapImagePyramidWindow::createPyramidZip(
+        const QImage &image,
+        const QRect &worldBounds,
+        const QString &outputFileName,
+        QString *error,
+        const LogFunction &logger)
 {
-    QString fileName = QStringLiteral("%1/tile%2x%3.png").arg(level).arg(col).arg(row);
-
-    log(QStringLiteral("Adding %1 to ZIP").arg(fileName));
-
-//    zip.setCurrentFile(fileName);
-
-    QuaZipFile file(&zip);
-    QuaZipNewInfo newInfo(fileName);
-    if (file.open(QIODevice::WriteOnly, newInfo) == false) {
-        log(QStringLiteral("Error opening %1 in ZIP file").arg(fileName));
-        return;
+    if (image.isNull()) {
+        if (error)
+            *error = tr("The source image is empty.");
+        return false;
     }
-    if (image.save(&file, "PNG") == false) {
-        log(QStringLiteral("ERROR writing %1 to ZIP file").arg(fileName));
-        file.close();
-        return;
+    if (worldBounds.width() <= 0 || worldBounds.height() <= 0) {
+        if (error)
+            *error = tr("The pyramid world bounds are empty or inverted.");
+        return false;
     }
-    file.close();
-}
+    if (outputFileName.isEmpty()) {
+        if (error)
+            *error = tr("No output ZIP file was selected.");
+        return false;
+    }
 
-void InGameMapImagePyramidWindow::writePyramidTxt(QuaZip &zip, const QImage &image)
-{
-    QString fileName = QStringLiteral("pyramid.txt");
-    log(QStringLiteral("Writing %1").arg(fileName));
-    QuaZipFile file(&zip);
-    QuaZipNewInfo newInfo(fileName);
-    if (file.open(QIODevice::WriteOnly, newInfo) == false) {
-        log(QStringLiteral("Error opening %1 in ZIP file").arg(fileName));
-        return;
+    QuaZip zip(outputFileName);
+    if (!zip.open(QuaZip::Mode::mdCreate)) {
+        if (error)
+            *error = tr("Could not create %1 (ZIP error %2).")
+                    .arg(QDir::toNativeSeparators(outputFileName))
+                    .arg(zip.getZipError());
+        return false;
     }
-    QTextStream ts(&file);
-    ts << "VERSION=1\n";
-    ts << QStringLiteral("bounds=%1 %2 %3 %4\n").arg(ui->xMin->value()).arg(ui->yMin->value()).arg(ui->xMax->value()).arg(ui->yMax->value());
-    ts << QStringLiteral("imageSize=%1 %2").arg(image.size().width()).arg(image.size().height());
-    ts.flush();
-    file.close();
+
+    const QSize paddedSize(
+                int(std::ceil(image.width() / 16.0f) * 16),
+                int(std::ceil(image.height() / 16.0f) * 16));
+    QImage paddedImage(paddedSize, QImage::Format_ARGB32);
+    paddedImage.fill(Qt::transparent);
+    QPainter painter(&paddedImage);
+    painter.drawImage(QPoint(), image);
+    painter.end();
+
+    const int tileSize = 256;
+    const int levels = 5;
+    for (int level = 0; level < levels; ++level) {
+        const int width = qMax(1, paddedImage.width() / (1 << level));
+        const int height = qMax(1, paddedImage.height() / (1 << level));
+        const QImage scaledImage = paddedImage.scaled(
+                    width, height, Qt::IgnoreAspectRatio,
+                    Qt::SmoothTransformation);
+        const int columns = int(std::ceil(width / qreal(tileSize)));
+        const int rows = int(std::ceil(height / qreal(tileSize)));
+        pyramidLog(logger,
+                   tr("Creating level %1 with %2 x %3 tile(s)")
+                   .arg(level).arg(columns).arg(rows));
+        for (int row = 0; row < rows; ++row) {
+            for (int col = 0; col < columns; ++col) {
+                const QImage tile = scaledImage.copy(
+                            col * tileSize, row * tileSize,
+                            tileSize, tileSize);
+                if (!writePyramidImage(
+                            zip, tile, col, row, level,
+                            error, logger)) {
+                    zip.close();
+                    QFile::remove(outputFileName);
+                    return false;
+                }
+            }
+        }
+        if (width <= tileSize && height <= tileSize)
+            break;
+    }
+
+    if (!writePyramidDescription(
+                zip, image, worldBounds, error, logger)) {
+        zip.close();
+        QFile::remove(outputFileName);
+        return false;
+    }
+    zip.close();
+    if (zip.getZipError() != 0) {
+        if (error)
+            *error = tr("Could not finish %1 (ZIP error %2).")
+                    .arg(QDir::toNativeSeparators(outputFileName))
+                    .arg(zip.getZipError());
+        QFile::remove(outputFileName);
+        return false;
+    }
+    return true;
 }
 
 void InGameMapImagePyramidWindow::log(const QString &str)

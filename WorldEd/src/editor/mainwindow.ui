@@ -398,10 +398,13 @@
     <addaction name="actionRemoveInGameMapHole"/>
     <addaction name="actionConvertToPolygon"/>
     <addaction name="separator"/>
-    <addaction name="actionGenerateInGameMapBuildingFeatures"/>
     <addaction name="actionGenerateInGameMapTreeFeatures"/>
+    <addaction name="actionWriteInGameMapForest"/>
+    <addaction name="separator"/>
     <addaction name="actionGenerateInGameMapWaterFeatures"/>
     <addaction name="actionGenerateInGameMapRoadFeatures"/>
+    <addaction name="actionGenerateInGameMapBuildingFeatures"/>
+    <addaction name="actionWriteInGameMapWorldMap"/>
     <addaction name="separator"/>
     <addaction name="actionReadInGameMapFeaturesXML"/>
     <addaction name="actionWriteInGameMapFeaturesXML_256"/>
@@ -973,6 +976,22 @@
     <string>Generate Tree Features</string>
    </property>
   </action>
+  <action name="actionWriteInGameMapForest">
+   <property name="text">
+    <string>Write Worldmap-Forest</string>
+   </property>
+   <property name="toolTip">
+    <string>Write natural=forest features to worldmap-forest.xml and create forest.png plus forest.pyramid.zip</string>
+   </property>
+  </action>
+  <action name="actionWriteInGameMapWorldMap">
+   <property name="text">
+    <string>Write Worldmap</string>
+   </property>
+   <property name="toolTip">
+    <string>Write water, road, building and other non-Forest features to worldmap.xml</string>
+   </property>
+  </action>
   <action name="actionRemoveInGameMapFeatures">
    <property name="icon">
     <iconset resource="editor.qrc">
@@ -1158,7 +1177,7 @@
   </action>
   <action name="actionCheckForHoles">
    <property name="text">
-    <string>Check For Holes</string>
+    <string>Hole Detection...</string>
    </property>
   </action>
  </widget>

@@ -16,6 +16,7 @@
  */
 
 #include "ingamemapwriterbinary.h"
+#include "ingamemapwriter.h"
 
 #include "world.h"
 #include "worldcell.h"
@@ -274,6 +275,7 @@ public:
 
     InGameMapWriterBinaryPrivate()
         : mWorld(nullptr)
+        , mFeatureScope(InGameMapFeatureScope::AllFeatures)
     {
     }
 
@@ -347,6 +349,8 @@ public:
             for (int x = 0; x < world->width(); x++) {
                 WorldCell *cell = world->cellAt(x, y);
                 for (auto* feature : std::as_const(cell->inGameMap().mFeatures)) {
+                    if (!inGameMapFeatureMatchesScope(feature, mFeatureScope))
+                        continue;
                     addString(feature->mGeometry.mType);
                     for (auto& property : feature->mProperties) {
                         addString(property.mKey);
@@ -586,6 +590,8 @@ public:
         QList<ExportFeature> exportFeatures;
         const QPoint cellCoordinates = worldCellCoordinates(cell);
         for (InGameMapFeature *feature : std::as_const(cell->inGameMap().mFeatures)) {
+            if (!inGameMapFeatureMatchesScope(feature, mFeatureScope))
+                continue;
             ExportFeature item{feature, InGameMapGeometry()};
             QStringList diagnostics;
             if (!sanitizeInGameMapGeometryForExport(feature->mGeometry,
@@ -708,6 +714,7 @@ public:
     int mWrittenFeatures = 0;
     int mRepairedFeatures = 0;
     int mRejectedFeatures = 0;
+    InGameMapFeatureScope mFeatureScope;
 };
 
 /////
@@ -808,6 +815,11 @@ void InGameMapWriterBinary::writeWorld(World *world, QIODevice *device, const QS
     d->writeWorld(worldForExport, device, absDirPath);
     if (worldForExport != world)
         delete worldForExport;
+}
+
+void InGameMapWriterBinary::setFeatureScope(InGameMapFeatureScope scope)
+{
+    d->mFeatureScope = scope;
 }
 
 QString InGameMapWriterBinary::errorString() const

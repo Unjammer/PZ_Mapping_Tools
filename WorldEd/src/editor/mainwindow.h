@@ -75,6 +75,9 @@ public:
 
     bool InitConfigFiles();
 
+    static bool validateInGameMapForestExport(
+            QString *summary, QString *error);
+
     void readSettings();
     bool canRemoveEmptyBorderCells() const;
 
@@ -164,6 +167,8 @@ public slots:
     void generateInGameMapTreeFeatures();
     void generateInGameMapWaterFeatures();
     void generateInGameMapRoadFeatures();
+    void writeInGameMapForest();
+    void writeInGameMapWorldMap();
     void removeInGameMapFeatures();
     void splitInGameMapPolygon();
     void convertInGameMapPolylineToPolygon();

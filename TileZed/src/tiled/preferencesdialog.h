@@ -66,6 +66,7 @@ private slots:
     void exportObjectTypes();
 
 #ifdef ZOMBOID
+    void resetInterfaceLayout();
     void defaultGridColor();
     void defaultBackgroundColor();
     void browseThumbnailDirectory();

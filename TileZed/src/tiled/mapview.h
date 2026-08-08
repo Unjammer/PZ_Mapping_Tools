@@ -22,11 +22,13 @@
 #define MAPVIEW_H
 
 #include <QGraphicsView>
+#include <QElapsedTimer>
 
 #ifdef ZOMBOID
 #include "minimap.h"
 #endif
 
+class QLabel;
 class QPainter;
 
 namespace Tiled {
@@ -63,6 +65,10 @@ public:
     bool handScrolling() const { return mHandScrolling; }
     void setHandScrolling(bool handScrolling);
 
+#ifdef ZOMBOID
+    void setRenderDiagnosticsEnabled(bool enabled);
+#endif
+
 protected:
     bool event(QEvent *event);
 
@@ -75,6 +81,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *event);
 
 #ifdef ZOMBOID
+    void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event);
     void scrollContentsBy(int dx, int dy);
     void drawForeground(QPainter *painter, const QRectF &rect) override;
@@ -94,11 +101,21 @@ private:
     Zoomable *mZoomable;
 #ifdef ZOMBOID
     void drawProjectGridBadge(QPainter *painter);
+    void updateRenderDiagnosticsLabel();
+    void positionRenderDiagnosticsLabel();
 
     MiniMap *mMiniMap;
     MiniMapItem *mMiniMapItem;
     bool mFixedMiniMap = false;
     QRect mProjectGridBadgeRect;
+    bool mRenderDiagnosticsEnabled;
+    QLabel *mRenderDiagnosticsLabel;
+    QElapsedTimer mDiagnosticsPreviousFrame;
+    QElapsedTimer mDiagnosticsMemoryTimer;
+    qreal mDiagnosticsFps;
+    qreal mDiagnosticsRenderMs;
+    quint64 mDiagnosticsRenderedTiles;
+    quint64 mDiagnosticsMemoryBytes;
 #endif
 };
 

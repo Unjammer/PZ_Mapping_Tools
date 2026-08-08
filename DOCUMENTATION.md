@@ -19,10 +19,11 @@ under `docs/index.html`.
 - [Current release changes](RELEASE_CHANGELOG.md): user-facing release notes.
 - [Complete unofficial changelog](CHANGELOG-PZTOOLS.md): detailed differences
   from the maintained Tim Baker baselines.
-- [Building PZ Mapping Tools](BUILDING.md): supported Windows build,
-  deployment, hash verification, and regression procedure.
-- [Linux and macOS build feasibility audit](PLATFORM-BUILD-AUDIT.md):
-  confirmed portability blockers and validation gates.
+- [How to build PZ Mapping Tools](BUILDING.md): source layout, Windows,
+  Linux, and macOS compilation, packaging, hash verification, and validation.
+- [GitHub release updater design](docs/PZTools-Auto-Updater-Design.md):
+  version discovery, signed manifests, staging, rollback, managed files, and
+  the separate Tiles synchronization policy.
 - [Upstream history](UPSTREAM-HISTORY.md): source provenance and selectively
   ported upstream work.
 

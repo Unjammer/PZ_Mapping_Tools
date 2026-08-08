@@ -151,6 +151,7 @@ SOURCES += aboutdialog.cpp \
     propertiesmodel.cpp \
     propertiesview.cpp \
     quickstampmanager.cpp \
+    removetilesetsdialog.cpp \
     renamelayer.cpp \
     resizedialog.cpp \
     resizehelper.cpp \
@@ -396,6 +397,7 @@ HEADERS += aboutdialog.h \
     propertiesview.h \
     quickstampmanager.h \
     rangeset.h \
+    removetilesetsdialog.h \
     renamelayer.h \
     resizedialog.h \
     resizehelper.h \
@@ -568,6 +570,7 @@ FORMS += aboutdialog.ui \
     offsetmapdialog.ui \
     preferencesdialog.ui \
     propertiesdialog.ui \
+    removetilesetsdialog.ui \
     resizedialog.ui \
     saveasimagedialog.ui\
     newimagelayerdialog.ui \

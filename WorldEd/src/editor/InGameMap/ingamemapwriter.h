@@ -21,9 +21,21 @@
 #include <QString>
 
 class World;
+class InGameMapFeature;
 class InGameMapWriterPrivate;
 
 class QIODevice;
+
+enum class InGameMapFeatureScope
+{
+    AllFeatures,
+    ForestFeatures,
+    NonForestFeatures
+};
+
+bool inGameMapFeatureMatchesScope(
+        const InGameMapFeature *feature,
+        InGameMapFeatureScope scope);
 
 class InGameMapWriter
 {
@@ -33,6 +45,7 @@ public:
 
     bool writeWorld(World *world, const QString &filePath);
     void writeWorld(World *world, QIODevice *device, const QString &absDirPath);
+    void setFeatureScope(InGameMapFeatureScope scope);
 
     QString errorString() const;
 

@@ -26,6 +26,7 @@
 
 #include <qmath.h>
 #include <QGraphicsPixmapItem>
+#include <QLocale>
 #include <QMouseEvent>
 #include <QPainter>
 
@@ -64,6 +65,29 @@ void WorldView::drawForeground(QPainter *painter, const QRectF &rect)
     QGraphicsView::drawForeground(painter, rect);
     if (scene() && scene()->world())
         drawProjectGridBadge(painter, scene()->world()->cellSize());
+}
+
+QString WorldView::renderDiagnosticsWorkloadText(
+        quint64 renderedTiles) const
+{
+    Q_UNUSED(renderedTiles)
+    if (!scene() || !scene()->world())
+        return tr("Cells in view 0");
+
+    const QRectF visible = mapToScene(viewport()->rect()).boundingRect();
+    const int startX = qMax(0, qFloor(
+        scene()->pixelToCellCoords(visible.topLeft()).x()));
+    const int startY = qMax(0, qFloor(
+        scene()->pixelToCellCoords(visible.topRight()).y()));
+    const int endX = qMin(scene()->world()->width() - 1, qCeil(
+        scene()->pixelToCellCoords(visible.bottomRight()).x()));
+    const int endY = qMin(scene()->world()->height() - 1, qCeil(
+        scene()->pixelToCellCoords(visible.bottomLeft()).y()));
+    const quint64 visibleCells = endX >= startX && endY >= startY
+            ? quint64(endX - startX + 1) * quint64(endY - startY + 1)
+            : 0;
+    return tr("Cells in view ~%1").arg(
+                QLocale().toString(qulonglong(visibleCells)));
 }
 
 /////

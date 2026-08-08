@@ -9,14 +9,19 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHash>
+#include <QHeaderView>
 #include <QImage>
+#include <QLabel>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QTableWidget>
+#include <QVBoxLayout>
 
 #include <algorithm>
 #include <cmath>
@@ -98,6 +103,8 @@ BiomeMapGeneratorDialog::BiomeMapGeneratorDialog(World *world, QWidget *parent)
             this, &BiomeMapGeneratorDialog::browseOutputDirectory);
     connect(ui->browseFallbackDirectory, &QToolButton::clicked,
             this, &BiomeMapGeneratorDialog::browseFallbackDirectory);
+    connect(ui->configurationReferenceButton, &QPushButton::clicked,
+            this, &BiomeMapGeneratorDialog::showConfigurationReference);
     connect(ui->buttonBox, &QDialogButtonBox::accepted,
             this, &BiomeMapGeneratorDialog::generate);
     connect(ui->buttonBox, &QDialogButtonBox::rejected,
@@ -174,6 +181,87 @@ void BiomeMapGeneratorDialog::browseFallbackDirectory()
                     : ui->fallbackDirectory->text().trimmed());
     if (!directory.isEmpty())
         ui->fallbackDirectory->setText(QDir::toNativeSeparators(directory));
+}
+
+void BiomeMapGeneratorDialog::showConfigurationReference()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Build 42.20 BiomeMapConfig Reference"));
+    dialog.resize(980, 610);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QLabel *description = new QLabel(
+                tr("<b>Each pixel stores two independent identifiers.</b> "
+                   "Red selects the biome and optional ore selector. Green selects "
+                   "the foraging zone. Both channels resolve through the "
+                   "same Build 42.20 <tt>biome_map_config</tt> table.<br/>"
+                   "<b>map_forest</b> selects procedural surface deposits "
+                   "of boulders, limestone, or flint. Ore noise selects the "
+                   "density from none through very high. It does not select "
+                   "iron or copper, which use separate vein generation.<br/>"
+                   "ID 171 is not active in the Vanilla table. It works only "
+                   "when the map adds the documented WorldGenOverride.lua "
+                   "entry."), &dialog);
+    description->setWordWrap(true);
+    layout->addWidget(description);
+
+    const QList<BiomeMapImageProcessor::PaletteEntry> &entries =
+            BiomeMapImageProcessor::palette();
+    QTableWidget *table = new QTableWidget(entries.size(), 6, &dialog);
+    table->setHorizontalHeaderLabels(
+                QStringList() << tr("Pixel") << tr("Palette")
+                << tr("Biome") << tr("Ore selector") << tr("Zone")
+                << tr("Availability"));
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setAlternatingRowColors(true);
+    table->verticalHeader()->setVisible(false);
+
+    for (int row = 0; row < entries.size(); ++row) {
+        const BiomeMapImageProcessor::PaletteEntry &entry = entries.at(row);
+        QTableWidgetItem *pixel =
+                new QTableWidgetItem(QString::number(entry.value));
+        pixel->setData(Qt::UserRole, entry.value);
+        pixel->setBackground(entry.color);
+        pixel->setForeground(
+                    entry.color.lightness() < 128 ? Qt::white : Qt::black);
+        table->setItem(row, 0, pixel);
+        table->setItem(row, 1, new QTableWidgetItem(entry.name));
+        table->setItem(row, 2, new QTableWidgetItem(
+                           entry.biome.isEmpty() ? tr("(none)") : entry.biome));
+        table->setItem(row, 3, new QTableWidgetItem(
+                           entry.ore.isEmpty() ? tr("(none)") : entry.ore));
+        table->item(row, 3)->setToolTip(
+                    BiomeMapImageProcessor::oreSelectorDescription(
+                        entry.ore));
+        table->setItem(row, 4, new QTableWidgetItem(entry.zone));
+        table->setItem(
+                    row, 5,
+                    new QTableWidgetItem(
+                        entry.enabledByDefault
+                        ? tr("Vanilla Build 42.20")
+                        : tr("Map override required")));
+    }
+    table->horizontalHeader()->setSectionResizeMode(
+                0, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(
+                1, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(
+                2, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(
+                3, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(
+                4, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(
+                5, QHeaderView::ResizeToContents);
+    layout->addWidget(table);
+
+    QDialogButtonBox *buttons =
+            new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    connect(buttons, &QDialogButtonBox::rejected,
+            &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.exec();
 }
 
 void BiomeMapGeneratorDialog::generate()
@@ -260,6 +348,13 @@ void BiomeMapGeneratorDialog::generate()
     if (!analysis.biomeValuesWithoutEffect.isEmpty())
         warnings += tr("Red IDs with no biome or ore effect: %1")
                 .arg(valuesText(analysis.biomeValuesWithoutEffect));
+    if (!analysis.valuesRequiringOverride.isEmpty()) {
+        warnings += tr("BiomeMap ID(s) requiring a map-specific "
+                       "WorldGenOverride.lua entry: %1. Vanilla Build 42.20 "
+                       "leaves ID 171 disabled, so it has no biome or zone "
+                       "definition unless the map enables it.")
+                .arg(valuesText(analysis.valuesRequiringOverride));
+    }
     if (!analysis.unknownZoneValues.isEmpty()) {
         QMessageBox::critical(this, tr("Invalid Foraging Zone IDs"),
                               tr("The green layer contains IDs with no zone mapping: %1\n\n"

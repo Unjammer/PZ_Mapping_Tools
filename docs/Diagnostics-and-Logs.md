@@ -88,11 +88,31 @@ preparation, Building catalog files, and thumbnail settings. A log containing
 `WorldEd interactive startup tasks begin` but no corresponding completion
 identifies the phase where startup is still working or failed.
 
+Every application log now starts with a privacy-limited machine summary:
+
+- operating system, kernel build, and CPU architecture
+- CPU model and logical processor count
+- total RAM and RAM available at startup
+- operating-system-reported GPU/display adapters
+- Qt version, Qt ABI, and process bitness
+
+No username, hostname, serial number, IP address, or hardware identifier is
+collected. A remote desktop session may expose only its remote display adapter.
+When WorldEd creates its native OpenGL context, it additionally records the
+actual OpenGL vendor, renderer, and version selected by the driver.
+
 TileZed logs a warning when BMP Rules regeneration takes 250 ms or more. The
 message contains the caller's requested rectangle, the true dirty rectangle,
-and the bounded work rectangle. This diagnostic concerns the terrain/BMP
-`Rules.txt` imported through the BMP Tool; it is not an Automapper-manifest
-reload.
+the bounded work rectangle, and deferred tile-initialization time. This
+diagnostic concerns the terrain/BMP `Rules.txt` imported through the BMP Tool;
+it is not an Automapper-manifest reload.
+
+For an older TMX, record the counts displayed by **Import Rules** and
+**Import Blends** before accepting replacement. Each TMX has one embedded
+snapshot. Import replaces that snapshot in memory and Save persists one
+replacement block. Reload after Import is unnecessary. If the selected file
+is already identical, TileZed reports a no-op and does not recreate the BMP
+blender.
 
 ## Reproducing a problem
 
@@ -146,6 +166,9 @@ GUI render checks write an explicit PNG:
 
 ```powershell
 .\PZWorldEd.exe --validate-preview-overlays
+.\PZWorldEd.exe --validate-biomemap-config
+.\PZWorldEd.exe --validate-hole-repair
+.\PZWorldEd.exe --validate-native-256-lot-geometry
 .\PZWorldEd.exe --validate-streets=<streets.xml>
 .\PZWorldEd.exe --validate-bmp-generation=<project.pzw>
 .\PZWorldEd.exe --validate-ingamemap=<worldmap.xml>
@@ -154,6 +177,7 @@ GUI render checks write an explicit PNG:
 .\PZWorldEd.exe --validate-worldgen-project-overlay=<game-path>::<project-overlay-path>
 .\PZWorldEd.exe --validate-world-defaults=..\config\WorldDefaults.txt
 .\PZWorldEd.exe --validate-tileset-cleanup
+.\PZWorldEd.exe --validate-ingamemap-forest-export
 .\PZWorldEd.exe --audit-tileset-cleanup=<TMX-TBX-or-project-folder>
 ```
 
@@ -197,11 +221,15 @@ may return before the process exits and may not provide a useful
 | `--validate-building-categories` | Templates, Tile mode, Furniture groups, Ortho/Iso categories, Lua placement, and Undo/Redo. |
 | `--validate-loot-distributions` | Game/project registry loading, merged provenance, and unresolved-reference policy. |
 | `--validate-preview-overlays` | Raster/OpenGL environment-preview overlay anchor alignment. |
+| `--validate-biomemap-config` | Embedded Build 42.20 Pixel, Biome, Ore Selector, Zone, availability table, and `map_forest` selector definition. |
+| `--validate-hole-repair` | Deterministic nearest-existing-tile propagation used by Hole Detection automatic repair. |
+| `--validate-native-256-lot-geometry` | Direct 1:1 native-256 cell, square, chunk, negative-origin, and cross-cell lot mapping. |
 | `--validate-bmp-generation` | Project BMP-to-TMX inputs, including `Rules.txt` versus `MapBaseXML.txt`. |
 | `--validate-worldgen-preview` | WorldGen definitions, inheritance, catalogue counts, and representative preview generation. |
 | `--validate-worldgen-prefab-import` | Strict z=0 TMX/TBX-to-prefab conversion and format limits. |
 | `--validate-world-defaults` | Duplicate-safe parsing and counts for enums, properties, templates, object types, and object groups. |
 | `--validate-tileset-cleanup` | Stale TMX handling, complete valid-header retention, 2x/1x path repair, missing-reference preservation, backup exclusion, and stable TBX ID remapping. |
+| `--validate-ingamemap-forest-export` | Forest and non-Forest XML/binary separation, Forest PNG coverage, pyramid ZIP levels, metadata bounds, and atomic four-file export. |
 | `--audit-tileset-cleanup` | Read-only report for real TMX/TBX files, including missing/outside TBX dependencies; it never applies cleanup. |
 
 ## Minimum useful issue report

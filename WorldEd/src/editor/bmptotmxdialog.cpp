@@ -18,17 +18,28 @@
 #include "bmptotmxdialog.h"
 #include "ui_bmptotmxdialog.h"
 
+#include "bmpblender.h"
 #include "bmptotmx.h"
 #include "mainwindow.h"
 #include "world.h"
 #include "worlddocument.h"
 
+#include "map.h"
+
+#include <QColor>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QIcon>
 #include <QMessageBox>
+#include <QPixmap>
 #include <QPushButton>
+#include <QSet>
+
+using namespace Tiled;
+using namespace Tiled::Internal;
 
 BMPToTMXDialog::BMPToTMXDialog(WorldDocument *worldDoc, QWidget *parent) :
     QDialog(parent),
@@ -87,6 +98,12 @@ BMPToTMXDialog::BMPToTMXDialog(WorldDocument *worldDoc, QWidget *parent) :
 
     ui->assignMapCheckBox->setChecked(settings.assignMapsToWorld);
     ui->warnUnknownColors->setChecked(settings.warnUnknownColors);
+    ui->repairUnknownColors->setChecked(settings.repairUnknownColors);
+    populateFallbackColors(settings.unknownGroundFallback,
+                           settings.unknownVegetationFallback);
+    repairUnknownColorsToggled(settings.repairUnknownColors);
+    connect(ui->repairUnknownColors, &QCheckBox::toggled,
+            this, &BMPToTMXDialog::repairUnknownColorsToggled);
 //    ui->compress->setChecked(settings.compress);
 //    ui->copyPixels->setChecked(settings.copyPixels);
     ui->replaceExisting->setChecked(!settings.updateExisting);
@@ -116,8 +133,11 @@ void BMPToTMXDialog::rulesBrowse()
     QString f = QFileDialog::getOpenFileName(this, tr("Choose the Rules.txt File"),
         ui->rulesEdit->text());
     if (!f.isEmpty()) {
+        const quint32 groundColor = fallbackColor(0);
+        const quint32 vegetationColor = fallbackColor(1);
         mRulesFile = f;
         ui->rulesEdit->setText(QDir::toNativeSeparators(mRulesFile));
+        populateFallbackColors(groundColor, vegetationColor);
     }
 }
 
@@ -139,6 +159,89 @@ void BMPToTMXDialog::mapbaseBrowse()
         mMapBaseFile = f;
         ui->mapbaseEdit->setText(QDir::toNativeSeparators(mMapBaseFile));
     }
+}
+
+void BMPToTMXDialog::repairUnknownColorsToggled(bool enabled)
+{
+    ui->groundFallbackLabel->setEnabled(enabled);
+    ui->groundFallback->setEnabled(enabled);
+    ui->vegetationFallbackLabel->setEnabled(enabled);
+    ui->vegetationFallback->setEnabled(enabled);
+}
+
+void BMPToTMXDialog::populateFallbackColors(
+        quint32 groundColor, quint32 vegetationColor)
+{
+    ui->groundFallback->clear();
+    ui->vegetationFallback->clear();
+
+    const auto addColor = [](QComboBox *combo, QRgb color,
+                             const QString &description) {
+        QPixmap swatch(18, 18);
+        swatch.fill(QColor::fromRgb(color));
+        const QString hex = QStringLiteral("#%1")
+                .arg(color & 0x00ffffff, 6, 16, QLatin1Char('0'))
+                .toUpper();
+        combo->addItem(
+                    QIcon(swatch),
+                    description.isEmpty()
+                    ? hex
+                    : QStringLiteral("%1 - %2").arg(hex, description),
+                    QVariant::fromValue<quint32>(color));
+    };
+
+    const QRgb black = qRgb(0, 0, 0);
+    addColor(ui->groundFallback, black, tr("Black / empty"));
+    addColor(ui->vegetationFallback, black, tr("Black / empty"));
+
+    BmpRulesFile file;
+    if (file.read(mRulesFile)) {
+        QSet<QRgb> groundColors;
+        QSet<QRgb> vegetationColors;
+        groundColors.insert(black);
+        vegetationColors.insert(black);
+        for (const BmpRule *rule : file.rules()) {
+            if (!rule)
+                continue;
+            QComboBox *combo = rule->bitmapIndex == 0
+                    ? ui->groundFallback
+                    : rule->bitmapIndex == 1
+                      ? ui->vegetationFallback : nullptr;
+            QSet<QRgb> *colors = rule->bitmapIndex == 0
+                    ? &groundColors
+                    : rule->bitmapIndex == 1
+                      ? &vegetationColors : nullptr;
+            if (!combo || !colors || colors->contains(rule->color))
+                continue;
+            colors->insert(rule->color);
+            addColor(combo, rule->color,
+                     rule->label.isEmpty()
+                     ? rule->tileChoices.mid(0, 2).join(
+                         QStringLiteral(", "))
+                     : rule->label);
+        }
+    }
+
+    const auto restoreColor = [](QComboBox *combo, quint32 color) {
+        for (int index = 0; index < combo->count(); ++index) {
+            if (combo->itemData(index).toUInt() == color) {
+                combo->setCurrentIndex(index);
+                return;
+            }
+        }
+        combo->setCurrentIndex(0);
+    };
+    restoreColor(ui->groundFallback, groundColor);
+    restoreColor(ui->vegetationFallback, vegetationColor);
+}
+
+quint32 BMPToTMXDialog::fallbackColor(int bitmapIndex) const
+{
+    const QComboBox *combo = bitmapIndex == 0
+            ? ui->groundFallback : ui->vegetationFallback;
+    return combo && combo->currentIndex() >= 0
+            ? combo->currentData().toUInt()
+            : quint32(qRgb(0, 0, 0));
 }
 
 void BMPToTMXDialog::accept()
@@ -221,6 +324,10 @@ void BMPToTMXDialog::toSettings()
     settings.mapbaseFile = mMapBaseFile;
     settings.assignMapsToWorld = ui->assignMapCheckBox->isChecked();
     settings.warnUnknownColors = ui->warnUnknownColors->isChecked();
+    settings.repairUnknownColors =
+            ui->repairUnknownColors->isChecked();
+    settings.unknownGroundFallback = fallbackColor(0);
+    settings.unknownVegetationFallback = fallbackColor(1);
 //    settings.compress = ui->compress->isChecked();
 //    settings.copyPixels = ui->copyPixels->isChecked();
     settings.updateExisting = ui->updateExisting->isChecked();

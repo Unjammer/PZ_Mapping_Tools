@@ -28,6 +28,7 @@ private slots:
     void updateZoneSource();
     void browseOutputDirectory();
     void browseFallbackDirectory();
+    void showConfigurationReference();
     void generate();
 
 private:

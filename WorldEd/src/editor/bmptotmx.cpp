@@ -69,6 +69,64 @@ int cellSizeForImage(const QSize &imageSize, int requestedCellSize)
     return 0;
 }
 
+struct BitmapValidationResult
+{
+    int unknownPixels = 0;
+    int repairedPixels = 0;
+    QMap<QRgb, QList<QPoint> > samples;
+};
+
+BitmapValidationResult validateBitmapColors(
+        QImage &image, const QSet<QRgb> &knownColors,
+        QRgb fallbackColor, bool repair, const QPoint &sourceOrigin)
+{
+    BitmapValidationResult result;
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            const QRgb color = image.pixel(x, y);
+            if (knownColors.contains(color))
+                continue;
+            ++result.unknownPixels;
+            QList<QPoint> &points = result.samples[color];
+            if (points.size() < 50)
+                points += sourceOrigin + QPoint(x, y);
+            if (repair) {
+                image.setPixel(x, y, fallbackColor);
+                ++result.repairedPixels;
+            }
+        }
+    }
+    return result;
+}
+
+bool validateBitmapColorRepair(QString *error)
+{
+    const QRgb black = qRgb(0, 0, 0);
+    const QRgb known = qRgb(12, 34, 56);
+    const QRgb unknown = qRgb(90, 80, 70);
+    QSet<QRgb> knownColors;
+    knownColors.insert(black);
+    knownColors.insert(known);
+
+    QImage image(3, 1, QImage::Format_ARGB32);
+    image.setPixel(0, 0, black);
+    image.setPixel(1, 0, known);
+    image.setPixel(2, 0, unknown);
+    const BitmapValidationResult result = validateBitmapColors(
+                image, knownColors, known, true, QPoint(100, 200));
+    if (result.unknownPixels != 1 ||
+            result.repairedPixels != 1 ||
+            image.pixel(2, 0) != known ||
+            result.samples.value(unknown) !=
+                QList<QPoint>({QPoint(102, 200)})) {
+        if (error)
+            *error = QStringLiteral(
+                "BMP color validation and repair self-test failed");
+        return false;
+    }
+    return true;
+}
+
 }
 
 BMPToTMX *BMPToTMX::mInstance = 0;
@@ -119,7 +177,14 @@ bool BMPToTMX::validateGenerationInputs(WorldDocument *worldDoc)
         mError += tr("\n(while reading Blends.txt)");
         return false;
     }
-    return loadGenerationTilesets();
+    if (!loadGenerationTilesets())
+        return false;
+    QString repairError;
+    if (!validateBitmapColorRepair(&repairError)) {
+        mError = repairError;
+        return false;
+    }
+    return true;
 }
 
 bool BMPToTMX::generateWorld(WorldDocument *worldDoc, BMPToTMX::GenerateMode mode)
@@ -220,6 +285,8 @@ bool BMPToTMX::generateWorld(WorldDocument *worldDoc, BMPToTMX::GenerateMode mod
 
     mUnknownColors.clear();
     mUnknownVegColors.clear();
+    mRepairedGroundPixels = 0;
+    mRepairedVegetationPixels = 0;
     mNewFiles.clear();
 
     if (mode == GenerateSelected) {
@@ -238,6 +305,12 @@ bool BMPToTMX::generateWorld(WorldDocument *worldDoc, BMPToTMX::GenerateMode mod
     qDeleteAll(mImages);
     mImages.clear();
 
+    if (settings.repairUnknownColors) {
+        qInfo() << "BMP to TMX color repair replaced"
+                << mRepairedGroundPixels << "ground pixel(s) and"
+                << mRepairedVegetationPixels
+                << "vegetation pixel(s) in generated TMX bitmap data";
+    }
     reportUnknownColors();
 
     if (world->getBMPToTMXSettings().assignMapsToWorld)
@@ -483,6 +556,74 @@ QString BMPToTMX::tmxNameForCell(WorldCell *cell, WorldBMP *bmp)
     QString filePath = exportDir + QLatin1Char('/')
             + tr("%1_%2_%3.tmx").arg(prefix).arg(worldOrigin.x() + cell->x()).arg(worldOrigin.y() + cell->y());
     return filePath;
+}
+
+void BMPToTMX::validateAndRepairBitmaps(
+        QImage &ground, QImage &vegetation,
+        const QString &sourcePath, const QPoint &sourceOrigin)
+{
+    const BMPToTMXSettings &settings =
+            mWorldDoc->world()->getBMPToTMXSettings();
+    if (!settings.warnUnknownColors && !settings.repairUnknownColors)
+        return;
+
+    const QRgb black = qRgb(0, 0, 0);
+    QSet<QRgb> knownGround;
+    QSet<QRgb> knownVegetation;
+    knownGround.insert(black);
+    knownVegetation.insert(black);
+    for (auto iterator = mRulesByColor0.constBegin();
+         iterator != mRulesByColor0.constEnd(); ++iterator) {
+        knownGround.insert(iterator.key());
+    }
+    for (auto iterator = mRulesByColor1.constBegin();
+         iterator != mRulesByColor1.constEnd(); ++iterator) {
+        knownVegetation.insert(iterator.key());
+    }
+
+    QRgb groundFallback = QRgb(settings.unknownGroundFallback);
+    QRgb vegetationFallback =
+            QRgb(settings.unknownVegetationFallback);
+    if (!knownGround.contains(groundFallback))
+        groundFallback = black;
+    if (!knownVegetation.contains(vegetationFallback))
+        vegetationFallback = black;
+
+    const BitmapValidationResult groundResult =
+            validateBitmapColors(
+                ground, knownGround, groundFallback,
+                settings.repairUnknownColors, sourceOrigin);
+    const BitmapValidationResult vegetationResult =
+            validateBitmapColors(
+                vegetation, knownVegetation, vegetationFallback,
+                settings.repairUnknownColors, sourceOrigin);
+
+    mRepairedGroundPixels += groundResult.repairedPixels;
+    mRepairedVegetationPixels += vegetationResult.repairedPixels;
+    if (!settings.warnUnknownColors)
+        return;
+
+    for (auto iterator = groundResult.samples.constBegin();
+         iterator != groundResult.samples.constEnd(); ++iterator) {
+        UnknownColor &unknown = mUnknownColors[sourcePath][iterator.key()];
+        unknown.rgb = iterator.key();
+        for (const QPoint &point : iterator.value()) {
+            if (unknown.xy.size() >= 50)
+                break;
+            unknown.xy += point;
+        }
+    }
+    for (auto iterator = vegetationResult.samples.constBegin();
+         iterator != vegetationResult.samples.constEnd(); ++iterator) {
+        UnknownColor &unknown =
+                mUnknownVegColors[sourcePath][iterator.key()];
+        unknown.rgb = iterator.key();
+        for (const QPoint &point : iterator.value()) {
+            if (unknown.xy.size() >= 50)
+                break;
+            unknown.xy += point;
+        }
+    }
 }
 
 void BMPToTMX::reportUnknownColors()
@@ -900,27 +1041,9 @@ bool BMPToTMX::WriteMap(WorldCell *cell, int bmpIndex)
         rbmpVeg.rimage() = bmpVeg.copy(ix, iy, cellSize, cellSize)
                 .convertToFormat(QImage::Format_ARGB32);
 
-        if (settings.warnUnknownColors) {
-            const QRgb black = qRgb(0, 0, 0);
-            for (int y = 0; y < map.height(); y++) {
-                for (int x = 0; x < map.width(); x++) {
-                    QRgb rgb = rbmpMain.pixel(x, y);
-                    if (!mRulesByColor0.contains(rgb)) {
-                        if (mUnknownColors[images->mPath][rgb].xy.size() < 50) {
-                            mUnknownColors[images->mPath][rgb].rgb = rgb;
-                            mUnknownColors[images->mPath][rgb].xy += QPoint(ix + x, iy + y);
-                        }
-                    }
-                    rgb = rbmpVeg.pixel(x, y);
-                    if (rgb != black && !mRulesByColor1.contains(rgb)) {
-                        if (mUnknownVegColors[images->mPath][rgb].xy.size() < 50) {
-                            mUnknownVegColors[images->mPath][rgb].rgb = rgb;
-                            mUnknownVegColors[images->mPath][rgb].xy += QPoint(ix + x, iy + y);
-                        }
-                    }
-                }
-            }
-        }
+        validateAndRepairBitmaps(
+                    rbmpMain.rimage(), rbmpVeg.rimage(),
+                    images->mPath, QPoint(ix, iy));
     }
 
     Tiled::Internal::BmpBlender blender;
@@ -1025,11 +1148,17 @@ bool BMPToTMX::UpdateMap(WorldCell *cell, int bmpIndex)
     }
     int ix = (cell->x() - images->mBounds.x()) * cellSize;
     int iy = (cell->y() - images->mBounds.y()) * cellSize;
+    QImage ground = bmp.copy(ix, iy, cellSize, cellSize)
+            .convertToFormat(QImage::Format_ARGB32);
+    QImage vegetation = bmpVeg.copy(ix, iy, cellSize, cellSize)
+            .convertToFormat(QImage::Format_ARGB32);
+    validateAndRepairBitmaps(
+                ground, vegetation, images->mPath, QPoint(ix, iy));
     QPainter painter(&rbmpMain.rimage());
-    painter.drawImage(0, 0, bmp, ix, iy, cellSize, cellSize);
+    painter.drawImage(0, 0, ground);
     painter.end();
     QPainter painter2(&rbmpVeg.rimage());
-    painter2.drawImage(0, 0, bmpVeg, ix, iy, cellSize, cellSize);
+    painter2.drawImage(0, 0, vegetation);
     painter2.end();
 
     MapWriter writer;

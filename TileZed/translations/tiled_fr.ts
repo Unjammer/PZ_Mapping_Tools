@@ -1073,8 +1073,12 @@ Ligne %1, colonne %2</translation>
     </message>
     <message>
         <location line="+13"/>
-        <source>Hardware &amp;accelerated drawing (OpenGL)</source>
-        <translation>Utilisation de l&apos;&amp;accélération matérielle (OpenGL)</translation>
+        <source>Experimental OpenGL viewport</source>
+        <translation>Viewport OpenGL expérimental</translation>
+    </message>
+    <message>
+        <source>Not recommended. TileZed does not yet have a native OpenGL renderer, and the Brush Tool may become much slower. Keep this disabled until the renderer port is complete.</source>
+        <translation>Déconseillé. TileZed ne possède pas encore de moteur de rendu OpenGL natif et l&apos;outil Brush peut devenir beaucoup plus lent. Laissez cette option désactivée jusqu&apos;à la fin du portage du moteur de rendu.</translation>
     </message>
     <message>
         <location line="+24"/>
@@ -2818,6 +2822,77 @@ Ligne %1, colonne %2</translation>
         <location filename="../src/tiled/changepolygon.cpp" line="+39"/>
         <source>Change Polygon</source>
         <translation>Modifier le polygone</translation>
+    </message>
+</context>
+<context>
+    <name>Tiled::Internal::BmpToolDialog</name>
+    <message>
+        <location filename="../src/tiled/bmptooldialog.cpp" line="994"/>
+        <source>Rules Already Current</source>
+        <translation>Rules déjà à jour</translation>
+    </message>
+    <message>
+        <location filename="../src/tiled/bmptooldialog.cpp" line="995"/>
+        <source>The selected Rules.txt is already identical to the snapshot embedded in %1.
+
+Nothing was changed and Reload is not required.</source>
+        <translation>Le fichier Rules.txt sélectionné est déjà identique au snapshot intégré dans %1.
+
+Aucune modification n’a été effectuée et Reload n’est pas nécessaire.</translation>
+    </message>
+    <message>
+        <location filename="../src/tiled/bmptooldialog.cpp" line="1005"/>
+        <source>The current TMX contains %1 aliases and %2 rules.
+The selected file contains %3 aliases and %4 rules.
+
+Replace the embedded Rules snapshot in %5?
+
+The previous snapshot will not be kept in the saved TMX. Reload is not required. Save the map to keep this change.</source>
+        <translation>Le TMX actuel contient %1 alias et %2 rules.
+Le fichier sélectionné contient %3 alias et %4 rules.
+
+Remplacer le snapshot Rules intégré dans %5 ?
+
+Le précédent snapshot ne sera pas conservé dans le TMX sauvegardé. Reload n’est pas nécessaire. Sauvegardez la carte pour conserver cette modification.</translation>
+    </message>
+    <message>
+        <location filename="../src/tiled/bmptooldialog.cpp" line="1018"/>
+        <source>Replace Embedded Rules?</source>
+        <translation>Remplacer les Rules intégrées ?</translation>
+    </message>
+    <message>
+        <location filename="../src/tiled/bmptooldialog.cpp" line="1090"/>
+        <source>Blends Already Current</source>
+        <translation>Blends déjà à jour</translation>
+    </message>
+    <message>
+        <location filename="../src/tiled/bmptooldialog.cpp" line="1091"/>
+        <source>The selected Blends.txt is already identical to the snapshot embedded in %1.
+
+Nothing was changed and Reload is not required.</source>
+        <translation>Le fichier Blends.txt sélectionné est déjà identique au snapshot intégré dans %1.
+
+Aucune modification n’a été effectuée et Reload n’est pas nécessaire.</translation>
+    </message>
+    <message>
+        <location filename="../src/tiled/bmptooldialog.cpp" line="1101"/>
+        <source>The current TMX contains %1 blends.
+The selected file contains %2 blends.
+
+Replace the embedded Blends snapshot in %3?
+
+The previous snapshot will not be kept in the saved TMX. Reload is not required. Save the map to keep this change.</source>
+        <translation>Le TMX actuel contient %1 blends.
+Le fichier sélectionné contient %2 blends.
+
+Remplacer le snapshot Blends intégré dans %3 ?
+
+Le précédent snapshot ne sera pas conservé dans le TMX sauvegardé. Reload n’est pas nécessaire. Sauvegardez la carte pour conserver cette modification.</translation>
+    </message>
+    <message>
+        <location filename="../src/tiled/bmptooldialog.cpp" line="1112"/>
+        <source>Replace Embedded Blends?</source>
+        <translation>Remplacer les Blends intégrés ?</translation>
     </message>
 </context>
 <context>

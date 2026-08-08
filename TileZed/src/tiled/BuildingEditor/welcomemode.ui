@@ -51,6 +51,23 @@
          </widget>
         </item>
         <item>
+         <widget class="QToolButton" name="newFolderButton">
+          <property name="toolTip">
+           <string>Create a folder inside the current Maps folder</string>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+          <property name="icon">
+           <iconset resource="../tiled.qrc">
+            <normaloff>:/images/16x16/document-new.png</normaloff>:/images/16x16/document-new.png</iconset>
+          </property>
+          <property name="toolButtonStyle">
+           <enum>Qt::ToolButtonIconOnly</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QToolButton" name="dirBrowse">
           <property name="text">
            <string>...</string>

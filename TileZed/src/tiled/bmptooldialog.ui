@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>BmpToolDialog</class>
- <widget class="QDialog" name="BmpToolDialog">
+ <widget class="QDockWidget" name="BmpToolDialog">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -11,8 +11,12 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>BMP Tool</string>
+   <string>BMP Tools</string>
   </property>
+  <property name="allowedAreas">
+   <set>Qt::LeftDockWidgetArea|Qt::RightDockWidgetArea</set>
+  </property>
+  <widget class="QWidget" name="dockWidgetContents">
   <layout class="QGridLayout" name="gridLayout">
    <property name="leftMargin">
     <number>2</number>
@@ -421,8 +425,8 @@ This is a permanent per-map setting.</string>
       </layout>
      </widget>
      <widget class="QWidget" name="tab_3">
-      <attribute name="title">
-       <string>Warnings</string>
+     <attribute name="title">
+       <string>Validation &amp; Repair</string>
       </attribute>
       <layout class="QGridLayout" name="gridLayout_2">
        <item row="0" column="0">
@@ -435,10 +439,10 @@ This is a permanent per-map setting.</string>
        <item row="1" column="0">
         <widget class="QCheckBox" name="repairUnknownColors">
          <property name="toolTip">
-          <string>During the color check, replace every pixel that is not present in the Rules palette. The change is undoable.</string>
+          <string>This is a bitmap validation and repair option, not a brush setting. During the color check, replace every pixel that is not present in the Rules palette. The change is undoable.</string>
          </property>
          <property name="text">
-          <string>Replace unknown pixels during color check</string>
+          <string>Auto-repair unknown bitmap colors during validation</string>
          </property>
         </widget>
        </item>
@@ -485,9 +489,10 @@ This is a permanent per-map setting.</string>
        </item>
       </layout>
      </widget>
-    </widget>
-   </item>
-  </layout>
+   </widget>
+  </item>
+ </layout>
+  </widget>
  </widget>
  <customwidgets>
   <customwidget>

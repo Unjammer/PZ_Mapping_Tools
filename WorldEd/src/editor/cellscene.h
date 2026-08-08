@@ -921,6 +921,8 @@ public:
     bool isAdjacentLot(WorldCellLot *lot) const;
 
     void checkHolesOnLevelZero();
+    int autoFixHolesOnLevelZero(QString *backupPath, QString *error);
+    static bool validateHoleRepair(QString *error);
 
     bool hasHoleInFloor() const
     { return !mHoleInFloor.isEmpty(); }

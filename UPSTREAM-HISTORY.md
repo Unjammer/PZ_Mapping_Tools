@@ -23,6 +23,24 @@ BuildingEd is not a third imported repository. Its source is contained in the
 `TileZed/` tree, principally under `src/tiled/BuildingEditor`, and therefore has
 the same `timbaker/tiled` baseline.
 
+## August 6, 2026 upstream review
+
+The Tim Baker `basements` branches were reviewed at WorldEd
+`179a0145` and TileZed `b4ad15fc`. Changes were ported selectively into the
+maintained integration trees.
+
+The WorldEd review contributed basement and above-ground building separation,
+the true minimum-level room scan, recursive building-layer levels, and
+basement-aware world-thumbnail ordering. The ordering was adapted to the
+existing renderer and thumbnail cache rather than replacing either maintained
+renderer.
+
+The TileZed review contributed undoable multi-tileset removal, the Qt 5
+follow-up correction, macOS Lua-console menu retention, and validated mapping
+tool presets. Complete upstream catalogue and BuildingEd data files were not
+adopted when they would remove maintained entries or introduce unresolved
+tile references.
+
 These revisions are not estimates. In the reconstruction repositories they are
 the Git merge-bases between each local `integration/qt5-basements` branch and
 its corresponding `upstream/basements` branch:

@@ -784,14 +784,43 @@ void MapDocument::setBmpRules(const QString &fileName,
     emit bmpRulesChanged();
 }
 
+void MapDocument::setBmpRulesAndAliases(
+        const QString &fileName,
+        const QList<BmpAlias *> &aliases,
+        const QList<BmpRule *> &rules)
+{
+    QElapsedTimer timer;
+    timer.start();
+
+    mMap->rbmpSettings()->setAliases(aliases);
+    mMap->rbmpSettings()->setRulesFile(fileName);
+    mMap->rbmpSettings()->setRules(rules);
+
+    mapComposite()->bmpBlender()->fromMap();
+    mapComposite()->bmpBlender()->recreate();
+
+    qInfo() << "BMP Rules.txt update prepared in" << timer.elapsed()
+            << "ms with" << aliases.size() << "aliases and"
+            << rules.size() << "rules";
+
+    emit bmpAliasesChanged();
+    emit bmpRulesChanged();
+}
+
 void MapDocument::setBmpBlends(const QString &fileName,
                                const QList<BmpBlend *> &blends)
 {
+    QElapsedTimer timer;
+    timer.start();
+
     mMap->rbmpSettings()->setBlendsFile(fileName);
     mMap->rbmpSettings()->setBlends(blends);
 
     mapComposite()->bmpBlender()->fromMap();
     mapComposite()->bmpBlender()->recreate();
+
+    qInfo() << "BMP Blends.txt update prepared in" << timer.elapsed()
+            << "ms with" << blends.size() << "blends";
 
     emit bmpBlendsChanged();
 }

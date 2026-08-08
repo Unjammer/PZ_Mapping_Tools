@@ -93,6 +93,9 @@
 #include "InGameMap/ingamemapwriter.h"
 #include "InGameMap/ingamemapwriterbinary.h"
 
+#include <quazip.h>
+#include <quazipfile.h>
+
 #include "shortcut/actionmanager.h"
 #include "shortcut/shortcuteditorwidget.h"
 #include "shortcut/keyboardshortcutwindow.h"
@@ -117,6 +120,8 @@
 #include <QMessageBox>
 #include <QLabel>
 #include <QHBoxLayout>
+#include <QPainter>
+#include <QPainterPath>
 #include <QPushButton>
 #include <QPixmap>
 #include <QRandomGenerator>
@@ -129,6 +134,7 @@
 #include <QSpinBox>
 #include <QTimer>
 #include <QTemporaryFile>
+#include <QTemporaryDir>
 #include <QToolBar>
 #include <QUndoGroup>
 #include <QUndoStack>
@@ -220,8 +226,11 @@ bool commitFilePair(const QStringList &temporaryFiles,
     return true;
 }
 
-bool writeInGameMapFilePair(World *world, const QString &xmlFileName,
-                            QString *error)
+bool writeInGameMapFilePair(
+        World *world, const QString &xmlFileName,
+        QString *error,
+        InGameMapFeatureScope scope =
+            InGameMapFeatureScope::AllFeatures)
 {
     const QFileInfo destinationInfo(xmlFileName);
     QDir destinationDirectory(destinationInfo.absolutePath());
@@ -258,6 +267,7 @@ bool writeInGameMapFilePair(World *world, const QString &xmlFileName,
     binaryTemporary.remove();
 
     InGameMapWriter writer;
+    writer.setFeatureScope(scope);
     if (!writer.writeWorld(world, xmlTemporaryName)) {
         QFile::remove(xmlTemporaryName);
         QFile::remove(binaryTemporaryName);
@@ -268,6 +278,7 @@ bool writeInGameMapFilePair(World *world, const QString &xmlFileName,
         return false;
     }
     InGameMapWriterBinary binaryWriter;
+    binaryWriter.setFeatureScope(scope);
     if (!binaryWriter.writeWorld(world, binaryTemporaryName)) {
         QFile::remove(xmlTemporaryName);
         QFile::remove(binaryTemporaryName);
@@ -287,6 +298,215 @@ bool writeInGameMapFilePair(World *world, const QString &xmlFileName,
         QFile::remove(binaryTemporaryName);
     }
     return committed;
+}
+
+QImage createForestFeatureImage(
+        World *world, int *featureCount, QString *error)
+{
+    if (featureCount)
+        *featureCount = 0;
+    if (!world) {
+        if (error)
+            *error = QObject::tr("No world is open.");
+        return QImage();
+    }
+
+    const int cellSize = world->cellSize();
+    const QSize imageSize(world->size() * cellSize);
+    QImage image(imageSize, QImage::Format_ARGB32);
+    if (image.isNull()) {
+        if (error) {
+            *error = QObject::tr(
+                        "Could not allocate the %1 x %2 Forest image.")
+                    .arg(imageSize.width()).arg(imageSize.height());
+        }
+        return QImage();
+    }
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    const QBrush brush(Qt::white);
+    int drawnFeatures = 0;
+
+    for (int cellY = 0; cellY < world->height(); ++cellY) {
+        for (int cellX = 0; cellX < world->width(); ++cellX) {
+            WorldCell *cell = world->cellAt(cellX, cellY);
+            if (!cell)
+                continue;
+            for (InGameMapFeature *feature :
+                 cell->inGameMap().features()) {
+                if (!inGameMapFeatureMatchesScope(
+                            feature,
+                            InGameMapFeatureScope::ForestFeatures)) {
+                    continue;
+                }
+                if (!feature->mGeometry.isPolygon()
+                        || feature->mGeometry.mCoordinates.isEmpty()) {
+                    continue;
+                }
+
+                QPolygonF polygon;
+                QVector<QPolygonF> holes;
+                const InGameMapCoordinates &outer =
+                        feature->mGeometry.mCoordinates.first();
+                for (const InGameMapPoint &point : outer)
+                    polygon += QPointF(point.x, point.y);
+                if (polygon.isEmpty())
+                    continue;
+
+                const bool clockwise = outer.isClockwise();
+                for (int index = 1;
+                     index < feature->mGeometry.mCoordinates.size();
+                     ++index) {
+                    const InGameMapCoordinates &inner =
+                            feature->mGeometry.mCoordinates.at(index);
+                    QPolygonF hole;
+                    if (clockwise == inner.isClockwise()) {
+                        for (int pointIndex = inner.size() - 1;
+                             pointIndex >= 0; --pointIndex) {
+                            const InGameMapPoint &point =
+                                    inner.at(pointIndex);
+                            hole += QPointF(point.x, point.y);
+                        }
+                    } else {
+                        for (const InGameMapPoint &point : inner)
+                            hole += QPointF(point.x, point.y);
+                    }
+                    holes += hole;
+                }
+
+                if (!polygon.isClosed())
+                    polygon += polygon.first();
+                QPainterPath path;
+                path.addPolygon(polygon);
+                QPainterPath holesPath;
+                for (QPolygonF hole : std::as_const(holes)) {
+                    if (!hole.isEmpty() && !hole.isClosed())
+                        hole += hole.first();
+                    if (!hole.isEmpty())
+                        holesPath.addPolygon(hole);
+                }
+                path = path.subtracted(holesPath);
+                path.translate(cellX * cellSize, cellY * cellSize);
+                painter.fillPath(path, brush);
+                ++drawnFeatures;
+            }
+        }
+    }
+    painter.end();
+    if (featureCount)
+        *featureCount = drawnFeatures;
+    return image;
+}
+
+bool writeInGameMapForestBundle(
+        World *world, const QString &outputDirectory,
+        QStringList *writtenFiles, QString *error)
+{
+    QDir destination(outputDirectory);
+    if (!destination.exists()) {
+        if (error) {
+            *error = QObject::tr("The destination directory does not exist:\n%1")
+                    .arg(QDir::toNativeSeparators(outputDirectory));
+        }
+        return false;
+    }
+
+    int forestFeatureCount = 0;
+    QString imageError;
+    const QImage forestImage = createForestFeatureImage(
+                world, &forestFeatureCount, &imageError);
+    if (forestImage.isNull()) {
+        if (error)
+            *error = imageError;
+        return false;
+    }
+    if (forestFeatureCount == 0) {
+        if (error) {
+            *error = QObject::tr(
+                        "No natural=forest polygon is available.\n\n"
+                        "Run Generate Tree Features first, then write "
+                        "Worldmap-Forest again.");
+        }
+        return false;
+    }
+
+    QTemporaryDir staging(destination.filePath(
+            QStringLiteral(".pzworlded-forest-XXXXXX")));
+    if (!staging.isValid()) {
+        if (error) {
+            *error = QObject::tr("Could not create a staging directory in:\n%1")
+                    .arg(QDir::toNativeSeparators(
+                             destination.absolutePath()));
+        }
+        return false;
+    }
+
+    const QDir stagingDirectory(staging.path());
+    const QString xmlTemporary = stagingDirectory.filePath(
+                QStringLiteral("worldmap-forest.xml"));
+    const QString binaryTemporary =
+            xmlTemporary + QStringLiteral(".bin");
+    const QString imageTemporary = stagingDirectory.filePath(
+                QStringLiteral("forest.png"));
+    const QString pyramidTemporary = stagingDirectory.filePath(
+                QStringLiteral("forest.pyramid.zip"));
+
+    if (!writeInGameMapFilePair(
+                world, xmlTemporary, error,
+                InGameMapFeatureScope::ForestFeatures)) {
+        return false;
+    }
+    if (!forestImage.save(imageTemporary, "PNG")) {
+        if (error) {
+            *error = QObject::tr("Could not write the Forest PNG:\n%1")
+                    .arg(QDir::toNativeSeparators(imageTemporary));
+        }
+        return false;
+    }
+
+    const GenerateLotsSettings settings =
+            world->getGenerateLotsSettings();
+    const int cellSize = world->cellSize();
+    const QRect worldBounds(
+                settings.worldOrigin.x() * cellSize,
+                settings.worldOrigin.y() * cellSize,
+                forestImage.width(), forestImage.height());
+    QString pyramidError;
+    if (!InGameMapImagePyramidWindow::createPyramidZip(
+                forestImage, worldBounds, pyramidTemporary,
+                &pyramidError,
+                [](const QString &message) {
+        qInfo().noquote() << "Forest pyramid:" << message;
+        qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
+    })) {
+        if (error) {
+            *error = QObject::tr("Could not create the Forest pyramid.\n\n%1")
+                    .arg(pyramidError);
+        }
+        return false;
+    }
+
+    const QStringList temporaryFiles = {
+        xmlTemporary,
+        binaryTemporary,
+        imageTemporary,
+        pyramidTemporary
+    };
+    const QStringList destinationFiles = {
+        destination.filePath(QStringLiteral("worldmap-forest.xml")),
+        destination.filePath(QStringLiteral("worldmap-forest.xml.bin")),
+        destination.filePath(QStringLiteral("forest.png")),
+        destination.filePath(QStringLiteral("forest.pyramid.zip"))
+    };
+    if (!commitFilePair(temporaryFiles, destinationFiles, error))
+        return false;
+
+    if (writtenFiles)
+        *writtenFiles = destinationFiles;
+    qInfo() << "Worldmap-Forest export completed:"
+            << forestFeatureCount << "forest feature(s), bounds"
+            << worldBounds << "files" << destinationFiles;
+    return true;
 }
 
 bool tmxContainsMapContent(const QString &filePath)
@@ -362,6 +582,172 @@ QDockWidget *visibleDockInTabGroup(QMainWindow *window,
 }
 
 } // namespace
+
+bool MainWindow::validateInGameMapForestExport(
+        QString *summary, QString *error)
+{
+    World world(2, 2, WorldGridFormat::Native256);
+    GenerateLotsSettings settings;
+    settings.worldOrigin = QPoint(5, 7);
+    world.setGenerateLotsSettings(settings);
+    WorldCell *cell = world.cellAt(0, 0);
+
+    InGameMapFeature *forest = new InGameMapFeature(&cell->inGameMap());
+    forest->mGeometry.mType = QStringLiteral("Polygon");
+    InGameMapCoordinates forestCoordinates;
+    forestCoordinates += InGameMapPoint(16, 16);
+    forestCoordinates += InGameMapPoint(120, 16);
+    forestCoordinates += InGameMapPoint(120, 120);
+    forestCoordinates += InGameMapPoint(16, 120);
+    forest->mGeometry.mCoordinates += forestCoordinates;
+    forest->mProperties.set(
+                QStringLiteral("natural"), QStringLiteral("forest"));
+    cell->inGameMap().features() += forest;
+
+    InGameMapFeature *building =
+            new InGameMapFeature(&cell->inGameMap());
+    building->mGeometry.mType = QStringLiteral("Polygon");
+    InGameMapCoordinates buildingCoordinates;
+    buildingCoordinates += InGameMapPoint(180, 180);
+    buildingCoordinates += InGameMapPoint(240, 180);
+    buildingCoordinates += InGameMapPoint(240, 240);
+    buildingCoordinates += InGameMapPoint(180, 240);
+    building->mGeometry.mCoordinates += buildingCoordinates;
+    building->mProperties.set(
+                QStringLiteral("building"),
+                QStringLiteral("Residential"));
+    cell->inGameMap().features() += building;
+
+    QTemporaryDir output;
+    if (!output.isValid()) {
+        if (error)
+            *error = tr("Could not create the Forest export test folder.");
+        return false;
+    }
+
+    QStringList forestFiles;
+    QString exportError;
+    if (!writeInGameMapForestBundle(
+                &world, output.path(), &forestFiles, &exportError)) {
+        if (error)
+            *error = exportError;
+        return false;
+    }
+    const QString worldMapPath = QDir(output.path()).filePath(
+                QStringLiteral("worldmap.xml"));
+    if (!writeInGameMapFilePair(
+                &world, worldMapPath, &exportError,
+                InGameMapFeatureScope::NonForestFeatures)) {
+        if (error)
+            *error = exportError;
+        return false;
+    }
+
+    const auto readFile = [](const QString &path, QByteArray *data) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly))
+            return false;
+        *data = file.readAll();
+        return file.error() == QFile::NoError;
+    };
+    const QDir directory(output.path());
+    const QString forestXmlPath = directory.filePath(
+                QStringLiteral("worldmap-forest.xml"));
+    const QString forestBinaryPath = forestXmlPath
+            + QStringLiteral(".bin");
+    const QString worldBinaryPath = worldMapPath
+            + QStringLiteral(".bin");
+    QByteArray forestXml;
+    QByteArray worldXml;
+    QByteArray forestBinary;
+    QByteArray worldBinary;
+    if (!readFile(forestXmlPath, &forestXml)
+            || !readFile(worldMapPath, &worldXml)
+            || !readFile(forestBinaryPath, &forestBinary)
+            || !readFile(worldBinaryPath, &worldBinary)) {
+        if (error)
+            *error = tr("One or more Forest export test files could not be read.");
+        return false;
+    }
+    if (!forestXml.contains("value=\"forest\"")
+            || forestXml.contains("value=\"Residential\"")
+            || !worldXml.contains("value=\"Residential\"")
+            || worldXml.contains("value=\"forest\"")
+            || !forestBinary.contains("forest")
+            || forestBinary.contains("Residential")
+            || !worldBinary.contains("Residential")
+            || worldBinary.contains("forest")) {
+        if (error) {
+            *error = tr("Forest and non-Forest features were not separated "
+                        "consistently in XML and binary output.");
+        }
+        return false;
+    }
+
+    const QString forestImagePath = directory.filePath(
+                QStringLiteral("forest.png"));
+    const QImage forestImage(forestImagePath);
+    if (forestImage.size() != QSize(512, 512)
+            || qAlpha(forestImage.pixel(32, 32)) == 0
+            || qAlpha(forestImage.pixel(210, 210)) != 0) {
+        if (error) {
+            *error = tr("forest.png does not represent only the Forest "
+                        "feature geometry.");
+        }
+        return false;
+    }
+
+    const QString pyramidPath = directory.filePath(
+                QStringLiteral("forest.pyramid.zip"));
+    QuaZip zip(pyramidPath);
+    if (!zip.open(QuaZip::Mode::mdUnzip)) {
+        if (error)
+            *error = tr("forest.pyramid.zip could not be opened.");
+        return false;
+    }
+    const QStringList entries = zip.getFileNameList();
+    if (!entries.contains(QStringLiteral("0/tile0x0.png"))
+            || !entries.contains(QStringLiteral("1/tile0x0.png"))
+            || !entries.contains(QStringLiteral("pyramid.txt"))
+            || !zip.setCurrentFile(QStringLiteral("pyramid.txt"))) {
+        zip.close();
+        if (error) {
+            *error = tr("The Forest pyramid is missing its image levels or "
+                        "pyramid.txt.");
+        }
+        return false;
+    }
+    QuaZipFile pyramidTextFile(&zip);
+    if (!pyramidTextFile.open(QIODevice::ReadOnly)) {
+        zip.close();
+        if (error)
+            *error = tr("pyramid.txt could not be read from the Forest pyramid.");
+        return false;
+    }
+    const QByteArray pyramidText = pyramidTextFile.readAll();
+    pyramidTextFile.close();
+    zip.close();
+    if (!pyramidText.contains("VERSION=1")
+            || !pyramidText.contains("bounds=1280 1792 1792 2304")
+            || !pyramidText.contains("imageSize=512 512")) {
+        if (error) {
+            *error = tr("pyramid.txt does not contain the expected world "
+                        "bounds and image size.");
+        }
+        return false;
+    }
+
+    if (forestFiles.size() != 4) {
+        if (error)
+            *error = tr("The Forest export did not report all four output files.");
+        return false;
+    }
+    if (summary) {
+        *summary = tr("forest/non-Forest XML and binary filtering, Forest "
+                      "PNG, two image levels, and pyramid.txt bounds verified");
+    }
+    return true;
+}
 
 MainWindow *MainWindow::mInstance = 0;
 
@@ -489,6 +875,23 @@ MainWindow::MainWindow(QWidget *parent)
     ui->menuView->addAction(mSearchDock->toggleViewAction());
     ui->menuView->addAction(mStreetNamesDock->toggleViewAction());
     ui->menuView->addSeparator();
+    QAction *renderDiagnosticsAction = new QAction(
+                tr("Render Diagnostics"), this);
+    renderDiagnosticsAction->setCheckable(true);
+    renderDiagnosticsAction->setToolTip(tr(
+        "Show FPS, render time, drawn tiles, memory, zoom and renderer mode"));
+    renderDiagnosticsAction->setChecked(mSettings.value(
+        QLatin1String("RenderDiagnostics/Enabled"), true).toBool());
+    ui->menuView->addAction(renderDiagnosticsAction);
+    connect(renderDiagnosticsAction, &QAction::toggled, this,
+            [this](bool enabled) {
+        mSettings.setValue(
+                    QLatin1String("RenderDiagnostics/Enabled"), enabled);
+        const QList<BaseGraphicsView *> views =
+                findChildren<BaseGraphicsView *>();
+        for (BaseGraphicsView *view : views)
+            view->setRenderDiagnosticsEnabled(enabled);
+    });
     mNightPreviewAction = new QAction(tr("Night Preview"), this);
     mNightPreviewAction->setCheckable(true);
     mNightPreviewAction->setToolTip(
@@ -770,6 +1173,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->actionGenerateInGameMapTreeFeatures, &QAction::triggered, this, &MainWindow::generateInGameMapTreeFeatures);
     connect(ui->actionGenerateInGameMapWaterFeatures, &QAction::triggered, this, &MainWindow::generateInGameMapWaterFeatures);
     connect(ui->actionGenerateInGameMapRoadFeatures, &QAction::triggered, this, &MainWindow::generateInGameMapRoadFeatures);
+    connect(ui->actionWriteInGameMapForest, &QAction::triggered,
+            this, &MainWindow::writeInGameMapForest);
+    connect(ui->actionWriteInGameMapWorldMap, &QAction::triggered,
+            this, &MainWindow::writeInGameMapWorldMap);
     connect(ui->actionRemoveInGameMapFeatures, &QAction::triggered, this, &MainWindow::removeInGameMapFeatures);
     connect(ui->actionRemoveInGameMapPoints, &QAction::triggered, this, &MainWindow::removeInGameMapPoint);
     connect(ui->actionSplitInGameMapPolygon, &QAction::triggered, this, &MainWindow::splitInGameMapPolygon);
@@ -1055,15 +1462,37 @@ MainWindow::MainWindow(QWidget *parent)
          BiomeMapImageProcessor::palette()) {
         QPixmap swatch(16, 16);
         swatch.fill(entry.color);
+        QString label = tr("%1 (ID %2)").arg(entry.name).arg(entry.value);
+        if (!entry.enabledByDefault)
+            label += tr(" [map override]");
+        const int itemIndex = biomePalette->count();
         biomePalette->addItem(QIcon(swatch),
-                              tr("%1 (ID %2)").arg(entry.name).arg(entry.value),
+                              label,
                               entry.value);
+        biomePalette->setItemData(
+                    itemIndex,
+                    tr("Pixel ID: %1\nBiome: %2\nOre selector: %3\n"
+                       "Ore meaning: %4\nZone: %5%6")
+                    .arg(entry.value)
+                    .arg(entry.biome.isEmpty() ? tr("(none)") : entry.biome)
+                    .arg(entry.ore.isEmpty() ? tr("(none)") : entry.ore)
+                    .arg(BiomeMapImageProcessor::oreSelectorDescription(
+                             entry.ore))
+                    .arg(entry.zone)
+                    .arg(entry.enabledByDefault
+                         ? QString()
+                         : tr("\nAvailability: map-specific "
+                              "WorldGenOverride.lua required")),
+                    Qt::ToolTipRole);
     }
     const int paletteIndex = biomePalette->findData(biomeTool->biomeValue());
     if (paletteIndex >= 0)
         biomePalette->setCurrentIndex(paletteIndex);
     biomePalette->setToolTip(
-                tr("Palette value written to the red Biome channel."));
+                tr("Palette value written to the red Biome channel. "
+                   "Item details reproduce the Build 42.20 "
+                   "biome_map_config fields. map_forest selects surface "
+                   "boulders, limestone, or flint, not iron or copper."));
     biomeControlActions += toolsBar->addWidget(biomePalette);
 
     QLabel *biomeOpacityLabel = new QLabel(tr("Opacity:"), toolsBar);
@@ -2849,6 +3278,8 @@ void MainWindow::initActionManager()
     actionManager->registerAction(ui->actionGenerateInGameMapTreeFeatures, CONTEXT_MENU, CATEGORY_MENU_INGAME_MAP, QStringLiteral("Menu.InGameMap.GenerateTreeFeatures"));
     actionManager->registerAction(ui->actionGenerateInGameMapWaterFeatures, CONTEXT_MENU, CATEGORY_MENU_INGAME_MAP, QStringLiteral("Menu.InGameMap.GenerateWaterFeatures"));
     actionManager->registerAction(ui->actionGenerateInGameMapRoadFeatures, CONTEXT_MENU, CATEGORY_MENU_INGAME_MAP, QStringLiteral("Menu.InGameMap.GenerateRoadFeatures"));
+    actionManager->registerAction(ui->actionWriteInGameMapForest, CONTEXT_MENU, CATEGORY_MENU_INGAME_MAP, QStringLiteral("Menu.InGameMap.WriteWorldmapForest"));
+    actionManager->registerAction(ui->actionWriteInGameMapWorldMap, CONTEXT_MENU, CATEGORY_MENU_INGAME_MAP, QStringLiteral("Menu.InGameMap.WriteWorldmap"));
     actionManager->registerAction(ui->actionReadInGameMapFeaturesXML, CONTEXT_MENU, CATEGORY_MENU_INGAME_MAP, QStringLiteral("Menu.InGameMap.ReadXML"));
     actionManager->registerAction(ui->actionWriteInGameMapFeaturesXML_256, CONTEXT_MENU, CATEGORY_MENU_INGAME_MAP, QStringLiteral("Menu.InGameMap.WriteXML8x8"));
     actionManager->registerAction(ui->actionOverwriteInGameMapFeaturesXML_256, CONTEXT_MENU, CATEGORY_MENU_INGAME_MAP, QStringLiteral("Menu.InGameMap.OverwriteXML8x8"), QStringLiteral("Overwrite Features XML 8x8"));
@@ -3784,10 +4215,57 @@ void MainWindow::checkForHoles()
         return;
     }
     if (CellDocument *doc = mCurrentDocument->asCellDocument()) {
-        doc->scene()->checkHolesOnLevelZero();
+        CellScene *scene = doc->scene();
+        scene->checkHolesOnLevelZero();
         if (doc->view()->miniMap()) {
             doc->view()->miniMap()->update();
         }
+        const int holeCount = scene->holeInFloor().size();
+        if (holeCount == 0) {
+            QMessageBox::information(
+                        this, tr("Hole Detection"),
+                        tr("Every level-zero coordinate contains at least "
+                           "one tile."));
+            return;
+        }
+
+        QMessageBox dialog(
+                    QMessageBox::Warning,
+                    tr("Hole Detection"),
+                    tr("%1 coordinate(s) contain no tile on level zero or "
+                       "an available basement level.\n\n"
+                       "They are highlighted in red. Automatic repair copies "
+                       "the nearest floor tile already present on the "
+                       "current TMX Floor layer. Lots and building files are "
+                       "not changed. A timestamped backup is created first.")
+                    .arg(holeCount),
+                    QMessageBox::NoButton,
+                    this);
+        QPushButton *fixButton = dialog.addButton(
+                    tr("Fix Automatically"), QMessageBox::AcceptRole);
+        dialog.addButton(tr("Keep Highlighted"), QMessageBox::RejectRole);
+        dialog.setDefaultButton(fixButton);
+        dialog.exec();
+        if (dialog.clickedButton() != fixButton)
+            return;
+
+        QString backupPath;
+        QString error;
+        const int repaired =
+                scene->autoFixHolesOnLevelZero(&backupPath, &error);
+        if (repaired == 0) {
+            QMessageBox::warning(
+                        this, tr("Hole Repair Failed"), error);
+            return;
+        }
+        scene->checkHolesOnLevelZero();
+        if (doc->view()->miniMap())
+            doc->view()->miniMap()->update();
+        QMessageBox::information(
+                    this, tr("Hole Repair Complete"),
+                    tr("%1 square(s) were repaired.\n\nBackup:\n%2")
+                    .arg(repaired)
+                    .arg(QDir::toNativeSeparators(backupPath)));
     }
 }
 
@@ -3809,72 +4287,15 @@ void MainWindow::createInGameMapFeatureImage()
     if (fileName.isEmpty()) {
         return;
     }
-    World* world = worldDoc->world();
-    const int cellSize = world->cellSize();
-    QSize size(world->size() * cellSize);
-    QImage image(size.width(), size.height(), QImage::Format_ARGB32);
-    image.fill(Qt::transparent);
-    QPainter painter(&image);
-    QBrush brush(Qt::white);
-
-    QPolygonF mPolygon;
-    QVector<QPolygonF> mHoles;
-    for (int cellY = 0; cellY < world->height(); cellY++) {
-        for (int cellX = 0; cellX < world->width(); cellX++) {
-            WorldCell *cell = world->cellAt(cellX, cellY);
-            if (cell == nullptr) {
-                continue;
-            }
-            for (InGameMapFeature* feature : cell->inGameMap().features()) {
-                if (!feature->mProperties.contains(QStringLiteral("natural"), QStringLiteral("forest"))) {
-                    continue;
-                }
-                if (!feature->mGeometry.isPolygon() || feature->mGeometry.mCoordinates.isEmpty()) {
-                    continue;
-                }
-
-                mPolygon.clear();
-                mHoles.clear();
-                const InGameMapCoordinates& outer = feature->mGeometry.mCoordinates.first();
-                for (auto& point : outer) {
-                    mPolygon += QPointF(point.x, point.y);
-                }
-                bool bClockwise = outer.isClockwise();
-                for (int i = 1; i < feature->mGeometry.mCoordinates.size(); i++) {
-                    const auto& inner = feature->mGeometry.mCoordinates[i];
-                    QPolygonF hole;
-                    if (bClockwise == inner.isClockwise()) {
-                        for (int j = inner.size() - 1; j >= 0; j--) {
-                            auto& point = inner[j];
-                            hole += QPointF(point.x, point.y);
-                        }
-                    } else {
-                        for (auto& point : inner) {
-                            hole += QPointF(point.x, point.y);
-                        }
-                    }
-                    mHoles += hole;
-                }
-
-                QPainterPath path;
-                if (!mPolygon.isClosed()) {
-                    mPolygon += mPolygon.first();
-                }
-                path.addPolygon(mPolygon);
-                QPainterPath path2;
-                for (auto& hole : mHoles) {
-                    if (hole.isClosed() == false) {
-                        hole += hole.first();
-                    }
-                    path2.addPolygon(hole);
-                }
-                path = path.subtracted(path2);
-                path.translate(cellX * cellSize, cellY * cellSize);
-                painter.fillPath(path, brush);
-            }
-        }
+    QString imageError;
+    const QImage image = createForestFeatureImage(
+                worldDoc->world(), nullptr, &imageError);
+    if (image.isNull()) {
+        QMessageBox::critical(
+                    this, tr("Unable to Create Feature Image"),
+                    imageError);
+        return;
     }
-    painter.end();
     if (!image.save(fileName)) {
         QMessageBox::critical(
                     this, tr("Unable to Save Feature Image"),
@@ -3944,8 +4365,31 @@ void MainWindow::overwriteInGameMapFeaturesXML()
         return;
     }
 
+    const QFileInfo exportInfo(fileName);
     QString error;
-    if (!writeInGameMapFilePair(worldDoc->world(), fileName, &error)) {
+    if (exportInfo.fileName().compare(
+                QStringLiteral("worldmap-forest.xml"),
+                Qt::CaseInsensitive) == 0) {
+        QStringList writtenFiles;
+        if (!writeInGameMapForestBundle(
+                    worldDoc->world(), exportInfo.absolutePath(),
+                    &writtenFiles, &error)) {
+            QMessageBox::critical(
+                        this, tr("Unable to Write Worldmap-Forest"),
+                        tr("No Forest export file was replaced.\n\n%1")
+                        .arg(error));
+        }
+        return;
+    }
+
+    const InGameMapFeatureScope scope =
+            exportInfo.fileName().compare(
+                QStringLiteral("worldmap.xml"),
+                Qt::CaseInsensitive) == 0
+            ? InGameMapFeatureScope::NonForestFeatures
+            : InGameMapFeatureScope::AllFeatures;
+    if (!writeInGameMapFilePair(
+                worldDoc->world(), fileName, &error, scope)) {
         QMessageBox::critical(
                     this, tr("Unable to Export In-Game Map"),
                     tr("Neither output file was replaced.\n\nXML: %1\n"
@@ -4090,6 +4534,105 @@ void MainWindow::generateInGameMapRoadFeatures()
         generator.generateWorld(worldDoc, InGameMapFeatureGenerator::GenerateSelected,
                                 InGameMapFeatureGenerator::FeatureRoad);
     }
+}
+
+void MainWindow::writeInGameMapForest()
+{
+    WorldDocument *worldDoc = currentWorldDocument();
+    if (!worldDoc)
+        return;
+
+    QString suggestedDirectory = mSettings.value(
+                QLatin1String("InGameMap/ForestOutputDirectory"))
+            .toString();
+    if (suggestedDirectory.isEmpty()) {
+        const QString previousExport =
+                worldDoc->getInGameMapXMLFileName();
+        if (!previousExport.isEmpty())
+            suggestedDirectory = QFileInfo(previousExport).absolutePath();
+        else if (!worldDoc->fileName().isEmpty())
+            suggestedDirectory = QFileInfo(worldDoc->fileName()).absolutePath();
+        else
+            suggestedDirectory = QDir::currentPath();
+    }
+    const QString outputDirectory = QFileDialog::getExistingDirectory(
+                this, tr("Choose Worldmap-Forest Output Folder"),
+                suggestedDirectory);
+    if (outputDirectory.isEmpty())
+        return;
+
+    PROGRESS progress(QStringLiteral("Writing Worldmap-Forest"), this);
+    QStringList writtenFiles;
+    QString error;
+    if (!writeInGameMapForestBundle(
+                worldDoc->world(), outputDirectory,
+                &writtenFiles, &error)) {
+        QMessageBox::critical(
+                    this, tr("Unable to Write Worldmap-Forest"),
+                    tr("No Forest export file was replaced.\n\n%1")
+                    .arg(error));
+        return;
+    }
+    mSettings.setValue(
+                QLatin1String("InGameMap/ForestOutputDirectory"),
+                outputDirectory);
+
+    QStringList displayedFiles;
+    for (const QString &path : std::as_const(writtenFiles))
+        displayedFiles += QDir::toNativeSeparators(path);
+    QMessageBox::information(
+                this, tr("Worldmap-Forest Complete"),
+                tr("WorldEd wrote the Forest feature data and the actual "
+                   "game-compatible Forest image pyramid:\n\n%1")
+                .arg(displayedFiles.join(QLatin1Char('\n'))));
+}
+
+void MainWindow::writeInGameMapWorldMap()
+{
+    WorldDocument *worldDoc = currentWorldDocument();
+    if (!worldDoc)
+        return;
+
+    QString suggestedDirectory;
+    const QString previousExport = worldDoc->getInGameMapXMLFileName();
+    if (!previousExport.isEmpty())
+        suggestedDirectory = QFileInfo(previousExport).absolutePath();
+    else if (!worldDoc->fileName().isEmpty())
+        suggestedDirectory = QFileInfo(worldDoc->fileName()).absolutePath();
+    else
+        suggestedDirectory = QDir::currentPath();
+
+    const QString outputDirectory = QFileDialog::getExistingDirectory(
+                this, tr("Choose Worldmap Output Folder"),
+                suggestedDirectory);
+    if (outputDirectory.isEmpty())
+        return;
+    const QString xmlFileName = QDir(outputDirectory).filePath(
+                QStringLiteral("worldmap.xml"));
+
+    PROGRESS progress(QStringLiteral("Writing Worldmap"), this);
+    QString error;
+    if (!writeInGameMapFilePair(
+                worldDoc->world(), xmlFileName, &error,
+                InGameMapFeatureScope::NonForestFeatures)) {
+        QMessageBox::critical(
+                    this, tr("Unable to Write Worldmap"),
+                    tr("Neither output file was replaced.\n\nXML: %1\n"
+                       "Binary: %2\n\n%3")
+                    .arg(QDir::toNativeSeparators(xmlFileName),
+                         QDir::toNativeSeparators(
+                             xmlFileName + QLatin1String(".bin")),
+                         error));
+        return;
+    }
+    worldDoc->setInGameMapXMLFileName(xmlFileName);
+    Preferences::instance()->setWorldMapXMLFile(xmlFileName);
+    QMessageBox::information(
+                this, tr("Worldmap Complete"),
+                tr("WorldEd wrote the non-Forest feature data:\n\n%1\n%2")
+                .arg(QDir::toNativeSeparators(xmlFileName),
+                     QDir::toNativeSeparators(
+                         xmlFileName + QLatin1String(".bin"))));
 }
 
 void MainWindow::writeWindowSettings()
@@ -4316,6 +4859,8 @@ void MainWindow::updateActions()
     ui->actionGenerateInGameMapTreeFeatures->setEnabled(selectedCells);
     ui->actionGenerateInGameMapWaterFeatures->setEnabled(selectedCells);
     ui->actionGenerateInGameMapRoadFeatures->setEnabled(selectedCells);
+    ui->actionWriteInGameMapForest->setEnabled(hasDoc);
+    ui->actionWriteInGameMapWorldMap->setEnabled(hasDoc);
     ui->actionRemoveInGameMapFeatures->setEnabled(((worldDoc != nullptr) && (worldDoc->selectedInGameMapFeatureCount() > 0)) ||
                                                (cellDoc != nullptr && cellDoc->selectedInGameMapFeatures().isEmpty() == false));
     ui->actionRemoveInGameMapPoints->setEnabled(canRemoveInGameMapPoint());

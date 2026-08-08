@@ -92,6 +92,7 @@ void BmpBlender::recreate()
 
         qDeleteAll(mTileLayers);
         mTileLayers.clear();
+        mBlendGrids.clear();
 
         markDirty(0, 0, mMap->width() - 1, mMap->height() - 1);
 
@@ -135,6 +136,8 @@ void BmpBlender::flush(const MapRenderer *renderer, const QRect &rect, const QPo
         initTiles();
         mInitTilesLater = false;
     }
+    if (mRuleByColor.isEmpty() && mBlendsByLayer.isEmpty())
+        return;
 
     for (QRect r : dirty) {
         int x1 = r.left(), x2 = r.right(), y1 = r.top(), y2 = r.bottom();
@@ -160,6 +163,8 @@ void BmpBlender::flush(const QRect &rect)
         initTiles();
         mInitTilesLater = false;
     }
+    if (mRuleByColor.isEmpty() && mBlendsByLayer.isEmpty())
+        return;
 
     int x1 = rect.left(), x2 = rect.right(), y1 = rect.top(), y2 = rect.bottom();
     x1 -= 2;
@@ -336,11 +341,9 @@ void BmpBlender::fromMap()
     mRuleByColor.clear();
     mRuleLayers.clear();
     mFloor0Rules.clear();
+    mInactiveRuleCount = 0;
     foreach (BmpRule *rule, mMap->bmpSettings()->rules()) {
         RuleWrapper *ruleW = new RuleWrapper(rule);
-        mRuleByColor[rule->color] += ruleW;
-        if (!mRuleLayers.contains(rule->targetLayer))
-            mRuleLayers += rule->targetLayer;
         foreach (QString tileName, rule->tileChoices) {
             if (BuildingEditor::BuildingTilesMgr::legalTileName(tileName)) {
                 if (!mAliasByName.contains(tileName))
@@ -368,11 +371,9 @@ void BmpBlender::fromMap()
     mBlendList.clear();
     mBlendsByLayer.clear();
     mBlendLayers.clear();
-    QSet<QString> layers;
+    mInactiveBlendCount = 0;
     foreach (BmpBlend *blend, mMap->bmpSettings()->blends()) {
         BlendWrapper *blendW = new BlendWrapper(blend);
-        mBlendsByLayer[blend->targetLayer] += blendW;
-        layers.insert(blend->targetLayer);
         QStringList excludes;
         foreach (QString tileName, blend->ExclusionList) {
             if (!BuildingEditor::BuildingTilesMgr::legalTileName(tileName)) {
@@ -417,7 +418,6 @@ void BmpBlender::fromMap()
         }
         mBlendList += blendW;
     }
-    mBlendLayers = layers.values();
 
     mTileNames = normalizeTileNames(tileNames.values());
 
@@ -446,13 +446,16 @@ QList<Tile *>& BmpBlender::tileNameToTiles(const QString &name, QList<Tile *>& t
             }
         }
         if (selectedTileset) {
+            if (selectedTileset->isMissing())
+                return tiles;
             for (int index = 0;
                  index < selectedTileset->tileCount(); ++index) {
                 if (Tile *tile = selectedTileset->tileAt(index))
                     tiles += tile;
             }
         } else if (mTileByName.contains(name)) {
-            tiles += mTileByName[name];
+            if (Tile *tile = mTileByName[name])
+                tiles += tile;
         } else {
             for (Tileset *tileset : mMap->tilesets()) {
                 if (tileset && BuildingEditor::BuildingTilesMgr::
@@ -462,14 +465,12 @@ QList<Tile *>& BmpBlender::tileNameToTiles(const QString &name, QList<Tile *>& t
                     break;
                 }
             }
-            if (selectedTileset) {
+            if (selectedTileset && !selectedTileset->isMissing()) {
                 for (int index = 0;
                      index < selectedTileset->tileCount(); ++index) {
                     if (Tile *tile = selectedTileset->tileAt(index))
                         tiles += tile;
                 }
-            } else {
-                tiles += TilesetManager::instance()->missingTile();
             }
         }
     }
@@ -505,30 +506,65 @@ void BmpBlender::initTiles()
         if (BuildingEditor::BuildingTilesMgr::parseTileName(tileName, tilesetName, tileID)) {
             if (!mTilesetNames.contains(tilesetName))
                 mTilesetNames += tilesetName;
-            if (tilesets.contains(tilesetName))
-                mTileByName[tileName] = tilesets[tilesetName]->tileAt(tileID);
+            if (tilesets.contains(tilesetName)
+                    && !tilesets[tilesetName]->isMissing()) {
+                if (Tile *tile = tilesets[tilesetName]->tileAt(tileID))
+                    mTileByName[tileName] = tile;
+            }
         }
     }
 
+    mRuleByColor.clear();
+    mRuleLayers.clear();
+    mInactiveRuleCount = 0;
     mFloorTileToRule.clear();
     foreach (RuleWrapper *ruleW, mRules) {
         ruleW->mTiles = tileNamesToTiles(ruleW->mTileNames).toVector();
+        if (ruleW->mTiles.isEmpty()) {
+            ++mInactiveRuleCount;
+            continue;
+        }
+        mRuleByColor[ruleW->mRule->color] += ruleW;
+        if (!mRuleLayers.contains(ruleW->mRule->targetLayer))
+            mRuleLayers += ruleW->mRule->targetLayer;
         if (ruleW->mRule->targetLayer != STR_0Floor)
             continue;
         foreach (Tile *tile, ruleW->mTiles)
-            mFloorTileToRule[tile] = ruleW;
+            if (tile)
+                mFloorTileToRule[tile] = ruleW;
     }
 
+    mBlendsByLayer.clear();
+    mBlendLayers.clear();
+    mInactiveBlendCount = 0;
     mBlendExclude2Layers.clear();
     foreach (BlendWrapper *blendW, mBlendList) {
         blendW->mMainTiles = tileNameToTiles(blendW->mBlend->mainTile).toVector();
         blendW->mBlendTiles = tileNameToTiles(blendW->mBlend->blendTile).toVector();
         blendW->mExcludeTiles = tileNamesToTiles(blendW->mBlend->ExclusionList).toVector();
         blendW->mExclude2Tiles.clear();
+        QStringList exclude2Layers;
         for (int i = 0; i < blendW->mBlend->exclude2.size(); i += 2) {
             blendW->mExclude2Tiles += tileNameToTiles(blendW->mBlend->exclude2[i]).toVector();
-            mBlendExclude2Layers += blendW->mBlend->exclude2[i + 1];
+            exclude2Layers += blendW->mBlend->exclude2[i + 1];
         }
+        if (blendW->mMainTiles.isEmpty()
+                || blendW->mBlendTiles.isEmpty()) {
+            ++mInactiveBlendCount;
+            continue;
+        }
+        for (const QString &layerName : exclude2Layers)
+            mBlendExclude2Layers += layerName;
+        mBlendsByLayer[blendW->mBlend->targetLayer] += blendW;
+        if (!mBlendLayers.contains(blendW->mBlend->targetLayer))
+            mBlendLayers += blendW->mBlend->targetLayer;
+    }
+
+    if (mInactiveRuleCount || mInactiveBlendCount) {
+        qInfo() << "BMP unavailable-tileset filtering skipped"
+                << mInactiveRuleCount << "of" << mRules.size()
+                << "rules and" << mInactiveBlendCount << "of"
+                << mBlendList.size() << "blends";
     }
 
     updateWarnings();
@@ -538,6 +574,10 @@ void BmpBlender::initTiles()
     if (true/*mHack*/) {
         mKnownBlendTiles.clear();
         foreach (BlendWrapper *blendW, mBlendList) {
+            if (blendW->mMainTiles.isEmpty()
+                    || blendW->mBlendTiles.isEmpty()) {
+                continue;
+            }
             mKnownBlendTiles += QSet<Tile*>(blendW->mBlendTiles.begin(), blendW->mBlendTiles.end());
         }
     }
@@ -801,8 +841,24 @@ void BmpBlender::updateWarnings()
     foreach (Tileset *ts, mMap->tilesets())
         tilesets[ts->name()] = ts;
     foreach (QString tilesetName, mTilesetNames) {
-        if (!tilesets.contains(tilesetName))
+        if (!tilesets.contains(tilesetName)
+                || !tilesets[tilesetName]
+                || tilesets[tilesetName]->isMissing()) {
             warnings += tr("Map is missing \"%1\" tileset.").arg(tilesetName);
+        }
+    }
+
+    if (mInactiveRuleCount) {
+        warnings += tr(
+                    "Skipped %1 BMP rule(s) because none of their tile "
+                    "choices are available. The definitions remain embedded "
+                    "in the TMX.").arg(mInactiveRuleCount);
+    }
+    if (mInactiveBlendCount) {
+        warnings += tr(
+                    "Skipped %1 BMP blend(s) because their main or output "
+                    "tiles are unavailable. The definitions remain embedded "
+                    "in the TMX.").arg(mInactiveBlendCount);
     }
 
     foreach (QString layerName, mTileLayers.keys()) {

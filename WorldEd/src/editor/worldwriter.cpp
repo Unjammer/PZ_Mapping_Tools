@@ -365,6 +365,23 @@ public:
                          QLatin1String(settings.warnUnknownColors ? "true" : "false"));
         w.writeEndElement();
 
+        w.writeStartElement(QLatin1String("repair-unknown-colors"));
+        w.writeAttribute(
+                    QLatin1String("checked"),
+                    QLatin1String(settings.repairUnknownColors
+                                  ? "true" : "false"));
+        w.writeAttribute(
+                    QLatin1String("ground"),
+                    QStringLiteral("%1").arg(
+                        settings.unknownGroundFallback, 8, 16,
+                        QLatin1Char('0')));
+        w.writeAttribute(
+                    QLatin1String("vegetation"),
+                    QStringLiteral("%1").arg(
+                        settings.unknownVegetationFallback, 8, 16,
+                        QLatin1Char('0')));
+        w.writeEndElement();
+
         w.writeStartElement(QLatin1String("compress"));
         w.writeAttribute(QLatin1String("checked"),
                          QLatin1String(settings.compress ? "true" : "false"));

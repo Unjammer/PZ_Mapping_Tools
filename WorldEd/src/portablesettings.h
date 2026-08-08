@@ -10,6 +10,8 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSettings>
+#include <QStringList>
+#include <QSysInfo>
 #include <QThread>
 
 #include <cstdio>
@@ -21,6 +23,16 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <psapi.h>
+#ifdef _MSC_VER
+#pragma comment(lib, "user32.lib")
+#endif
+#elif defined(Q_OS_LINUX)
+#include <sys/sysinfo.h>
+#include <unistd.h>
+#elif defined(Q_OS_MAC)
+#include <mach/mach.h>
+#include <sys/sysctl.h>
 #endif
 
 namespace PortableSettings {
@@ -400,6 +412,235 @@ inline void configure()
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, path);
 }
 
+inline QString cpuDescription()
+{
+#ifdef Q_OS_WIN
+    QSettings cpuRegistry(
+                QStringLiteral(
+                    "HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\"
+                    "CentralProcessor\\0"),
+                QSettings::NativeFormat);
+    const QString description = cpuRegistry.value(
+                QStringLiteral("ProcessorNameString")).toString().simplified();
+    if (!description.isEmpty())
+        return description;
+#elif defined(Q_OS_LINUX)
+    QFile cpuInfo(QStringLiteral("/proc/cpuinfo"));
+    if (cpuInfo.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        const QList<QByteArray> lines = cpuInfo.readAll().split('\n');
+        for (const QByteArray &line : lines) {
+            if (!line.startsWith("model name") &&
+                    !line.startsWith("Hardware"))
+                continue;
+            const int separator = line.indexOf(':');
+            if (separator >= 0) {
+                const QString description =
+                        QString::fromLocal8Bit(line.mid(separator + 1))
+                        .simplified();
+                if (!description.isEmpty())
+                    return description;
+            }
+        }
+    }
+#elif defined(Q_OS_MAC)
+    size_t length = 0;
+    if (sysctlbyname("machdep.cpu.brand_string", nullptr, &length,
+                     nullptr, 0) == 0 && length > 1) {
+        QByteArray description(int(length), '\0');
+        if (sysctlbyname("machdep.cpu.brand_string", description.data(),
+                         &length, nullptr, 0) == 0) {
+            return QString::fromLocal8Bit(description.constData()).simplified();
+        }
+    }
+#endif
+    return QSysInfo::currentCpuArchitecture();
+}
+
+inline quint64 totalPhysicalMemoryBytes()
+{
+#ifdef Q_OS_WIN
+    MEMORYSTATUSEX memory = {};
+    memory.dwLength = sizeof(memory);
+    if (GlobalMemoryStatusEx(&memory))
+        return quint64(memory.ullTotalPhys);
+#elif defined(Q_OS_LINUX)
+    struct sysinfo memory = {};
+    if (::sysinfo(&memory) == 0)
+        return quint64(memory.totalram) * quint64(memory.mem_unit);
+#elif defined(Q_OS_MAC)
+    quint64 memory = 0;
+    size_t length = sizeof(memory);
+    if (sysctlbyname("hw.memsize", &memory, &length, nullptr, 0) == 0)
+        return memory;
+#endif
+    return 0;
+}
+
+inline quint64 availablePhysicalMemoryBytes()
+{
+#ifdef Q_OS_WIN
+    MEMORYSTATUSEX memory = {};
+    memory.dwLength = sizeof(memory);
+    if (GlobalMemoryStatusEx(&memory))
+        return quint64(memory.ullAvailPhys);
+#elif defined(Q_OS_LINUX)
+    QFile memInfo(QStringLiteral("/proc/meminfo"));
+    if (memInfo.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        const QList<QByteArray> lines = memInfo.readAll().split('\n');
+        for (const QByteArray &line : lines) {
+            if (!line.startsWith("MemAvailable:"))
+                continue;
+            const QList<QByteArray> fields = line.simplified().split(' ');
+            if (fields.size() >= 2)
+                return fields.at(1).toULongLong() * 1024ULL;
+        }
+    }
+#endif
+    return 0;
+}
+
+inline QStringList graphicsAdapterDescriptions()
+{
+    QStringList adapters;
+#ifdef Q_OS_WIN
+    for (DWORD index = 0; ; ++index) {
+        DISPLAY_DEVICEW adapter = {};
+        adapter.cb = sizeof(adapter);
+        if (!EnumDisplayDevicesW(nullptr, index, &adapter, 0))
+            break;
+        if (adapter.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER)
+            continue;
+        const QString description =
+                QString::fromWCharArray(adapter.DeviceString).simplified();
+        if (description.isEmpty())
+            continue;
+        int existing = -1;
+        for (int adapterIndex = 0; adapterIndex < adapters.size();
+             ++adapterIndex) {
+            QString existingDescription = adapters.at(adapterIndex);
+            existingDescription.remove(QStringLiteral(" [active]"));
+            if (existingDescription.compare(
+                        description, Qt::CaseInsensitive) == 0) {
+                existing = adapterIndex;
+                break;
+            }
+        }
+        const QString labelledDescription =
+                description + ((adapter.StateFlags & DISPLAY_DEVICE_ACTIVE)
+                               ? QStringLiteral(" [active]")
+                               : QString());
+        if (existing == -1) {
+            adapters += labelledDescription;
+        } else if (adapter.StateFlags & DISPLAY_DEVICE_ACTIVE) {
+            adapters[existing] = labelledDescription;
+        }
+    }
+#elif defined(Q_OS_LINUX)
+    const QDir drm(QStringLiteral("/sys/class/drm"));
+    const QStringList cards = drm.entryList(
+                QStringList() << QStringLiteral("card[0-9]*"),
+                QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QString &card : cards) {
+        QFile vendorFile(drm.filePath(
+                             card + QStringLiteral("/device/vendor")));
+        QFile deviceFile(drm.filePath(
+                             card + QStringLiteral("/device/device")));
+        if (!vendorFile.open(QIODevice::ReadOnly | QIODevice::Text) ||
+                !deviceFile.open(QIODevice::ReadOnly | QIODevice::Text))
+            continue;
+        const QString vendor =
+                QString::fromLatin1(vendorFile.readAll()).trimmed();
+        const QString device =
+                QString::fromLatin1(deviceFile.readAll()).trimmed();
+        adapters += QStringLiteral("%1 PCI %2:%3")
+                .arg(card, vendor, device);
+    }
+#endif
+    return adapters;
+}
+
+inline QString gibibytes(quint64 bytes)
+{
+    return bytes == 0
+            ? QStringLiteral("unknown")
+            : QStringLiteral("%1 GiB").arg(
+                  double(bytes) / (1024.0 * 1024.0 * 1024.0), 0, 'f', 1);
+}
+
+inline quint64 currentProcessMemoryBytes()
+{
+#ifdef Q_OS_WIN
+    typedef BOOL (WINAPI *GetProcessMemoryInfoFunction)(
+            HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD);
+    static GetProcessMemoryInfoFunction queryMemory =
+            reinterpret_cast<GetProcessMemoryInfoFunction>(
+                GetProcAddress(GetModuleHandleW(L"kernel32.dll"),
+                               "K32GetProcessMemoryInfo"));
+    if (!queryMemory)
+        return 0;
+
+    PROCESS_MEMORY_COUNTERS_EX counters = {};
+    counters.cb = sizeof(counters);
+    if (!queryMemory(GetCurrentProcess(),
+                     reinterpret_cast<PPROCESS_MEMORY_COUNTERS>(&counters),
+                     sizeof(counters))) {
+        return 0;
+    }
+    return quint64(counters.WorkingSetSize);
+#elif defined(Q_OS_LINUX)
+    QFile statm(QStringLiteral("/proc/self/statm"));
+    if (!statm.open(QIODevice::ReadOnly | QIODevice::Text))
+        return 0;
+    const QList<QByteArray> values = statm.readLine().simplified().split(' ');
+    if (values.size() < 2)
+        return 0;
+    bool ok = false;
+    const quint64 residentPages = values.at(1).toULongLong(&ok);
+    const long pageSize = sysconf(_SC_PAGESIZE);
+    return ok && pageSize > 0 ? residentPages * quint64(pageSize) : 0;
+#elif defined(Q_OS_MAC)
+    mach_task_basic_info_data_t info = {};
+    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
+                  reinterpret_cast<task_info_t>(&info), &count)
+            != KERN_SUCCESS) {
+        return 0;
+    }
+    return quint64(info.resident_size);
+#else
+    return 0;
+#endif
+}
+
+inline void logMachineDiagnostics()
+{
+    qInfo().noquote()
+            << "Machine OS:" << QSysInfo::prettyProductName()
+            << "| kernel:" << QSysInfo::kernelType()
+            << QSysInfo::kernelVersion()
+            << "| architecture:" << QSysInfo::currentCpuArchitecture();
+    qInfo().noquote()
+            << "Machine CPU:" << cpuDescription()
+            << "| logical processors:" << QThread::idealThreadCount();
+
+    const quint64 totalMemory = totalPhysicalMemoryBytes();
+    const quint64 availableMemory = availablePhysicalMemoryBytes();
+    qInfo().noquote()
+            << "Machine RAM: total" << gibibytes(totalMemory)
+            << "| available at startup:" << gibibytes(availableMemory);
+
+    const QStringList adapters = graphicsAdapterDescriptions();
+    qInfo().noquote()
+            << "Machine GPU/display adapters:"
+            << (adapters.isEmpty()
+                ? QStringLiteral("not reported by the operating system")
+                : adapters.join(QStringLiteral(" | ")));
+    qInfo().noquote()
+            << "Runtime: Qt" << QString::fromLatin1(qVersion())
+            << "| Qt build ABI:" << QSysInfo::buildAbi()
+            << "| process:" << (sizeof(void *) * 8) << "bit";
+}
+
 inline QFile &messageLogFile()
 {
     static QFile file;
@@ -559,6 +800,7 @@ inline QString installLogging()
     qInfo().noquote() << "Application configuration" << QDir::toNativeSeparators(applicationConfigPath());
     QSettings settings;
     qInfo().noquote() << "Settings file" << QDir::toNativeSeparators(settings.fileName());
+    logMachineDiagnostics();
     return filePath;
 }
 

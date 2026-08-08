@@ -35,6 +35,7 @@ class InGameMapWriterPrivate
 public:
     InGameMapWriterPrivate()
         : mWorld(nullptr)
+        , mFeatureScope(InGameMapFeatureScope::AllFeatures)
     {
     }
 
@@ -98,6 +99,8 @@ public:
         QList<ExportFeature> exportFeatures;
         int cellPointCount = 0;
         for (InGameMapFeature *feature : std::as_const(cell->inGameMap().mFeatures)) {
+            if (!inGameMapFeatureMatchesScope(feature, mFeatureScope))
+                continue;
             ExportFeature item{feature, InGameMapGeometry()};
             QStringList diagnostics;
             if (!sanitizeInGameMapGeometryForExport(feature->mGeometry,
@@ -199,9 +202,23 @@ public:
     int mWrittenFeatures = 0;
     int mRepairedFeatures = 0;
     int mRejectedFeatures = 0;
+    InGameMapFeatureScope mFeatureScope;
 };
 
 /////
+
+bool inGameMapFeatureMatchesScope(
+        const InGameMapFeature *feature,
+        InGameMapFeatureScope scope)
+{
+    if (scope == InGameMapFeatureScope::AllFeatures)
+        return true;
+    const bool forest = feature && feature->mProperties.contains(
+                QStringLiteral("natural"), QStringLiteral("forest"));
+    return scope == InGameMapFeatureScope::ForestFeatures
+            ? forest
+            : !forest;
+}
 
 InGameMapWriter::InGameMapWriter()
     : d(new InGameMapWriterPrivate)
@@ -282,6 +299,11 @@ void InGameMapWriter::writeWorld(World *world, QIODevice *device, const QString 
 {
     d->mOutputPath = QStringLiteral("<device>");
     d->writeWorld(world, device, absDirPath);
+}
+
+void InGameMapWriter::setFeatureScope(InGameMapFeatureScope scope)
+{
+    d->mFeatureScope = scope;
 }
 
 QString InGameMapWriter::errorString() const

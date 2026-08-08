@@ -3982,15 +3982,22 @@ void BiomeMapTool::finishStroke()
 void BiomeMapTool::updateStatusInfo()
 {
     QString name = tr("value %1").arg(mBiomeValue);
-    for (const BiomeMapImageProcessor::PaletteEntry &entry :
-         BiomeMapImageProcessor::palette()) {
-        if (entry.value == mBiomeValue) {
-            name = tr("%1 (ID %2)").arg(entry.name).arg(entry.value);
-            break;
-        }
+    QString config;
+    const BiomeMapImageProcessor::PaletteEntry *entry =
+            BiomeMapImageProcessor::entryForValue(mBiomeValue);
+    if (entry) {
+        name = tr("%1 (ID %2)").arg(entry->name).arg(entry->value);
+        config = tr(" Biome: %1. Ore selector: %2. Zone: %3.%4")
+                .arg(entry->biome.isEmpty() ? tr("(none)") : entry->biome)
+                .arg(entry->ore.isEmpty() ? tr("(none)") : entry->ore)
+                .arg(entry->zone)
+                .arg(entry->enabledByDefault
+                     ? QString()
+                     : tr(" Map override required."));
     }
     setStatusInfo(tr("Left-drag paints only the red Biome channel: %1. "
-                     "The green Zone channel is preserved.").arg(name));
+                     "The green Zone channel is preserved.%2")
+                  .arg(name, config));
 }
 
 /////

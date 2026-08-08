@@ -44,12 +44,16 @@
 #include "tilelayer.h"
 #include "tileset.h"
 #include "zlevelrenderer.h"
+#include "../../portablesettings.h"
 
 #include <qmath.h>
 #include <QApplication>
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QLineF>
+#include <QLocale>
 #include <QScrollBar>
 #include <QSettings>
 #include <QStyleOptionGraphicsItem>
@@ -64,6 +68,21 @@
 using namespace BuildingEditor;
 using namespace Tiled;
 using namespace Tiled::Internal;
+
+namespace {
+
+QString diagnosticMemoryText(quint64 bytes)
+{
+    if (!bytes)
+        return QObject::tr("unknown");
+    const qreal gibibyte = 1024.0 * 1024.0 * 1024.0;
+    if (bytes >= quint64(gibibyte))
+        return QObject::tr("%1 GiB").arg(bytes / gibibyte, 0, 'f', 2);
+    return QObject::tr("%1 MiB").arg(
+                bytes / (1024.0 * 1024.0), 0, 'f', 1);
+}
+
+}
 
 /////
 
@@ -89,8 +108,17 @@ void CompositeLayerGroupItem::paint(QPainter *p, const QStyleOptionGraphicsItem 
     if (mLayerGroup->needsSynch() /*mBoundingRect != mLayerGroup->boundingRect(mRenderer)*/)
         return;
 
+    QElapsedTimer elapsed;
+    elapsed.start();
     OrderedCellsTemporaries vars;
     mRenderer->drawTileLayerGroup(p, mLayerGroup, option->exposedRect, reinterpret_cast<ZTileLayerGroupRenderData*>(&vars));
+    const qint64 elapsedMs = elapsed.elapsed();
+    if (elapsedMs >= 250) {
+        qWarning() << "BuildingEd slow floor render:"
+                   << elapsedMs << "ms, level" << mLayerGroup->level()
+                   << "scale" << p->transform().m11()
+                   << "exposed" << option->exposedRect;
+    }
 #if 1 && !defined(QT_NO_DEBUG)
     QPen pen(Qt::white);
     pen.setCosmetic(true);
@@ -321,6 +349,7 @@ BuildingIsoScene::BuildingIsoScene(QObject *parent) :
     mDarkRectangle(new QGraphicsRectItem),
     mNightPreviewItem(new NightPreviewItem),
     mNightPreviewEnabled(false),
+    mDeferredNightPreviewRebuild(false),
     mCurrentTool(0),
     mLayerGroupWithToolTiles(0),
     mToolTiles(QString(), 0, 0, 1, 1),
@@ -328,7 +357,8 @@ BuildingIsoScene::BuildingIsoScene(QObject *parent) :
     mShowBuildingTiles(true),
     mShowUserTiles(true),
     mCurrentLevel(0),
-    mHighlightRoomLock(false)
+    mHighlightRoomLock(false),
+    mDeferredCurrentFloorChange(false)
 {
     ZVALUE_CURSOR = 1000;
     ZVALUE_GRID = 1001;
@@ -409,6 +439,11 @@ void BuildingIsoScene::setDocument(BuildingDocument *doc)
     mSquarePropertiesItem = nullptr;
 
     mDocument = doc;
+    mDeferredCurrentFloorChange = false;
+    mDeferredNightPreviewRebuild = false;
+    mDeferredWholeFloorTileUpdates.clear();
+    mDeferredFloorTileUpdates.clear();
+    mPendingLayerVisibilityFloors.clear();
 
     qDeleteAll(mFloorItems);
     mFloorItems.clear();
@@ -446,8 +481,7 @@ void BuildingIsoScene::setDocument(BuildingDocument *doc)
     setSceneRect(mBuildingMap->mapComposite()->boundingRect(mBuildingMap->mapRenderer()));
     mDarkRectangle->setRect(sceneRect());
     mNightPreviewItem->setBounds(sceneRect());
-    if (mNightPreviewEnabled)
-        rebuildNightPreview();
+    requestNightPreviewRebuild();
 
     calculateUnlitRoomMask();
 
@@ -965,24 +999,31 @@ void BuildingIsoScene::floorEdited(BuildingFloor *floor)
     BuildingBaseScene::floorEdited(floor);
 
     mBuildingMap->floorEdited(floor);
-    if (mNightPreviewEnabled)
-        rebuildNightPreview();
+    requestNightPreviewRebuild();
 }
 
 void BuildingIsoScene::floorTilesChanged(BuildingFloor *floor)
 {
+    if (!hasVisibleView()) {
+        mDeferredFloorTileUpdates.remove(floor);
+        mDeferredWholeFloorTileUpdates.insert(floor);
+        return;
+    }
     mBuildingMap->floorTilesChanged(floor);
-    if (mNightPreviewEnabled)
-        rebuildNightPreview();
+    requestNightPreviewRebuild();
 }
 
 void BuildingIsoScene::floorTilesChanged(BuildingFloor *floor,
                                               const QString &layerName,
                                               const QRect &bounds)
 {
+    if (!hasVisibleView()) {
+        if (!mDeferredWholeFloorTileUpdates.contains(floor))
+            mDeferredFloorTileUpdates[floor][layerName] |= bounds;
+        return;
+    }
     mBuildingMap->floorTilesChanged(floor, layerName, bounds);
-    if (mNightPreviewEnabled)
-        rebuildNightPreview();
+    requestNightPreviewRebuild();
 }
 
 void BuildingIsoScene::layerOpacityChanged(BuildingFloor *floor,
@@ -996,12 +1037,92 @@ void BuildingIsoScene::layerOpacityChanged(BuildingFloor *floor,
 
 void BuildingIsoScene::layerVisibilityChanged(BuildingFloor *floor, const QString &layerName)
 {
-    if (CompositeLayerGroupItem *item = itemForFloor(floor)) {
-        if (item->layerGroup()->setLayerVisibility(layerName, floor->layerVisibility(layerName))) {
+    Q_UNUSED(layerName)
+    const bool schedule = mPendingLayerVisibilityFloors.isEmpty();
+    mPendingLayerVisibilityFloors.insert(floor);
+    if (schedule)
+        QMetaObject::invokeMethod(this, "applyPendingLayerVisibilityChanges",
+                                  Qt::QueuedConnection);
+}
+
+bool BuildingIsoScene::hasVisibleView() const
+{
+    const QList<QGraphicsView*> sceneViews = views();
+    for (QGraphicsView *view : sceneViews) {
+        if (view && view->isVisible())
+            return true;
+    }
+    return false;
+}
+
+void BuildingIsoScene::applyPendingLayerVisibilityChanges()
+{
+    if (!mDocument || !mBuildingMap || mPendingLayerVisibilityFloors.isEmpty())
+        return;
+    if (!hasVisibleView() && !mLoading)
+        return;
+
+    const QSet<BuildingFloor*> floors = mPendingLayerVisibilityFloors;
+    mPendingLayerVisibilityFloors.clear();
+    for (BuildingFloor *floor : floors) {
+        CompositeLayerGroupItem *item = itemForFloor(floor);
+        if (!item)
+            continue;
+        CompositeLayerGroup *layerGroup = item->layerGroup();
+        bool changed = false;
+        for (TileLayer *layer : layerGroup->layers()) {
+            const QString layerName = MapComposite::layerNameWithoutPrefix(layer);
+            changed |= layerGroup->setLayerVisibility(
+                        layer, floor->layerVisibility(layerName));
+        }
+        if (changed) {
             item->synchWithTileLayers();
             item->updateBounds();
         }
     }
+}
+
+void BuildingIsoScene::applyDeferredUpdates()
+{
+    if (!mDocument || !mBuildingMap)
+        return;
+
+    if (mDeferredCurrentFloorChange)
+        currentFloorChanged();
+    applyPendingLayerVisibilityChanges();
+    if (mDeferredNightPreviewRebuild)
+        requestNightPreviewRebuild();
+
+    if (mDeferredWholeFloorTileUpdates.isEmpty() &&
+            mDeferredFloorTileUpdates.isEmpty())
+        return;
+
+    QElapsedTimer elapsed;
+    elapsed.start();
+    const QSet<BuildingFloor*> wholeFloors = mDeferredWholeFloorTileUpdates;
+    const QMap<BuildingFloor*,QMap<QString,QRegion> > regions =
+            mDeferredFloorTileUpdates;
+    mDeferredWholeFloorTileUpdates.clear();
+    mDeferredFloorTileUpdates.clear();
+
+    for (BuildingFloor *floor : wholeFloors)
+        mBuildingMap->floorTilesChanged(floor);
+    for (auto floorIt = regions.constBegin(); floorIt != regions.constEnd();
+         ++floorIt) {
+        if (wholeFloors.contains(floorIt.key()))
+            continue;
+        for (auto layerIt = floorIt.value().constBegin();
+             layerIt != floorIt.value().constEnd(); ++layerIt) {
+            for (const QRect &bounds : layerIt.value())
+                mBuildingMap->floorTilesChanged(
+                            floorIt.key(), layerIt.key(), bounds);
+        }
+    }
+
+    requestNightPreviewRebuild();
+    qInfo() << "BuildingEd applied deferred hidden-view tile updates in"
+            << elapsed.elapsed() << "ms for"
+            << wholeFloors.size() + regions.size() << "floor(s)";
 }
 
 void BuildingIsoScene::setNightPreviewEnabled(bool enabled)
@@ -1009,11 +1130,25 @@ void BuildingIsoScene::setNightPreviewEnabled(bool enabled)
     mNightPreviewEnabled = enabled;
     mNightPreviewItem->setVisible(enabled);
     if (enabled)
-        rebuildNightPreview();
+        requestNightPreviewRebuild();
+    else
+        mDeferredNightPreviewRebuild = false;
+}
+
+void BuildingIsoScene::requestNightPreviewRebuild()
+{
+    if (!mNightPreviewEnabled)
+        return;
+    if (!hasVisibleView()) {
+        mDeferredNightPreviewRebuild = true;
+        return;
+    }
+    rebuildNightPreview();
 }
 
 void BuildingIsoScene::rebuildNightPreview()
 {
+    mDeferredNightPreviewRebuild = false;
     QVector<NightPreviewLight> lights;
     QVector<QPolygonF> litRooms;
     if (!mNightPreviewEnabled || !mDocument || !mBuildingMap) {
@@ -1210,6 +1345,14 @@ void BuildingIsoScene::rebuildNightPreview()
 
 void BuildingIsoScene::currentFloorChanged()
 {
+    if (!mLoading && !hasVisibleView()) {
+        mDeferredCurrentFloorChange = true;
+        return;
+    }
+    mDeferredCurrentFloorChange = false;
+    QElapsedTimer elapsed;
+    elapsed.start();
+
     synchObjectItemVisibility();
 
     highlightFloorChanged(prefs()->highlightFloor());
@@ -1229,11 +1372,17 @@ void BuildingIsoScene::currentFloorChanged()
     if (BuildingFloor *floor = building()->floor(mCurrentLevel))
         mBuildingMap->suppressTiles(floor, QRegion());
     mCurrentLevel = currentLevel();
-    if (mNightPreviewEnabled)
-        rebuildNightPreview();
+    requestNightPreviewRebuild();
 
     if ((mLoading == false) && prefs()->showOnlyFloors()) {
         showOnlyFloorsChanged(true);
+    }
+
+    const qint64 elapsedMs = elapsed.elapsed();
+    if (elapsedMs >= 100) {
+        qWarning() << "BuildingEd slow floor switch preparation:"
+                   << elapsedMs << "ms, level" << currentLevel()
+                   << "floors" << building()->floorCount();
     }
 }
 
@@ -1313,8 +1462,7 @@ void BuildingIsoScene::roomChanged(Room *room)
         mBuildingMap->floorEdited(floor);
         BuildingBaseScene::floorEdited(floor);
     }
-    if (mNightPreviewEnabled)
-        rebuildNightPreview();
+    requestNightPreviewRebuild();
 }
 
 void BuildingIsoScene::floorAdded(BuildingFloor *floor)
@@ -1325,6 +1473,9 @@ void BuildingIsoScene::floorAdded(BuildingFloor *floor)
 
 void BuildingIsoScene::floorRemoved(BuildingFloor *floor)
 {
+    mDeferredWholeFloorTileUpdates.remove(floor);
+    mDeferredFloorTileUpdates.remove(floor);
+    mPendingLayerVisibilityFloors.remove(floor);
     BuildingBaseScene::floorRemoved(floor);
     mBuildingMap->floorRemoved(floor);
 }
@@ -1363,8 +1514,7 @@ void BuildingIsoScene::objectTileChanged(BuildingObject *object)
     BuildingBaseScene::objectTileChanged(object);
 
     mBuildingMap->objectTileChanged(object);
-    if (mNightPreviewEnabled)
-        rebuildNightPreview();
+    requestNightPreviewRebuild();
 }
 
 void BuildingIsoScene::buildingResized()
@@ -1585,7 +1735,14 @@ void BuildingIsoScene::layersUpdated(int level, const QRegion &rgn)
 BuildingIsoView::BuildingIsoView(QWidget *parent) :
     QGraphicsView(parent),
     mZoomable(new Zoomable(this)),
-    mHandScrolling(false)
+    mHandScrolling(false),
+    mRenderDiagnosticsEnabled(QSettings().value(
+        QStringLiteral("RenderDiagnostics/Enabled"), true).toBool()),
+    mRenderDiagnosticsLabel(new QLabel(this)),
+    mDiagnosticsFps(0.0),
+    mDiagnosticsFrameMs(0.0),
+    mDiagnosticsRenderedTiles(0),
+    mDiagnosticsMemoryBytes(0)
 {
     BuildingPreferences *prefs = BuildingPreferences::instance();
     setUseOpenGL(prefs->useOpenGL());
@@ -1605,6 +1762,19 @@ BuildingIsoView::BuildingIsoView(QWidget *parent) :
     setOptimizationFlags(QGraphicsView::DontAdjustForAntialiasing);
 
     connect(mZoomable, &Zoomable::scaleChanged, this, &BuildingIsoView::adjustScale);
+
+    mRenderDiagnosticsLabel->setObjectName(
+                QStringLiteral("RenderDiagnosticsBubble"));
+    mRenderDiagnosticsLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    mRenderDiagnosticsLabel->setStyleSheet(QStringLiteral(
+        "QLabel#RenderDiagnosticsBubble {"
+        " background-color: rgba(18, 23, 29, 225);"
+        " color: #f2f5f7; border: 1px solid #5a6978;"
+        " border-left: 3px solid #e49a35; border-radius: 6px;"
+        " padding: 6px 9px; }"));
+    mRenderDiagnosticsLabel->setVisible(mRenderDiagnosticsEnabled);
+    mRenderDiagnosticsLabel->raise();
+    mDiagnosticsMemoryTimer.start();
 
     // Install an event filter so that we can get key events on behalf of the
     // active tool without having to have the current focus.
@@ -1654,6 +1824,111 @@ void BuildingIsoView::hideEvent(QHideEvent *event)
     // Disable hand scrolling when the view gets hidden in any way
     setHandScrolling(false);
     QGraphicsView::hideEvent(event);
+}
+
+void BuildingIsoView::showEvent(QShowEvent *event)
+{
+    QGraphicsView::showEvent(event);
+    if (scene())
+        scene()->applyDeferredUpdates();
+}
+
+void BuildingIsoView::setRenderDiagnosticsEnabled(bool enabled)
+{
+    if (mRenderDiagnosticsEnabled == enabled)
+        return;
+    mRenderDiagnosticsEnabled = enabled;
+    mDiagnosticsPreviousFrame.invalidate();
+    mDiagnosticsFps = 0.0;
+    mDiagnosticsFrameMs = 0.0;
+    mRenderDiagnosticsLabel->setVisible(enabled);
+    if (enabled) {
+        mDiagnosticsMemoryBytes = PortableSettings::currentProcessMemoryBytes();
+        mDiagnosticsMemoryTimer.restart();
+        mRenderDiagnosticsLabel->raise();
+    }
+    viewport()->update();
+}
+
+void BuildingIsoView::paintEvent(QPaintEvent *event)
+{
+    if (!mRenderDiagnosticsEnabled) {
+        QGraphicsView::paintEvent(event);
+        return;
+    }
+
+    ZLevelRenderer::resetRenderedTileCount();
+    QElapsedTimer renderTimer;
+    renderTimer.start();
+    QGraphicsView::paintEvent(event);
+
+    const qreal renderMs = qMax<qreal>(
+                0.01, renderTimer.nsecsElapsed() / 1000000.0);
+    mDiagnosticsFrameMs = mDiagnosticsFrameMs <= 0.0
+            ? renderMs
+            : mDiagnosticsFrameMs * 0.75 + renderMs * 0.25;
+
+    if (mDiagnosticsPreviousFrame.isValid()) {
+        const qint64 elapsed = mDiagnosticsPreviousFrame.restart();
+        if (elapsed > 0) {
+            const qreal currentFps = 1000.0 / elapsed;
+            mDiagnosticsFps = mDiagnosticsFps <= 0.0
+                    ? currentFps
+                    : mDiagnosticsFps * 0.75 + currentFps * 0.25;
+        }
+    } else {
+        mDiagnosticsPreviousFrame.start();
+    }
+
+    mDiagnosticsRenderedTiles = ZLevelRenderer::renderedTileCount();
+    if (!mDiagnosticsMemoryTimer.isValid() ||
+            mDiagnosticsMemoryTimer.elapsed() >= 1000) {
+        mDiagnosticsMemoryBytes =
+                PortableSettings::currentProcessMemoryBytes();
+        mDiagnosticsMemoryTimer.restart();
+    }
+    updateRenderDiagnosticsLabel();
+}
+
+void BuildingIsoView::resizeEvent(QResizeEvent *event)
+{
+    QGraphicsView::resizeEvent(event);
+    positionRenderDiagnosticsLabel();
+}
+
+void BuildingIsoView::updateRenderDiagnosticsLabel()
+{
+    const bool openGL = qobject_cast<QOpenGLWidget *>(viewport());
+    const QString text = tr("FPS %1   Render %2 ms\n"
+                            "Tiles drawn %3   RAM %4\n"
+                            "Zoom %5%   %6   %7 x %8")
+            .arg(mDiagnosticsFps, 0, 'f', 1)
+            .arg(mDiagnosticsFrameMs, 0, 'f', 2)
+            .arg(QLocale().toString(
+                     qulonglong(mDiagnosticsRenderedTiles)))
+            .arg(diagnosticMemoryText(mDiagnosticsMemoryBytes))
+            .arg(mZoomable->scale() * 100.0, 0, 'f', 0)
+            .arg(openGL ? tr("OpenGL") : tr("Raster"))
+            .arg(viewport()->width())
+            .arg(viewport()->height());
+    if (mRenderDiagnosticsLabel->text() != text) {
+        mRenderDiagnosticsLabel->setText(text);
+        mRenderDiagnosticsLabel->adjustSize();
+    }
+    positionRenderDiagnosticsLabel();
+    mRenderDiagnosticsLabel->raise();
+}
+
+void BuildingIsoView::positionRenderDiagnosticsLabel()
+{
+    if (!mRenderDiagnosticsLabel || !viewport())
+        return;
+    const QPoint viewportOrigin = viewport()->mapTo(this, QPoint(0, 0));
+    const int x = viewportOrigin.x() + 10;
+    const int y = qMax(viewportOrigin.y() + 10,
+                       viewportOrigin.y() + viewport()->height()
+                       - mRenderDiagnosticsLabel->height() - 10);
+    mRenderDiagnosticsLabel->move(x, y);
 }
 
 void BuildingIsoView::mousePressEvent(QMouseEvent *event)

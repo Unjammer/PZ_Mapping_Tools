@@ -33,6 +33,8 @@
 #include "documentmanager.h"
 #include "document.h"
 #include "bmptotmx.h"
+#include "biomemapimageprocessor.h"
+#include "cellscene.h"
 #include "defaultsfile.h"
 #include "toolmanager.h"
 #include "preferences.h"
@@ -89,6 +91,35 @@ int main(int argc, char *argv[])
     bool validateTilesetCleanup = false;
     for (const QString &argument : commandLineArguments) {
         if (argument == QLatin1String(
+                    "--validate-biomemap-config")) {
+            QString error;
+            if (!BiomeMapImageProcessor::validateConfiguration(&error)) {
+                qCritical().noquote()
+                        << "BiomeMapConfig validation failed:" << error;
+                return 32;
+            }
+            qInfo() << "BiomeMapConfig validation passed:"
+                    << BiomeMapImageProcessor::palette().size()
+                    << "entries including the map-override ID";
+            return 0;
+        }
+        if (argument == QLatin1String(
+                    "--validate-ingamemap-forest-export")) {
+            QString summary;
+            QString error;
+            if (!MainWindow::validateInGameMapForestExport(
+                        &summary, &error)) {
+                qCritical().noquote()
+                        << "InGameMap Forest export validation failed:"
+                        << error;
+                return 33;
+            }
+            qInfo().noquote()
+                    << "InGameMap Forest export validation passed:"
+                    << summary;
+            return 0;
+        }
+        if (argument == QLatin1String(
                     "--validate-native-256-lot-geometry")) {
             QString error;
             if (!LotFilesManager256::validateNative256Geometry(&error)) {
@@ -98,6 +129,17 @@ int main(int argc, char *argv[])
                 return 18;
             }
             qInfo() << "Native-256 lot geometry validation passed";
+            return 0;
+        }
+        if (argument == QLatin1String("--validate-hole-repair")) {
+            QString error;
+            if (!CellScene::validateHoleRepair(&error)) {
+                qCritical().noquote()
+                        << "Hole Detection repair validation failed:"
+                        << error;
+                return 31;
+            }
+            qInfo() << "Hole Detection repair validation passed";
             return 0;
         }
         const QString defaultsValidationPrefix =

@@ -60,6 +60,9 @@ public:
     QString mapbaseFile;
     bool assignMapsToWorld;
     bool warnUnknownColors;
+    bool repairUnknownColors;
+    quint32 unknownGroundFallback;
+    quint32 unknownVegetationFallback;
     bool compress;
     bool copyPixels;
     bool updateExisting;
@@ -67,6 +70,9 @@ public:
     BMPToTMXSettings() :
         assignMapsToWorld(false),
         warnUnknownColors(true),
+        repairUnknownColors(false),
+        unknownGroundFallback(0xff000000u),
+        unknownVegetationFallback(0xff000000u),
         compress(true),
         copyPixels(true),
         updateExisting(false)
@@ -81,6 +87,10 @@ public:
                 mapbaseFile == other.mapbaseFile &&
                 assignMapsToWorld == other.assignMapsToWorld &&
                 warnUnknownColors == other.warnUnknownColors &&
+                repairUnknownColors == other.repairUnknownColors &&
+                unknownGroundFallback == other.unknownGroundFallback &&
+                unknownVegetationFallback ==
+                    other.unknownVegetationFallback &&
                 compress == other.compress &&
                 copyPixels == other.copyPixels &&
                 updateExisting == other.updateExisting;

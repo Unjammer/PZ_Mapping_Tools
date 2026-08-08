@@ -97,6 +97,9 @@ private:
 
     QString tmxNameForCell(WorldCell *cell, WorldBMP *bmp);
 
+    void validateAndRepairBitmaps(
+            QImage &ground, QImage &vegetation,
+            const QString &sourcePath, const QPoint &sourceOrigin);
     void reportUnknownColors();
 
 private:
@@ -146,6 +149,8 @@ private:
     };
     QMap<QString,QMap<QRgb,UnknownColor> > mUnknownColors;
     QMap<QString,QMap<QRgb,UnknownColor> > mUnknownVegColors;
+    int mRepairedGroundPixels = 0;
+    int mRepairedVegetationPixels = 0;
 
     QStringList mNewFiles;
 };

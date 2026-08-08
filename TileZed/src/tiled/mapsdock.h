@@ -49,9 +49,11 @@ private slots:
     void findNext();
     void updateFindButtons();
     void browse();
+    void newFolder();
     void editedMapsDirectory();
     void onMapsDirectoryChanged();
     void selectionChanged();
+    void setPreviewExpanded(bool expanded);
     void onMapImageChanged(MapImage *mapImage);
     void mapImageFailedToLoad(MapImage *mapImage);
 
@@ -60,10 +62,12 @@ protected:
 
 private:
     void retranslateUi();
+    void updatePreviewToggle();
 
     QLineEdit *mFilterEdit;
     QToolButton *mFindPrev;
     QToolButton *mFindNext;
+    QToolButton *mPreviewToggle;
     QLabel *mPreviewLabel;
     MapImage *mPreviewMapImage;
     QLineEdit *mDirectoryEdit;
@@ -82,6 +86,9 @@ public:
     void mousePressEvent(QMouseEvent *event);
 
     QFileSystemModel *model() const { return mFSModel; }
+    static QModelIndex createFolder(
+            QWidget *parent, QFileSystemModel *model,
+            const QModelIndex &parentIndex);
 
 private slots:
     void onMapsDirectoryChanged();

@@ -25,10 +25,13 @@
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
+#include <QElapsedTimer>
 
 #include <QMap>
+#include <QSet>
 
 class CompositeLayerGroup;
+class QLabel;
 class MapComposite;
 
 namespace Tiled {
@@ -237,15 +240,19 @@ public:
     void calculateUnlitRoomMask();
     void setNightPreviewEnabled(bool enabled);
     void rebuildNightPreview();
+    void applyDeferredUpdates();
 
 private:
     void BuildingToMap();
     CompositeLayerGroupItem *itemForFloor(BuildingFloor *floor);
+    bool hasVisibleView() const;
+    void requestNightPreviewRebuild();
 
     BuildingPreferences *prefs() const;
 
     typedef Tiled::Tileset Tileset;
 private slots:
+    void applyPendingLayerVisibilityChanges();
     void currentFloorChanged();
     void currentLayerChanged();
 
@@ -308,6 +315,7 @@ private:
     QGraphicsRectItem *mDarkRectangle;
     Tiled::Internal::NightPreviewItem *mNightPreviewItem;
     bool mNightPreviewEnabled;
+    bool mDeferredNightPreviewRebuild;
     BaseTool *mCurrentTool;
     CompositeLayerGroup *mLayerGroupWithToolTiles;
     Tiled::TileLayer mToolTiles;
@@ -318,6 +326,10 @@ private:
     int mCurrentLevel;
     QPoint mHighlightRoomPos;
     bool mHighlightRoomLock;
+    bool mDeferredCurrentFloorChange;
+    QSet<BuildingFloor*> mDeferredWholeFloorTileUpdates;
+    QMap<BuildingFloor*,QMap<QString,QRegion> > mDeferredFloorTileUpdates;
+    QSet<BuildingFloor*> mPendingLayerVisibilityFloors;
 };
 
 class BuildingIsoView : public QGraphicsView
@@ -336,6 +348,7 @@ public:
     bool event(QEvent *event);
     bool eventFilter(QObject *object, QEvent *event);
 
+    void showEvent(QShowEvent *event);
     void hideEvent(QHideEvent *event);
 
     void mousePressEvent(QMouseEvent *event);
@@ -347,6 +360,7 @@ public:
     void clearDocument();
 
     void setHandScrolling(bool handScrolling);
+    void setRenderDiagnosticsEnabled(bool enabled);
 
 signals:
     void mouseCoordinateChanged(const QPoint &tilePos);
@@ -355,12 +369,27 @@ private slots:
     void adjustScale(qreal scale);
     void setUseOpenGL(bool useOpenGL);
 
+protected:
+    void paintEvent(QPaintEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+
 private:
+    void updateRenderDiagnosticsLabel();
+    void positionRenderDiagnosticsLabel();
+
     Tiled::Internal::Zoomable *mZoomable;
     QPoint mLastMousePos;
     QPointF mLastMouseScenePos;
     QPoint mLastMouseTilePos;
     bool mHandScrolling;
+    bool mRenderDiagnosticsEnabled;
+    QLabel *mRenderDiagnosticsLabel;
+    QElapsedTimer mDiagnosticsPreviousFrame;
+    QElapsedTimer mDiagnosticsMemoryTimer;
+    qreal mDiagnosticsFps;
+    qreal mDiagnosticsFrameMs;
+    quint64 mDiagnosticsRenderedTiles;
+    quint64 mDiagnosticsMemoryBytes;
 };
 
 } // namespace BuildingEditor

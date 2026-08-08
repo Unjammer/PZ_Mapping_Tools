@@ -44,6 +44,7 @@
 #include "zlevelrenderer.h"
 
 #include <QDebug>
+#include <QElapsedTimer>
 
 using namespace BuildingEditor;
 using namespace Tiled;
@@ -1106,6 +1107,14 @@ void BuildingMap::tilesetRemoved(Tileset *tileset)
 
 void BuildingMap::handlePending()
 {
+    QElapsedTimer elapsed;
+    elapsed.start();
+    const bool recreatedAll = pendingRecreateAll;
+    const bool resizedBuilding = pendingBuildingResized;
+    const int layoutFloorCount = pendingLayoutToSquares.size();
+    const int squareFloorCount = pendingSquaresToTileLayers.size();
+    const int erasedFloorCount = pendingEraseUserTiles.size();
+    const int userTileFloorCount = pendingUserTilesToLayer.size();
     QMap<int,QRegion> updatedLevels;
 
     if (pendingRecreateAll) {
@@ -1206,6 +1215,18 @@ void BuildingMap::handlePending()
 
     foreach (int level, updatedLevels.keys())
         emit layersUpdated(level, updatedLevels[level]);
+
+    const qint64 elapsedMs = elapsed.elapsed();
+    if (elapsedMs >= 100) {
+        qWarning() << "BuildingEd slow map update:"
+                   << elapsedMs << "ms, recreate" << recreatedAll
+                   << "resize" << resizedBuilding
+                   << "layout floors" << layoutFloorCount
+                   << "square floors" << squareFloorCount
+                   << "erased floors" << erasedFloorCount
+                   << "user-tile floors" << userTileFloorCount
+                   << "updated levels" << updatedLevels.size();
+    }
 
     pending = false;
     pendingRecreateAll = false;

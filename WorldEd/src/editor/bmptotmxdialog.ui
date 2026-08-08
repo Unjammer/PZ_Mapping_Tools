@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>438</width>
-    <height>380</height>
+    <height>540</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -20,13 +20,6 @@
       <widget class="QCheckBox" name="assignMapCheckBox">
        <property name="text">
         <string>Assign generated maps to the world.</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="0">
-      <widget class="QCheckBox" name="warnUnknownColors">
-       <property name="text">
-        <string>Report unknown colors used in images</string>
        </property>
       </widget>
      </item>
@@ -45,6 +38,66 @@
       </widget>
      </item>
     </layout>
+   </item>
+   <item row="5" column="0">
+    <widget class="QGroupBox" name="validationRepairGroup">
+     <property name="title">
+      <string>Validation &amp; Repair</string>
+     </property>
+     <layout class="QVBoxLayout" name="validationRepairLayout">
+      <item>
+       <widget class="QCheckBox" name="warnUnknownColors">
+        <property name="text">
+         <string>Report unknown colors used in images</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="repairUnknownColors">
+        <property name="toolTip">
+         <string>Replace colors that are not defined by Rules.txt in the generated or updated TMX bitmap data.</string>
+        </property>
+        <property name="text">
+         <string>Auto-repair unknown bitmap colors during conversion</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="repairExplanation">
+        <property name="text">
+         <string>Repair changes only bitmap data embedded in generated or updated TMX files. Source images are never modified.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QFormLayout" name="repairFallbackLayout">
+        <item row="0" column="0">
+         <widget class="QLabel" name="groundFallbackLabel">
+          <property name="text">
+           <string>Ground fallback:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QComboBox" name="groundFallback"/>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="vegetationFallbackLabel">
+          <property name="text">
+           <string>Vegetation fallback:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QComboBox" name="vegetationFallback"/>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
    </item>
    <item row="6" column="0">
     <spacer name="verticalSpacer">

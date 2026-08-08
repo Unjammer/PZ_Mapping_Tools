@@ -75,6 +75,8 @@ public:
 
 protected:
     void drawForeground(QPainter *painter, const QRectF &rect) override;
+    QString renderDiagnosticsWorkloadText(
+            quint64 renderedTiles) const override;
 
 private:
     WorldMiniMapItem *mMiniMapItem;

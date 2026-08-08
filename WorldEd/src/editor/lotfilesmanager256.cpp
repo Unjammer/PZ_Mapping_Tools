@@ -183,6 +183,12 @@ bool LotFilesManager256::generateWorld(WorldDocument *worldDoc, GenerateMode mod
     mCellBounds256 = CombinedCellMaps::outputCellRect(
             gridFormat,
             QRect(lotSettings.worldOrigin, QSize(mWorldDoc->world()->size())));
+    qInfo() << "LOT export geometry:"
+            << "grid" << worldGridFormatName(gridFormat)
+            << "source-cell-size" << mWorldDoc->world()->cellSize()
+            << "world-origin" << lotSettings.worldOrigin
+            << "world-size" << mWorldDoc->world()->size()
+            << "output-cell-bounds" << mCellBounds256;
 
     mDialog = new ExportLotsProgressDialog(MainWindow::instance());
     ExportLotsProgressDialog& progress = *mDialog;
@@ -481,9 +487,28 @@ void LotFilesManager256::updateWorkers()
         }
         if (worker->mStatus == LotFilesWorker256::Status::Finished) {
             if (!worker->mHoleInFloor.isEmpty()) {
-                for (const QPoint& holePos : std::as_const(worker->mHoleInFloor)) {
-                    mFailures += GenerateCellFailure(worker->mCell, QStringLiteral("Hole in floor at %1,%2,0").arg(holePos.x()).arg(holePos.y()));
+                const int sampleLimit = 24;
+                QStringList samples;
+                const int sampleCount =
+                        std::min(sampleLimit, worker->mHoleInFloor.size());
+                for (int holeIndex = 0;
+                     holeIndex < sampleCount;
+                     ++holeIndex) {
+                    const QPoint holePos =
+                            worker->mHoleInFloor.at(holeIndex);
+                    samples += QStringLiteral("%1,%2,0")
+                            .arg(holePos.x()).arg(holePos.y());
                 }
+                QString message =
+                        QStringLiteral("%1 square(s) contain no tile. "
+                                       "First coordinate(s): %2")
+                        .arg(worker->mHoleInFloor.size())
+                        .arg(samples.join(QStringLiteral(", ")));
+                if (worker->mHoleInFloor.size() > sampleLimit) {
+                    message += QStringLiteral(" ...");
+                }
+                mFailures += GenerateCellFailure(
+                            worker->mCell, message);
             }
             mProgressDialog->setCellStatus(worker->mCombinedCellMaps->mCell256X - mCellBounds256.left(),
                                            worker->mCombinedCellMaps->mCell256Y - mCellBounds256.top(),
@@ -1139,7 +1164,6 @@ void LotFilesWorker256::checkHolesOnLevelZero() {
     if (lg == nullptr) {
         return;
     }
-    Tiled::Internal::TileDefWatcher *tileDefWatcher = BuildingEditor::getTileDefWatcher(); // NOTE: not safe while multithreading active
     lg->prepareDrawing2();
     const QPoint worldOrigin =
             mWorldDoc->world()->getGenerateLotsSettings().worldOrigin;
@@ -1167,43 +1191,25 @@ void LotFilesWorker256::checkHolesOnLevelZero() {
     for (int y = sourceCellBounds.top(); y <= sourceCellBounds.bottom(); y++) {
         for (int x = sourceCellBounds.left(); x <= sourceCellBounds.right(); x++) {
             cells.resize(0);
-            lg->orderedCellsAt2(QPoint(x, y), vars, cells);
-            bool hasFloor = false;
-            for (const Tiled::Cell *cell : std::as_const(cells)) {
-                if (TileDefTileset* tdts = tileDefWatcher->tileset(cell->tile->tileset()->name())) {
-                    if (TileDefTile* tdt = tdts->tileAt(cell->tile->id())) {
-                        if (tdt->mProperties.contains(QStringLiteral("solidfloor"))) {
-                            hasFloor = true;
-                            break;
-                        }
-                    }
-                }
-            }
-            if (!hasFloor) {
+            bool hasTile =
+                    lg->orderedCellsAt2(QPoint(x, y), vars, cells);
+            if (!hasTile) {
                 for (int level = -1; level >= mapComposite->minLevel(); level--) {
                     if (CompositeLayerGroup* layerGroup2 = mapComposite->layerGroupForLevel(level)) {
                         if (!preparedLevels.contains(level)) {
                             layerGroup2->prepareDrawing2();
                             preparedLevels += level;
                         }
-                        layerGroup2->orderedCellsAt2(QPoint(x, y), vars, cells);
-                        for (const Tiled::Cell *cell : std::as_const(cells)) {
-                            if (TileDefTileset* tdts = tileDefWatcher->tileset(cell->tile->tileset()->name())) {
-                                if (TileDefTile* tdt = tdts->tileAt(cell->tile->id())) {
-                                    if (tdt->mProperties.contains(QStringLiteral("solidfloor"))) {
-                                        hasFloor = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        if (hasFloor) {
+                        hasTile =
+                                layerGroup2->orderedCellsAt2(
+                                    QPoint(x, y), vars, cells);
+                        if (hasTile) {
                             break;
                         }
                     }
                 }
             }
-            if (!hasFloor) {
+            if (!hasTile) {
                 mHoleInFloor += QPoint(x - boundsX, y - boundsY);
             }
         }
@@ -2301,6 +2307,20 @@ int CombinedCellMaps::checkLoading(WorldDocument *worldDoc)
                  - mMinSourceCellX) * mSourceCellSize,
                 (cell->y() + lotSettings.worldOrigin.y()
                  - mMinSourceCellY) * mSourceCellSize);
+        if (world->geometry().directLotExport
+                && (mMinSourceCellX != mCell256X
+                    || mMinSourceCellY != mCell256Y
+                    || cellPos != QPoint())) {
+            mError = QCoreApplication::translate(
+                    "CombinedCellMaps",
+                    "Native-256 cell %1,%2 would be shifted to local square "
+                    "%3,%4 while generating output cell %5,%6. Generation "
+                    "was stopped to prevent a misaligned LOT export.")
+                    .arg(cell->x()).arg(cell->y())
+                    .arg(cellPos.x()).arg(cellPos.y())
+                    .arg(mCell256X).arg(mCell256Y);
+            return -1;
+        }
         MapComposite* subMap = mMapComposite->addMap(info, cellPos, 0);
         subMap->setCellMap(true);
         mCellMaps += subMap;
@@ -2459,6 +2479,55 @@ bool LotFilesManager256::validateNative256Geometry(QString *error)
                 }
             }
         }
+    }
+
+    const QList<int> origins = { 0, 27, -5 };
+    const QList<int> cellOffsets = { 0, 1, 31 };
+    const QList<int> localSquares = { 0, 1, 7, 8, 127, 255 };
+    for (int origin : origins) {
+        for (int cellOffset : cellOffsets) {
+            const int expectedCell = origin + cellOffset;
+            for (int localSquare : localSquares) {
+                const qint64 worldSquare =
+                        qint64(expectedCell) * CELL_SIZE_256 + localSquare;
+                const int outputCell = int(std::floor(
+                        double(worldSquare) / CELL_SIZE_256));
+                const int outputLocal = int(
+                        worldSquare
+                        - qint64(outputCell) * CELL_SIZE_256);
+                const int outputChunk = outputLocal / CHUNK_SIZE_256;
+                const int squareInChunk = outputLocal % CHUNK_SIZE_256;
+                if (outputCell != expectedCell
+                        || outputLocal != localSquare
+                        || outputChunk != localSquare / CHUNK_SIZE_256
+                        || squareInChunk != localSquare % CHUNK_SIZE_256) {
+                    if (error) {
+                        *error = QStringLiteral(
+                                "Native256 square mapping shifted for "
+                                "origin %1, cell %2, local square %3.")
+                                .arg(origin).arg(cellOffset).arg(localSquare);
+                    }
+                    return false;
+                }
+            }
+        }
+    }
+
+    const int lotSourceCell = 27;
+    const int lotLocalX = 250;
+    const int lotWidth = 20;
+    const int lotWorldLeft =
+            lotSourceCell * CELL_SIZE_256 + lotLocalX;
+    const int firstLotCell = int(std::floor(
+            lotWorldLeft / double(CELL_SIZE_256)));
+    const int lastLotCell = int(std::floor(
+            (lotWorldLeft + lotWidth - 1) / double(CELL_SIZE_256)));
+    if (firstLotCell != 27 || lastLotCell != 28) {
+        if (error) {
+            *error = QStringLiteral(
+                    "Native256 cross-cell lot bounds are shifted.");
+        }
+        return false;
     }
 
     const QRect legacyCell(0, 0, 1, 1);

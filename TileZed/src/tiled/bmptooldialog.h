@@ -18,7 +18,7 @@
 #ifndef BMPTOOLDIALOG_H
 #define BMPTOOLDIALOG_H
 
-#include <QDialog>
+#include <QDockWidget>
 #include <QMap>
 #include <QModelIndex>
 #include <QStringList>
@@ -41,12 +41,13 @@ class BmpRule;
 namespace Internal {
 class MapDocument;
 
-class BmpToolDialog : public QDialog
+class BmpToolDialog : public QDockWidget
 {
     Q_OBJECT
     
 public:
     static BmpToolDialog *instance();
+    static bool validateReloadEquality(QString *errorString);
 
     void setVisible(bool visible);
 

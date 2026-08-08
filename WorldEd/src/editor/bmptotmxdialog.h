@@ -39,12 +39,16 @@ private slots:
     void rulesBrowse();
     void blendsBrowse();
     void mapbaseBrowse();
+    void repairUnknownColorsToggled(bool enabled);
     void accept();
     void apply();
 
 private:
     bool validate();
     void toSettings();
+    void populateFallbackColors(quint32 groundColor,
+                                quint32 vegetationColor);
+    quint32 fallbackColor(int bitmapIndex) const;
 
 private:
     Ui::BMPToTMXDialog *ui;

@@ -561,6 +561,28 @@ private:
                 QString value = xml.attributes().value(QLatin1String("checked")).toString();
                 settings.warnUnknownColors = value == QLatin1String("true");
                 xml.skipCurrentElement();
+            } else if (xml.name() ==
+                       QLatin1String("repair-unknown-colors")) {
+                const QXmlStreamAttributes attributes = xml.attributes();
+                settings.repairUnknownColors =
+                        attributes.value(
+                            QLatin1String("checked")) ==
+                        QLatin1String("true");
+                bool groundOk = false;
+                const quint32 ground =
+                        attributes.value(
+                            QLatin1String("ground")).toString()
+                        .toUInt(&groundOk, 16);
+                if (groundOk)
+                    settings.unknownGroundFallback = ground;
+                bool vegetationOk = false;
+                const quint32 vegetation =
+                        attributes.value(
+                            QLatin1String("vegetation")).toString()
+                        .toUInt(&vegetationOk, 16);
+                if (vegetationOk)
+                    settings.unknownVegetationFallback = vegetation;
+                xml.skipCurrentElement();
             } else if (xml.name() == QLatin1String("compress")) {
                 QString value = xml.attributes().value(QLatin1String("checked")).toString();
                 settings.compress = value == QLatin1String("true");

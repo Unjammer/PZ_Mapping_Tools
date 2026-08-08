@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Tim Baker <treectrl@users.sf.net>
+ * Copyright 2026, Tim Baker <treectrl@users.sf.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -15,31 +15,32 @@
  * this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef INGAMEMAPWRITERBINARY_H
-#define INGAMEMAPWRITERBINARY_H
+#ifndef REMOVETILESETSDIALOG_H
+#define REMOVETILESETSDIALOG_H
 
-#include <QString>
+#include <QDialog>
 
-class World;
-class InGameMapWriterBinaryPrivate;
-enum class InGameMapFeatureScope;
+namespace Ui {
+class RemoveTilesetsDialog;
+}
 
-class QIODevice;
-
-class InGameMapWriterBinary
+class RemoveTilesetsDialog : public QDialog
 {
+    Q_OBJECT
+
 public:
-    InGameMapWriterBinary();
-    ~InGameMapWriterBinary();
+    explicit RemoveTilesetsDialog(QWidget *parent = nullptr);
+    ~RemoveTilesetsDialog();
 
-    bool writeWorld(World *world, const QString &filePath);
-    void writeWorld(World *world, QIODevice *device, const QString &absDirPath);
-    void setFeatureScope(InGameMapFeatureScope scope);
+    void setTilesets(const QStringList &tilesets);
+    QStringList tilesetsToRemove() const;
 
-    QString errorString() const;
+private slots:
+    void checkAll();
+    void uncheckAll();
 
 private:
-    InGameMapWriterBinaryPrivate *d;
+    Ui::RemoveTilesetsDialog *ui;
 };
 
-#endif // INGAMEMAPWRITERBINARY_H
+#endif // REMOVETILESETSDIALOG_H

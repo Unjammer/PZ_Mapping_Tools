@@ -46,6 +46,7 @@
 #include <QMessageBox>
 #include <QScrollBar>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QToolBar>
 #include <QToolButton>
@@ -687,6 +688,10 @@ BuildingTilesDialog::BuildingTilesDialog(QWidget *parent) :
             this, &BuildingTilesDialog::tilesetSelectionChanged);
     connect(TileMetaInfoMgr::instance(), &TileMetaInfoMgr::tilesetAdded,
             this, &BuildingTilesDialog::tilesetAdded);
+    connect(TileMetaInfoMgr::instance(), &TileMetaInfoMgr::tilesetCatalogLoaded,
+            this, &BuildingTilesDialog::setTilesetList);
+    connect(TileMetaInfoMgr::instance(), &TileMetaInfoMgr::tilesetDiscoveryFinished,
+            this, &BuildingTilesDialog::setTilesetList);
     connect(TileMetaInfoMgr::instance(), &TileMetaInfoMgr::tilesetAboutToBeRemoved,
             this, &BuildingTilesDialog::tilesetAboutToBeRemoved);
     connect(TileMetaInfoMgr::instance(), &TileMetaInfoMgr::tilesetRemoved,
@@ -1236,24 +1241,98 @@ void BuildingTilesDialog::setFurnitureTiles()
 
 void BuildingTilesDialog::setTilesetList()
 {
-    ui->tilesetList->clear();
-    // Add the list of tilesets, and resize it to fit
-    int width = 64;
-    QFontMetrics fm = ui->tilesetList->fontMetrics();
-    foreach (Tileset *tileset, TileMetaInfoMgr::instance()->tilesets()) {
-        QListWidgetItem *item = new QListWidgetItem();
-        item->setText(tileset->name());
-        if (tileset->isMissing())
-            item->setForeground(Qt::red);
-        ui->tilesetList->addItem(item);
-        width = qMax(width, fm.horizontalAdvance(tileset->name()));
+    QString selectedName;
+    if (QListWidgetItem *current = ui->tilesetList->currentItem())
+        selectedName = current->text();
+    else if (mCurrentTileset)
+        selectedName = mCurrentTileset->name();
+    if (selectedName.isEmpty()) {
+        QSettings &settings = BuildingPreferences::instance()->settings();
+        settings.beginGroup(QLatin1String("BuildingTilesDialog"));
+        selectedName =
+                settings.value(QLatin1String("SelectedTileset")).toString();
+        settings.endGroup();
     }
-    int sbw = ui->tilesetList->verticalScrollBar()->sizeHint().width();
-    ui->tilesetList->setFixedWidth(width + 16 + sbw);
 
-    ui->filterEdit->setFixedWidth(ui->tilesetList->width());
-    ui->filterEdit->setEnabled(ui->tilesetList->count() > 0);
-    tilesetFilterEdited(ui->filterEdit->text());
+    {
+        const QSignalBlocker blocker(ui->tilesetList);
+        ui->tilesetList->clear();
+
+        // Add the list of tilesets, and resize it to fit.
+        int width = 64;
+        QFontMetrics fm = ui->tilesetList->fontMetrics();
+        foreach (Tileset *tileset, TileMetaInfoMgr::instance()->tilesets()) {
+            QListWidgetItem *item = new QListWidgetItem();
+            item->setText(tileset->name());
+            if (tileset->isMissing())
+                item->setForeground(Qt::red);
+            ui->tilesetList->addItem(item);
+            width = qMax(width, fm.horizontalAdvance(tileset->name()));
+        }
+        int sbw = ui->tilesetList->verticalScrollBar()->sizeHint().width();
+        ui->tilesetList->setFixedWidth(width + 16 + sbw);
+
+        ui->filterEdit->setFixedWidth(ui->tilesetList->width());
+        ui->filterEdit->setEnabled(ui->tilesetList->count() > 0);
+        tilesetFilterEdited(ui->filterEdit->text());
+
+        int selectedRow = -1;
+        for (int row = 0; row < ui->tilesetList->count(); ++row) {
+            QListWidgetItem *item = ui->tilesetList->item(row);
+            if (selectedRow < 0 && !item->isHidden())
+                selectedRow = row;
+            if (!selectedName.isEmpty()
+                    && item->text() == selectedName
+                    && !item->isHidden()) {
+                selectedRow = row;
+                break;
+            }
+        }
+        if (selectedRow >= 0)
+            ui->tilesetList->setCurrentRow(selectedRow);
+    }
+
+    tilesetSelectionChanged();
+    qInfo() << "Building Tiles dialog tileset list refreshed:"
+            << ui->tilesetList->count() << "entries";
+}
+
+bool BuildingTilesDialog::validateTilesetCatalog(QString *errorString)
+{
+    TileMetaInfoMgr *manager = TileMetaInfoMgr::instance();
+    const int expectedCount = manager->tilesets().count();
+    const int actualCount = ui->tilesetList->count();
+    if (actualCount != expectedCount) {
+        if (errorString) {
+            *errorString = tr(
+                        "Building > Tiles lists %1 tilesets, but the "
+                        "loaded catalogue contains %2.")
+                    .arg(actualCount).arg(expectedCount);
+        }
+        return false;
+    }
+    for (int row = 0; row < actualCount; ++row) {
+        QListWidgetItem *item = ui->tilesetList->item(row);
+        Tileset *tileset = manager->tileset(row);
+        if (!item || !tileset || item->text() != tileset->name()) {
+            if (errorString) {
+                *errorString = tr(
+                            "Building > Tiles row %1 does not match the "
+                            "loaded catalogue.")
+                        .arg(row);
+            }
+            return false;
+        }
+    }
+    if (actualCount > 0 && !mCurrentTileset) {
+        if (errorString) {
+            *errorString = tr(
+                        "Building > Tiles did not select an available "
+                        "tileset.");
+        }
+        return false;
+    }
+    return true;
 }
 
 void BuildingTilesDialog::saveSplitterSizes(QSplitter *splitter)
@@ -1870,12 +1949,21 @@ void BuildingTilesDialog::toggleCorners()
 
 void BuildingTilesDialog::manageTilesets()
 {
+    const QString selectedName =
+            mCurrentTileset ? mCurrentTileset->name() : QString();
     TileMetaInfoDialog dialog(this);
     dialog.exec();
 
     TileMetaInfoMgr *mgr = TileMetaInfoMgr::instance();
     if (!mgr->writeTxt())
         QMessageBox::warning(this, tr("Tileset Metadata Error"), mgr->errorString());
+
+    setTilesetList();
+    if (!selectedName.isEmpty()) {
+        const int row = mgr->indexOf(selectedName);
+        if (row >= 0 && !ui->tilesetList->item(row)->isHidden())
+            ui->tilesetList->setCurrentRow(row);
+    }
 }
 
 void BuildingTilesDialog::tilesetAdded(Tileset *tileset)

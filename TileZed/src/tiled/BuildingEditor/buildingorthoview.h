@@ -138,6 +138,7 @@ private:
     QImage *mBmp;
     QImage *mDragBmp;
     QList<GraphicsObjectItem*> mObjectItems;
+    bool mObjectsVisible;
 };
 
 class GraphicsGridItem : public QGraphicsItem

@@ -69,6 +69,7 @@ public:
     void selectCategory(BuildingTileCategory *category);
     void selectCategory(FurnitureGroup *furnitureGroup);
     void reparent(QWidget *parent);
+    bool validateTilesetCatalog(QString *errorString);
 
     //+ UNDO/REDO
     void addTile(BuildingTileCategory *category, int index, BuildingTileEntry *entry);

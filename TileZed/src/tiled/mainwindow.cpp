@@ -87,6 +87,7 @@
 #ifdef ZOMBOID
 #include "bmpclipboard.h"
 #include "bmptool.h"
+#include "bmptooldialog.h"
 #include "changetileselection.h"
 #include "checkbuildingswindow.h"
 #include "checkmapswindow.h"
@@ -156,6 +157,7 @@
 #include <QSignalBlocker>
 #include <QShortcut>
 #include <QTimer>
+#include <QToolBar>
 #include <QToolButton>
 
 using namespace Tiled;
@@ -362,7 +364,7 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     mRedoAction->setIconText(tr("Redo"));
     connect(undoGroup, &QUndoGroup::cleanChanged, this, &MainWindow::updateWindowTitle);
 
-    UndoDock *undoDock = new UndoDock(undoGroup, this);
+    mUndoDock = new UndoDock(undoGroup, this);
 
 #ifdef ZOMBOID
     addDockWidget(Qt::RightDockWidgetArea, mLayerDock);
@@ -370,14 +372,14 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     addDockWidget(Qt::RightDockWidgetArea, mObjectsDock);
     addDockWidget(Qt::RightDockWidgetArea, mWorldEdDock);
     addDockWidget(Qt::RightDockWidgetArea, mMapsDock);
-    addDockWidget(Qt::RightDockWidgetArea, undoDock);
+    addDockWidget(Qt::RightDockWidgetArea, mUndoDock);
     addDockWidget(Qt::RightDockWidgetArea, mTilesetDock);
     addDockWidget(Qt::RightDockWidgetArea, mAutomappingDock);
     tabifyDockWidget(mLayerDock, mLevelsDock);
     tabifyDockWidget(mLevelsDock, mObjectsDock);
     tabifyDockWidget(mObjectsDock, mWorldEdDock);
     tabifyDockWidget(mWorldEdDock, mMapsDock);
-    tabifyDockWidget(undoDock, mTilesetDock);
+    tabifyDockWidget(mUndoDock, mTilesetDock);
     tabifyDockWidget(mTilesetDock, mAutomappingDock);
 
     setStatusBar(nullptr);
@@ -388,8 +390,8 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     mUi->statusBarFrame->setLayout(statusBarLayout);
 #else
     addDockWidget(Qt::RightDockWidgetArea, mLayerDock);
-    addDockWidget(Qt::RightDockWidgetArea, undoDock);
-    tabifyDockWidget(undoDock, mLayerDock);
+    addDockWidget(Qt::RightDockWidgetArea, mUndoDock);
+    tabifyDockWidget(mUndoDock, mLayerDock);
     addDockWidget(Qt::RightDockWidgetArea, mObjectsDock);
     tabifyDockWidget(mLayerDock, mObjectsDock);
     addDockWidget(Qt::RightDockWidgetArea, mTilesetDock);
@@ -750,14 +752,36 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     mUi->menuView->addSeparator();
     mUi->menuView->addAction(mTilesetDock->toggleViewAction());
     mUi->menuView->addAction(mLayerDock->toggleViewAction());
-    mUi->menuView->addAction(undoDock->toggleViewAction());
+    mUi->menuView->addAction(mUndoDock->toggleViewAction());
     mUi->menuView->addAction(mObjectsDock->toggleViewAction());
     mUi->menuView->addAction(mAutomappingDock->toggleViewAction());
 #ifdef ZOMBOID
     mUi->menuView->addAction(mLevelsDock->toggleViewAction());
     mUi->menuView->addAction(mWorldEdDock->toggleViewAction());
     mUi->menuView->addAction(mMapsDock->toggleViewAction());
+    mBmpToolsDock = BmpToolDialog::instance();
+    addDockWidget(Qt::RightDockWidgetArea, mBmpToolsDock);
+    tabifyDockWidget(mAutomappingDock, mBmpToolsDock);
+    mBmpToolsDock->hide();
+    mTilesetDock->raise();
+    mUi->menuView->addAction(mBmpToolsDock->toggleViewAction());
     mUi->menuView->addSeparator();
+    QAction *renderDiagnosticsAction = new QAction(
+                tr("Render Diagnostics"), this);
+    renderDiagnosticsAction->setCheckable(true);
+    renderDiagnosticsAction->setToolTip(tr(
+        "Show FPS, render time, drawn tiles, memory, zoom and renderer mode"));
+    renderDiagnosticsAction->setChecked(mSettings.value(
+        QLatin1String("RenderDiagnostics/Enabled"), true).toBool());
+    mUi->menuView->addAction(renderDiagnosticsAction);
+    connect(renderDiagnosticsAction, &QAction::toggled, this,
+            [this](bool enabled) {
+        mSettings.setValue(
+                    QLatin1String("RenderDiagnostics/Enabled"), enabled);
+        const QList<MapView *> views = findChildren<MapView *>();
+        for (MapView *view : views)
+            view->setRenderDiagnosticsEnabled(enabled);
+    });
     mNightPreviewAction = new QAction(tr("Night Preview"), this);
     mNightPreviewAction->setCheckable(true);
     mNightPreviewAction->setToolTip(
@@ -1834,6 +1858,72 @@ void MainWindow::openPreferences()
     preferencesDialog.exec();
 }
 
+#ifdef ZOMBOID
+void MainWindow::resetInterfaceLayout()
+{
+    mSettings.remove(QLatin1String("MainWindow"));
+    mSettings.remove(QLatin1String("Splitters"));
+
+    const QList<QDockWidget*> docks = {
+        mLayerDock, mLevelsDock, mObjectsDock, mWorldEdDock, mMapsDock,
+        mUndoDock, mTilesetDock, mAutomappingDock, mBmpToolsDock
+    };
+    for (QDockWidget *dock : docks) {
+        if (!dock)
+            continue;
+        dock->setFloating(false);
+        removeDockWidget(dock);
+    }
+
+    addDockWidget(Qt::RightDockWidgetArea, mLayerDock);
+    addDockWidget(Qt::RightDockWidgetArea, mLevelsDock);
+    addDockWidget(Qt::RightDockWidgetArea, mObjectsDock);
+    addDockWidget(Qt::RightDockWidgetArea, mWorldEdDock);
+    addDockWidget(Qt::RightDockWidgetArea, mMapsDock);
+    addDockWidget(Qt::RightDockWidgetArea, mUndoDock);
+    addDockWidget(Qt::RightDockWidgetArea, mTilesetDock);
+    addDockWidget(Qt::RightDockWidgetArea, mAutomappingDock);
+    addDockWidget(Qt::RightDockWidgetArea, mBmpToolsDock);
+
+    tabifyDockWidget(mLayerDock, mLevelsDock);
+    tabifyDockWidget(mLevelsDock, mObjectsDock);
+    tabifyDockWidget(mObjectsDock, mWorldEdDock);
+    tabifyDockWidget(mWorldEdDock, mMapsDock);
+    tabifyDockWidget(mUndoDock, mTilesetDock);
+    tabifyDockWidget(mTilesetDock, mAutomappingDock);
+    tabifyDockWidget(mAutomappingDock, mBmpToolsDock);
+
+    for (QDockWidget *dock : docks) {
+        if (dock && dock != mBmpToolsDock)
+            dock->show();
+    }
+    mBmpToolsDock->hide();
+    mLayerDock->raise();
+    mTilesetDock->raise();
+    mMainSplitter->setSizes(QList<int>() << 80 << 200);
+
+    const QList<QToolBar*> toolBars =
+            findChildren<QToolBar*>(
+                QString(), Qt::FindDirectChildrenOnly);
+    for (QToolBar *toolBar : toolBars) {
+        removeToolBar(toolBar);
+        addToolBar(Qt::TopToolBarArea, toolBar);
+        toolBar->show();
+    }
+
+    QTimer::singleShot(0, this, [this]() {
+        resizeDocks(QList<QDockWidget*>() << mLayerDock,
+                    QList<int>() << 330, Qt::Horizontal);
+        resizeDocks(QList<QDockWidget*>() << mLayerDock << mTilesetDock,
+                    QList<int>() << qMax(320, height() * 3 / 5)
+                                 << qMax(240, height() * 2 / 5),
+                    Qt::Vertical);
+        writeWindowSettings();
+    });
+    qInfo() << "TileZed interface layout reset to defaults";
+}
+#endif
+
 void MainWindow::zoomIn()
 {
     if (MapView *mapView = mDocumentManager->currentMapView())
@@ -2882,7 +2972,6 @@ private:
 } // namespace Internal
 } // namespace Tiled
 
-#include "bmptooldialog.h"
 #include "luatiled.h"
 #include "painttilelayer.h"
 
@@ -3756,6 +3845,8 @@ void MainWindow::readSettings()
         qInfo() << "TileZed dock dimensions restored:"
                 << "right width" << rightDockWidth
                 << "right heights" << rightTopDockHeight << rightBottomDockHeight;
+        if (mTilesetDock->isVisible())
+            mTilesetDock->raise();
     });
     updateRecentFiles();
 }

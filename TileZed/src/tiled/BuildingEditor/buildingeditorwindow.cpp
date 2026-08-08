@@ -553,6 +553,23 @@ BuildingEditorWindow::BuildingEditorWindow(QWidget *parent) :
     mNightPreviewAction->setVisible(false);
     mNightPreviewAction->setEnabled(false);
     ui->menuView->addSeparator();
+    QAction *renderDiagnosticsAction = new QAction(
+                tr("Render Diagnostics"), this);
+    renderDiagnosticsAction->setCheckable(true);
+    renderDiagnosticsAction->setToolTip(tr(
+        "Show FPS, render time, drawn tiles, memory, zoom and renderer mode"));
+    renderDiagnosticsAction->setChecked(mSettings.value(
+        QLatin1String("RenderDiagnostics/Enabled"), true).toBool());
+    ui->menuView->addAction(renderDiagnosticsAction);
+    connect(renderDiagnosticsAction, &QAction::toggled, this,
+            [this](bool enabled) {
+        mSettings.setValue(
+                    QLatin1String("RenderDiagnostics/Enabled"), enabled);
+        const QList<BuildingIsoView *> views =
+                findChildren<BuildingIsoView *>();
+        for (BuildingIsoView *view : views)
+            view->setRenderDiagnosticsEnabled(enabled);
+    });
     ui->menuView->addAction(mNightPreviewAction);
     QToolButton *nightPreviewButton = new QToolButton(this);
     nightPreviewButton->setCheckable(true);

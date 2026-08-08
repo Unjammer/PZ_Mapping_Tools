@@ -24,6 +24,7 @@ struct TilesetCleanupOptions
 {
     bool recursive = true;
     bool normalizePaths = true;
+    bool removeUnresolvedTilesets = false;
 };
 
 struct TilesetCleanupResult
@@ -36,6 +37,10 @@ struct TilesetCleanupResult
     int validUnusedKept = 0;
     int normalized = 0;
     int missingUsed = 0;
+    int unresolvedRemoved = 0;
+    int affectedTileCells = 0;
+    int affectedTileObjects = 0;
+    int affectedRuleReferences = 0;
     int missingDependencies = 0;
     int externalDependencies = 0;
     bool formatUpdated = false;
@@ -43,6 +48,7 @@ struct TilesetCleanupResult
     bool applied = false;
     QStringList removedNames;
     QStringList missingNames;
+    QStringList unresolvedRemovedNames;
     QStringList pathChanges;
     QStringList dependencyWarnings;
     QString error;
@@ -91,6 +97,7 @@ private:
     QLineEdit *mRootEdit = nullptr;
     QCheckBox *mRecursiveCheck = nullptr;
     QCheckBox *mNormalizeCheck = nullptr;
+    QCheckBox *mRemoveUnresolvedCheck = nullptr;
     QPlainTextEdit *mReport = nullptr;
     QTableWidget *mSummaryTable = nullptr;
     QLabel *mStatusTitle = nullptr;

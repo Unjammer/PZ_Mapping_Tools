@@ -235,6 +235,8 @@ private:
     QStringList mBlendLayers;
     QMap<QString,QList<BlendWrapper*> > mBlendsByLayer;
     QSet<QString> mBlendExclude2Layers;
+    int mInactiveRuleCount = 0;
+    int mInactiveBlendCount = 0;
 
     QSet<Tile*> mKnownBlendTiles;
     bool mHack;

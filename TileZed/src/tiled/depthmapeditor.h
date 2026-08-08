@@ -73,6 +73,7 @@ signals:
     void cursorPixelChanged(int x, int y, int depth, bool defined);
     void geometryPicked(int index);
     void geometryTranslated(int index, const QVector3D &delta);
+    void geometryScaled(int index, float factor);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -89,6 +90,8 @@ private:
     void rebuildOverlay();
     void reportCursor(const QPoint &point);
     int pickGeometry(const QPointF &imagePoint) const;
+    QRectF geometryBounds(int index) const;
+    bool isOnResizeHandle(const QPointF &imagePoint, int index) const;
     QVector3D geometryDragDelta(const QPointF &from,
                                 const QPointF &to) const;
 
@@ -107,7 +110,9 @@ private:
     QPoint mLastPoint;
     bool mGeometryEditing = true;
     bool mGeometryDragging = false;
+    bool mGeometryResizing = false;
     QPointF mLastGeometryPoint;
+    qreal mLastResizeDistance = 0.0;
 };
 
 class DepthMapEditor : public QMainWindow
@@ -156,10 +161,16 @@ private slots:
     void removeGeometry();
     void geometrySelectionChanged();
     void geometryValuesChanged();
+    void geometryPixelSizeChanged();
+    void snapToPixelGridToggled(bool enabled);
+    void savePrimitivePreset();
+    void insertPrimitivePreset();
+    void deletePrimitivePreset();
     void generateSelectedGeometry();
     void generateAllGeometry();
     void canvasGeometryPicked(int index);
     void canvasGeometryTranslated(int index, const QVector3D &delta);
+    void canvasGeometryScaled(int index, float factor);
 
 private:
     struct Edit {
@@ -168,6 +179,12 @@ private:
         QImage after;
         int beforeRevision = 0;
         int afterRevision = 0;
+    };
+
+    struct PrimitivePreset {
+        QString name;
+        QString tileset;
+        DepthPrimitive primitive;
     };
 
     static const int DepthTileWidth = 128;
@@ -201,6 +218,16 @@ private:
     void updateGeometryList(int selectedIndex = -1);
     void updateGeometryControls();
     void updateCanvasGeometry();
+    void updatePrimitivePresetUi();
+    QVector3D primitivePixelSize(
+            const DepthPrimitive &primitive) const;
+    void setPrimitivePixelSize(DepthPrimitive &primitive,
+                               int dimension, double pixels) const;
+    void snapPrimitiveToPixelGrid(DepthPrimitive &primitive) const;
+    void scalePrimitive(DepthPrimitive &primitive, float factor) const;
+    QVector<PrimitivePreset> readPrimitivePresets() const;
+    void writePrimitivePresets(
+            const QVector<PrimitivePreset> &presets) const;
     QVector<DepthPrimitive> &currentGeometry();
     const QVector<DepthPrimitive> currentGeometryValue() const;
     int selectedGeometryIndex() const;
@@ -245,10 +272,17 @@ private:
     QDoubleSpinBox *mMaximumSpins[3] = { nullptr, nullptr, nullptr };
     QDoubleSpinBox *mRadiusSpins[2] = { nullptr, nullptr };
     QDoubleSpinBox *mHeightSpin = nullptr;
+    QLabel *mPixelSizeLabels[3] = { nullptr, nullptr, nullptr };
+    QDoubleSpinBox *mPixelSizeSpins[3] = { nullptr, nullptr, nullptr };
     QComboBox *mPlaneCombo = nullptr;
     QPlainTextEdit *mPointsEdit = nullptr;
     QStackedWidget *mShapeStack = nullptr;
     QCheckBox *mRespectAlphaCheck = nullptr;
+    QCheckBox *mSnapPixelCheck = nullptr;
+    QComboBox *mPresetCombo = nullptr;
+    QPushButton *mInsertPresetButton = nullptr;
+    QPushButton *mDeletePresetButton = nullptr;
+    QVector<PrimitivePreset> mVisiblePresets;
 
     QAction *mSaveAction = nullptr;
     QAction *mSaveAsAction = nullptr;

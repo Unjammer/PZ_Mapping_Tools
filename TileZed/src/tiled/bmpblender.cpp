@@ -93,6 +93,7 @@ void BmpBlender::recreate()
 
         qDeleteAll(mTileLayers);
         mTileLayers.clear();
+        mBlendGrids.clear();
 
         markDirty(0, 0, mMap->width() - 1, mMap->height() - 1);
 
@@ -120,6 +121,9 @@ void BmpBlender::flush(const MapRenderer *renderer, const QRect &rect, const QPo
     if (mDirtyRegion.isEmpty())
         return;
 
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+
     QPolygonF polygon;
     int level = 0;
     polygon << QPointF(renderer->pixelToTileCoords(rect.topLeft(), level) - mapPos);
@@ -132,10 +136,16 @@ void BmpBlender::flush(const MapRenderer *renderer, const QRect &rect, const QPo
         return;
     mDirtyRegion -= dirty;
 
+    qint64 initTilesMs = 0;
     if (mInitTilesLater) {
+        QElapsedTimer initTimer;
+        initTimer.start();
         initTiles();
+        initTilesMs = initTimer.elapsed();
         mInitTilesLater = false;
     }
+    if (mRuleByColor.isEmpty() && mBlendsByLayer.isEmpty())
+        return;
 
     QElapsedTimer timer;
     timer.start();
@@ -145,26 +155,45 @@ void BmpBlender::flush(const MapRenderer *renderer, const QRect &rect, const QPo
     addEdgeTiles(work.left(), work.top(), work.right(), work.bottom());
     tileGridsToLayers(work.left(), work.top(), work.right(), work.bottom());
 
-    if (timer.elapsed() >= 250) {
+    const qint64 redrawMs = timer.elapsed();
+    const qint64 totalMs = totalTimer.elapsed();
+    if (totalMs >= 250) {
         qWarning() << "BMP-rule redraw was slow:"
-                   << timer.elapsed() << "ms,"
+                   << totalMs << "ms total,"
+                   << initTilesMs << "ms tile initialization,"
+                   << redrawMs << "ms region redraw,"
                    << "dirty rects" << dirtyRectCount
                    << "dirty bounds" << dirty.boundingRect()
-                   << "work bounds" << work;
+                   << "work bounds" << work
+                   << "active rules"
+                   << mRules.size() - mInactiveRuleCount
+                   << "of" << mRules.size()
+                   << "active blends"
+                   << mBlendList.size() - mInactiveBlendCount
+                   << "of" << mBlendList.size();
     }
 }
 
 void BmpBlender::flush(const QRect &rect)
 {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+
     QRegion dirty = mDirtyRegion & rect;
     if (dirty.isEmpty())
         return;
     mDirtyRegion -= dirty;
 
+    qint64 initTilesMs = 0;
     if (mInitTilesLater) {
+        QElapsedTimer initTimer;
+        initTimer.start();
         initTiles();
+        initTilesMs = initTimer.elapsed();
         mInitTilesLater = false;
     }
+    if (mRuleByColor.isEmpty() && mBlendsByLayer.isEmpty())
+        return;
 
     // This overload is used by whole-map consumers such as previews and
     // exports. The old code intersected mDirtyRegion with rect, but then
@@ -178,13 +207,23 @@ void BmpBlender::flush(const QRect &rect)
     addEdgeTiles(work.left(), work.top(), work.right(), work.bottom());
     tileGridsToLayers(work.left(), work.top(), work.right(), work.bottom());
 
-    if (timer.elapsed() >= 250) {
+    const qint64 redrawMs = timer.elapsed();
+    const qint64 totalMs = totalTimer.elapsed();
+    if (totalMs >= 250) {
         qWarning() << "BMP-rule whole-map redraw was slow:"
-                   << timer.elapsed() << "ms,"
+                   << totalMs << "ms total,"
+                   << initTilesMs << "ms tile initialization,"
+                   << redrawMs << "ms region redraw,"
                    << "requested" << rect
                    << "dirty rects" << dirtyRectCount
                    << "dirty bounds" << dirty.boundingRect()
-                   << "work bounds" << work;
+                   << "work bounds" << work
+                   << "active rules"
+                   << mRules.size() - mInactiveRuleCount
+                   << "of" << mRules.size()
+                   << "active blends"
+                   << mBlendList.size() - mInactiveBlendCount
+                   << "of" << mBlendList.size();
     }
 }
 
@@ -352,11 +391,9 @@ void BmpBlender::fromMap()
     mRuleByColor.clear();
     mRuleLayers.clear();
     mFloor0Rules.clear();
+    mInactiveRuleCount = 0;
     foreach (BmpRule *rule, mMap->bmpSettings()->rules()) {
         RuleWrapper *ruleW = new RuleWrapper(rule);
-        mRuleByColor[rule->color] += ruleW;
-        if (!mRuleLayers.contains(rule->targetLayer))
-            mRuleLayers += rule->targetLayer;
         foreach (QString tileName, rule->tileChoices) {
             if (BuildingEditor::BuildingTilesMgr::legalTileName(tileName)) {
                 if (!mAliasByName.contains(tileName))
@@ -384,11 +421,9 @@ void BmpBlender::fromMap()
     mBlendList.clear();
     mBlendsByLayer.clear();
     mBlendLayers.clear();
-    QSet<QString> layers;
+    mInactiveBlendCount = 0;
     foreach (BmpBlend *blend, mMap->bmpSettings()->blends()) {
         BlendWrapper *blendW = new BlendWrapper(blend);
-        mBlendsByLayer[blend->targetLayer] += blendW;
-        layers.insert(blend->targetLayer);
         QStringList excludes;
         foreach (QString tileName, blend->ExclusionList) {
             if (!BuildingEditor::BuildingTilesMgr::legalTileName(tileName)) {
@@ -433,7 +468,6 @@ void BmpBlender::fromMap()
         }
         mBlendList += blendW;
     }
-    mBlendLayers = layers.values();
 
     mTileNames = normalizeTileNames(tileNames.values());
 
@@ -462,13 +496,16 @@ QList<Tile *>& BmpBlender::tileNameToTiles(const QString &name, QList<Tile *>& t
             }
         }
         if (selectedTileset) {
+            if (selectedTileset->isMissing())
+                return tiles;
             for (int index = 0;
                  index < selectedTileset->tileCount(); ++index) {
                 if (Tile *tile = selectedTileset->tileAt(index))
                     tiles += tile;
             }
         } else if (mTileByName.contains(name)) {
-            tiles += mTileByName[name];
+            if (Tile *tile = mTileByName[name])
+                tiles += tile;
         } else {
             for (Tileset *tileset : mMap->tilesets()) {
                 if (tileset && BuildingEditor::BuildingTilesMgr::
@@ -478,14 +515,12 @@ QList<Tile *>& BmpBlender::tileNameToTiles(const QString &name, QList<Tile *>& t
                     break;
                 }
             }
-            if (selectedTileset) {
+            if (selectedTileset && !selectedTileset->isMissing()) {
                 for (int index = 0;
                      index < selectedTileset->tileCount(); ++index) {
                     if (Tile *tile = selectedTileset->tileAt(index))
                         tiles += tile;
                 }
-            } else {
-                tiles += TilesetManager::instance()->missingTile();
             }
         }
     }
@@ -521,30 +556,65 @@ void BmpBlender::initTiles()
         if (BuildingEditor::BuildingTilesMgr::parseTileName(tileName, tilesetName, tileID)) {
             if (!mTilesetNames.contains(tilesetName))
                 mTilesetNames += tilesetName;
-            if (tilesets.contains(tilesetName))
-                mTileByName[tileName] = tilesets[tilesetName]->tileAt(tileID);
+            if (tilesets.contains(tilesetName)
+                    && !tilesets[tilesetName]->isMissing()) {
+                if (Tile *tile = tilesets[tilesetName]->tileAt(tileID))
+                    mTileByName[tileName] = tile;
+            }
         }
     }
 
+    mRuleByColor.clear();
+    mRuleLayers.clear();
+    mInactiveRuleCount = 0;
     mFloorTileToRule.clear();
     foreach (RuleWrapper *ruleW, mRules) {
         ruleW->mTiles = tileNamesToTiles(ruleW->mTileNames).toVector();
+        if (ruleW->mTiles.isEmpty()) {
+            ++mInactiveRuleCount;
+            continue;
+        }
+        mRuleByColor[ruleW->mRule->color] += ruleW;
+        if (!mRuleLayers.contains(ruleW->mRule->targetLayer))
+            mRuleLayers += ruleW->mRule->targetLayer;
         if (ruleW->mRule->targetLayer != STR_0Floor)
             continue;
         foreach (Tile *tile, ruleW->mTiles)
-            mFloorTileToRule[tile] = ruleW;
+            if (tile)
+                mFloorTileToRule[tile] = ruleW;
     }
 
+    mBlendsByLayer.clear();
+    mBlendLayers.clear();
+    mInactiveBlendCount = 0;
     mBlendExclude2Layers.clear();
     foreach (BlendWrapper *blendW, mBlendList) {
         blendW->mMainTiles = tileNameToTiles(blendW->mBlend->mainTile).toVector();
         blendW->mBlendTiles = tileNameToTiles(blendW->mBlend->blendTile).toVector();
         blendW->mExcludeTiles = tileNamesToTiles(blendW->mBlend->ExclusionList).toVector();
         blendW->mExclude2Tiles.clear();
+        QStringList exclude2Layers;
         for (int i = 0; i < blendW->mBlend->exclude2.size(); i += 2) {
             blendW->mExclude2Tiles += tileNameToTiles(blendW->mBlend->exclude2[i]).toVector();
-            mBlendExclude2Layers += blendW->mBlend->exclude2[i + 1];
+            exclude2Layers += blendW->mBlend->exclude2[i + 1];
         }
+        if (blendW->mMainTiles.isEmpty()
+                || blendW->mBlendTiles.isEmpty()) {
+            ++mInactiveBlendCount;
+            continue;
+        }
+        for (const QString &layerName : exclude2Layers)
+            mBlendExclude2Layers += layerName;
+        mBlendsByLayer[blendW->mBlend->targetLayer] += blendW;
+        if (!mBlendLayers.contains(blendW->mBlend->targetLayer))
+            mBlendLayers += blendW->mBlend->targetLayer;
+    }
+
+    if (mInactiveRuleCount || mInactiveBlendCount) {
+        qInfo() << "BMP unavailable-tileset filtering skipped"
+                << mInactiveRuleCount << "of" << mRules.size()
+                << "rules and" << mInactiveBlendCount << "of"
+                << mBlendList.size() << "blends";
     }
 
     updateWarnings();
@@ -554,9 +624,140 @@ void BmpBlender::initTiles()
     if (true/*mHack*/) {
         mKnownBlendTiles.clear();
         foreach (BlendWrapper *blendW, mBlendList) {
+            if (blendW->mMainTiles.isEmpty()
+                    || blendW->mBlendTiles.isEmpty()) {
+                continue;
+            }
             mKnownBlendTiles += QSet<Tile*>(blendW->mBlendTiles.begin(), blendW->mBlendTiles.end());
         }
     }
+}
+
+bool BmpBlender::validateUnavailableTilesetFiltering(
+        QString *errorString)
+{
+    Map map(Map::LevelIsometric, 8, 8, 64, 128);
+    Tileset available(QStringLiteral("PZTools_valid_sheet_01"),
+                      64, 128);
+    Tileset unavailable(QStringLiteral("PZTools_retired_sheet_01"),
+                        64, 128);
+    if (!available.loadFromNothing(
+                QSize(128, 128), QStringLiteral("available.png"))
+            || !unavailable.loadFromNothing(
+                QSize(1024, 1024), QStringLiteral("retired.png"))) {
+        if (errorString) {
+            *errorString = QStringLiteral(
+                        "Could not construct unavailable-tileset fixtures");
+        }
+        return false;
+    }
+    available.setMissing(false);
+    unavailable.setMissing(true);
+    map.addTileset(&available);
+    map.addTileset(&unavailable);
+
+    const QString valid0 =
+            QStringLiteral("PZTools_valid_sheet_01_000");
+    const QString valid1 =
+            QStringLiteral("PZTools_valid_sheet_01_001");
+    const QString retired0 =
+            QStringLiteral("PZTools_retired_sheet_01_000");
+    const QRgb noCondition = qRgb(0, 0, 0);
+    QList<BmpRule *> rules;
+    rules += new BmpRule(
+                QStringLiteral("valid"), 0, qRgb(1, 2, 3),
+                QStringList() << valid0, QStringLiteral("0_Floor"),
+                noCondition, false);
+    rules += new BmpRule(
+                QStringLiteral("retired"), 0, qRgb(4, 5, 6),
+                QStringList() << retired0,
+                QStringLiteral("0_Vegetation"), noCondition, false);
+    rules += new BmpRule(
+                QStringLiteral("mixed"), 1, qRgb(7, 8, 9),
+                QStringList() << retired0 << valid1,
+                QStringLiteral("0_Vegetation"), noCondition, false);
+    rules += new BmpRule(
+                QStringLiteral("null"), 1, qRgb(10, 11, 12),
+                QStringList() << QString(),
+                QStringLiteral("0_FloorOverlay"), noCondition, false);
+    map.rbmpSettings()->setRules(rules);
+
+    QList<BmpBlend *> blends;
+    blends += new BmpBlend(
+                QStringLiteral("0_FloorOverlay"), valid0, valid1,
+                BmpBlend::E, QStringList(), QStringList());
+    blends += new BmpBlend(
+                QStringLiteral("0_FloorOverlay"), retired0, valid1,
+                BmpBlend::W, QStringList(), QStringList());
+    blends += new BmpBlend(
+                QStringLiteral("0_FloorOverlay"), valid0, retired0,
+                BmpBlend::N, QStringList(), QStringList());
+    map.rbmpSettings()->setBlends(blends);
+
+    BmpBlender blender(&map);
+    blender.initTiles();
+
+    const bool activeRulesAreCorrect =
+            blender.mInactiveRuleCount == 1
+            && blender.mRuleByColor.contains(qRgb(1, 2, 3))
+            && !blender.mRuleByColor.contains(qRgb(4, 5, 6))
+            && blender.mRuleByColor.contains(qRgb(7, 8, 9))
+            && blender.mRuleByColor.contains(qRgb(10, 11, 12));
+    if (!activeRulesAreCorrect) {
+        if (errorString) {
+            *errorString = QStringLiteral(
+                        "Rules with only unavailable outputs remained active");
+        }
+        return false;
+    }
+
+    RuleWrapper *mixedRule =
+            blender.mRuleByColor.value(qRgb(7, 8, 9)).value(0);
+    RuleWrapper *nullRule =
+            blender.mRuleByColor.value(qRgb(10, 11, 12)).value(0);
+    if (!mixedRule || mixedRule->mTiles.size() != 1
+            || mixedRule->mTiles.first() != available.tileAt(1)
+            || !nullRule || nullRule->mTiles.size() != 1
+            || nullRule->mTiles.first() != nullptr) {
+        if (errorString) {
+            *errorString = QStringLiteral(
+                        "Available and null rule choices were not preserved");
+        }
+        return false;
+    }
+
+    const QList<BlendWrapper *> activeBlends =
+            blender.mBlendsByLayer.value(
+                QStringLiteral("0_FloorOverlay"));
+    if (blender.mInactiveBlendCount != 2
+            || activeBlends.size() != 1
+            || activeBlends.first()->mBlendTiles.size() != 1
+            || activeBlends.first()->mBlendTiles.first()
+                != available.tileAt(1)) {
+        if (errorString) {
+            *errorString = QStringLiteral(
+                        "Blends with unavailable main/output tiles "
+                        "remained active");
+        }
+        return false;
+    }
+
+    if (!blender.tileNameToTiles(retired0).isEmpty()
+            || !blender.tileNameToTiles(unavailable.name()).isEmpty()
+            || blender.mKnownBlendTiles.contains(
+                unavailable.tileAt(0))) {
+        if (errorString) {
+            *errorString = QStringLiteral(
+                        "Missing placeholder tiles entered rule/blend "
+                        "evaluation");
+        }
+        return false;
+    }
+
+    qInfo() << "Validated unavailable-tileset filtering:"
+            << blender.mInactiveRuleCount << "inactive rule and"
+            << blender.mInactiveBlendCount << "inactive blends";
+    return true;
 }
 
 static bool adjacentToNonBlack(const QImage &image1, const QImage &image2, int x1, int y1)
@@ -817,8 +1018,24 @@ void BmpBlender::updateWarnings()
     foreach (Tileset *ts, mMap->tilesets())
         tilesets[ts->name()] = ts;
     foreach (QString tilesetName, mTilesetNames) {
-        if (!tilesets.contains(tilesetName))
+        if (!tilesets.contains(tilesetName)
+                || !tilesets[tilesetName]
+                || tilesets[tilesetName]->isMissing()) {
             warnings += tr("Map is missing \"%1\" tileset.").arg(tilesetName);
+        }
+    }
+
+    if (mInactiveRuleCount) {
+        warnings += tr(
+                    "Skipped %1 BMP rule(s) because none of their tile "
+                    "choices are available. The definitions remain embedded "
+                    "in the TMX.").arg(mInactiveRuleCount);
+    }
+    if (mInactiveBlendCount) {
+        warnings += tr(
+                    "Skipped %1 BMP blend(s) because their main or output "
+                    "tiles are unavailable. The definitions remain embedded "
+                    "in the TMX.").arg(mInactiveBlendCount);
     }
 
     foreach (QString layerName, mTileLayers.keys()) {

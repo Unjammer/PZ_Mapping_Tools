@@ -43,6 +43,7 @@
 #include "map.h"
 #include "maplevel.h"
 #include "mapobject.h"
+#include "mapwriter.h"
 #include "objectgroup.h"
 #include "tile.h"
 #include "tileset.h"
@@ -54,8 +55,10 @@
 
 #include <qmath.h>
 #include <QApplication>
+#include <QDateTime>
 #include <QDebug>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QGraphicsItem>
 #include <QGraphicsSceneEvent>
@@ -66,6 +69,8 @@
 #include <QMimeData>
 #include <QOpenGLFunctions>
 #include <QOpenGLWidget>
+#include <QQueue>
+#include <QSaveFile>
 #include <QScopedValueRollback>
 #include <QSettings>
 #include <QStyleOptionGraphicsItem>
@@ -73,6 +78,46 @@
 #include <QUndoStack>
 
 using namespace Tiled;
+
+namespace {
+
+QVector<int> nearestSourceCells(int width, int height,
+                                const QVector<int> &sources)
+{
+    const int cellCount = width * height;
+    QVector<int> nearest(cellCount, -1);
+    QQueue<int> pending;
+    for (int source : sources) {
+        if (source < 0 || source >= cellCount || nearest.at(source) != -1)
+            continue;
+        nearest[source] = source;
+        pending.enqueue(source);
+    }
+
+    const QPoint neighbours[] = {
+        QPoint(-1, 0), QPoint(1, 0),
+        QPoint(0, -1), QPoint(0, 1)
+    };
+    while (!pending.isEmpty()) {
+        const int index = pending.dequeue();
+        const int x = index % width;
+        const int y = index / width;
+        for (const QPoint &offset : neighbours) {
+            const int nx = x + offset.x();
+            const int ny = y + offset.y();
+            if (nx < 0 || ny < 0 || nx >= width || ny >= height)
+                continue;
+            const int neighbour = nx + ny * width;
+            if (nearest.at(neighbour) != -1)
+                continue;
+            nearest[neighbour] = nearest.at(index);
+            pending.enqueue(neighbour);
+        }
+    }
+    return nearest;
+}
+
+}
 
 ///// ///// ///// ///// /////
 
@@ -551,6 +596,7 @@ void TilesetTextures::tilesetChanged(Tileset *tileset)
 static TilesetTextures TILESET_TEXTURES;
 static bool OPENGL_NO_CONTEXT_REPORTED = false;
 static bool OPENGL_CORE_UNAVAILABLE_REPORTED = false;
+static bool OPENGL_DEVICE_REPORTED = false;
 
 LayerGroupVBO::LayerGroupVBO()
     : mLayerGroup(nullptr)
@@ -624,6 +670,23 @@ void LayerGroupVBO::paint(QPainter *painter, Tiled::MapRenderer *renderer,
     if (mContext == nullptr) {
         mContext = currentContext;
         connect(mContext, &QOpenGLContext::aboutToBeDestroyed, this, &LayerGroupVBO::aboutToBeDestroyed);
+    }
+
+    if (!OPENGL_DEVICE_REPORTED) {
+        OPENGL_DEVICE_REPORTED = true;
+        const char *vendor = reinterpret_cast<const char *>(glGetString(GL_VENDOR));
+        const char *device = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
+        const char *version = reinterpret_cast<const char *>(glGetString(GL_VERSION));
+        qInfo().noquote()
+                << "WorldEd active OpenGL device:"
+                << (vendor ? QString::fromLatin1(vendor)
+                           : QStringLiteral("unknown vendor"))
+                << "|"
+                << (device ? QString::fromLatin1(device)
+                           : QStringLiteral("unknown renderer"))
+                << "| OpenGL"
+                << (version ? QString::fromLatin1(version)
+                            : QStringLiteral("unknown version"));
     }
 
     QOpenGLShaderProgram& shaderProgram = mMapCompositeVBO->mShaderProgram;
@@ -901,6 +964,7 @@ void LayerGroupVBO::paint2(QPainter *painter, Tiled::MapRenderer *renderer,
                     tiles[i].mTexture->mTexture->bind();
                     glDrawRangeElements(GL_TRIANGLE_FAN, start, end, count, GL_UNSIGNED_INT, (void*)(start * sizeof(GLuint)));
 #endif
+                    ZLevelRenderer::addRenderedTileCount();
                 }
 
                 vboTiles->mVertexBuffer.release();
@@ -1012,6 +1076,7 @@ void LayerGroupVBO::paint2(QPainter *painter, Tiled::MapRenderer *renderer,
                         tile.mTexture->mTexture->bind();
                         glDrawRangeElements(GL_TRIANGLE_FAN, start, end, count, GL_UNSIGNED_INT, (void*)(start * sizeof(GLuint)));
 #endif
+                        ZLevelRenderer::addRenderedTileCount();
                     }
                 }
             }
@@ -6910,60 +6975,220 @@ void CellScene::checkHolesOnLevelZero()
     if (layerGroup == nullptr) {
         return;
     }
-    Tiled::Internal::TileDefWatcher *tileDefWatcher = BuildingEditor::getTileDefWatcher(); // NOTE: not safe while multithreading active
     layerGroup->prepareDrawing2();
     OrderedCellsTemporaries vars;
     QVector<const Tiled::Cell*> cells;
     QSet<int> preparedLevels;
     for (int y = 0; y < mMapComposite->map()->height(); y++) {
         for (int x = 0; x < mMapComposite->map()->width(); x++) {
-            layerGroup->orderedCellsAt2(QPoint(x, y), vars, cells);
-            bool hasFloor = false;
-            for (const Tiled::Cell *cell : std::as_const(cells)) {
-                if (TileDefTileset* tdts = tileDefWatcher->tileset(cell->tile->tileset()->name())) {
-                    if (TileDefTile* tdt = tdts->tileAt(cell->tile->id())) {
-                        if (tdt->mProperties.contains(QStringLiteral("solidfloor"))) {
-                            hasFloor = true;
-                            break;
-                        }
-                    }
-                }
-            }
-            if (!hasFloor) {
+            bool hasTile =
+                    layerGroup->orderedCellsAt2(
+                        QPoint(x, y), vars, cells);
+            if (!hasTile) {
                 for (int level = -1; level >= mMapComposite->minLevel(); level--) {
                     if (CompositeLayerGroup* layerGroup2 = mMapComposite->layerGroupForLevel(level)) {
                         if (!preparedLevels.contains(level)) {
                             layerGroup2->prepareDrawing2();
                             preparedLevels += level;
                         }
-                        layerGroup2->orderedCellsAt2(QPoint(x, y), vars, cells);
-                        for (const Tiled::Cell *cell : std::as_const(cells)) {
-                            if (TileDefTileset* tdts = tileDefWatcher->tileset(cell->tile->tileset()->name())) {
-                                if (TileDefTile* tdt = tdts->tileAt(cell->tile->id())) {
-                                    if (tdt->mProperties.contains(QStringLiteral("solidfloor"))) {
-                                        hasFloor = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        if (hasFloor) {
+                        hasTile =
+                                layerGroup2->orderedCellsAt2(
+                                    QPoint(x, y), vars, cells);
+                        if (hasTile) {
                             break;
                         }
                     }
                 }
             }
-            if (!hasFloor) {
-                qDebug() << "no solidfloor tile at" << x << y;
+            if (!hasTile) {
                 mHoleInFloor += QPoint(x, y);
             }
         }
     }
-    if (mHoleInFloor.isEmpty()) {
-        QMessageBox::information(MainWindow::instance(), QStringLiteral("Check For Holes"), QStringLiteral("No holes found."));
-    } else {
-        QMessageBox::warning(MainWindow::instance(), QStringLiteral("Check For Holes"), QStringLiteral("%1 holes found.").arg(mHoleInFloor.size()));
+    qInfo() << "Hole Detection found" << mHoleInFloor.size()
+            << "level-zero coordinate(s) without any composite tile";
+}
+
+int CellScene::autoFixHolesOnLevelZero(QString *backupPath, QString *error)
+{
+    if (backupPath)
+        backupPath->clear();
+    if (error)
+        error->clear();
+    if (mHoleInFloor.isEmpty())
+        return 0;
+    if (!mMap || !mDocument || !mDocument->worldDocument()) {
+        if (error)
+            *error = tr("The current cell map is not available.");
+        return 0;
     }
+
+    const QString mapPath = cell()->mapFilePath();
+    if (mapPath.isEmpty() || !QFileInfo::exists(mapPath)) {
+        if (error) {
+            *error = tr("Automatic repair requires an existing TMX file for "
+                        "the current cell.");
+        }
+        return 0;
+    }
+
+    MapLevel *mapLevel = mMap->mapLevelForZ(0);
+    const int floorIndex = mapLevel
+            ? mapLevel->indexOfLayer(
+                QStringLiteral("Floor"), Layer::TileLayerType)
+            : -1;
+    TileLayer *floorLayer = floorIndex >= 0
+            ? mapLevel->layerAt(floorIndex)->asTileLayer()
+            : nullptr;
+    if (!floorLayer) {
+        if (error) {
+            *error = tr("The level-zero Floor layer is missing from the "
+                        "current TMX file.");
+        }
+        return 0;
+    }
+
+    QVector<int> sources;
+    for (int y = 0; y < floorLayer->height(); ++y) {
+        for (int x = 0; x < floorLayer->width(); ++x) {
+            if (!floorLayer->cellAt(x, y).isEmpty()) {
+                sources += x + y * floorLayer->width();
+            }
+        }
+    }
+    if (sources.isEmpty()) {
+        if (error) {
+            *error = tr("No floor tile exists on the current TMX Floor "
+                        "layer. Add one floor tile in TileZed, "
+                        "then run Hole Detection again.");
+        }
+        return 0;
+    }
+
+    const QVector<int> nearest = nearestSourceCells(
+                floorLayer->width(), floorLayer->height(), sources);
+    QVector<QPair<QPoint, Cell>> previousCells;
+    previousCells.reserve(mHoleInFloor.size());
+    for (const QPoint &hole : std::as_const(mHoleInFloor)) {
+        if (!floorLayer->contains(hole))
+            continue;
+        const int sourceIndex =
+                nearest.at(hole.x() + hole.y() * floorLayer->width());
+        if (sourceIndex < 0)
+            continue;
+        const QPoint source(
+                    sourceIndex % floorLayer->width(),
+                    sourceIndex / floorLayer->width());
+        const Cell sourceCell = floorLayer->cellAt(source);
+        if (sourceCell.isEmpty())
+            continue;
+        previousCells += qMakePair(hole, floorLayer->cellAt(hole));
+        floorLayer->setCell(hole.x(), hole.y(), sourceCell);
+    }
+    if (previousCells.isEmpty()) {
+        if (error)
+            *error = tr("No detected hole could be repaired.");
+        return 0;
+    }
+
+    const QFileInfo projectInfo(mDocument->worldDocument()->fileName());
+    const QString timestamp =
+            QDateTime::currentDateTime().toString(
+                QStringLiteral("yyyyMMdd-HHmmss-zzz"));
+    QDir backupDirectory(
+                projectInfo.absoluteDir().filePath(
+                    QStringLiteral(".pztools-backups/hole-detection-%1")
+                    .arg(timestamp)));
+    if (!QDir().mkpath(backupDirectory.absolutePath())) {
+        for (const auto &entry : std::as_const(previousCells))
+            floorLayer->setCell(entry.first.x(), entry.first.y(), entry.second);
+        if (error) {
+            *error = tr("Could not create the automatic-repair backup "
+                        "directory:\n%1")
+                    .arg(QDir::toNativeSeparators(
+                             backupDirectory.absolutePath()));
+        }
+        return 0;
+    }
+
+    const QString backupFileName =
+            QStringLiteral("cell_%1_%2_%3")
+            .arg(cell()->x()).arg(cell()->y())
+            .arg(QFileInfo(mapPath).fileName());
+    const QString savedBackupPath =
+            backupDirectory.filePath(backupFileName);
+    if (!QFile::copy(mapPath, savedBackupPath)) {
+        for (const auto &entry : std::as_const(previousCells))
+            floorLayer->setCell(entry.first.x(), entry.first.y(), entry.second);
+        if (error) {
+            *error = tr("Could not back up the TMX file before repair:\n%1")
+                    .arg(QDir::toNativeSeparators(savedBackupPath));
+        }
+        return 0;
+    }
+
+    QSaveFile output(mapPath);
+    if (!output.open(QIODevice::WriteOnly)) {
+        for (const auto &entry : std::as_const(previousCells))
+            floorLayer->setCell(entry.first.x(), entry.first.y(), entry.second);
+        if (error)
+            *error = output.errorString();
+        return 0;
+    }
+    MapWriter writer;
+    writer.setLayerDataFormat(MapWriter::Base64Zlib);
+    writer.setDtdEnabled(false);
+    writer.writeMap(mMap, &output, QFileInfo(mapPath).absolutePath());
+    if (output.error() != QFile::NoError || !output.commit()) {
+        for (const auto &entry : std::as_const(previousCells))
+            floorLayer->setCell(entry.first.x(), entry.first.y(), entry.second);
+        if (error)
+            *error = output.errorString();
+        return 0;
+    }
+
+    if (CompositeLayerGroup *layerGroup =
+            mMapComposite->layerGroupForLevel(0)) {
+        layerGroup->regionAltered(floorLayer);
+    }
+    mMapComposite->synch();
+    mHoleInFloor.clear();
+    update();
+    if (backupPath)
+        *backupPath = savedBackupPath;
+    qInfo() << "Hole Detection automatic repair:"
+            << previousCells.size() << "square(s) repaired in"
+            << mapPath << "backup" << savedBackupPath;
+    return previousCells.size();
+}
+
+bool CellScene::validateHoleRepair(QString *error)
+{
+    if (error)
+        error->clear();
+
+    const int width = 7;
+    const int height = 5;
+    const int leftSource = 1 + 2 * width;
+    const int rightSource = 5 + 2 * width;
+    const QVector<int> nearest = nearestSourceCells(
+                width, height, { leftSource, rightSource });
+    if (nearest.size() != width * height
+            || nearest.at(leftSource) != leftSource
+            || nearest.at(rightSource) != rightSource
+            || nearest.at(0 + 2 * width) != leftSource
+            || nearest.at(6 + 2 * width) != rightSource
+            || nearest.at(3 + 0 * width) != leftSource) {
+        if (error)
+            *error = QStringLiteral("Nearest-tile propagation is incorrect.");
+        return false;
+    }
+    if (!nearestSourceCells(4, 3, {}).contains(-1)) {
+        if (error)
+            *error = QStringLiteral("No-source repair fixture is incorrect.");
+        return false;
+    }
+    return true;
 }
 
 void CellScene::handlePendingUpdates()

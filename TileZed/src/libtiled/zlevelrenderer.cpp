@@ -45,6 +45,12 @@ using namespace Tiled;
 #define DISPLAY_TILE_HEIGHT (map()->tileHeight() * (is2x() ? 2 : 1))
 
 namespace {
+quint64 &frameRenderedTileCount()
+{
+    static thread_local quint64 count = 0;
+    return count;
+}
+
 struct JUMBO
 {
     QString tilesetName;
@@ -65,6 +71,21 @@ static JUMBO s_jumbo[] = {
     { QStringLiteral("e_yellowwood"), true },
 };
 } // namespace anonymous
+
+void ZLevelRenderer::resetRenderedTileCount()
+{
+    frameRenderedTileCount() = 0;
+}
+
+void ZLevelRenderer::addRenderedTileCount(quint64 count)
+{
+    frameRenderedTileCount() += count;
+}
+
+quint64 ZLevelRenderer::renderedTileCount()
+{
+    return frameRenderedTileCount();
+}
 
 QSize ZLevelRenderer::mapSize() const
 {
@@ -546,6 +567,7 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
                         painter->setOpacity(opacities[i] * opacity);
 
                         painter->drawImage(0, 0, img);
+                        addRenderedTileCount();
 
                         if (bJUMBO && !tilesetName.contains(QStringLiteral("JUMBOXL")) && !tilesetName.contains(QStringLiteral("JUMBOXXL"))) {
                             drawJumboTreeTile_Leaves(cell->tile, painter, baseTransform, x, y, m11, m12, m21, m22);

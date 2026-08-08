@@ -230,6 +230,9 @@ public:
 
     void setBmpAliases(const QList<BmpAlias*> &aliases);
     void setBmpRules(const QString &fileName, const QList<BmpRule*> &rules);
+    void setBmpRulesAndAliases(const QString &fileName,
+                               const QList<BmpAlias*> &aliases,
+                               const QList<BmpRule*> &rules);
     void setBmpBlends(const QString &fileName, const QList<BmpBlend*> &blends);
 
     MapNoBlend paintNoBlend(MapNoBlend *noBlend, const MapNoBlend &other, const QRegion &rgn);

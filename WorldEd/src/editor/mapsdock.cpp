@@ -22,19 +22,74 @@
 #include "mainwindow.h"
 #include "preferences.h"
 
+#include <QAction>
 #include <QBoxLayout>
 #include <QCompleter>
+#include <QDebug>
+#include <QDir>
 #include <QEvent>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFileSystemModel>
 #include <QHeaderView>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QMouseEvent>
+#include <QRegularExpression>
+#include <QSettings>
+#include <QStyle>
 #include <QToolButton>
+
+namespace {
+
+QString portableFolderNameError(const QString &name)
+{
+    if (name.isEmpty())
+        return MapsView::tr("Enter a folder name.");
+    if (name.size() > 255)
+        return MapsView::tr("The folder name is too long.");
+    if (name == QLatin1String(".") || name == QLatin1String(".."))
+        return MapsView::tr("Choose a normal folder name.");
+    const QRegularExpression forbidden(
+                QStringLiteral("[\\\\/:*?\"<>|]"));
+    if (forbidden.match(name).hasMatch()) {
+        return MapsView::tr(
+                    "Folder names cannot contain \\ / : * ? \" < > |");
+    }
+    if (name.endsWith(QLatin1Char('.')) ||
+            name.endsWith(QLatin1Char(' '))) {
+        return MapsView::tr(
+                    "Folder names cannot end with a dot or space.");
+    }
+    const QString stem =
+            name.section(QLatin1Char('.'), 0, 0).toUpper();
+    const QStringList reserved = {
+        QStringLiteral("CON"), QStringLiteral("PRN"),
+        QStringLiteral("AUX"), QStringLiteral("NUL"),
+        QStringLiteral("COM1"), QStringLiteral("COM2"),
+        QStringLiteral("COM3"), QStringLiteral("COM4"),
+        QStringLiteral("COM5"), QStringLiteral("COM6"),
+        QStringLiteral("COM7"), QStringLiteral("COM8"),
+        QStringLiteral("COM9"), QStringLiteral("LPT1"),
+        QStringLiteral("LPT2"), QStringLiteral("LPT3"),
+        QStringLiteral("LPT4"), QStringLiteral("LPT5"),
+        QStringLiteral("LPT6"), QStringLiteral("LPT7"),
+        QStringLiteral("LPT8"), QStringLiteral("LPT9")
+    };
+    if (reserved.contains(stem)) {
+        return MapsView::tr(
+                    "That name is reserved by Windows. Choose another name.");
+    }
+    return QString();
+}
+
+}
 
 MapsDock::MapsDock(QWidget *parent)
     : QDockWidget(parent)
+    , mPreviewToggle(new QToolButton(this))
     , mPreviewLabel(new QLabel(this))
     , mPreviewMapImage(0)
     , mMapsView(new MapsView(this))
@@ -67,6 +122,19 @@ MapsDock::MapsDock(QWidget *parent)
     mPreviewLabel->setFrameShadow(QFrame::Plain);
     mPreviewLabel->setMinimumHeight(128);
     mPreviewLabel->setAlignment(Qt::AlignCenter);
+    mPreviewToggle->setCheckable(true);
+    mPreviewToggle->setAutoRaise(true);
+    mPreviewToggle->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    mPreviewToggle->setFixedSize(24, 16);
+    QSettings previewSettings(
+                QSettings::IniFormat, QSettings::UserScope,
+                QLatin1String("TheIndieStone"),
+                QLatin1String("PZWorldEd"));
+    const bool previewExpanded = previewSettings.value(
+                QLatin1String("MainWindow/MapsPreviewExpanded"),
+                true).toBool();
+    mPreviewToggle->setChecked(previewExpanded);
+    mPreviewLabel->setVisible(previewExpanded);
 
     QHBoxLayout *dirLayout = new QHBoxLayout;
     label = new QLabel(tr("Folder:"));
@@ -82,11 +150,25 @@ MapsDock::MapsDock(QWidget *parent)
     button->setText(QLatin1String("..."));
 //    button->setIcon(QIcon(QLatin1String(":/images/16x16/document-properties.png")));
     button->setToolTip(tr("Choose Folder"));
+    QAction *newFolderAction = new QAction(
+                style()->standardIcon(QStyle::SP_FileDialogNewFolder),
+                tr("New Folder"), this);
+    newFolderAction->setToolTip(
+                tr("Create a folder inside the current Maps folder"));
+    QToolButton *newFolderButton = new QToolButton();
+    newFolderButton->setDefaultAction(newFolderAction);
+    newFolderButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    newFolderButton->setAccessibleName(tr("New Folder"));
+    mMapsView->setContextMenuPolicy(Qt::ActionsContextMenu);
+    mMapsView->addAction(newFolderAction);
+    dirLayout->addWidget(label);
     dirLayout->addWidget(edit);
+    dirLayout->addWidget(newFolderButton);
     dirLayout->addWidget(button);
 
     layout->addLayout(filterLayout);
     layout->addWidget(mMapsView);
+    layout->addWidget(mPreviewToggle, 0, Qt::AlignHCenter);
     layout->addWidget(mPreviewLabel);
     layout->addLayout(dirLayout);
 
@@ -94,6 +176,10 @@ MapsDock::MapsDock(QWidget *parent)
     retranslateUi();
 
     connect(button, &QAbstractButton::clicked, this, &MapsDock::browse);
+    connect(newFolderAction, &QAction::triggered,
+            this, &MapsDock::newFolder);
+    connect(mPreviewToggle, &QToolButton::toggled,
+            this, &MapsDock::setPreviewExpanded);
 
     Preferences *prefs = Preferences::instance();
     connect(prefs, &Preferences::mapsDirectoryChanged, this, &MapsDock::onMapsDirectoryChanged);
@@ -280,6 +366,16 @@ void MapsDock::browse()
     }
 }
 
+void MapsDock::newFolder()
+{
+    const QModelIndex created = MapsView::createFolder(
+                this, mMapsView->model(), mMapsView->rootIndex());
+    if (!created.isValid())
+        return;
+    mMapsView->setCurrentIndex(created);
+    mMapsView->scrollTo(created);
+}
+
 void MapsDock::editedMapsDirectory()
 {
     Preferences *prefs = Preferences::instance();
@@ -297,6 +393,11 @@ void MapsDock::onMapsDirectoryChanged()
 void MapsDock::selectionChanged()
 {
     updateFindButtons();
+    if (!mPreviewToggle->isChecked()) {
+        mPreviewLabel->setPixmap(QPixmap());
+        mPreviewMapImage = nullptr;
+        return;
+    }
     QModelIndexList selectedRows = mMapsView->selectionModel()->selectedRows();
     if (selectedRows.isEmpty()) {
         mPreviewLabel->setPixmap(QPixmap());
@@ -328,9 +429,30 @@ void MapsDock::selectionChanged()
     mPreviewMapImage = mapImage;
 }
 
+void MapsDock::setPreviewExpanded(bool expanded)
+{
+    mPreviewLabel->setVisible(expanded);
+    updatePreviewToggle();
+    QSettings settings(
+                QSettings::IniFormat, QSettings::UserScope,
+                QLatin1String("TheIndieStone"),
+                QLatin1String("PZWorldEd"));
+    settings.setValue(
+                QLatin1String("MainWindow/MapsPreviewExpanded"),
+                expanded);
+    if (expanded) {
+        selectionChanged();
+    } else {
+        mPreviewLabel->setPixmap(QPixmap());
+        mPreviewMapImage = nullptr;
+    }
+}
+
 void MapsDock::onMapImageChanged(MapImage *mapImage)
 {
-    if ((mapImage == mPreviewMapImage) && mapImage->isLoaded()) {
+    if (mPreviewToggle->isChecked()
+            && (mapImage == mPreviewMapImage)
+            && mapImage->isLoaded()) {
         QImage image = mapImage->image().scaled(256, 123, Qt::KeepAspectRatio,
                                                 Qt::SmoothTransformation);
         mPreviewLabel->setPixmap(QPixmap::fromImage(image));
@@ -359,6 +481,21 @@ void MapsDock::changeEvent(QEvent *e)
 void MapsDock::retranslateUi()
 {
     setWindowTitle(tr("Maps"));
+    mPreviewToggle->setText(QString());
+    mPreviewToggle->setAccessibleName(
+                tr("Map / Building Preview"));
+    updatePreviewToggle();
+}
+
+void MapsDock::updatePreviewToggle()
+{
+    const bool expanded = mPreviewToggle->isChecked();
+    mPreviewToggle->setArrowType(
+                expanded ? Qt::DownArrow : Qt::RightArrow);
+    mPreviewToggle->setToolTip(
+                expanded
+                ? tr("Collapse the selected map or building preview")
+                : tr("Expand the selected map or building preview"));
 }
 
 ///// ///// ///// ///// /////
@@ -420,6 +557,64 @@ MapsView::MapsView(QWidget *parent)
 QSize MapsView::sizeHint() const
 {
     return QSize(360, 140);
+}
+
+QModelIndex MapsView::createFolder(
+        QWidget *parent, QFileSystemModel *model,
+        const QModelIndex &parentIndex)
+{
+    if (!model || !parentIndex.isValid())
+        return QModelIndex();
+
+    bool accepted = false;
+    const QString folderName = QInputDialog::getText(
+                parent, tr("New Folder"), tr("Folder name:"),
+                QLineEdit::Normal, tr("New Folder"), &accepted).trimmed();
+    if (!accepted)
+        return QModelIndex();
+
+    const QString nameError =
+            portableFolderNameError(folderName);
+    if (!nameError.isEmpty()) {
+        QMessageBox::warning(
+                    parent, tr("Create Folder"), nameError);
+        return QModelIndex();
+    }
+
+    const QString parentPath = model->filePath(parentIndex);
+    if (!QFileInfo(parentPath).isDir()) {
+        QMessageBox::warning(
+                    parent, tr("Create Folder"),
+                    tr("The current Maps folder is not available:\n%1")
+                    .arg(QDir::toNativeSeparators(parentPath)));
+        return QModelIndex();
+    }
+    const QString folderPath =
+            QDir(parentPath).filePath(folderName);
+    if (QFileInfo::exists(folderPath)) {
+        QMessageBox::warning(
+                    parent, tr("Create Folder"),
+                    tr("A file or folder named \"%1\" already exists in:\n%2")
+                    .arg(folderName,
+                         QDir::toNativeSeparators(parentPath)));
+        return QModelIndex();
+    }
+
+    const bool wasReadOnly = model->isReadOnly();
+    model->setReadOnly(false);
+    QModelIndex created = model->mkdir(parentIndex, folderName);
+    model->setReadOnly(wasReadOnly);
+    if (!created.isValid()) {
+        QMessageBox::warning(
+                    parent, tr("Create Folder"),
+                    tr("The folder could not be created in:\n%1\n\n"
+                       "Check that you have permission to modify this folder.")
+                    .arg(QDir::toNativeSeparators(parentPath)));
+        return QModelIndex();
+    }
+
+    qInfo() << "Maps browser created folder" << folderPath;
+    return created;
 }
 
 void MapsView::mousePressEvent(QMouseEvent *event)

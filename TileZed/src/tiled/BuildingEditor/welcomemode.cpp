@@ -28,8 +28,10 @@
 
 #include "mapmanager.h"
 #include "mapimagemanager.h"
+#include "mapsdock.h"
 #include "preferences.h"
 
+#include <QAction>
 #include <QCompleter>
 #include <QApplication>
 #include <QDebug>
@@ -44,6 +46,7 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QSet>
+#include <QStyle>
 
 using namespace BuildingEditor;
 
@@ -281,6 +284,19 @@ WelcomeMode::WelcomeMode(QObject *parent) :
     connect(ui->dirEdit, &QLineEdit::returnPressed, this, &WelcomeMode::editedMapsDirectory);
 
     connect(ui->dirBrowse, &QAbstractButton::clicked, this, &WelcomeMode::browse);
+    QAction *newFolderAction = new QAction(
+                ui->newFolderButton->style()->standardIcon(
+                    QStyle::SP_FileDialogNewFolder),
+                tr("New Folder"), mWidget);
+    newFolderAction->setToolTip(
+                tr("Create a folder inside the current Maps folder"));
+    ui->newFolderButton->setDefaultAction(newFolderAction);
+    ui->newFolderButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    ui->newFolderButton->setAccessibleName(tr("New Folder"));
+    ui->treeView->setContextMenuPolicy(Qt::ActionsContextMenu);
+    ui->treeView->addAction(newFolderAction);
+    connect(newFolderAction, &QAction::triggered,
+            this, &WelcomeMode::newFolder);
 
     connect(ui->legendCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &WelcomeMode::legendIndexChanged);
@@ -378,6 +394,18 @@ void WelcomeMode::browse()
         BuildingPreferences *prefs = BuildingPreferences::instance();
         prefs->setMapsDirectory(f);
     }
+}
+
+void WelcomeMode::newFolder()
+{
+    const QModelIndex created =
+            Tiled::Internal::MapsView::createFolder(
+                widget()->window(), mFSModel,
+                ui->treeView->rootIndex());
+    if (!created.isValid())
+        return;
+    ui->treeView->setCurrentIndex(created);
+    ui->treeView->scrollTo(created);
 }
 
 void WelcomeMode::editedMapsDirectory()

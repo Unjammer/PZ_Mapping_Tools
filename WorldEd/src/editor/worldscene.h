@@ -135,14 +135,14 @@ public:
                const QStyleOptionGraphicsItem *option,
                QWidget *widget = 0);
 
-    void paintThumbnails(QPainter *painter) const;
+    void paintThumbnails(QPainter *painter);
 
     virtual QPoint cellPos() const = 0;
     virtual QString mapFilePath() const = 0;
     virtual const QList<WorldCellLot*> &lots() const = 0;
 
     void updateCellImage();
-    void updateLotImage(int index);
+    void insertLotImage(int index);
     void updateBoundingRect();
 
     void mapImageChanged(MapImage *mapImage);
@@ -157,21 +157,25 @@ protected:
     void calcMapImageBounds();
     void calcLotImageBounds(int index);
     QPointF calcLotImagePosition(WorldCellLot *lot, int scaledImageWidth, MapImage *mapImage);
+    void sortLotImages();
 
     struct LotImage {
-        LotImage()
-            : mMapImage(0)
+        explicit LotImage(int lotLevel)
+            : mMapImage(nullptr)
+            , level(lotLevel)
         {
         }
 
-        LotImage(const QRectF &bounds, MapImage *mapImage)
+        LotImage(const QRectF &bounds, MapImage *mapImage, int lotLevel)
             : mBounds(bounds)
             , mMapImage(mapImage)
+            , level(lotLevel)
         {
         }
 
         QRectF mBounds;
         MapImage *mMapImage;
+        int level;
     };
 
     WorldScene *mScene;
@@ -179,6 +183,7 @@ protected:
     MapImage *mMapImage;
     QRectF mMapImageBounds;
     QVector<LotImage> mLotImages;
+    QVector<int> mLotImagesRenderOrder;
     QPointF mDrawOffset;
     bool mWantsImages;
 #ifndef QT_NO_DEBUG

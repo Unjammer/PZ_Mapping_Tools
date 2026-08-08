@@ -751,7 +751,8 @@ GraphicsFloorItem::GraphicsFloorItem(BuildingBaseScene *editor, BuildingFloor *f
     mEditor(editor),
     mFloor(floor),
     mBmp(new QImage(mFloor->width(), mFloor->height(), QImage::Format_RGB32)),
-    mDragBmp(0)
+    mDragBmp(0),
+    mObjectsVisible(false)
 {
     setFlag(ItemUsesExtendedStyleOption);
     if (mEditor->renderer()->asIso()) {
@@ -799,6 +800,8 @@ void GraphicsFloorItem::objectAdded(GraphicsObjectItem *item)
     BuildingObject *object = item->object();
     Q_ASSERT(!itemForObject(object));
     item->setParentItem(this);
+    mObjectsVisible = mEditor->shouldShowObjectItem(object);
+    item->setVisible(mObjectsVisible);
     mObjectItems.insert(object->index(), item);
 
     for (int i = object->index(); i < mObjectItems.count(); i++)
@@ -880,9 +883,18 @@ void GraphicsFloorItem::setDragBmp(QImage *bmp)
 
 void GraphicsFloorItem::synchVisibility()
 {
-    setVisible(mEditor->shouldShowFloorItem(mFloor));
-    foreach (GraphicsObjectItem *item, mObjectItems)
-        item->setVisible(mEditor->shouldShowObjectItem(item->object()));
+    const bool floorVisible = mEditor->shouldShowFloorItem(mFloor);
+    if (isVisible() != floorVisible)
+        setVisible(floorVisible);
+
+    const bool objectsVisible = mObjectItems.isEmpty()
+            ? false
+            : mEditor->shouldShowObjectItem(mObjectItems.first()->object());
+    if (mObjectsVisible != objectsVisible) {
+        for (GraphicsObjectItem *item : qAsConst(mObjectItems))
+            item->setVisible(objectsVisible);
+        mObjectsVisible = objectsVisible;
+    }
 }
 
 /////

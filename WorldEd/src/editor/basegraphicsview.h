@@ -19,10 +19,12 @@
 #define BASEGRAPHICSVIEW_H
 
 #include <QGraphicsView>
+#include <QElapsedTimer>
 #include <QTimer>
 
 class BaseGraphicsScene;
 class BaseGraphicsView;
+class QLabel;
 class QPainter;
 class Zoomable;
 
@@ -106,6 +108,7 @@ public:
     void setPoweredPreviewEnabled(bool enabled);
     void setSnowPreviewEnabled(bool enabled);
     void setJumboPreviewEnabled(bool enabled);
+    void setRenderDiagnosticsEnabled(bool enabled);
 
 signals:
     void statusBarCoordinatesChanged(int x, int y);
@@ -121,7 +124,10 @@ private slots:
     void setUseOpenGL(bool useOpenGL);
 
 protected:
+    void paintEvent(QPaintEvent *event) override;
     void drawProjectGridBadge(QPainter *painter, int cellSize) const;
+    virtual QString renderDiagnosticsWorkloadText(
+            quint64 renderedTiles) const;
 
     bool mHandScrolling;
     QPoint mLastMouseGlobalPos;
@@ -142,6 +148,8 @@ private slots:
 protected:
     void startAutoScroll();
     void stopAutoScroll();
+    void updateRenderDiagnosticsLabel();
+    void positionRenderDiagnosticsLabel();
 
     bool mMousePressed;
     QTimer mScrollTimer;
@@ -154,6 +162,14 @@ protected:
     QToolButton *mPoweredPreviewButton;
     QToolButton *mSnowPreviewButton;
     QToolButton *mJumboPreviewButton;
+    bool mRenderDiagnosticsEnabled;
+    QLabel *mRenderDiagnosticsLabel;
+    QElapsedTimer mDiagnosticsPreviousFrame;
+    QElapsedTimer mDiagnosticsMemoryTimer;
+    qreal mDiagnosticsFps;
+    qreal mDiagnosticsFrameMs;
+    quint64 mDiagnosticsRenderedTiles;
+    quint64 mDiagnosticsMemoryBytes;
 };
 
 #endif // BASEGRAPHICSVIEW_H

@@ -69,6 +69,78 @@ using namespace Tiled::Internal;
 namespace Tiled {
 namespace Internal {
 
+static bool bmpAliasesEqual(const QList<BmpAlias *> &left,
+                            const QList<BmpAlias *> &right)
+{
+    if (left.size() != right.size())
+        return false;
+    for (int index = 0; index < left.size(); ++index) {
+        const BmpAlias *leftAlias = left.at(index);
+        const BmpAlias *rightAlias = right.at(index);
+        if (!leftAlias || !rightAlias) {
+            if (leftAlias != rightAlias)
+                return false;
+            continue;
+        }
+        if (leftAlias->name != rightAlias->name ||
+                leftAlias->tiles != rightAlias->tiles) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool bmpRulesEqual(const QList<BmpRule *> &left,
+                          const QList<BmpRule *> &right)
+{
+    if (left.size() != right.size())
+        return false;
+    for (int index = 0; index < left.size(); ++index) {
+        const BmpRule *leftRule = left.at(index);
+        const BmpRule *rightRule = right.at(index);
+        if (!leftRule || !rightRule) {
+            if (leftRule != rightRule)
+                return false;
+            continue;
+        }
+        if (leftRule->label != rightRule->label ||
+                leftRule->bitmapIndex != rightRule->bitmapIndex ||
+                leftRule->color != rightRule->color ||
+                leftRule->tileChoices != rightRule->tileChoices ||
+                leftRule->targetLayer != rightRule->targetLayer ||
+                leftRule->condition != rightRule->condition ||
+                leftRule->obsolete != rightRule->obsolete) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool bmpBlendsEqual(const QList<BmpBlend *> &left,
+                           const QList<BmpBlend *> &right)
+{
+    if (left.size() != right.size())
+        return false;
+    for (int index = 0; index < left.size(); ++index) {
+        const BmpBlend *leftBlend = left.at(index);
+        const BmpBlend *rightBlend = right.at(index);
+        if (!leftBlend || !rightBlend) {
+            if (leftBlend != rightBlend)
+                return false;
+            continue;
+        }
+        if (leftBlend->targetLayer != rightBlend->targetLayer ||
+                leftBlend->mainTile != rightBlend->mainTile ||
+                leftBlend->blendTile != rightBlend->blendTile ||
+                leftBlend->dir != rightBlend->dir ||
+                leftBlend->ExclusionList != rightBlend->ExclusionList ||
+                leftBlend->exclude2 != rightBlend->exclude2) {
+            return false;
+        }
+    }
+    return true;
+}
+
 class ChangeBmpRules : public QUndoCommand
 {
 public:
@@ -98,8 +170,7 @@ public:
         QString oldFile = mMapDocument->map()->bmpSettings()->rulesFile();
         QList<BmpAlias*> oldAliases = mMapDocument->map()->bmpSettings()->aliasesCopy();
         QList<BmpRule*> oldRules = mMapDocument->map()->bmpSettings()->rulesCopy();
-        mMapDocument->setBmpAliases(mAliases);
-        mMapDocument->setBmpRules(mFileName, mRules);
+        mMapDocument->setBmpRulesAndAliases(mFileName, mAliases, mRules);
         mAliases = oldAliases;
         mFileName = oldFile;
         mRules = oldRules;
@@ -145,6 +216,72 @@ public:
     QString mFileName;
     QList<BmpBlend*> mBlends;
 };
+
+bool BmpToolDialog::validateReloadEquality(QString *errorString)
+{
+    const QString configDirectory =
+            QDir(PortableSettings::installRootPath())
+            .filePath(QLatin1String("config"));
+    const QString rulesPath =
+            QDir(configDirectory).filePath(QLatin1String("Rules.txt"));
+    const QString blendsPath =
+            QDir(configDirectory).filePath(QLatin1String("Blends.txt"));
+
+    BmpRulesFile rulesFile;
+    if (!rulesFile.read(rulesPath)) {
+        *errorString = tr("Could not read the deployed Rules.txt: %1")
+                .arg(rulesFile.errorString());
+        return false;
+    }
+    QList<BmpAlias *> aliasCopies = rulesFile.aliasesCopy();
+    QList<BmpRule *> ruleCopies = rulesFile.rulesCopy();
+    if (!bmpAliasesEqual(rulesFile.aliases(), aliasCopies) ||
+            !bmpRulesEqual(rulesFile.rules(), ruleCopies)) {
+        qDeleteAll(aliasCopies);
+        qDeleteAll(ruleCopies);
+        *errorString = tr("An unchanged Rules.txt was not recognized");
+        return false;
+    }
+    if (!aliasCopies.isEmpty())
+        aliasCopies.first()->name += QLatin1String("_changed");
+    if (aliasCopies.isEmpty() ||
+            bmpAliasesEqual(rulesFile.aliases(), aliasCopies)) {
+        qDeleteAll(aliasCopies);
+        qDeleteAll(ruleCopies);
+        *errorString = tr("A changed Rules.txt alias was not detected");
+        return false;
+    }
+    qDeleteAll(aliasCopies);
+    qDeleteAll(ruleCopies);
+
+    BmpBlendsFile blendsFile;
+    if (!blendsFile.read(blendsPath, rulesFile.aliases())) {
+        *errorString = tr("Could not read the deployed Blends.txt: %1")
+                .arg(blendsFile.errorString());
+        return false;
+    }
+    QList<BmpBlend *> blendCopies = blendsFile.blendsCopy();
+    if (!bmpBlendsEqual(blendsFile.blends(), blendCopies)) {
+        qDeleteAll(blendCopies);
+        *errorString = tr("An unchanged Blends.txt was not recognized");
+        return false;
+    }
+    if (!blendCopies.isEmpty())
+        blendCopies.first()->targetLayer += QLatin1String("_changed");
+    if (blendCopies.isEmpty() ||
+            bmpBlendsEqual(blendsFile.blends(), blendCopies)) {
+        qDeleteAll(blendCopies);
+        *errorString = tr("A changed Blends.txt entry was not detected");
+        return false;
+    }
+    qDeleteAll(blendCopies);
+
+    qInfo() << "Validated no-op Reload detection with"
+            << rulesFile.aliases().size() << "aliases,"
+            << rulesFile.rules().size() << "rules and"
+            << blendsFile.blends().size() << "blends";
+    return true;
+}
 
 class ReplaceUnknownBmpPixels : public QUndoCommand
 {
@@ -207,7 +344,7 @@ BmpToolDialog *BmpToolDialog::instance()
 }
 
 BmpToolDialog::BmpToolDialog(QWidget *parent) :
-    QDialog(parent),
+    QDockWidget(parent),
     ui(new Ui::BmpToolDialog),
     mDocument(0),
     mExpanded(true)
@@ -215,7 +352,10 @@ BmpToolDialog::BmpToolDialog(QWidget *parent) :
     ui->setupUi(this);
     setupCustomBrushUi();
 
-    setWindowFlags(windowFlags() | Qt::Tool);
+    setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    setFeatures(QDockWidget::DockWidgetClosable |
+                QDockWidget::DockWidgetMovable |
+                QDockWidget::DockWidgetFloatable);
 
     ui->tabWidget->setCurrentIndex(0);
 
@@ -709,18 +849,14 @@ void BmpToolDialog::setVisible(bool visible)
 {
     QSettings settings;
     settings.beginGroup(QLatin1String("BmpToolDialog"));
-    if (visible) {
-        QByteArray geom = settings.value(QLatin1String("geometry")).toByteArray();
-        if (!geom.isEmpty())
-            restoreGeometry(geom);
-    }
 
     synchBlendTilesView();
 
-    QDialog::setVisible(visible);
+    QDockWidget::setVisible(visible);
+    if (visible)
+        raise();
 
     if (!visible) {
-        settings.setValue(QLatin1String("geometry"), saveGeometry());
         settings.setValue(QLatin1String("scale"), ui->tableView->zoomable()->scale());
         settings.setValue(QLatin1String("Blends/Scale"), ui->blendView->zoomable()->scale());
         settings.setValue(QLatin1String("brushSize"), ui->brushSize->value());
@@ -819,6 +955,14 @@ void BmpToolDialog::reloadRules()
             QMessageBox::warning(this, tr("Reload Rules Failed"), file.errorString());
             return;
         }
+        const BmpSettings *bmpSettings = mDocument->map()->bmpSettings();
+        if (bmpAliasesEqual(file.aliases(), bmpSettings->aliases()) &&
+                bmpRulesEqual(file.rules(), bmpSettings->rules())) {
+            qInfo() << "BMP Rules.txt reload skipped because the imported "
+                       "rules are unchanged:"
+                    << QDir::toNativeSeparators(f);
+            return;
+        }
         mDocument->undoStack()->push(
                     new ChangeBmpRules(mDocument, f, file.aliasesCopy(),
                                        file.rulesCopy()));
@@ -843,10 +987,47 @@ void BmpToolDialog::importRules()
             QMessageBox::warning(this, tr("Import Rules Failed"), file.errorString());
             return;
         }
+        const BmpSettings *bmpSettings = mDocument->map()->bmpSettings();
+        if (bmpAliasesEqual(file.aliases(), bmpSettings->aliases()) &&
+                bmpRulesEqual(file.rules(), bmpSettings->rules())) {
+            QMessageBox::information(
+                        this,
+                        tr("Rules Already Current"),
+                        tr("The selected Rules.txt is already identical to the "
+                           "snapshot embedded in %1.\n\nNothing was changed and "
+                           "Reload is not required.")
+                        .arg(mDocument->displayName()));
+            qInfo() << "BMP Rules.txt import skipped because the embedded "
+                       "snapshot is already identical:"
+                    << QDir::toNativeSeparators(f);
+            return;
+        }
+        const QString question =
+                tr("The current TMX contains %1 aliases and %2 rules.\n"
+                   "The selected file contains %3 aliases and %4 rules.\n\n"
+                   "Replace the embedded Rules snapshot in %5?\n\n"
+                   "The previous snapshot will not be kept in the saved TMX. "
+                   "Reload is not required. Save the map to keep this change.")
+                .arg(bmpSettings->aliases().size())
+                .arg(bmpSettings->rules().size())
+                .arg(file.aliases().size())
+                .arg(file.rules().size())
+                .arg(mDocument->displayName());
+        if (QMessageBox::question(
+                    this, tr("Replace Embedded Rules?"), question,
+                    QMessageBox::Yes | QMessageBox::No,
+                    QMessageBox::Yes) != QMessageBox::Yes) {
+            return;
+        }
         settings.setValue(QLatin1String("BmpToolDialog/RulesFile"), f);
         mDocument->undoStack()->push(new ChangeBmpRules(mDocument, f,
                                                         file.aliasesCopy(),
                                                         file.rulesCopy()));
+        qInfo() << "Replaced embedded BMP rules snapshot in"
+                << mDocument->displayName()
+                << "with" << file.aliases().size() << "aliases and"
+                << file.rules().size() << "rules from"
+                << QDir::toNativeSeparators(f);
     }
 }
 
@@ -881,6 +1062,14 @@ void BmpToolDialog::reloadBlends()
             QMessageBox::warning(this, tr("Reload Blends Failed"), file.errorString());
             return;
         }
+        if (bmpBlendsEqual(
+                    file.blends(),
+                    mDocument->map()->bmpSettings()->blends())) {
+            qInfo() << "BMP Blends.txt reload skipped because the imported "
+                       "blends are unchanged:"
+                    << QDir::toNativeSeparators(f);
+            return;
+        }
         mDocument->undoStack()->push(new ChangeBmpBlends(mDocument, f, file.blendsCopy()));
     }
 }
@@ -903,8 +1092,41 @@ void BmpToolDialog::importBlends()
             QMessageBox::warning(this, tr("Import Blends Failed"), file.errorString());
             return;
         }
+        const BmpSettings *bmpSettings = mDocument->map()->bmpSettings();
+        if (bmpBlendsEqual(file.blends(), bmpSettings->blends())) {
+            QMessageBox::information(
+                        this,
+                        tr("Blends Already Current"),
+                        tr("The selected Blends.txt is already identical to the "
+                           "snapshot embedded in %1.\n\nNothing was changed and "
+                           "Reload is not required.")
+                        .arg(mDocument->displayName()));
+            qInfo() << "BMP Blends.txt import skipped because the embedded "
+                       "snapshot is already identical:"
+                    << QDir::toNativeSeparators(f);
+            return;
+        }
+        const QString question =
+                tr("The current TMX contains %1 blends.\n"
+                   "The selected file contains %2 blends.\n\n"
+                   "Replace the embedded Blends snapshot in %3?\n\n"
+                   "The previous snapshot will not be kept in the saved TMX. "
+                   "Reload is not required. Save the map to keep this change.")
+                .arg(bmpSettings->blends().size())
+                .arg(file.blends().size())
+                .arg(mDocument->displayName());
+        if (QMessageBox::question(
+                    this, tr("Replace Embedded Blends?"), question,
+                    QMessageBox::Yes | QMessageBox::No,
+                    QMessageBox::Yes) != QMessageBox::Yes) {
+            return;
+        }
         settings.setValue(QLatin1String("BmpToolDialog/BlendsFile"), f);
         mDocument->undoStack()->push(new ChangeBmpBlends(mDocument, f, file.blendsCopy()));
+        qInfo() << "Replaced embedded BMP blends snapshot in"
+                << mDocument->displayName()
+                << "with" << file.blends().size() << "blends from"
+                << QDir::toNativeSeparators(f);
     }
 }
 

@@ -1264,7 +1264,7 @@ void BaseCellItem::initialize()
     updateCellImage();
 
     for (int i = 0; i < lots().size(); i++)
-        updateLotImage(i);
+        insertLotImage(i);
 
     updateBoundingRect();
 }
@@ -1294,19 +1294,45 @@ void BaseCellItem::paint(QPainter *painter,
 #endif
 }
 
-void BaseCellItem::paintThumbnails(QPainter *painter) const
+void BaseCellItem::paintThumbnails(QPainter *painter)
 {
     if (Preferences::instance()->showWorldThumbnails()) {
+        if (mLotImagesRenderOrder.size() != mLotImages.size())
+            sortLotImages();
+
+        int firstAboveGroundIndex = mLotImagesRenderOrder.size();
+        for (int i = 0; i < mLotImagesRenderOrder.size(); ++i) {
+            const LotImage &lotImage =
+                    mLotImages.at(mLotImagesRenderOrder.at(i));
+            if (lotImage.level >= 0) {
+                firstAboveGroundIndex = i;
+                break;
+            }
+            if (!lotImage.mMapImage || !lotImage.mMapImage->isLoaded())
+                continue;
+            const QRectF target =
+                    lotImage.mBounds.translated(mDrawOffset);
+            const QRectF source(
+                    QPointF(0, 0), lotImage.mMapImage->image().size());
+            painter->drawImage(target, lotImage.mMapImage->image(), source);
+        }
+
         if (mMapImage && mMapImage->isLoaded()) {
             QRectF target = mMapImageBounds.translated(mDrawOffset);
             QRectF source = QRect(QPoint(0, 0), mMapImage->image().size());
             painter->drawImage(target, mMapImage->image(), source);
         }
 
-        for (const LotImage &lotImage : std::as_const(mLotImages)) {
-            if (!lotImage.mMapImage || !lotImage.mMapImage->isLoaded()) continue;
-            QRectF target = lotImage.mBounds.translated(mDrawOffset);
-            QRectF source = QRect(QPoint(0, 0), lotImage.mMapImage->image().size());
+        for (int i = firstAboveGroundIndex;
+             i < mLotImagesRenderOrder.size(); ++i) {
+            const LotImage &lotImage =
+                    mLotImages.at(mLotImagesRenderOrder.at(i));
+            if (!lotImage.mMapImage || !lotImage.mMapImage->isLoaded())
+                continue;
+            const QRectF target =
+                    lotImage.mBounds.translated(mDrawOffset);
+            const QRectF source(
+                    QPointF(0, 0), lotImage.mMapImage->image().size());
             painter->drawImage(target, lotImage.mMapImage->image(), source);
         }
     }
@@ -1334,18 +1360,19 @@ void BaseCellItem::updateCellImage()
     setToolTip(QDir::toNativeSeparators(mapFilePath()));
 }
 
-void BaseCellItem::updateLotImage(int index)
+void BaseCellItem::insertLotImage(int index)
 {
     WorldCellLot *lot = lots().at(index);
     MapImage *mapImage = mWantsImages
             ? MapImageManager::instance()->getMapImage(lot->mapName()/*, mapFilePath()*/)
-            : 0;
+            : nullptr;
     if (mapImage) {
-        mLotImages.insert(index, LotImage(QRectF(), mapImage));
+        mLotImages.insert(index, LotImage(QRectF(), mapImage, lot->level()));
         calcLotImageBounds(index);
     } else {
-        mLotImages.insert(index, LotImage());
+        mLotImages.insert(index, LotImage(lot->level()));
     }
+    mLotImagesRenderOrder.clear();
 }
 
 QPointF BaseCellItem::calcLotImagePosition(WorldCellLot *lot, int scaledImageWidth, MapImage *mapImage)
@@ -1365,6 +1392,19 @@ QPointF BaseCellItem::calcLotImagePosition(WorldCellLot *lot, int scaledImageWid
     const qreal scaleImageToCell = qreal(scaledImageWidth) / mapImage->image().width();
     pos -= mapImage->tileToImageCoords(0, 0) * scaleImageToCell;
     return pos;
+}
+
+void BaseCellItem::sortLotImages()
+{
+    mLotImagesRenderOrder.clear();
+    for (int i = 0; i < mLotImages.size(); ++i)
+        mLotImagesRenderOrder += i;
+    std::stable_sort(
+                mLotImagesRenderOrder.begin(),
+                mLotImagesRenderOrder.end(),
+                [this](int a, int b) {
+        return mLotImages.at(a).level < mLotImages.at(b).level;
+    });
 }
 
 void BaseCellItem::updateBoundingRect()
@@ -1411,7 +1451,7 @@ void BaseCellItem::mapImageChanged(MapImage *mapImage)
 #if 0
         // Perhaps the image now exists and didn't before.
         if (!lotImage.mMapImage) {
-            updateLotImage(index);
+            insertLotImage(index);
             if (mLotImages[index].mMapImage)
                 changed = true;
         }
@@ -1584,13 +1624,14 @@ void WorldCellItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opt
 
 void WorldCellItem::lotAdded(int index)
 {
-    updateLotImage(index);
+    insertLotImage(index);
     updateBoundingRect();
 }
 
 void WorldCellItem::lotRemoved(int index)
 {
     mLotImages.remove(index);
+    mLotImagesRenderOrder.clear();
     updateBoundingRect();
 }
 
@@ -1598,6 +1639,8 @@ void WorldCellItem::lotMoved(WorldCellLot *lot)
 {
     int index = mCell->lots().indexOf(lot);
     LotImage *lotImage = &mLotImages[index];
+    lotImage->level = lot->level();
+    mLotImagesRenderOrder.clear();
     lotImage->mBounds.moveTopLeft(calcLotImagePosition(lot, lotImage->mBounds.width(),
                                                        lotImage->mMapImage));
     updateBoundingRect();
@@ -1608,8 +1651,9 @@ void WorldCellItem::cellContentsChanged()
 {
     updateCellImage();
     mLotImages.clear();
+    mLotImagesRenderOrder.clear();
     for (int i = 0; i < mCell->lots().size(); i++)
-        updateLotImage(i);
+        insertLotImage(i);
     updateBoundingRect();
 }
 
@@ -1794,8 +1838,9 @@ void OtherWorldCellItem::cellContentsChanged()
 {
     updateCellImage();
     mLotImages.clear();
+    mLotImagesRenderOrder.clear();
     for (int i = 0; i < mCell->lots().size(); i++)
-        updateLotImage(i);
+        insertLotImage(i);
     updateBoundingRect();
 }
 

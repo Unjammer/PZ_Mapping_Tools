@@ -79,6 +79,7 @@ public slots:
     void onMapsDirectoryChanged();
     void onActivated(const QModelIndex &index);
     void browse();
+    void newFolder();
     void editedMapsDirectory();
     void selectionChanged();
 

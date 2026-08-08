@@ -36,6 +36,7 @@
 #endif
 #include <QFile>
 #include <QFileInfo>
+#include <QDebug>
 #include <QSettings>
 
 using namespace Tiled;
@@ -229,7 +230,25 @@ Preferences::Preferences()
                                         true).toBool();
     mLanguage = mSettings->value(QLatin1String("Language"),
                                  QString()).toString();
-    mUseOpenGL = mSettings->value(QLatin1String("OpenGL"), false).toBool();
+    const int openGLSafetyResetVersion = 1;
+    const int storedOpenGLSafetyResetVersion =
+            mSettings->value(
+                QLatin1String("OpenGLSafetyResetVersion"), 0).toInt();
+    const bool storedUseOpenGL =
+            mSettings->value(QLatin1String("OpenGL"), false).toBool();
+    if (storedOpenGLSafetyResetVersion < openGLSafetyResetVersion) {
+        mUseOpenGL = false;
+        mSettings->setValue(QLatin1String("OpenGL"), false);
+        mSettings->setValue(QLatin1String("OpenGLSafetyResetVersion"),
+                            openGLSafetyResetVersion);
+        if (storedUseOpenGL) {
+            qInfo() << "TileZed OpenGL viewport was disabled after the "
+                       "renderer safety update. Qt raster is recommended "
+                       "until the native OpenGL renderer is ported.";
+        }
+    } else {
+        mUseOpenGL = storedUseOpenGL;
+    }
 #ifdef ZOMBOID
     mAutoSwitchLayer = mSettings->value(QLatin1String("AutoSwitchLayer"), true).toBool();
     mTilesetScale = mSettings->value(QLatin1String("TilesetScale"), 1.0).toReal();

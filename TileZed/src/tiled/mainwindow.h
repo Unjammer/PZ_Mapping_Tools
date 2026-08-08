@@ -80,8 +80,10 @@ class TilesetDock;
 class MapView;
 class CommandButton;
 class ObjectsDock;
+class UndoDock;
 class Zoomable;
 #ifdef ZOMBOID
+class BmpToolDialog;
 class BmpClipboard;
 class EdgeTool;
 class Eraser;
@@ -178,6 +180,9 @@ public slots:
     void deleteInAllLayers();
 #endif
     void openPreferences();
+#ifdef ZOMBOID
+    void resetInterfaceLayout();
+#endif
 
     void zoomIn();
     void zoomOut();
@@ -326,10 +331,12 @@ private:
     LayerDock *mLayerDock;
     ObjectsDock *mObjectsDock;
     AutomappingDock *mAutomappingDock;
+    UndoDock *mUndoDock = nullptr;
 #ifdef ZOMBOID
     ZLevelsDock *mLevelsDock;
     MapsDock *mMapsDock;
     WorldEdDock *mWorldEdDock;
+    BmpToolDialog *mBmpToolsDock = nullptr;
 #endif
     TilesetDock *mTilesetDock;
 #ifdef ZOMBOID
