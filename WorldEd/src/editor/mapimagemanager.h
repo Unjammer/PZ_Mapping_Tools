@@ -224,6 +224,7 @@ public:
 
 #ifdef WORLDED
     MapImage *getZombieSpawnImage(const QString &imageName, const QString &relativeTo = QString());
+    bool reloadImageFile(const QString &imageName);
 #endif
 
     QString errorString() const

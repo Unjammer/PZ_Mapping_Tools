@@ -176,6 +176,7 @@ public:
 
     void cachePZProperties(Tileset *cached);
     void copyPZProperties(Tileset *src, Tileset *dst);
+    QString cacheMemorySummary() const;
 #endif
 
 signals:

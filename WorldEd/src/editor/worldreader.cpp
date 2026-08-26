@@ -363,12 +363,17 @@ private:
         const int y =
                 atts.value(QLatin1String("y")).toString().toInt();
         const QString mapName = atts.value(QLatin1String("map")).toString();
+        const QString chunkDataOverride = atts.value(
+                    QLatin1String("chunkDataOverride")).toString();
 
         if (!mWorld->contains(x, y))
             xml.raiseError(tr("Invalid cell coordinates %1,%2").arg(x).arg(y));
         else {
             WorldCell *cell = mWorld->cellAt(x, y);
             cell->setMapFilePath(resolveReference(mapName, mPath));
+            cell->setChunkDataOverrideFilePath(resolveReference(
+                                                   chunkDataOverride,
+                                                   mPath));
 
             while (xml.readNextStartElement()) {
                 if (xml.name() == QLatin1String("template"))

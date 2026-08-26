@@ -47,6 +47,7 @@
 #include "BuildingEditor/buildingdocumentmgr.h"
 #include "BuildingEditor/buildingeditorwindow.h"
 #include "BuildingEditor/buildingfloor.h"
+#include "BuildingEditor/buildingisoview.h"
 #include "BuildingEditor/buildingfurnituredock.h"
 #include "BuildingEditor/buildinglua.h"
 #include "BuildingEditor/buildingmap.h"
@@ -57,13 +58,17 @@
 #include "BuildingEditor/buildingtilesdialog.h"
 #include "BuildingEditor/buildingtilesetdock.h"
 #include "BuildingEditor/buildingtiletools.h"
+#include "BuildingEditor/mixedtilesetview.h"
+#include "BuildingEditor/objecteditmode.h"
 #include "BuildingEditor/tileeditmode.h"
+#include "BuildingEditor/attributeeditmode.h"
 #include "tileselectionscope.h"
 #include "BuildingEditor/buildingwriter.h"
 #include "BuildingEditor/categorydock.h"
 #include "BuildingEditor/furnituregroups.h"
 #include "BuildingEditor/newbuildingdialog.h"
 #include "tilemetainfomgr.h"
+#include "tiletoolpreviewcache.h"
 #include "tiledeffile.h"
 #include "tilesetmanager.h"
 #include "worlded/worldedmgr.h"
@@ -230,6 +235,12 @@ static bool validateSingleRowTilesetCatalog(QString *errorString)
 }
 static bool validateTransparentTileContract(QString *errorString)
 {
+    MixedTilesetModel browserModel;
+    if (!browserModel.showTransparentTiles()) {
+        *errorString = QStringLiteral(
+                    "BuildingEd tile browsers hide transparent source cells");
+        return false;
+    }
     QImage transparentImage(64, 128, QImage::Format_ARGB32_Premultiplied);
     transparentImage.fill(Qt::transparent);
     Tiled::Tileset tileset(QStringLiteral("transparent-validation"),
@@ -751,6 +762,117 @@ static bool validateBuildingClipboard(
     return valid;
 }
 
+static bool triggerBuildingSelectionScope(
+        BuildingEditor::BuildingEditorWindow *window,
+        const QString &text)
+{
+    for (QAction *action : window->findChildren<QAction *>()) {
+        if (action->text() == text) {
+            action->trigger();
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool validateBuildingCutScope(
+        BuildingEditor::BuildingEditorWindow *window,
+        BuildingEditor::BuildingDocument *document,
+        QString *errorString)
+{
+    using namespace BuildingEditor;
+    BuildingFloor *floor = document->currentFloor();
+    if (!floor) {
+        *errorString = QStringLiteral("Current floor is unavailable");
+        return false;
+    }
+    QPoint source(-1, -1);
+    Room *sourceRoom = nullptr;
+    for (int y = 0; y < floor->height() && !sourceRoom; ++y) {
+        for (int x = 0; x < floor->width(); ++x) {
+            if (Room *room = floor->GetRoomAt(x, y)) {
+                source = QPoint(x, y);
+                sourceRoom = room;
+                break;
+            }
+        }
+    }
+    if (!sourceRoom) {
+        *errorString = QStringLiteral("Fixture has no room square");
+        return false;
+    }
+    const QStringList layerNames = BuildingMap::layerNames(floor->level());
+    if (layerNames.size() < 2) {
+        *errorString = QStringLiteral("Fixture floor has fewer than two layers");
+        return false;
+    }
+    const QString currentLayerName = layerNames.contains(
+                QStringLiteral("Floor"))
+            ? QStringLiteral("Floor") : layerNames.first();
+    QString otherLayerName;
+    for (const QString &layerName : layerNames) {
+        if (layerName != currentLayerName) {
+            otherLayerName = layerName;
+            break;
+        }
+    }
+    const QString originalCurrentLayer = document->currentLayer();
+    const QRegion originalSelection = document->tileSelection();
+    const QString originalCurrentTile = floor->grimeAt(
+                currentLayerName, source.x(), source.y());
+    const QString originalOtherTile = floor->grimeAt(
+                otherLayerName, source.x(), source.y());
+    const QString currentMarker = QStringLiteral("blends_natural_01_0");
+    const QString otherMarker = QStringLiteral("blends_natural_01_1");
+    floor->setGrime(currentLayerName, source.x(), source.y(), currentMarker);
+    floor->setGrime(otherLayerName, source.x(), source.y(), otherMarker);
+    document->setCurrentLayer(currentLayerName);
+    document->setTileSelection(QRegion(QRect(source, QSize(1, 1))));
+
+    bool valid = triggerBuildingSelectionScope(
+                window, QStringLiteral("Current Layer"));
+    const int currentLayerUndoIndex = document->undoStack()->index();
+    valid = valid && QMetaObject::invokeMethod(
+                window, "editCut", Qt::DirectConnection);
+    valid = valid
+            && floor->GetRoomAt(source) == sourceRoom
+            && floor->grimeAt(currentLayerName, source.x(), source.y()).isEmpty()
+            && floor->grimeAt(otherLayerName, source.x(), source.y()) == otherMarker
+            && !document->clipboardRoomLayers().isEmpty();
+    while (document->undoStack()->index() > currentLayerUndoIndex)
+        document->undoStack()->undo();
+    valid = valid
+            && floor->GetRoomAt(source) == sourceRoom
+            && floor->grimeAt(currentLayerName, source.x(), source.y()) == currentMarker
+            && floor->grimeAt(otherLayerName, source.x(), source.y()) == otherMarker;
+
+    valid = valid && triggerBuildingSelectionScope(
+                window, QStringLiteral("All Layers"));
+    const int allLayersUndoIndex = document->undoStack()->index();
+    valid = valid && QMetaObject::invokeMethod(
+                window, "editCut", Qt::DirectConnection);
+    valid = valid
+            && floor->GetRoomAt(source) == nullptr
+            && floor->grimeAt(currentLayerName, source.x(), source.y()).isEmpty()
+            && floor->grimeAt(otherLayerName, source.x(), source.y()).isEmpty();
+    while (document->undoStack()->index() > allLayersUndoIndex)
+        document->undoStack()->undo();
+    valid = valid
+            && floor->GetRoomAt(source) == sourceRoom
+            && floor->grimeAt(currentLayerName, source.x(), source.y()) == currentMarker
+            && floor->grimeAt(otherLayerName, source.x(), source.y()) == otherMarker;
+
+    floor->setGrime(currentLayerName, source.x(), source.y(),
+                    originalCurrentTile);
+    floor->setGrime(otherLayerName, source.x(), source.y(), originalOtherTile);
+    document->setCurrentLayer(originalCurrentLayer);
+    document->setTileSelection(originalSelection);
+    triggerBuildingSelectionScope(window, QStringLiteral("Current Layer"));
+    if (!valid)
+        *errorString = QStringLiteral("Cut did not preserve its selected scope");
+    return valid;
+}
+
 static bool validateBuildingClipboardFixture(
         BuildingEditor::BuildingEditorWindow *window,
         const QString &fileName,
@@ -789,12 +911,10 @@ static bool validateBuildingClipboardFixture(
     ModeManager::instance().setCurrentMode(tileMode);
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 
-    for (QAction *action : window->findChildren<QAction *>()) {
-        if (action->text() == QStringLiteral("Visible Layers")) {
-            action->trigger();
-            break;
-        }
-    }
+    if (!validateBuildingCutScope(window, document, errorString))
+        return false;
+
+    triggerBuildingSelectionScope(window, QStringLiteral("Visible Layers"));
 
     BuildingFloor *floor = document->currentFloor();
     const QSize selectionSize(qMin(14, floor->width()),
@@ -899,6 +1019,27 @@ static bool validateBuildingClipboardFixture(
     while (document->undoStack()->canUndo()) {
         document->undoStack()->undo();
         QCoreApplication::processEvents();
+    }
+    const QList<BuildingIsoScene *> isoScenes =
+            window->findChildren<BuildingIsoScene *>();
+    int deferredSceneCount = 0;
+    for (BuildingIsoScene *scene : isoScenes) {
+        if (scene->hasDeferredStructuralMapRebuild())
+            ++deferredSceneCount;
+    }
+    valid = valid && isoScenes.size() == 3 && deferredSceneCount == 2;
+    IsoObjectEditMode *objectMode = window->findChild<IsoObjectEditMode *>();
+    AttributeEditMode *attributeMode = window->findChild<AttributeEditMode *>();
+    valid = valid && objectMode && attributeMode;
+    if (objectMode && attributeMode) {
+        ModeManager::instance().setCurrentMode(objectMode);
+        QCoreApplication::processEvents(QEventLoop::AllEvents);
+        ModeManager::instance().setCurrentMode(attributeMode);
+        QCoreApplication::processEvents(QEventLoop::AllEvents);
+        ModeManager::instance().setCurrentMode(tileMode);
+        QCoreApplication::processEvents(QEventLoop::AllEvents);
+        for (BuildingIsoScene *scene : isoScenes)
+            valid = valid && !scene->hasDeferredStructuralMapRebuild();
     }
     if (!valid)
         *errorString = QStringLiteral("Fixture copy-paste state is invalid");
@@ -1871,10 +2012,12 @@ int main(int argc, char *argv[])
     if (commandLine.validateBrushPerformance &&
             commandLine.filesToOpen().isEmpty()) {
         QString error;
-        const bool valid = validateBrushUndoBuffers(&error);
+        QString summary;
+        const bool valid = validateBrushUndoBuffers(&error)
+                && validateTileToolPointerPerformance(&summary, &error);
         qInfo().noquote()
                 << "TileZed brush-performance validation:"
-                << (valid ? QStringLiteral("PASS")
+                << (valid ? QStringLiteral("PASS: %1").arg(summary)
                           : QStringLiteral("FAIL: %1").arg(error));
         return valid ? 0 : 1;
     }
@@ -2038,7 +2181,12 @@ int main(int argc, char *argv[])
         buildingEditor.readSettings();
         QTimer::singleShot(0, &buildingEditor,
                            [&buildingEditor, &commandLine]() {
-            if (!MainWindow::InitConfigFiles(&buildingEditor) ||
+            buildingEditor.setEnabled(false);
+            qApp->processEvents(QEventLoop::AllEvents);
+            const bool configLoaded =
+                    MainWindow::InitConfigFiles(&buildingEditor);
+            buildingEditor.setEnabled(true);
+            if (!configLoaded ||
                     !buildingEditor.Startup()) {
                 buildingEditor.close();
                 QCoreApplication::quit();
@@ -2292,8 +2440,14 @@ int main(int argc, char *argv[])
         QString error;
         QString summary;
         const bool coreValid = validateBrushUndoBuffers(&error);
-        const bool mapValid = coreValid && validateBrushMapPerformance(
+        QString pointerSummary;
+        const bool pointerValid = coreValid
+                && validateTileToolPointerPerformance(
+                    &pointerSummary, &error);
+        const bool mapValid = pointerValid && validateBrushMapPerformance(
                     commandLine.filesToOpen().first(), &summary, &error);
+        if (mapValid)
+            summary = pointerSummary + QStringLiteral(", ") + summary;
         qInfo().noquote()
                 << "TileZed brush-performance validation:"
                 << (mapValid

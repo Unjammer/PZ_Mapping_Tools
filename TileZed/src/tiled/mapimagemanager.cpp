@@ -147,7 +147,8 @@ MapImage *MapImageManager::getMapImage(const QString &mapName, const QString &re
 
 #ifdef WORLDED
     QString suffix = QFileInfo(mapName).suffix();
-    if (BMPToTMX::supportedImageFormats().contains(suffix)) {
+    if (BMPToTMX::supportedImageFormats().contains(
+                suffix, Qt::CaseInsensitive)) {
         QString keyName = QFileInfo(mapName).canonicalFilePath();
         if (mMapImages.contains(keyName))
             return mMapImages[keyName];

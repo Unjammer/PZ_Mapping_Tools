@@ -27,6 +27,7 @@
 
 class QListWidgetItem;
 class QToolButton;
+class QUndoGroup;
 class QUndoStack;
 
 namespace Ui {

@@ -10,6 +10,8 @@
 #define PARTIALCHUNKSELECTION_H
 
 #include <QBitArray>
+#include <QRect>
+#include <QRegion>
 #include <QString>
 
 namespace PZTools
@@ -37,6 +39,8 @@ public:
     bool save(const QString &mapPath, QString *error = nullptr) const;
 
     static QString filePath(const QString &mapPath);
+    static QRegion changedLassoRegion(const QRect &oldChunks,
+                                      const QRect &newChunks);
     static bool validate(QString *error = nullptr);
 
 private:

@@ -17,6 +17,7 @@
 
 #include "chunkdatafile256.h"
 
+#include "chunkdataoverride.h"
 #include "mapcomposite.h"
 #include "world.h"
 
@@ -33,13 +34,15 @@ ChunkDataFile256::ChunkDataFile256()
 
 }
 
-void ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *mapComposite, const LotFile::RectLookup<LotFile::RoomRect> &roomRectLookup, const GenerateLotsSettings &settings, const QBitArray *selectedChunks)
+bool ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *mapComposite, const LotFile::RectLookup<LotFile::RoomRect> &roomRectLookup, const GenerateLotsSettings &settings, const QImage &overrideImage, QString *error, const QBitArray *selectedChunks)
 {
     QString lotsDirectory = settings.exportDir;
     QFile file(lotsDirectory + QString::fromLatin1("/chunkdata_%1_%2.bin")
                .arg(combinedMaps.mCell256X).arg(combinedMaps.mCell256Y));
     if (!file.open(QIODevice::WriteOnly)) {
-        return;
+        if (error)
+            *error = file.errorString();
+        return false;
     }
 
     QDataStream out(&file); // BigEndian by default, Java DataInputStream also BigEndian
@@ -99,6 +102,11 @@ void ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *map
                         bits |= BIT_ROOM;
                     if (isPositionNull(mapComposite, chunkRect.x() + x, chunkRect.y() + y))
                         bits |= BIT_NULL;
+                    bits = ChunkDataOverride::mergedBits(
+                                overrideImage,
+                                xx * CHUNK_SIZE_256 + x,
+                                yy * CHUNK_SIZE_256 + y,
+                                bits);
                     bitsArray[x + y * CHUNK_SIZE_256] = bits;
                     if (bits == 0)
                         empty++;
@@ -136,6 +144,12 @@ void ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *map
     delete[] bitsArray;
 
     file.close();
+    if (out.status() != QDataStream::Ok) {
+        if (error)
+            *error = file.errorString();
+        return false;
+    }
+    return true;
 }
 
 bool ChunkDataFile256::isPositionNull(MapComposite *mapComposite, int squareX, int squareY)

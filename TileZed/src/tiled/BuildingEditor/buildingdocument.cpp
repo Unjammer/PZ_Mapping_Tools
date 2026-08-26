@@ -111,6 +111,7 @@ BuildingDocument::~BuildingDocument()
     for (const ClipboardTileLayer &layer : qAsConst(mClipboardTileLayers))
         delete layer.tiles;
     qDeleteAll(mClipboardRooms);
+    delete mBuilding;
 }
 
 QString BuildingDocument::displayName() const

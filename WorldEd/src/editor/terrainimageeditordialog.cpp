@@ -1,5 +1,7 @@
 #include "terrainimageeditordialog.h"
 #include "bmpblender.h"
+#include "mappingimageformat.h"
+#include "mapimagemanager.h"
 #include "preferences.h"
 #include "world.h"
 #include "worlddocument.h"
@@ -19,7 +21,6 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
-#include <QImageWriter>
 #include <QImageReader>
 #include <QKeySequence>
 #include <QLabel>
@@ -773,9 +774,10 @@ void TerrainImageEditorDialog::openImages()
         return;
     const QString current = normalizedGroundPath(mGroundPath->text());
     const QString path = QFileDialog::getOpenFileName(
-                this, tr("Open Ground or Vegetation PNG"),
+                this, tr("Open Ground or Vegetation Image"),
                 QFileInfo(current).absolutePath(),
-                tr("PNG images (*.png)"));
+                tr("Terrain images (*.png *.bmp);;PNG images (*.png);;"
+                   "BMP images (*.bmp)"));
     if (!path.isEmpty())
         loadImagePair(normalizedGroundPath(path));
 }
@@ -786,6 +788,13 @@ bool TerrainImageEditorDialog::saveImages()
         return saveImagesAs();
     if (mCanvas->groundImage().isNull())
         return false;
+    if (!MappingImageFormat::isSupportedPath(groundPath)) {
+        QMessageBox::warning(
+                    this, tr("Save Images"),
+                    tr("Ground and vegetation images must use the PNG or BMP "
+                       "file extension."));
+        return false;
+    }
     QString attachmentError;
     if (mAttachToProject->isChecked() &&
             !validateAttachment(&attachmentError)) {
@@ -827,9 +836,10 @@ bool TerrainImageEditorDialog::saveImages()
             return false;
         }
     }
-    if (!savePngAtomically(mCanvas->groundImage(), groundPath, &error) ||
-            !savePngAtomically(mCanvas->vegetationImage(),
-                               vegetationPath, &error)) {
+    if (!MappingImageFormat::saveAtomically(
+                mCanvas->groundImage(), groundPath, &error) ||
+            !MappingImageFormat::saveAtomically(
+                mCanvas->vegetationImage(), vegetationPath, &error)) {
         QMessageBox::warning(this, tr("Save Images"), error);
         return false;
     }
@@ -837,12 +847,13 @@ bool TerrainImageEditorDialog::saveImages()
             !attachImagesToWorld(groundPath, &error)) {
         QMessageBox::warning(
                     this, tr("Attach Images"),
-                    tr("The PNG files were saved, but the project could not "
+                    tr("The image files were saved, but the project could not "
                        "be updated:\n%1").arg(error));
         mSavedRevision = mRevision;
         setDirty(false);
         return false;
     }
+    MapImageManager::instance()->reloadImageFile(groundPath);
     mGroundPath->setText(QDir::toNativeSeparators(groundPath));
     mSavedRevision = mRevision;
     setDirty(false);
@@ -851,14 +862,21 @@ bool TerrainImageEditorDialog::saveImages()
 }
 bool TerrainImageEditorDialog::saveImagesAs()
 {
+    QString selectedFilter;
     const QString path = QFileDialog::getSaveFileName(
-                this, tr("Save Ground PNG"),
+                this, tr("Save Ground Image"),
                 normalizedGroundPath(mGroundPath->text()),
-                tr("PNG images (*.png)"));
+                tr("PNG images (*.png);;BMP images (*.bmp)"),
+                &selectedFilter);
     if (path.isEmpty())
         return false;
+    QString selectedPath = path;
+    if (QFileInfo(selectedPath).suffix().isEmpty()) {
+        selectedPath += selectedFilter.contains(QLatin1String("*.bmp"))
+                ? QLatin1String(".bmp") : QLatin1String(".png");
+    }
     mGroundPath->setText(QDir::toNativeSeparators(
-                             normalizedGroundPath(path)));
+                             normalizedGroundPath(selectedPath)));
     return saveImages();
 }
 void TerrainImageEditorDialog::activeLayerChanged(int bitmapIndex)
@@ -1207,15 +1225,19 @@ QString TerrainImageEditorDialog::normalizedGroundPath(
     QString baseName = info.completeBaseName();
     if (baseName.endsWith(QLatin1String("_veg"), Qt::CaseInsensitive))
         baseName.chop(4);
+    QString suffix = info.suffix();
+    if (suffix.isEmpty())
+        suffix = QLatin1String("png");
     return QDir::cleanPath(info.dir().filePath(
-                               baseName + QLatin1String(".png")));
+                               baseName + QLatin1Char('.') + suffix));
 }
 QString TerrainImageEditorDialog::vegetationPathFor(
         const QString &groundPath) const
 {
     const QFileInfo info(groundPath);
     return info.dir().filePath(
-                info.completeBaseName() + QLatin1String("_veg.png"));
+                info.completeBaseName() + QLatin1String("_veg.") +
+                info.suffix());
 }
 bool TerrainImageEditorDialog::loadRulesFile(const QString &path)
 {
@@ -1278,7 +1300,7 @@ bool TerrainImageEditorDialog::loadImagePair(const QString &groundPath)
                              tr("The ground image could not be decoded.\n\n"
                                 "File: %1\n"
                                 "Reason: %2\n\n"
-                                "Select a valid PNG image and try again.")
+                                 "Select a valid PNG or BMP image and try again.")
                              .arg(QDir::toNativeSeparators(groundPath),
                                   groundReader.errorString()));
         return false;
@@ -1337,7 +1359,7 @@ bool TerrainImageEditorDialog::loadImagePair(const QString &groundPath)
                         tr("The vegetation image could not be decoded.\n\n"
                            "File: %1\n"
                            "Reason: %2\n\n"
-                           "Repair or replace this PNG, or remove it to let "
+                           "Repair or replace this image, or remove it to let "
                            "WorldEd create an empty vegetation image.")
                         .arg(QDir::toNativeSeparators(vegetationPath),
                              vegetationReader.errorString()));
@@ -1489,37 +1511,13 @@ bool TerrainImageEditorDialog::maybeDiscardChanges()
     const QMessageBox::StandardButton answer =
             QMessageBox::question(
                 this, tr("Unsaved Terrain Images"),
-                tr("Save changes to the ground and vegetation PNG files?"),
+                tr("Save changes to the ground and vegetation image files?"),
                 QMessageBox::Save | QMessageBox::Discard |
                 QMessageBox::Cancel, QMessageBox::Save);
     if (answer == QMessageBox::Cancel)
         return false;
     if (answer == QMessageBox::Save)
         return saveImages();
-    return true;
-}
-bool TerrainImageEditorDialog::savePngAtomically(
-        const QImage &image, const QString &path, QString *error) const
-{
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly)) {
-        if (error)
-            *error = file.errorString();
-        return false;
-    }
-    QImageWriter writer(&file, "png");
-    writer.setCompression(6);
-    if (!writer.write(image)) {
-        if (error)
-            *error = writer.errorString();
-        file.cancelWriting();
-        return false;
-    }
-    if (!file.commit()) {
-        if (error)
-            *error = file.errorString();
-        return false;
-    }
     return true;
 }
 bool TerrainImageEditorDialog::validateAttachment(QString *error) const

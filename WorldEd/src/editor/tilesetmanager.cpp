@@ -404,6 +404,7 @@ void TilesetManager::fileChangedTimeout()
         tilesetDirectoryChanged();
     }
     qDebug() << "fileChangedTimeout " << mChangedFiles;
+    bool cachedImagesChanged = false;
     foreach (Tileset *tileset, mTilesetImageCache->mTilesets) {
         QString fileName = tileset->imageSource2x().isEmpty() ? tileset->imageSource() : tileset->imageSource2x();
         if (mChangedFiles.contains(fileName)) {
@@ -411,6 +412,7 @@ void TilesetManager::fileChangedTimeout()
             if (QImageReader(fileName).size().isValid()) {
                 tileset->loadFromImage(QImage(fileName), tileset->imageSource());
                 tileset->setMissing(false);
+                cachedImagesChanged = true;
             } else {
                 if (tileset->tileHeight() == mMissingTile->height()
                         && tileset->tileWidth() == mMissingTile->width()) {
@@ -418,9 +420,12 @@ void TilesetManager::fileChangedTimeout()
                         tileset->tileAt(i)->setImage(mMissingTile);
                 }
                 tileset->setMissing(true);
+                cachedImagesChanged = true;
             }
         }
     }
+    if (cachedImagesChanged)
+        mTilesetImageCache->rebuildTileImagePool();
     foreach (Tileset *tileset, tilesets()) {
         QString fileName = tileset->imageSource();
         QString fileName2 = tileset->imageSource2x().isEmpty() ? tileset->imageSource() : tileset->imageSource2x();
@@ -465,6 +470,7 @@ void TilesetManager::imageLoaded(QImage *image, Tileset *tileset)
 {
     QWriteLocker imageWriteLock(&tilesetImageLock());
     Q_ASSERT(mTilesetImageCache->mTilesets.contains(tileset));
+    const bool replacingLoadedImage = tileset->isLoaded();
 
     // This updates a tileset in the cache.
     if (!tileset->loadFromImage(*image, tileset->imageSource())) {
@@ -490,9 +496,15 @@ void TilesetManager::imageLoaded(QImage *image, Tileset *tileset)
             }
             emit tilesetChanged(candidate);
         }
+        if (replacingLoadedImage)
+            mTilesetImageCache->rebuildTileImagePool();
         delete image;
         return;
     }
+    if (replacingLoadedImage)
+        mTilesetImageCache->rebuildTileImagePool();
+    else
+        mTilesetImageCache->deduplicateTilesetImages(tileset);
 
     // Watch the image file for changes.
     mWatcher->addPath(tileset->imageSource2x().isEmpty() ? tileset->imageSource() : tileset->imageSource2x());
@@ -705,6 +717,11 @@ void TilesetManager::copyPZProperties(Tileset *src, Tileset *dst)
             tileDst->setProperties(tileSrc->properties());
         }
     }
+}
+
+QString TilesetManager::cacheMemorySummary() const
+{
+    return mTilesetImageCache->memorySummary();
 }
 
 void TilesetManager::changeTilesetSource(Tileset *tileset, const QString &source,

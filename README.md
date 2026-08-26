@@ -35,6 +35,26 @@ Project Zomboid game assets are not included.
 
 ## Included applications
 
+Each main application window includes a lower-right message indicator modeled
+after Project Zomboid's error counter. A red box counts errors and an orange
+box counts warnings. A new message slides the indicator above the application
+status area, keeps it visible for three seconds, then hides it without
+discarding the message list. This includes messages emitted by background
+workers and warnings that previously appeared only in the log. Warning and
+critical message boxes are included as well, without counting the same message
+twice when it was just logged. Click a visible box to inspect the complete
+timestamped message, source and thread, copy one or all entries, open the logs
+folder, filter by severity, or clear the current counters.
+
+The title of each main application window displays the current centralized
+build identifier so screenshots and reports can identify the exact binary in
+use.
+
+The complete tileset catalogue shares the immutable pixel storage of exact
+duplicate extracted tile images within each application process. Sheet names,
+tile ordering, IDs, offsets, transparent tiles, and TMX declarations remain
+independent and unchanged.
+
 ### PZWorldEd
 
 PZWorldEd manages PZW projects, cells, lots, roads, zones, world-map data,
@@ -46,13 +66,22 @@ Important additions include:
 - Native256 projects with one source cell mapped to one output cell
 - Partial Chunks mode for selecting the 8 x 8-square chunks included in a
   Native256 LOT export
+- Per-cell Native256 chunk-data overrides that paint explicit collision,
+  wall-edge, water, and room metadata before LOT export
 - BMP-to-TMX validation, optional repair, and Rules/Blends metadata-only synchronization
 - Hole Detection based on actual tile presence
 - Optional hole filling during LOT generation
+- Generate Lots path choosers update the displayed history entry and active
+  export setting immediately after the first selection
 - Project Doctor for paths, missing tilesets, and project cleanup
 - Build 42.20 Biomemap reference and separate red and green painting modes
 - Main, vegetation, and Biomemap editing require a saved PZW and use the
   project directory for generated images
+- Main terrain, vegetation, and Zombie Heatmap editing accepts PNG and BMP.
+  Saving preserves the selected extension and writes matching PNG or BMP file
+  data. Attached terrain images refresh in the World view after saving.
+- The Maps browser sorts directories and files by Name, numeric Size, or
+  actual Last modified time when its column headers are clicked.
 - WorldGen biome, feature, and static-prefab editing
 - OpenStreetMap project generation with terrain, vegetation, buildings,
   streets, roads, markings, and typed zones
@@ -78,6 +107,16 @@ Important additions include:
   use a green outline and occupied targets use orange. One click pastes into
   the cell under the pointer and returns to the normal selection tool. Pasting
   into a non-empty cell requires explicit confirmation.
+- Cell Paste updates its preview only when the target cell changes and reuses
+  precomputed relative cell offsets, so pointer movement inside one cell does
+  not revisit the clipboard contents.
+- Partial Chunks lassos and the optional room-under-pointer highlight redraw
+  only the scene regions whose visual state changed. Render diagnostics are
+  disabled by default, and rendered-tile counting remains inactive until the
+  diagnostics are explicitly enabled.
+- Raster rendering does not retain a CPU atlas for every tilesheet. OpenGL
+  atlases are assembled only for sheets that are actually uploaded, then the
+  temporary CPU atlas is released after upload.
 - InGameMap Forest export with the Forest pyramid and strict Build 42.20
   binary-header validation before existing files are replaced
 - InGameMap building outlines from both placed TBX lots and RoomDefs embedded
@@ -129,9 +168,20 @@ Important additions include:
   or cleared, including when Undo removes a newly introduced tileset from the
   TMX.
 - Partial Chunks mode shared with WorldEd for Native256 TMX maps
+- Edge, Fence, and Curb previews ignore pointer movement that does not change
+  the effective tile, orientation, level, layer, selection, mode, or modifier.
+  Their resolved definition tiles are cached for the complete preview and are
+  invalidated by real map, layer, configuration, and tileset changes.
+- Partial Chunks lassos redraw only changed chunks. Tile edits use the affected
+  layer's sprite margins, and BMP edits use the generated BMP layers rather
+  than the map-wide maximum, so unrelated Jumbo tiles do not enlarge ordinary
+  dirty regions.
 - Depth Map primitive editing with Build 42 local geometry dimensions,
   projected outline dimensions, movable saved panels, and reusable presets
 - TileDef comparison and Snow, Burnt, and custom replacement editing
+- A tileset tile's context menu resolves the configured `.tiles` or
+  `.tiles.txt` file that defines it, opens that file in the TileDefs editor,
+  and selects the exact tileset and tile index
 - Fast pack extraction for individual tiles, tilesets, and multi-tile objects
 - Optional orphan-pixel cleanup during extraction
 - Lua mapping tools with transactional Undo
@@ -140,6 +190,14 @@ Important additions include:
 - Narrow Tilesets docks retain every command through the toolbar overflow
   menu.
 - Layer and level visibility thresholds are restored from the portable INI.
+- The Layers and Levels visibility sliders stay synchronized, clamp stored
+  values to the open map, and provide **Check All** and **Uncheck All** from
+  the Layers list context menu.
+- The Maps browser sorts directories and files by Name, numeric Size, or
+  actual Last modified time when its column headers are clicked.
+- The Qt raster viewport is used consistently. The experimental OpenGL
+  viewport is disabled to avoid driver-dependent Brush Tool slowdowns. Render
+  diagnostics are disabled by default.
 
 ### BuildingEd
 
@@ -154,13 +212,27 @@ Important additions include:
 - Complete tileset discovery shared with TileZed and WorldEd
 - Layer-aware and floor-aware tile selection
 - Copy and cut preserve RoomDefs and room layouts together with selected tile
-  layers. Paste without a destination selection provides a translucent,
-  click-to-place preview in the Ortho and isometric views.
+  layers. Cut removes room layouts only when **All Layers** is selected.
+  **Current Layer**, **Visible Layers**, and **Specific Layers** remove only
+  their selected explicit tile layers. Paste without a destination selection
+  provides a translucent, click-to-place preview in the Ortho and isometric
+  views.
 - Copied RoomDefs are recreated as building-owned rooms during placement, so
   replacing the clipboard cannot invalidate pasted room floors.
 - The placement preview uses a validated, immutable snapshot of copied tiles
   and rooms instead of traversing live clipboard grids on every mouse move.
   Converted isometric preview tiles are reused while the pointer moves.
+- Tile previews redraw only their affected isometric area. Extended margins
+  are applied only to Jumbo, Jumbo XL, and Jumbo XXL tiles, and preview tile
+  lookup no longer rebuilds the complete tileset catalogue on each move.
+- The Qt raster viewport uses minimal dirty-region updates. The experimental
+  OpenGL viewport is disabled, and render diagnostics are off by default.
+- Structural edits regenerate automatic building layers only for the visible
+  Object, Tile, or Attribute mode. Hidden isometric views synchronize when
+  their mode is opened instead of repeating the same floor-wide work after
+  every room, wall, window, door, stair, roof, or furniture change.
+- Closing a TBX releases its building model and all per-document editor views
+  so closed buildings do not accumulate during a long session.
 - Editing a room name or internal name commits when the field is finished or a
   list entry is selected. Text entry no longer rebuilds every isometric floor
   after each character.
@@ -283,9 +355,11 @@ WorldEd searches both portable resource directories recursively and detects
 files added while the application is running. A basement-access source does
 not need to contain a staircase or a dedicated anchor. WorldEd displays the
 complete TBX or TMX as a translucent overlay aligned to the Basement trace
-origin. Right-click the Basement zone itself with Select or Create Object and
-choose **Choose Basement Access...** to browse the available access names with
-a visual preview. This action is never offered for another zone type.
+origin. The source is loaded only when its Basement object is selected, so
+opening a cell does not load every access used by that cell. Right-click the
+Basement zone itself with Select or Create Object and choose **Choose Basement
+Access...** to browse the available access names with a visual preview. This
+action is never offered for another zone type.
 
 Each application provides an autosave interval in Preferences. WorldEd and
 TileZed save only an existing modified PZW or TMX. BuildingEd retains its
@@ -354,6 +428,57 @@ room objects, used-tile headers, and zombie intensity are limited to the
 selected chunks. A selected chunk may be empty by design. An omitted chunk is
 absent from the exported LOT even if its TMX area contains tiles. This mode is
 available only for Native256 projects.
+
+## Native256 chunk-data overrides
+
+Select one cell in a Native256 project, then open **Tools > Terrain &
+Environment > Native256 Chunk Data Overrides**. The editor stores one optional
+256 x 256 RGBA PNG for that cell. One image pixel represents one map square.
+Transparent pixels keep the value that WorldEd normally generates from the
+TMX, TBX, rooms, and tile definitions. Opaque pixels replace that generated
+value. The red channel contains a value from 0 through 31. Green and blue must
+be zero. Right-drag restores transparent automatic generation.
+
+The PZW stores the PNG reference on the cell. Cell Move, Copy, Paste, Undo,
+and Redo preserve that reference. Generate Lots validates every attached PNG
+before starting and stops with the affected cell and reason if a file is
+missing, unreadable, the wrong size, or contains unsupported channel values.
+Legacy300 projects cannot attach or export this data.
+
+Build 42.20.3 `MapCollisionData` defines five flags for each level-0 square:
+
+- `0` means none of the five flags is set. An explicit opaque zero can turn a
+  normally generated square into empty collision metadata.
+- `1`, Solid, marks the complete square as solid in native collision and path
+  data. The game normally derives it from a solid or solid-transparent square
+  or from stairs, then removes it for water and tree squares.
+- `2`, North wall, blocks the north edge. The game normally derives it from
+  north collision, north door frames or door walls, and north window flags.
+  A hoppable north edge is not marked blocked.
+- `4`, West wall, applies the equivalent rule to the west edge using the west
+  collision, door, window, and hoppable flags.
+- `8`, Water, marks the square as water in native collision data.
+- `16`, Room, marks the square as belonging to a room.
+
+Flags combine by addition. For example, `17` is Solid plus Room, and `22` is
+North wall plus West wall plus Room. The tool permits every combination from
+0 through 31 without claiming that every combination is sensible for the
+game. Use the smallest combination required for the intended test.
+
+The game passes each `chunkdata_x_y.bin` file to the native collision system
+when it initializes a meta cell in single-player or on a server. It does not
+initialize this system on a game client. Native path tasks consume this data.
+When an actual 8 x 8 chunk later loads or a level-0 square changes, the game
+recalculates these same five bits from the real square. The override therefore
+controls the generated initial metadata. It does not alter the TMX, tiles,
+TileDefs, or the loaded square itself.
+
+WorldEd still has an internal null or absent marker used by Partial Chunks and
+empty source coverage. The editor intentionally does not expose it because it
+is outside the five values visible in `MapCollisionData`. Leave a pixel
+transparent when WorldEd should retain its normal null or generated state.
+An omitted Partial Chunk remains absent and takes priority over override
+pixels inside that chunk.
 
 In **Preferences > Window Setup**, **Use 1920 x 1080** immediately resizes and
 centers only the current application. **Apply to Current Application** does the
@@ -427,11 +552,12 @@ older maps, adjacent cells with different `firstgid` values, and embedded BMP
 rules that reference tiles not currently painted on a normal tile layer.
 
 A fully transparent cell in a resolved sheet is valid and remains distinct
-from a missing PNG. With **Show Invisible Tiles** enabled, transparent and
-explicitly invisible tiles use a crossed-eye marker. Unresolved sources use a
-separate red missing-source marker. Tile makers should assign the `invisible`
-TileDef property to intentional transparent placeholders so Check Maps can
-distinguish them from accidental empty artwork.
+from a missing PNG. BuildingEd tile, furniture, mixed-tileset, and Building >
+Tiles browsers display transparent and explicitly invisible tiles with a
+crossed-eye marker. Unresolved sources use a separate red missing-source
+marker. Tile makers should assign the `invisible` TileDef property to
+intentional transparent placeholders so Check Maps can distinguish them from
+accidental empty artwork.
 
 ## Portable configuration
 

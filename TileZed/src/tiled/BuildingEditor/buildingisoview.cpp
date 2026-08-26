@@ -36,6 +36,7 @@
 #include "tiledeffile.h"
 #include "zoomable.h"
 
+#include "customtilesize.h"
 #include "isometricrenderer.h"
 #include "map.h"
 #include "maprenderer.h"
@@ -78,6 +79,29 @@ QString diagnosticMemoryText(quint64 bytes)
         return QObject::tr("%1 GiB").arg(bytes / gibibyte, 0, 'f', 2);
     return QObject::tr("%1 MiB").arg(
                 bytes / (1024.0 * 1024.0), 0, 'f', 1);
+}
+
+QMargins toolTileUpdateMargins(const TileLayer &tiles)
+{
+    const int tileScale = 2;
+    int horizontal = 0;
+    int top = (128 - 32) * tileScale;
+    for (int x = 0; x < tiles.width(); ++x) {
+        for (int y = 0; y < tiles.height(); ++y) {
+            Tile *tile = tiles.cellAt(x, y).tile;
+            if (!tile)
+                continue;
+            const QSize customSize = CustomTileSize::forTileset(
+                        tile->tileset()->name());
+            if (customSize.isEmpty())
+                continue;
+            horizontal = qMax(horizontal,
+                    (customSize.width() - 64) * tileScale / 2);
+            top = qMax(top,
+                    (customSize.height() - 32) * tileScale);
+        }
+    }
+    return QMargins(horizontal, top, horizontal, 0);
 }
 }
 /////
@@ -342,6 +366,7 @@ BuildingIsoScene::BuildingIsoScene(QObject *parent) :
     mGridItem(0),
     mTileSelectionItem(0),
     mSquarePropertiesItem(nullptr),
+    mLoading(false),
     mDarkRectangle(new QGraphicsRectItem),
     mCurrentTool(0),
     mLayerGroupWithToolTiles(0),
@@ -353,7 +378,8 @@ BuildingIsoScene::BuildingIsoScene(QObject *parent) :
     mShowUserTiles(true),
     mCurrentLevel(0),
     mHighlightRoomLock(false),
-    mDeferredCurrentFloorChange(false)
+    mDeferredCurrentFloorChange(false),
+    mDeferredStructuralMapRebuild(false)
 {
     ZVALUE_CURSOR = 1000;
     ZVALUE_GRID = 1001;
@@ -429,9 +455,12 @@ void BuildingIsoScene::setDocument(BuildingDocument *doc)
     mTileSelectionItem = nullptr;
     delete mSquarePropertiesItem;
     mSquarePropertiesItem = nullptr;
+    delete mRoomSelectionItem;
+    mRoomSelectionItem = nullptr;
 
     mDocument = doc;
     mDeferredCurrentFloorChange = false;
+    mDeferredStructuralMapRebuild = false;
     mDeferredWholeFloorTileUpdates.clear();
     mDeferredFloorTileUpdates.clear();
     mPendingLayerVisibilityFloors.clear();
@@ -448,11 +477,14 @@ void BuildingIsoScene::setDocument(BuildingDocument *doc)
         qDeleteAll(mLayerGroupItems);
         mLayerGroupItems.clear();
         delete mGridItem;
+        mGridItem = nullptr;
         delete mBasementAccessItem;
+        mBasementAccessItem = nullptr;
 
         dynamic_cast<IsoBuildingRenderer*>(mRenderer)->mMapRenderer = 0;
 
         mLayerGroupWithToolTiles = 0;
+        mToolTileSceneRect = QRectF();
         mToolTileSource = nullptr;
         mToolTileSourceLayer.clear();
         mToolTileSourceLevel = -1;
@@ -463,7 +495,9 @@ void BuildingIsoScene::setDocument(BuildingDocument *doc)
     if (!mDocument)
         return;
 
+    mLoading = true;
     BuildingToMap();
+    mLoading = false;
 
     foreach (BuildingFloor *floor, mDocument->building()->floors())
         BuildingBaseScene::floorAdded(floor);
@@ -655,6 +689,9 @@ void BuildingIsoScene::setToolTiles(const FloorTileGrid *tiles,
                                     const QString &layerName,
                                     bool reusableSource)
 {
+    if (!mToolTileSceneRect.isEmpty())
+        update(mToolTileSceneRect);
+    mToolTileSceneRect = QRectF();
     if (mLayerGroupWithToolTiles) {
         mLayerGroupWithToolTiles->clearToolTiles();
         mLayerGroupWithToolTiles = nullptr;
@@ -682,10 +719,6 @@ void BuildingIsoScene::setToolTiles(const FloorTileGrid *tiles,
             && mToolTileSourceLevel == currentLevel()
             && QSize(mToolTiles.width(), mToolTiles.height()) == tilesSize;
     if (!reuseConvertedTiles) {
-        QMap<QString,Tileset*> tilesetByName;
-        foreach (Tileset *ts, mBuildingMap->map()->tilesets())
-            tilesetByName[ts->name()] = ts;
-
         mToolTiles.resize(tilesSize, QPoint());
         for (int x = 0; x < tiles->width(); x++) {
             for (int y = 0; y < tiles->height(); y++) {
@@ -696,9 +729,13 @@ void BuildingIsoScene::setToolTiles(const FloorTileGrid *tiles,
                     QString tilesetName;
                     int index;
                     if (BuildingTilesMgr::parseTileName(
-                                tileName, tilesetName, index)
-                            && tilesetByName.contains(tilesetName)) {
-                        tile = tilesetByName[tilesetName]->tileAt(index);
+                                tileName, tilesetName, index)) {
+                        Tileset *resolved = TileMetaInfoMgr::instance()
+                                ->tileset(tilesetName);
+                        if (resolved && index >= 0
+                                && index < resolved->tileCount()) {
+                            tile = resolved->tileAt(index);
+                        }
                     }
                 }
                 mToolTiles.setCell(x, y, Cell(tile));
@@ -716,15 +753,19 @@ void BuildingIsoScene::setToolTiles(const FloorTileGrid *tiles,
     }
     mLayerGroupWithToolTiles = layerGroup;
 
-    int TileScale = 2;
-    QRectF r = mBuildingMap->mapRenderer()->boundingRect(tiles->bounds().translated(pos), currentLevel())
-            .adjusted(-64*TileScale, -(256-32)*TileScale, 64*TileScale, 0); // extra for jumbo trees
-//            .adjusted(0, -(128-32)*2, 0, 0); // use mMap->drawMargins()
-    update(r);
+    const QMargins margins = toolTileUpdateMargins(mToolTiles);
+    mToolTileSceneRect = mBuildingMap->mapRenderer()
+            ->boundingRect(tiles->bounds().translated(pos), currentLevel())
+            .adjusted(-margins.left(), -margins.top(),
+                      margins.right(), margins.bottom());
+    update(mToolTileSceneRect);
 }
 
 void BuildingIsoScene::clearToolTiles()
 {
+    if (!mToolTileSceneRect.isEmpty())
+        update(mToolTileSceneRect);
+    mToolTileSceneRect = QRectF();
     if (mLayerGroupWithToolTiles) {
         mLayerGroupWithToolTiles->clearToolTiles();
         mLayerGroupWithToolTiles = 0;
@@ -942,9 +983,15 @@ void BuildingIsoScene::BuildingToMap()
         qDeleteAll(mLayerGroupItems);
         mLayerGroupItems.clear();
         delete mBasementAccessItem;
+        mBasementAccessItem = nullptr;
         delete mGridItem;
+        mGridItem = nullptr;
         delete mTileSelectionItem;
+        mTileSelectionItem = nullptr;
         delete mSquarePropertiesItem;
+        mSquarePropertiesItem = nullptr;
+        delete mRoomSelectionItem;
+        mRoomSelectionItem = nullptr;
 
         mLayerGroupWithToolTiles = 0;
         mNonEmptyLayerGroupItem = 0;
@@ -1010,12 +1057,16 @@ void BuildingIsoScene::floorEdited(BuildingFloor *floor)
 {
     BuildingBaseScene::floorEdited(floor);
 
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->floorEdited(floor);
 }
 
 void BuildingIsoScene::floorTilesChanged(BuildingFloor *floor)
 {
     if (!hasVisibleView()) {
+        if (mDeferredStructuralMapRebuild)
+            return;
         mDeferredFloorTileUpdates.remove(floor);
         mDeferredWholeFloorTileUpdates.insert(floor);
         return;
@@ -1028,6 +1079,8 @@ void BuildingIsoScene::floorTilesChanged(BuildingFloor *floor,
                                               const QRect &bounds)
 {
     if (!hasVisibleView()) {
+        if (mDeferredStructuralMapRebuild)
+            return;
         if (!mDeferredWholeFloorTileUpdates.contains(floor))
             mDeferredFloorTileUpdates[floor][layerName] |= bounds;
         return;
@@ -1062,6 +1115,37 @@ bool BuildingIsoScene::hasVisibleView() const
     }
     return false;
 }
+bool BuildingIsoScene::deferStructuralMapUpdate()
+{
+    if (mLoading || hasVisibleView())
+        return false;
+    mDeferredStructuralMapRebuild = true;
+    mDeferredWholeFloorTileUpdates.clear();
+    mDeferredFloorTileUpdates.clear();
+    return true;
+}
+void BuildingIsoScene::rebuildDeferredMap()
+{
+    if (!mDeferredStructuralMapRebuild)
+        return;
+    QElapsedTimer elapsed;
+    elapsed.start();
+    mDeferredStructuralMapRebuild = false;
+    mDeferredWholeFloorTileUpdates.clear();
+    mDeferredFloorTileUpdates.clear();
+    BuildingToMap();
+    for (BuildingFloor *floor : mDocument->building()->floors())
+        mPendingLayerVisibilityFloors.insert(floor);
+    applyPendingLayerVisibilityChanges();
+    mDeferredCurrentFloorChange = false;
+    currentFloorChanged();
+    currentLayerChanged();
+    calculateUnlitRoomMask();
+    update();
+    qInfo() << "BuildingEd rebuilt deferred hidden structural view in"
+            << elapsed.elapsed() << "ms for"
+            << mDocument->building()->floorCount() << "floor(s)";
+}
 void BuildingIsoScene::applyPendingLayerVisibilityChanges()
 {
     if (!mDocument || !mBuildingMap || mPendingLayerVisibilityFloors.isEmpty())
@@ -1092,6 +1176,10 @@ void BuildingIsoScene::applyDeferredUpdates()
 {
     if (!mDocument || !mBuildingMap)
         return;
+    if (mDeferredStructuralMapRebuild) {
+        rebuildDeferredMap();
+        return;
+    }
     if (mDeferredCurrentFloorChange)
         currentFloorChanged();
     applyPendingLayerVisibilityChanges();
@@ -1195,41 +1283,51 @@ void BuildingIsoScene::currentLayerChanged()
 void BuildingIsoScene::roomAtPositionChanged(BuildingFloor *floor, const QPoint &pos)
 {
     Q_UNUSED(pos);
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->floorEdited(floor);
 }
 
 void BuildingIsoScene::roomDefinitionChanged()
 {
-    // Also called when the building's exterior wall tile changes.
-
-    foreach (BuildingFloor *floor, mDocument->building()->floors()) {
-        mBuildingMap->floorEdited(floor);
+    foreach (BuildingFloor *floor, mDocument->building()->floors())
         BuildingBaseScene::floorEdited(floor);
-    }
+    if (deferStructuralMapUpdate())
+        return;
+    foreach (BuildingFloor *floor, mDocument->building()->floors())
+        mBuildingMap->floorEdited(floor);
 }
 
 void BuildingIsoScene::roomAdded(Room *room)
 {
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->roomAdded(room);
 }
 
 void BuildingIsoScene::roomRemoved(Room *room)
 {
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->roomRemoved(room);
 }
 
 void BuildingIsoScene::roomChanged(Room *room)
 {
     Q_UNUSED(room)
-    foreach (BuildingFloor *floor, mDocument->building()->floors()) {
-        mBuildingMap->floorEdited(floor);
+    foreach (BuildingFloor *floor, mDocument->building()->floors())
         BuildingBaseScene::floorEdited(floor);
-    }
+    if (deferStructuralMapUpdate())
+        return;
+    foreach (BuildingFloor *floor, mDocument->building()->floors())
+        mBuildingMap->floorEdited(floor);
 }
 
 void BuildingIsoScene::floorAdded(BuildingFloor *floor)
 {
     BuildingBaseScene::floorAdded(floor);
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->floorAdded(floor);
 }
 
@@ -1239,6 +1337,8 @@ void BuildingIsoScene::floorRemoved(BuildingFloor *floor)
     mDeferredFloorTileUpdates.remove(floor);
     mPendingLayerVisibilityFloors.remove(floor);
     BuildingBaseScene::floorRemoved(floor);
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->floorRemoved(floor);
 }
 
@@ -1249,6 +1349,8 @@ void BuildingIsoScene::objectAdded(BuildingObject *object)
 
     BuildingBaseScene::objectAdded(object);
 
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->objectAdded(object);
 }
 
@@ -1256,11 +1358,15 @@ void BuildingIsoScene::objectAboutToBeRemoved(BuildingObject *object)
 {
     BuildingBaseScene::objectAboutToBeRemoved(object);
 
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->objectAboutToBeRemoved(object);
 }
 
 void BuildingIsoScene::objectRemoved(BuildingObject *object)
 {
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->objectRemoved(object);
 }
 
@@ -1268,6 +1374,8 @@ void BuildingIsoScene::objectMoved(BuildingObject *object)
 {
     BuildingBaseScene::objectMoved(object);
 
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->objectMoved(object);
 }
 
@@ -1275,12 +1383,16 @@ void BuildingIsoScene::objectTileChanged(BuildingObject *object)
 {
     BuildingBaseScene::objectTileChanged(object);
 
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->objectTileChanged(object);
 }
 
 void BuildingIsoScene::buildingResized()
 {
     BuildingBaseScene::buildingResized();
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->buildingResized();
     mGridItem->synchWithBuilding();
     mBasementAccessItem->synchWithBuilding();
@@ -1290,6 +1402,8 @@ void BuildingIsoScene::buildingResized()
 void BuildingIsoScene::buildingRotated()
 {
     BuildingBaseScene::buildingRotated();
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->buildingRotated();
     mGridItem->synchWithBuilding();
     mBasementAccessItem->synchWithBuilding();
@@ -1346,7 +1460,7 @@ void BuildingIsoScene::showOnlyFloorsChanged(bool show)
 
 void BuildingIsoScene::tilesetAdded(Tileset *tileset)
 {
-    if (!mDocument)
+    if (!mDocument || mLoading)
         return;
     mBuildingMap->tilesetAdded(tileset);
 }
@@ -1356,19 +1470,21 @@ void BuildingIsoScene::tilesetAboutToBeRemoved(Tileset *tileset)
     if (!mDocument)
         return;
     clearToolTiles();
+    if (mLoading)
+        return;
     mBuildingMap->tilesetAboutToBeRemoved(tileset);
 }
 
 void BuildingIsoScene::tilesetRemoved(Tileset *tileset)
 {
-    if (!mDocument)
+    if (!mDocument || mLoading)
         return;
     mBuildingMap->tilesetRemoved(tileset);
 }
 
 void BuildingIsoScene::tilesetChanged(Tileset *tileset)
 {
-    if (!mDocument || !mBuildingMap)
+    if (!mDocument || !mBuildingMap || mLoading)
         return;
     if (mBuildingMap->isTilesetUsed(tileset))
         update();
@@ -1495,7 +1611,7 @@ BuildingIsoView::BuildingIsoView(QWidget *parent) :
     mZoomable(new Zoomable(this)),
     mHandScrolling(false),
     mRenderDiagnosticsEnabled(QSettings().value(
-        QStringLiteral("RenderDiagnostics/Enabled"), true).toBool()),
+        QStringLiteral("RenderDiagnostics/Enabled"), false).toBool()),
     mRenderDiagnosticsLabel(new QLabel(this)),
     mDiagnosticsFps(0.0),
     mDiagnosticsFrameMs(0.0),
@@ -1612,9 +1728,11 @@ void BuildingIsoView::paintEvent(QPaintEvent *event)
         return;
     }
     ZLevelRenderer::resetRenderedTileCount();
+    ZLevelRenderer::setRenderedTileCountingEnabled(true);
     QElapsedTimer renderTimer;
     renderTimer.start();
     QGraphicsView::paintEvent(event);
+    ZLevelRenderer::setRenderedTileCountingEnabled(false);
     const qreal renderMs = qMax<qreal>(
                 0.01, renderTimer.nsecsElapsed() / 1000000.0);
     mDiagnosticsFrameMs = mDiagnosticsFrameMs <= 0.0
@@ -1784,27 +1902,16 @@ void BuildingIsoView::clearDocument()
 void BuildingIsoView::setUseOpenGL(bool useOpenGL)
 {
 #ifndef QT_NO_OPENGL
-    if (useOpenGL) {
-        if (!qobject_cast<QOpenGLWidget*>(viewport())) {
-//            QSurfaceFormat format = QSurfaceFormat::defaultFormat();
-//            format.setDepth(false); // No need for a depth buffer
-//            format.setSampleBuffers(true); // Enable anti-aliasing
-            QOpenGLWidget *viewport = new QOpenGLWidget();
-//            viewport->setFormat(format);
-            setViewport(viewport);
-        }
-    } else {
-        if (qobject_cast<QOpenGLWidget*>(viewport()))
-            setViewport(0);
-    }
+    Q_UNUSED(useOpenGL)
+    if (qobject_cast<QOpenGLWidget*>(viewport()))
+        setViewport(0);
 
     QWidget *v = viewport();
+    setViewportUpdateMode(QGraphicsView::MinimalViewportUpdate);
     v->setAttribute(Qt::WA_StaticContents);
     v->setMouseTracking(true);
     qInfo() << "BuildingEd IsoView renderer:"
-            << (qobject_cast<QOpenGLWidget *>(v)
-                ? QStringLiteral("OpenGL viewport")
-                : QStringLiteral("Qt raster viewport"));
+            << QStringLiteral("Qt raster viewport");
 #endif
 }
 

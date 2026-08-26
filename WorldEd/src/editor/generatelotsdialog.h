@@ -26,6 +26,7 @@ public:
     bool fillHolesDuringExport() const;
     bool fillHolesWithNearestTile() const;
     QString holeFillTileName() const;
+    static bool validatePathSelection(QString *error);
 
 private slots:
     void exportBrowse();
@@ -41,7 +42,7 @@ private slots:
     void apply();
 
 private:
-    void addComboItemIfAbsent(QComboBox *comboBox, const QString &text);
+    static void selectComboItem(QComboBox *comboBox, const QString &text);
     QStringList comboboxStringList(QComboBox *comboBox) const;
     bool validate();
     bool prepareModExport(QString *error);

@@ -79,7 +79,7 @@ MapView::MapView(QWidget *parent)
 #ifdef ZOMBOID
     , mMiniMap(0)
     , mRenderDiagnosticsEnabled(QSettings().value(
-          QStringLiteral("RenderDiagnostics/Enabled"), true).toBool())
+          QStringLiteral("RenderDiagnostics/Enabled"), false).toBool())
     , mRenderDiagnosticsLabel(new QLabel(this))
     , mDiagnosticsFps(0.0)
     , mDiagnosticsRenderMs(0.0)
@@ -186,20 +186,11 @@ void MapView::adjustScale(qreal scale)
 void MapView::setUseOpenGL(bool useOpenGL)
 {
 #ifndef QT_NO_OPENGL
+    Q_UNUSED(useOpenGL)
     QWidget *oldViewport = viewport();
     QWidget *newViewport = viewport();
-    if (useOpenGL) {
-        if (!qobject_cast<QOpenGLWidget*>(viewport())) {
-            QSurfaceFormat format = QSurfaceFormat::defaultFormat();
-            format.setDepthBufferSize(0); // No need for a depth buffer
-            format.setSamples(4); // Enable anti-aliasing
-            newViewport = new QOpenGLWidget();
-            ((QOpenGLWidget*) newViewport)->setFormat(format);
-        }
-    } else {
-        if (qobject_cast<QOpenGLWidget*>(viewport()))
-            newViewport = 0;
-    }
+    if (qobject_cast<QOpenGLWidget*>(viewport()))
+        newViewport = 0;
 
     // Changing the viewport destroys its child widgets
     if (newViewport != oldViewport) {
@@ -216,12 +207,11 @@ void MapView::setUseOpenGL(bool useOpenGL)
     }
 
     QWidget *v = viewport();
+    setViewportUpdateMode(QGraphicsView::MinimalViewportUpdate);
     v->setAttribute(Qt::WA_StaticContents);
     v->setMouseTracking(true);
     qInfo() << "TileZed MapView renderer:"
-            << (qobject_cast<QOpenGLWidget *>(v)
-                ? QStringLiteral("OpenGL viewport")
-                : QStringLiteral("Qt raster viewport"));
+            << QStringLiteral("Qt raster viewport");
 #endif
 }
 #else
@@ -411,9 +401,11 @@ void MapView::paintEvent(QPaintEvent *event)
     }
 
     ZLevelRenderer::resetRenderedTileCount();
+    ZLevelRenderer::setRenderedTileCountingEnabled(true);
     QElapsedTimer renderTimer;
     renderTimer.start();
     QGraphicsView::paintEvent(event);
+    ZLevelRenderer::setRenderedTileCountingEnabled(false);
 
     const qreal renderMs = qMax<qreal>(
                 0.01, renderTimer.nsecsElapsed() / 1000000.0);

@@ -16,6 +16,7 @@
  */
 
 #include "worldscene.h"
+#include "mappingimageformat.h"
 
 #include "../portablesettings.h"
 #include "basegraphicsview.h"
@@ -45,13 +46,11 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGraphicsSceneMouseEvent>
-#include <QImageWriter>
 #include <QMap>
 #include <QKeyEvent>
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPainter>
-#include <QSaveFile>
 #include <QStatusBar>
 #include <QStyleOptionGraphicsItem>
 #include <QThread>
@@ -784,7 +783,10 @@ void WorldScene::loadOtherWorlds()
 #endif
     ownerIdentity = QDir::cleanPath(ownerIdentity);
     QSet<QString> loadedPaths;
-    for (const QString &path : world()->otherWorlds()) {
+    for (const QString &configuredPath : world()->otherWorlds()) {
+        const QString path = configuredPath.trimmed();
+        if (path.isEmpty())
+            continue;
         QString identity = QFileInfo(path).canonicalFilePath();
         if (identity.isEmpty())
             identity = QFileInfo(path).absoluteFilePath();
@@ -2917,25 +2919,9 @@ bool ZombieSpawnImageItem::save(QString *error)
             qInfo() << "Zombie Heatmap backup created:" << backupPath;
         }
     }
-    QSaveFile file(mFilePath);
-    if (!file.open(QIODevice::WriteOnly)) {
-        if (error)
-            *error = file.errorString();
+    if (!MappingImageFormat::saveAtomically(
+                mSourceImage, mFilePath, error))
         return false;
-    }
-    QImageWriter writer(&file, "png");
-    writer.setCompression(6);
-    if (!writer.write(mSourceImage)) {
-        if (error)
-            *error = writer.errorString();
-        file.cancelWriting();
-        return false;
-    }
-    if (!file.commit()) {
-        if (error)
-            *error = file.errorString();
-        return false;
-    }
     qInfo() << "Zombie Heatmap saved:" << mFilePath
             << mSourceImage.size()
             << "samples/cell" << mSamplesPerCell

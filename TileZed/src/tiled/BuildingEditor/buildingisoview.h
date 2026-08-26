@@ -239,11 +239,15 @@ public:
 
     void calculateUnlitRoomMask();
     void applyDeferredUpdates();
+    bool hasDeferredStructuralMapRebuild() const
+    { return mDeferredStructuralMapRebuild; }
 
 private:
     void BuildingToMap();
     CompositeLayerGroupItem *itemForFloor(BuildingFloor *floor);
     bool hasVisibleView() const;
+    bool deferStructuralMapUpdate();
+    void rebuildDeferredMap();
 
     BuildingPreferences *prefs() const;
 
@@ -313,6 +317,7 @@ private:
     BaseTool *mCurrentTool;
     CompositeLayerGroup *mLayerGroupWithToolTiles;
     Tiled::TileLayer mToolTiles;
+    QRectF mToolTileSceneRect;
     const FloorTileGrid *mToolTileSource;
     QString mToolTileSourceLayer;
     int mToolTileSourceLevel;
@@ -324,6 +329,7 @@ private:
     QPoint mHighlightRoomPos;
     bool mHighlightRoomLock;
     bool mDeferredCurrentFloorChange;
+    bool mDeferredStructuralMapRebuild;
     QSet<BuildingFloor*> mDeferredWholeFloorTileUpdates;
     QMap<BuildingFloor*,QMap<QString,QRegion> > mDeferredFloorTileUpdates;
     QSet<BuildingFloor*> mPendingLayerVisibilityFloors;

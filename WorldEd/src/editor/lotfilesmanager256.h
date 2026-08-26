@@ -93,7 +93,7 @@ public:
     void generateBuildingObjects(int mapWidth, int mapHeight);
     void generateBuildingObjects(int mapWidth, int mapHeight, LotFile::Room *room, LotFile::RoomRect *rr);
     void generateJumboTrees(CombinedCellMaps &combinedMaps);
-    void generateChunkData();
+    bool generateChunkData();
     void clearRemovedBuildingsList();
     bool handleTileset(const Tiled::Tileset *tileset, uint &firstGid);
     int getRoomID(int x, int y, int z);

@@ -1674,11 +1674,11 @@ void BuildingFloor::Square::ReplaceFloorGrime(BuildingTileEntry *grimeTile)
             grimeEnumW = BTC_GrimeFloor::NorthWest;
             break;
         default:
-            // NorthWindow1 to NorthWindow16
+            // NorthWindow1 to NorthWindow19
             if (wallTile1->isNorth(mEntryEnum[SectionWall])) {
                 grimeEnumN = BTC_GrimeFloor::North;
             }
-            // WestWindow1 to WestWindow16
+            // WestWindow1 to WestWindow19
             if (wallTile1->isWest(mEntryEnum[SectionWall])) {
                 grimeEnumW = BTC_GrimeFloor::West;
                 break;
@@ -1697,11 +1697,11 @@ void BuildingFloor::Square::ReplaceFloorGrime(BuildingTileEntry *grimeTile)
         case BTC_Walls::NorthWest: Q_ASSERT(false); break;
         case BTC_Walls::SouthEast: Q_ASSERT(false); break;
         default:
-            // NorthWindow1 to NorthWindow16
+            // NorthWindow1 to NorthWindow19
             if (wallTile2->isNorth(mEntryEnum[SectionWall2])) {
                 grimeEnumN = BTC_GrimeFloor::North;
             }
-            // WestWindow1 to WestWindow16
+            // WestWindow1 to WestWindow19
             if (wallTile2->isWest(mEntryEnum[SectionWall2])) {
                 grimeEnumW = BTC_GrimeFloor::West;
             }
@@ -1820,6 +1820,16 @@ TileDefTile *TileDefWatcher::tile(const QString &tilesetName, int tileIndex)
         return tileset1->tileAt(tileIndex);
     }
     return nullptr;
+}
+
+QString TileDefWatcher::filePathForTileset(const QString &tilesetName)
+{
+    check();
+    for (TileDefWatcherFile *watcherFile : qAsConst(mFiles)) {
+        if (watcherFile->mTileDefFile->tileset(tilesetName))
+            return watcherFile->mFilePath;
+    }
+    return QString();
 }
 
 TileDefWatcherFile *TileDefWatcher::fileByName(const QString &filePath)
@@ -2414,9 +2424,7 @@ void BuildingFloor::Square::ReplaceWallTrim()
 
     // SectionWall could be a west, north, or north-west wall
     if (wallTile1) {
-        if (mEntryEnum[SectionWall] == BTC_Walls::West ||
-                mEntryEnum[SectionWall] == BTC_Walls::WestDoor ||
-                mEntryEnum[SectionWall] == BTC_Walls::WestWindow ||
+        if (wallTile1->isWest(mEntryEnum[SectionWall]) ||
                 mEntryEnum[SectionWall] == BTC_Walls::NorthWest) {
             enumW = mEntryEnum[SectionWall];
             if (enumW == BTC_Walls::NorthWest) {
@@ -2434,9 +2442,7 @@ void BuildingFloor::Square::ReplaceWallTrim()
 
     // 2 different wall tiles forming north-west corner
     if (wallTile2) {
-        if (mEntryEnum[SectionWall2] == BTC_Walls::West ||
-                mEntryEnum[SectionWall2] == BTC_Walls::WestDoor ||
-                mEntryEnum[SectionWall2] == BTC_Walls::WestWindow) {
+        if (wallTile2->isWest(mEntryEnum[SectionWall2])) {
             enumW = mEntryEnum[SectionWall2];
         } else {
             enumN = mEntryEnum[SectionWall2];

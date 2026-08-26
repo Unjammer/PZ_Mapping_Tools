@@ -228,6 +228,13 @@ public:
         }
         w.writeAttribute(QLatin1String("map"), mapName);
 
+        const QString chunkDataOverride = relativeFileName(
+                    cell->chunkDataOverrideFilePath());
+        if (!chunkDataOverride.isEmpty()) {
+            w.writeAttribute(QLatin1String("chunkDataOverride"),
+                             chunkDataOverride);
+        }
+
         foreach (PropertyTemplate *pt, cell->templates())
             writeTemplateInstance(w, pt);
 

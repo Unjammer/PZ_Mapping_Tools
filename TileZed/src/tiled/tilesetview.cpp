@@ -23,8 +23,8 @@
 
 #include "map.h"
 #include "mapdocument.h"
+#include "mainwindow.h"
 #include "preferences.h"
-#include "propertiesdialog.h"
 #include "tmxmapwriter.h"
 #include "tile.h"
 #include "tileset.h"
@@ -369,9 +369,7 @@ void TilesetView::contextMenuEvent(QContextMenuEvent *event)
     const TilesetModel *m = tilesetModel();
     Tile *tile = m->tileAt(index);
 
-#ifdef ZOMBOID
-    const bool isExternal = (m->tileset() != nullptr) && m->tileset()->isExternal();
-#else
+#ifndef ZOMBOID
     const bool isExternal = m->tileset()->isExternal();
 #endif
     QMenu menu;
@@ -390,9 +388,8 @@ void TilesetView::contextMenuEvent(QContextMenuEvent *event)
         QAction *tileNameAction = menu.addAction(tileFileName(tile));
         tileNameAction->setEnabled(false);
         menu.addSeparator();
-        actionProperties = menu.addAction(propIcon,
-                                          tr("Tile &Properties..."));
-        actionProperties->setEnabled(!isExternal);
+        actionProperties = menu.addAction(
+                    propIcon, tr("Edit Project Zomboid Tile &Definition..."));
         Utils::setThemeIcon(actionProperties, "document-properties");
         actionExportSelection = menu.addAction(
                     QIcon(QLatin1String(":images/16x16/document-export.png")),
@@ -469,7 +466,7 @@ void TilesetView::contextMenuEvent(QContextMenuEvent *event)
         selectionModel()->setCurrentIndex(index,
                                           QItemSelectionModel::SelectCurrent |
                                           QItemSelectionModel::Clear);
-        editTileProperties();
+        editTileDefinition();
     }
 
     else if (action && action == actionExportSelection) {
@@ -528,18 +525,13 @@ void TilesetView::contextMenuEvent(QContextMenuEvent *event)
 #endif
 }
 
-void TilesetView::editTileProperties()
+void TilesetView::editTileDefinition()
 {
     const TilesetModel *m = tilesetModel();
     Tile *tile = m->tileAt(selectionModel()->currentIndex());
     if (!tile)
         return;
-
-    PropertiesDialog propertiesDialog(tr("Tile"),
-                                      tile,
-                                      mMapDocument->undoStack(),
-                                      this);
-    propertiesDialog.exec();
+    MainWindow::instance()->editTileDefinition(tile);
 }
 
 void TilesetView::setDrawGrid(bool drawGrid)

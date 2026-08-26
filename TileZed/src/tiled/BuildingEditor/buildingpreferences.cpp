@@ -79,7 +79,8 @@ BuildingPreferences::BuildingPreferences(QObject *parent) :
                                  false).toBool();
     mTileScale = mSettings.value(QLatin1String(KEY_TILE_SCALE),
                                  0.5).toReal();
-    mUseOpenGL = mSettings.value(QLatin1String(KEY_OPENGL), false).toBool();
+    mUseOpenGL = false;
+    mSettings.setValue(QLatin1String(KEY_OPENGL), false);
     mLevelIsometric = mSettings.value(QLatin1String(KEY_LEVEL_ISO), false).toBool();
     mAutoSaveIntervalMinutes = mSettings.value(
                 QLatin1String(KEY_AUTOSAVE_INTERVAL), 5).toInt();
@@ -199,11 +200,12 @@ void BuildingPreferences::setTileScale(qreal scale)
 
 void BuildingPreferences::setUseOpenGL(bool useOpenGL)
 {
-    if (useOpenGL == mUseOpenGL)
+    Q_UNUSED(useOpenGL)
+    if (!mUseOpenGL)
         return;
-    mUseOpenGL = useOpenGL;
-    mSettings.setValue(QLatin1String(KEY_OPENGL), mUseOpenGL);
-    emit useOpenGLChanged(mUseOpenGL);
+    mUseOpenGL = false;
+    mSettings.setValue(QLatin1String(KEY_OPENGL), false);
+    emit useOpenGLChanged(false);
 }
 
 void BuildingPreferences::setLevelIsometric(bool levels)

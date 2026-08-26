@@ -33,6 +33,9 @@
 
 #include <QMargins>
 #include <QPainter>
+#include <QHashFunctions>
+
+#include <cstring>
 
 using namespace Tiled;
 
@@ -118,6 +121,39 @@ void Tile::setImage(const Tile *tile)
     mImageSize = tile->mImageSize;
 
     mImageBlackValid = false;
+}
+
+quint64 Tile::imageHash() const
+{
+    uint hash = qHashBits(mImage.constBits(), size_t(mImage.sizeInBytes()));
+    hash = qHash(mImage.width(), hash);
+    hash = qHash(mImage.height(), hash);
+    hash = qHash(int(mImage.format()), hash);
+    hash = qHash(mImageOffset.x(), hash);
+    hash = qHash(mImageOffset.y(), hash);
+    hash = qHash(mImageSize.width(), hash);
+    hash = qHash(mImageSize.height(), hash);
+    return quint64(hash);
+}
+
+quint64 Tile::imageStorageBytes() const
+{
+    return quint64(mImage.sizeInBytes());
+}
+
+bool Tile::hasSameImageData(const Tile *tile) const
+{
+    if (!tile
+            || mImage.size() != tile->mImage.size()
+            || mImage.format() != tile->mImage.format()
+            || mImageOffset != tile->mImageOffset
+            || mImageSize != tile->mImageSize
+            || mImage.sizeInBytes() != tile->mImage.sizeInBytes()) {
+        return false;
+    }
+    return mImage.isNull()
+            || std::memcmp(mImage.constBits(), tile->mImage.constBits(),
+                           size_t(mImage.sizeInBytes())) == 0;
 }
 
 bool Tile::isRowTransparent(const QImage &image, int row)

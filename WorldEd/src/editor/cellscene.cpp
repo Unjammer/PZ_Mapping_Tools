@@ -647,16 +647,19 @@ TilesetTexture *TilesetTextures::get(const QString& tilesetName, const QList<Til
 //                GLint swizzleMask[] = {GL_BLUE, GL_GREEN, GL_RED, GL_ALPHA}; // FIXME: red/blue swapped
 //                context->functions()->glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
                 context->functions()->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-                context->functions()->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tileset->image().width(), tileset->image().height(), 0, GL_RGBA8, GL_UNSIGNED_BYTE, pixels);
+                context->functions()->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width(), image.height(), 0, GL_RGBA8, GL_UNSIGNED_BYTE, pixels);
                 Q_ASSERT(context->functions()->glGetError() == 0);
                 context->functions()->glBindTexture(GL_TEXTURE_2D, 0);
                 qDebug() << "TilesetTextures UPLOAD" << tilesetName << image << image.format() << "id=" << texture->mID;
+                tileset->releaseImage();
             }
 #else
             texture->mTexture->destroy();
             texture->mTexture->create();
             if (Tiled::Tileset *tileset = findTileset(tilesetName, tilesets)) {
-                texture->mTexture->setData(tileset->image(), QOpenGLTexture::DontGenerateMipMaps);
+                const QImage image = tileset->image();
+                texture->mTexture->setData(image, QOpenGLTexture::DontGenerateMipMaps);
+                tileset->releaseImage();
             }
 #endif
             return texture;
@@ -700,7 +703,7 @@ TilesetTexture *TilesetTextures::get(const QString& tilesetName, const QList<Til
 //            GLint swizzleMask[] = {GL_BLUE, GL_GREEN, GL_RED, GL_ALPHA}; // FIXME: red/blue swapped
 //            context->functions()->glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
             context->functions()->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-            context->functions()->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tileset->image().width(), tileset->image().height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+            context->functions()->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width(), image.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
             Q_ASSERT(context->functions()->glGetError() == 0);
             if (mipmap) {
                 context->functions()->glGenerateMipmap(GL_TEXTURE_2D);
@@ -709,11 +712,14 @@ TilesetTexture *TilesetTextures::get(const QString& tilesetName, const QList<Til
             Q_ASSERT(context->functions()->glGetError() == 0);
             qDebug() << "TilesetTextures CREATE" << tilesetName << image << image.format() << " id=" << texture->mID;
             Q_ASSERT(context->functions()->glGetError() == 0);
+            tileset->releaseImage();
 //            delete [] pixels2;
 #else
-            texture->mTexture = new QOpenGLTexture(tileset->image(), QOpenGLTexture::DontGenerateMipMaps);
+            const QImage image = tileset->image();
+            texture->mTexture = new QOpenGLTexture(image, QOpenGLTexture::DontGenerateMipMaps);
             texture->mTexture->setMagnificationFilter(QOpenGLTexture::Nearest);
             texture->mTexture->setMinificationFilter(QOpenGLTexture::Nearest);
+            tileset->releaseImage();
 #endif
             contextTextures->mTextureMap[tilesetName] = texture;
             contextTextures->mTextures += texture;
@@ -934,6 +940,8 @@ static inline bool isLotVisible(MapComposite *lot)
 void LayerGroupVBO::paint2(QPainter *painter, Tiled::MapRenderer *renderer,
                            const QRectF& exposedRect, QWidget *view)
 {
+    const bool countRenderedTiles =
+            ZLevelRenderer::isRenderedTileCountingEnabled();
 //    QOpenGLContext *context = QOpenGLContext::currentContext();
 //    if (context->shareContext() != nullptr)
 //        context = context->shareContext();
@@ -1138,7 +1146,8 @@ void LayerGroupVBO::paint2(QPainter *painter, Tiled::MapRenderer *renderer,
                     tiles[i].mTexture->mTexture->bind();
                     glDrawRangeElements(GL_TRIANGLE_FAN, start, end, count, GL_UNSIGNED_INT, (void*)(start * sizeof(GLuint)));
 #endif
-                    ZLevelRenderer::addRenderedTileCount();
+                    if (countRenderedTiles)
+                        ZLevelRenderer::addRenderedTileCount();
                 }
                 vboTiles->mVertexBuffer.release();
                 vboTiles->mIndexBuffer.release();
@@ -1248,7 +1257,8 @@ void LayerGroupVBO::paint2(QPainter *painter, Tiled::MapRenderer *renderer,
                         tile.mTexture->mTexture->bind();
                         glDrawRangeElements(GL_TRIANGLE_FAN, start, end, count, GL_UNSIGNED_INT, (void*)(start * sizeof(GLuint)));
 #endif
-                        ZLevelRenderer::addRenderedTileCount();
+                        if (countRenderedTiles)
+                            ZLevelRenderer::addRenderedTileCount();
                     }
                 }
             }
@@ -4732,7 +4742,10 @@ void BasementItem::setEditable(bool editable)
 
 void BasementItem::setSelected(bool selected)
 {
+    const bool wasSelected = mIsSelected;
     ObjectItem::setSelected(selected);
+    if (selected && !wasSelected)
+        refreshAccessPreview();
     if (mAccessPreview)
         mAccessPreview->setVisible(selected);
 }
@@ -4745,7 +4758,8 @@ void BasementItem::synchWithObject()
 {
     ObjectItem::synchWithObject();
     mStairHandle->synch();
-    refreshAccessPreview();
+    if (mIsSelected)
+        refreshAccessPreview();
     QString details = toolTip();
     const QString accessName = getAccessName();
     if (!accessName.isEmpty()) {
@@ -4753,10 +4767,10 @@ void BasementItem::synchWithObject()
                 .arg(accessName, getStairDirection())
                 .arg(getStairOffsetX())
                 .arg(getStairOffsetY());
-        if (mAccessPreview) {
+        if (mIsSelected && mAccessPreview) {
             details += QObject::tr("\nTransparent source preview: %1")
                     .arg(QDir::toNativeSeparators(mAccessPreviewPath));
-        } else {
+        } else if (mIsSelected && !mAccessPreviewStatus.isEmpty()) {
             details += QLatin1Char('\n') + mAccessPreviewStatus;
         }
     }
@@ -4775,6 +4789,8 @@ QString BasementItem::getAccessName() const
 }
 void BasementItem::refreshAccessPreview()
 {
+    if (!mIsSelected)
+        return;
     const QString accessName = getAccessName();
     const QString sourcePath = basementAccessSourcePath(mScene, accessName);
     mAccessPreviewStatus.clear();
@@ -5997,12 +6013,47 @@ void CellScene::setHighlightRoomPosition(const QPoint &tilePos)
     QRegion buildingRgn, roomRgn;
     if (Preferences::instance()->highlightRoomUnderPointer())
         buildingRgn = getBuildingRegion(tilePos, roomRgn);
-    if (buildingRgn - roomRgn != mMapComposite->suppressRegion() ||
-            document()->currentLevel() != mMapComposite->suppressLevel()) {
-        mMapComposite->setSuppressRegion(buildingRgn - roomRgn, document()->currentLevel());
-        update();
+    const QRegion newSuppressRegion = buildingRgn - roomRgn;
+    const QRegion oldSuppressRegion = mMapComposite->suppressRegion();
+    const int oldSuppressLevel = mMapComposite->suppressLevel();
+    const int newSuppressLevel = document()->currentLevel();
+    if (newSuppressRegion != oldSuppressRegion
+            || newSuppressLevel != oldSuppressLevel) {
+        mMapComposite->setSuppressRegion(newSuppressRegion, newSuppressLevel);
+        if (newSuppressLevel == oldSuppressLevel) {
+            updateRoomHighlightRegion(
+                        oldSuppressRegion.xored(newSuppressRegion),
+                        newSuppressLevel);
+        } else {
+            updateRoomHighlightRegion(oldSuppressRegion, oldSuppressLevel);
+            updateRoomHighlightRegion(newSuppressRegion, newSuppressLevel);
+        }
     }
     mHighlightRoomPosition = tilePos;
+}
+
+void CellScene::updateRoomHighlightRegion(const QRegion &region, int level)
+{
+    if (region.isEmpty() || !mRenderer || !mMapComposite)
+        return;
+    QMargins margins;
+    if (CompositeLayerGroup *layerGroup =
+            mMapComposite->layerGroupForLevel(level)) {
+        margins = layerGroup->drawMargins();
+        const int scale = mRenderer->is2x() ? 2 : 1;
+        margins *= scale;
+        if (map()) {
+            margins.setTop(qMax(0, margins.top()
+                                - map()->tileHeight() * scale));
+            margins.setRight(qMax(0, margins.right()
+                                  - map()->tileWidth() * scale));
+        }
+    }
+    for (const QRect &tileRect : region) {
+        update(mRenderer->boundingRect(tileRect, level).adjusted(
+                   -margins.left(), -margins.top(),
+                   margins.right(), margins.bottom()));
+    }
 }
 
 QRegion CellScene::getBuildingRegion(const QPoint &tilePos, QRegion &roomRgn)
@@ -8267,7 +8318,7 @@ void CellScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
             mPartialChunkLassoCurrent = chunk;
             mPartialChunkLassoSelect = !mPartialChunks.isSelected(
                         chunk.x(), chunk.y());
-            update();
+            update(partialChunkSceneRect(partialChunkLassoRect()));
             event->accept();
             return;
         }
@@ -8283,8 +8334,12 @@ void CellScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
 void CellScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
     if (mPartialChunkLassoActive) {
-        mPartialChunkLassoCurrent = partialChunkAt(event->scenePos(), true);
-        update();
+        const QPoint nextChunk = partialChunkAt(event->scenePos(), true);
+        if (nextChunk != mPartialChunkLassoCurrent) {
+            const QRect oldChunks = partialChunkLassoRect();
+            mPartialChunkLassoCurrent = nextChunk;
+            updatePartialChunkLasso(oldChunks, partialChunkLassoRect());
+        }
         event->accept();
         return;
     }
@@ -8308,7 +8363,12 @@ void CellScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 void CellScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     if (mPartialChunkLassoActive && event->button() == Qt::LeftButton) {
-        mPartialChunkLassoCurrent = partialChunkAt(event->scenePos(), true);
+        const QPoint nextChunk = partialChunkAt(event->scenePos(), true);
+        if (nextChunk != mPartialChunkLassoCurrent) {
+            const QRect oldChunks = partialChunkLassoRect();
+            mPartialChunkLassoCurrent = nextChunk;
+            updatePartialChunkLasso(oldChunks, partialChunkLassoRect());
+        }
         const QRect chunks = partialChunkLassoRect();
         for (int y = chunks.top(); y <= chunks.bottom(); ++y) {
             for (int x = chunks.left(); x <= chunks.right(); ++x)
@@ -8316,7 +8376,6 @@ void CellScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         }
         mPartialChunkLassoActive = false;
         savePartialChunks();
-        update();
         emit partialChunkSelectionChanged();
         event->accept();
         return;
@@ -8411,6 +8470,29 @@ QRect CellScene::partialChunkLassoRect() const
 {
     return QRect(mPartialChunkLassoStart,
                  mPartialChunkLassoCurrent).normalized();
+}
+
+QRectF CellScene::partialChunkSceneRect(const QRect &chunks) const
+{
+    if (!mRenderer || !document() || chunks.isEmpty())
+        return QRectF();
+    const int chunkSize = PZTools::PartialChunkSelection::ChunkSize;
+    const QRect tiles(chunks.x() * chunkSize,
+                      chunks.y() * chunkSize,
+                      chunks.width() * chunkSize,
+                      chunks.height() * chunkSize);
+    return mRenderer->boundingRect(
+                tiles, document()->currentLevel()).adjusted(-2, -2, 2, 2);
+}
+
+void CellScene::updatePartialChunkLasso(const QRect &oldChunks,
+                                        const QRect &newChunks)
+{
+    const QRegion changed =
+            PZTools::PartialChunkSelection::changedLassoRegion(
+                oldChunks, newChunks);
+    for (const QRect &chunks : changed)
+        update(partialChunkSceneRect(chunks));
 }
 
 void CellScene::loadPartialChunks()

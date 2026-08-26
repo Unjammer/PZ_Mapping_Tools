@@ -180,13 +180,16 @@ public:
 class CopyPasteDialog::MapTypeItem : public CopyPasteDialog::Item
 {
 public:
-    MapTypeItem(const QString &mapName)
+    MapTypeItem(const QString &mapName,
+                const QString &chunkDataOverrideFilePath)
         : Item(MapType)
         , mName(mapName)
+        , mChunkDataOverrideFilePath(chunkDataOverrideFilePath)
     {
     }
 
     QString mName;
+    QString mChunkDataOverrideFilePath;
 };
 
 class CopyPasteDialog::ObjectItem : public CopyPasteDialog::Item
@@ -490,8 +493,11 @@ World *CopyPasteDialog::toWorld() const
             WorldCell *cell = world->cellAt(cellItem->mCell->x(),
                                              cellItem->mCell->y());
             MapTypeItem *mapItem = cellItem->children(Item::MapType).first()->asMapItem();
-            if (mapItem->mChecked)
+            if (mapItem->mChecked) {
                 cell->setMapFilePath(mapItem->mName);
+                cell->setChunkDataOverrideFilePath(
+                            mapItem->mChunkDataOverrideFilePath);
+            }
         }
     }
 
@@ -711,7 +717,9 @@ void CopyPasteDialog::setup()
 
         CellItem *cellItem = new CellItem(cell);
         mCellRootItem[Map]->insertChild(-1, cellItem);
-        cellItem->insertChild(-1, new MapTypeItem(cell->mapFilePath()));
+        cellItem->insertChild(-1, new MapTypeItem(
+                                  cell->mapFilePath(),
+                                  cell->chunkDataOverrideFilePath()));
 
         cellItem = new CellItem(cell);
         mCellRootItem[Properties]->insertChild(-1, cellItem);
@@ -1057,13 +1065,22 @@ void CopyPasteDialog::showCellMap()
     foreach (Item *item, root->children()) {
         CellItem *cellItem = item->asCellItem();
         WorldCell *cell = cellItem->mCell;
-        if (cell->mapFilePath().isEmpty())
+        if (cell->mapFilePath().isEmpty()
+                && cell->chunkDataOverrideFilePath().isEmpty())
             continue;
 
         addToTree(v, 0, -1, cellItem, tr("Cell %1,%2").arg(cell->displayPos().x()).arg(cell->displayPos().y()));
 
         MapTypeItem *mapItem = cellItem->children(Item::MapType).first()->asMapItem();
-        addToTree(v, cellItem, 0, mapItem, QFileInfo(mapItem->mName).fileName());
+        QStringList files;
+        if (!mapItem->mName.isEmpty())
+            files += QFileInfo(mapItem->mName).fileName();
+        if (!mapItem->mChunkDataOverrideFilePath.isEmpty()) {
+            files += tr("chunk data: %1").arg(QFileInfo(
+                        mapItem->mChunkDataOverrideFilePath).fileName());
+        }
+        addToTree(v, cellItem, 0, mapItem,
+                  files.join(QLatin1String(" | ")));
     }
     v->expandAll();
 }

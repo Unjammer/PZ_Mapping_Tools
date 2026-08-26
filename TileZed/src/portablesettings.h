@@ -17,6 +17,9 @@
 #include <QThread>
 #include <QWidget>
 #include <QWindow>
+#ifdef PZTOOLS_APP_ISSUE_NOTIFIER
+#include "appissuenotifier.h"
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -819,6 +822,9 @@ inline void messageHandler(QtMsgType type,
     }
     std::fwrite(encoded.constData(), 1, size_t(encoded.size()), stderr);
     std::fflush(stderr);
+#ifdef PZTOOLS_APP_ISSUE_NOTIFIER
+    AppIssueCenter::captureQtMessage(type, context, message);
+#endif
     if (type == QtFatalMsg)
         std::abort();
 }
@@ -898,6 +904,9 @@ inline QString installLogging()
     if (!file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text))
         return QString();
     qInstallMessageHandler(messageHandler);
+#ifdef PZTOOLS_APP_ISSUE_NOTIFIER
+    AppIssueNotifier::initialize();
+#endif
 #ifdef Q_OS_WIN
     SetUnhandledExceptionFilter(unhandledExceptionLogger);
 #endif

@@ -526,6 +526,8 @@ MapsView::MapsView(QWidget *parent)
     model->setNameFilterDisables(false); // hide filtered files
 
     setModel(model);
+    setSortingEnabled(true);
+    sortByColumn(0, Qt::AscendingOrder);
 
     QHeaderView* hHeader = header();
     hHeader->showSection(1);

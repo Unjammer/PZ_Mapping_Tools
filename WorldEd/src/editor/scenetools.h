@@ -1009,6 +1009,7 @@ public:
     ~PasteCellsTool();
 
     static bool validateCellPastePlacement(QString *summary, QString *error);
+    quint64 previewRebuildCount() const { return mPreviewRebuildCount; }
 
     void activate();
     void deactivate();
@@ -1042,6 +1043,9 @@ private:
                                   const QPoint &sourceCell,
                                   const QPoint &requestedDrop,
                                   const QRect &worldBounds);
+    static QPoint boundedDropCell(const QRect &sourceOffsetBounds,
+                                  const QPoint &requestedDrop,
+                                  const QRect &worldBounds);
     static QPoint pastedCellPosition(const QPoint &cellPosition,
                                      const QPoint &sourceCell,
                                      const QPoint &dropCell);
@@ -1050,7 +1054,10 @@ private:
     QPointF mStartScenePos;
     QPoint mDropTilePos;
     QVector<QPoint> mSourceCellPositions;
+    QVector<QPoint> mSourceCellOffsets;
+    QRect mSourceOffsetBounds;
     QList<PasteCellItem*> mDnDItems;
+    quint64 mPreviewRebuildCount = 0;
     static PasteCellsTool *mInstance;
 };
 

@@ -844,6 +844,21 @@
   Java or Lua without public mapping documentation. The current property catalog
   includes additional B42 definitions found by source analysis.</p>
 
+  <h3>Open the definition for a tileset tile</h3>
+  <p>Right-click a tile in the Tilesets dock and choose
+  <strong>Edit Project Zomboid Tile Definition...</strong>. TileZed checks the
+  ordered <code>.tiles</code> and <code>.tiles.txt</code> files configured in
+  Preferences, opens the file that defines that tileset, and selects the exact
+  tile index. Official files are discovered from the configured Project
+  Zomboid installation. Custom definition files retain their configured order.</p>
+
+  <p>If another TileDefs file has unsaved changes, TileZed asks whether to save
+  them before switching files. If no configured file defines the selected
+  tileset, the warning lists the files that were checked. Add the correct file
+  under <strong>Edit &gt; Preferences &gt; Tile Property Files</strong>. This
+  command edits Project Zomboid TileDefs and does not add arbitrary metadata to
+  the current TMX.</p>
+
   <p>Hover over a property to read its English description. Descriptions explain
   expected value shape and likely engine use; where game behavior is inferred
   rather than explicit, treat the text as guidance and validate in-game.</p>

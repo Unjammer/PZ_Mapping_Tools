@@ -27,3 +27,11 @@ documentation notices. Do not add project-authored implementation comments.
 Keep shipped documentation limited to implemented behavior and never include
 private workflow material, internal paths, test narratives, or planned
 features.
+
+## Build identifiers
+
+Build identifiers use the local calendar date in `YYYYMMDD` form. The first
+designated build of a day has no suffix. Further designated builds on the same
+day use `b`, `c`, `d`, and so on. Check the shared source identifier, tags, and
+published releases before selecting the next identifier. The identifier is
+defined only in `shared/pztoolsbuild.h` and is not derived at runtime.

@@ -248,6 +248,7 @@ public slots:
     void tilesetMetaInfoDialog();
     void rearrangeTiles();
     void tilePropertiesEditor();
+    void editTileDefinition(Tiled::Tile *tile);
     void compareTileDef();
     void createPackFile();
     void showPackViewer();

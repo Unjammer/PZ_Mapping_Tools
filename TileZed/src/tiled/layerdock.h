@@ -66,6 +66,7 @@ private slots:
 #ifdef ZOMBOID
     void updateZomboidLayerSlider();
     void setZomboidLayer(int layer);
+    void setAllLayersVisible(bool visible);
 #endif
 
 private:
@@ -104,6 +105,9 @@ private slots:
     void currentLayerIndexChanged(int index);
 
     void editLayerName();
+
+signals:
+    void allLayersVisibilityRequested(bool visible);
 
 private:
     MapDocument *mMapDocument;

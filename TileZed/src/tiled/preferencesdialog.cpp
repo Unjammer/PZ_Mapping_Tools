@@ -131,11 +131,9 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) :
     });
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
-#ifndef QT_NO_OPENGL
-    mUi->openGL->setEnabled(true/*QGLFormat::hasOpenGL()*/);
-#else
     mUi->openGL->setEnabled(false);
-#endif
+    mUi->openGL->setVisible(false);
+    mUi->openGLWarning->setVisible(false);
 
     foreach (const QString &name, mLanguages) {
         QLocale locale(name);

@@ -546,7 +546,7 @@ MixedTilesetModel::MixedTilesetModel(QObject *parent) :
     mShowHeaders(true),
     mShowLabels(false),
     mHighlightLabelledItems(false),
-    mShowTransparentTiles(false),
+    mShowTransparentTiles(true),
     mColumnCount(COLUMN_COUNT)
 {
 }

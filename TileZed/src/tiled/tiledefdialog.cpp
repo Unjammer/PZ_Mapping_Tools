@@ -37,6 +37,7 @@
 #include "tile.h"
 #include "tileset.h"
 
+#include <QAbstractItemView>
 #include <QCloseEvent>
 #include <QActionGroup>
 #include <QDesktopServices>
@@ -2606,9 +2607,77 @@ void TileDefDialog::displayTile(const QString &tileName)
         if (mTilesetByName.contains(tilesetName)) {
             int row = rowOf(tilesetName);
             ui->tilesets->setCurrentRow(row);
-            ui->tiles->setCurrentIndex(ui->tiles->model()->index(mTilesetByName[tilesetName]->tileAt(tileID)));
+            Tile *tile = mTilesetByName[tilesetName]->tileAt(tileID);
+            if (!tile)
+                return;
+            const QModelIndex index = ui->tiles->model()->index(tile);
+            ui->tiles->setCurrentIndex(index);
+            ui->tiles->scrollTo(index, QAbstractItemView::PositionAtCenter);
         }
     }
+}
+
+bool TileDefDialog::openTile(const QString &fileName, const QString &tileName)
+{
+    QString tilesetName;
+    int tileID = -1;
+    if (!BuildingEditor::BuildingTilesMgr::parseTileName(
+                tileName, tilesetName, tileID)) {
+        QMessageBox::warning(this, tr("Tile Definition Not Found"),
+                             tr("The selected tile name is invalid:\n%1")
+                             .arg(tileName));
+        return false;
+    }
+
+    const QFileInfo requestedInfo(fileName);
+    const QString requestedPath = requestedInfo.canonicalFilePath().isEmpty()
+            ? requestedInfo.absoluteFilePath()
+            : requestedInfo.canonicalFilePath();
+    QString currentPath;
+    if (mTileDefFile) {
+        const QFileInfo currentInfo(mTileDefFile->fileName());
+        currentPath = currentInfo.canonicalFilePath().isEmpty()
+                ? currentInfo.absoluteFilePath()
+                : currentInfo.canonicalFilePath();
+    }
+
+    if (!mTileDefFile || QDir::cleanPath(currentPath).compare(
+                QDir::cleanPath(requestedPath), Qt::CaseInsensitive) != 0) {
+        if (!confirmSave())
+            return false;
+        clearDocument();
+        fileOpen(requestedPath);
+        if (!mTileDefFile)
+            return false;
+        addRecentFile(requestedPath);
+        initStringComboBoxValues();
+        updateTilesetList();
+        updateUI();
+        checkProperties();
+    }
+
+    TileDefTileset *defTileset = mTileDefFile->tileset(tilesetName);
+    if (!defTileset || tileID < 0 || tileID >= defTileset->mTiles.size()) {
+        QMessageBox::warning(
+                    this, tr("Tile Definition Not Found"),
+                    tr("%1 does not define tile %2.\n\nFile:\n%3")
+                    .arg(QFileInfo(requestedPath).fileName(), tileName,
+                         QDir::toNativeSeparators(requestedPath)));
+        return false;
+    }
+
+    if (!mTilesetByName.contains(tilesetName))
+        updateTilesetList();
+
+    ui->tilesetFilter->clear();
+    ui->propertyFilter->clear();
+    ui->valueFilter->clear();
+    for (int row = 0; row < ui->tilesets->count(); ++row)
+        ui->tilesets->item(row)->setHidden(false);
+    applyPropertyFilters();
+
+    displayTile(tileName);
+    return true;
 }
 
 QStringList TileDefDialog::recentFiles() const

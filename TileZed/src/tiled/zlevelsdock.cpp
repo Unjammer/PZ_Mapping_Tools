@@ -153,6 +153,8 @@ void ZLevelsDock::setMapDocument(MapDocument *mapDoc)
                 this, &ZLevelsDock::updateOpacitySlider);
         connect(mMapDocument, &MapDocument::currentLayerIndexChanged,
                 this, &ZLevelsDock::updateVisibilitySlider);
+        connect(mMapDocument, &MapDocument::maxVisibleLayerChanged,
+                this, &ZLevelsDock::updateVisibilitySlider);
         const int savedVisibility = qBound(
                     0,
                     QSettings().value(
@@ -242,6 +244,8 @@ void ZLevelsDock::setTopmostVisibleLayer(int layerIndex)
     if (!mMapDocument)
         return;
 
+    layerIndex = qBound(0, layerIndex,
+                        mMapDocument->map()->layerCount());
     QSettings().setValue(QLatin1String(KEY_LAYER_VISIBILITY), layerIndex);
 
     int index = 0;

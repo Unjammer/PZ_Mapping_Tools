@@ -4599,6 +4599,7 @@ void PasteCellsTool::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 void PasteCellsTool::startMoving()
 {
     cancelMoving();
+    mPreviewRebuildCount = 0;
     if (!mScene)
         return;
 
@@ -4617,6 +4618,14 @@ void PasteCellsTool::startMoving()
 
     mSourceCellPos = topLeftCell(mSourceCellPositions, QPoint());
     mStartScenePos = mScene->cellToPixelCoords(mSourceCellPos);
+    mSourceCellOffsets.clear();
+    mSourceCellOffsets.reserve(mSourceCellPositions.size());
+    mSourceOffsetBounds = QRect();
+    for (const QPoint &sourcePosition : std::as_const(mSourceCellPositions)) {
+        const QPoint offset = sourcePosition - mSourceCellPos;
+        mSourceCellOffsets.append(offset);
+        mSourceOffsetBounds |= QRect(offset, QSize(1, 1));
+    }
 
     QPoint requestedDrop = mSourceCellPos;
     const QList<WorldCell*> &selectedCells =
@@ -4629,14 +4638,14 @@ void PasteCellsTool::startMoving()
         requestedDrop = topLeftCell(selectedPositions, mSourceCellPos);
     }
 
-    mDropTilePos = boundedDropCell(mSourceCellPositions, mSourceCellPos,
-                                   requestedDrop,
+    mDropTilePos = boundedDropCell(mSourceOffsetBounds, requestedDrop,
                                    mScene->world()->bounds());
     const QPointF dropScenePos = mScene->cellToPixelCoords(mDropTilePos);
-    for (PasteCellItem *item : std::as_const(mDnDItems)) {
+    for (int index = 0; index < mDnDItems.size(); ++index) {
+        PasteCellItem *item = mDnDItems.at(index);
         item->setDragOffset(dropScenePos - mStartScenePos);
-        const QPoint targetPosition = pastedCellPosition(
-                    item->cellPos(), mSourceCellPos, mDropTilePos);
+        const QPoint targetPosition = mDropTilePos
+                + mSourceCellOffsets.at(index);
         item->setTargetOccupied(!mScene->world()->cellAt(targetPosition)->isEmpty());
     }
     qInfo() << "Cell paste preview started" << mDnDItems.size()
@@ -4657,14 +4666,19 @@ bool PasteCellsTool::updateDropPosition(const QPointF &pos)
         return false;
 
     const QPoint requestedDrop = targetCell->pos();
-    mDropTilePos = boundedDropCell(mSourceCellPositions, mSourceCellPos,
-                                   requestedDrop,
-                                   mScene->world()->bounds());
+    const QPoint nextDrop = boundedDropCell(
+                mSourceOffsetBounds, requestedDrop,
+                mScene->world()->bounds());
+    if (nextDrop == mDropTilePos)
+        return true;
+    mDropTilePos = nextDrop;
+    ++mPreviewRebuildCount;
     const QPointF dropScenePos = mScene->cellToPixelCoords(mDropTilePos);
-    for (PasteCellItem *item : std::as_const(mDnDItems)) {
+    for (int index = 0; index < mDnDItems.size(); ++index) {
+        PasteCellItem *item = mDnDItems.at(index);
         item->setDragOffset(dropScenePos - mStartScenePos);
-        const QPoint targetPosition = pastedCellPosition(
-                    item->cellPos(), mSourceCellPos, mDropTilePos);
+        const QPoint targetPosition = mDropTilePos
+                + mSourceCellOffsets.at(index);
         item->setTargetOccupied(!mScene->world()->cellAt(targetPosition)->isEmpty());
     }
     setStatusInfo(tr("Cell paste preview at %1,%2. Green targets are empty. "
@@ -4762,11 +4776,20 @@ QPoint PasteCellsTool::boundedDropCell(const QVector<QPoint> &cellPositions,
     if (cellPositions.isEmpty())
         return requestedDrop;
 
-    const QPoint delta = requestedDrop - sourceCell;
-    QRect cellBounds(cellPositions.first() + delta, QSize(1, 1));
+    QRect sourceOffsetBounds;
     for (const QPoint &cellPos : cellPositions)
-        cellBounds |= QRect(cellPos + delta, QSize(1, 1));
+        sourceOffsetBounds |= QRect(cellPos - sourceCell, QSize(1, 1));
+    return boundedDropCell(sourceOffsetBounds, requestedDrop, worldBounds);
+}
 
+QPoint PasteCellsTool::boundedDropCell(const QRect &sourceOffsetBounds,
+                                       const QPoint &requestedDrop,
+                                       const QRect &worldBounds)
+{
+    if (sourceOffsetBounds.isEmpty())
+        return requestedDrop;
+
+    const QRect cellBounds = sourceOffsetBounds.translated(requestedDrop);
     QPoint drop = requestedDrop;
     if (cellBounds.left() < worldBounds.left())
         drop.rx() += worldBounds.left() - cellBounds.left();
@@ -4791,6 +4814,8 @@ void PasteCellsTool::cancelMoving()
     qDeleteAll(mDnDItems);
     mDnDItems.clear();
     mSourceCellPositions.clear();
+    mSourceCellOffsets.clear();
+    mSourceOffsetBounds = QRect();
 }
 
 /////

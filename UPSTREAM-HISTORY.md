@@ -163,13 +163,17 @@ Known post-baseline ports in the current PZTools tree are:
 | WorldEd | [`f492c5cde209e1ef907af5d84f93c89cea4b1927`](https://github.com/timbaker/pzworlded/commit/f492c5cde209e1ef907af5d84f93c89cea4b1927) - LotPackViewer z-coordinate fix | Integrated |
 | WorldEd | [`a7d5a77ccacddef3909decda2da3167a2c4f03e1`](https://github.com/timbaker/pzworlded/commit/a7d5a77ccacddef3909decda2da3167a2c4f03e1) - OpenGL 3.3 cell renderer | Integrated with Qt 5/core-profile corrections |
 | TileZed / BuildingEd | [`2e0d35d5bf4286de1ce55820a0ea2c954b7924ff`](https://github.com/timbaker/tiled/commit/2e0d35d5bf4286de1ce55820a0ea2c954b7924ff) - MixedTilesetView first-row display fix | Integrated |
+| BuildingEd | [`fc29849e40878d3059d69bd31ffac21169184003`](https://github.com/timbaker/tiled/commit/fc29849e40878d3059d69bd31ffac21169184003) - west-wall trim for expanded window frames | Integrated |
+| TileZed / BuildingEd | [`cd7dc721bb4f80b97701bb14ef4f097e5ea9102a`](https://github.com/timbaker/tiled/commit/cd7dc721bb4f80b97701bb14ef4f097e5ea9102a) - bounded image-black mask coordinates | Integrated |
+| TileZed / BuildingEd | [`e2dd2d3afe633076f61b468fb2086d9e224d5406`](https://github.com/timbaker/tiled/commit/e2dd2d3afe633076f61b468fb2086d9e224d5406) - startup event-processing hang protection | Integrated with the maintained progress workflow |
+| BuildingEd | [`f4c25c2a119747b588981563987a1817b74dd7d5`](https://github.com/timbaker/tiled/commit/f4c25c2a119747b588981563987a1817b74dd7d5) - opening crash protection during isometric map construction | Integrated with the maintained deferred renderer |
 
-The post-baseline review was refreshed on 2026-08-15 through these heads:
+The post-baseline review was refreshed on 2026-08-25 through these heads:
 
 | Repository | Reviewed `basements` head | Post-baseline commits reviewed |
 |---|---|---|
 | `timbaker/pzworlded` | [`8d01befa83df1afc50f08e9faad00dde4e42925c`](https://github.com/timbaker/pzworlded/commit/8d01befa83df1afc50f08e9faad00dde4e42925c) | 29 |
-| `timbaker/tiled` | [`3c577009ba09512521977648d261da4d011c67f8`](https://github.com/timbaker/tiled/commit/3c577009ba09512521977648d261da4d011c67f8) | 29 |
+| `timbaker/tiled` | [`f4c25c2a119747b588981563987a1817b74dd7d5`](https://github.com/timbaker/tiled/commit/f4c25c2a119747b588981563987a1817b74dd7d5) | 38 |
 
 The complete feature and fix decisions, including ports, adaptations, changes
 already independently present, and platform-only work, are maintained in the
@@ -180,6 +184,23 @@ Platform-only Docker, Linux, macOS, or Qt 6 commits are not automatically
 imported into the Windows Qt 5 tree. They are reviewed for relevant portable
 changes. Likewise, broad upstream branch merges are not assumed to be safe:
 applicable changes are ported and tested individually.
+
+### Z3R0-BYT3Z review on 2026-08-24
+
+The common ancestor between the reviewed `Z3R0-BYT3Z/PZ_Mapping_Tools` main
+branch and this repository was
+[`d724a62e33f13659a1d9799943a8e3d03fe152c2`](https://github.com/Unjammer/PZ_Mapping_Tools/commit/d724a62e33f13659a1d9799943a8e3d03fe152c2).
+The following narrowly applicable fixes by Zero were selectively integrated:
+
+| Component | Source commit | Adaptation |
+|---|---|---|
+| TileZed and WorldEd build configuration | [`91e3d27dd1e3311680ee5cad6a2a1314cb8a674b`](https://github.com/Z3R0-BYT3Z/PZ_Mapping_Tools/commit/91e3d27dd1e3311680ee5cad6a2a1314cb8a674b) | MSVC release flags are limited to MSVC builds |
+| BuildingEd template rooms | [`b297d2e679aadcff44bb9fe4e023278b248467d7`](https://github.com/Z3R0-BYT3Z/PZ_Mapping_Tools/commit/b297d2e679aadcff44bb9fe4e023278b248467d7) | Added the missing `QUndoGroup` declaration |
+| Lua runtime libraries | [`f0e23f095e1a119a34a5cd35d2511403c0fc2288`](https://github.com/Z3R0-BYT3Z/PZ_Mapping_Tools/commit/f0e23f095e1a119a34a5cd35d2511403c0fc2288) | Removed the compiler entry point from both TileZed and WorldEd copies of the runtime project |
+
+The remaining reviewed changes were interface redesigns, assets,
+documentation, platform-specific configuration, or behavior that was already
+implemented independently. They were not imported.
 
 ## Relationship to CE
 

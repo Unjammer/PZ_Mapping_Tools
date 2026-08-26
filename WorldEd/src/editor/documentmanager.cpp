@@ -26,6 +26,7 @@
 #include <QDebug>
 #include <QFileInfo>
 #include <QUndoGroup>
+#include <QUndoStack>
 
 DocumentManager *DocumentManager::mInstance = NULL;
 
@@ -105,6 +106,9 @@ void DocumentManager::closeDocument(int index)
 
     Document *doc = mDocuments.takeAt(index);
     emit documentAboutToClose(index, doc);
+    qInfo() << "WorldEd closing document: undo commands"
+            << doc->undoStack()->count()
+            << "index" << doc->undoStack()->index();
     if (doc == mCurrent) {
         if (mDocuments.size())
             setCurrentDocument(mDocuments.first());

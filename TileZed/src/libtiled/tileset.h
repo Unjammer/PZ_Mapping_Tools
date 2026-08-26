@@ -33,6 +33,7 @@
 #include "object.h"
 
 #include <QColor>
+#include <QHash>
 #include <QList>
 #include <QPoint>
 #ifdef ZOMBOID
@@ -56,10 +57,16 @@ public:
     Tileset *findMatch(Tileset *ts, const QString &imageSource, const QString &imageSource2x);
     void invalidateLookupTables();
     void checkLookupTables();
+    void deduplicateTilesetImages(Tileset *tileset);
+    void rebuildTileImagePool();
+    QString memorySummary() const;
 
     QList<Tileset*> mTilesets;
     QMultiMap<QString,Tileset*> mTilesetByImageSource;
     QMultiMap<QString,Tileset*> mTilesetByImageSource2x;
+    QHash<quint64,QList<Tile*> > mTileImagePool;
+    quint64 mDeduplicatedBytes = 0;
+    quint64 mDeduplicatedImages = 0;
 };
 #endif
 

@@ -162,7 +162,8 @@ MapImage *MapImageManager::getMapImage(const QString &mapName, const QString &re
 
 #ifdef WORLDED
     QString suffix = QFileInfo(mapName).suffix();
-    if (BMPToTMX::supportedImageFormats().contains(suffix)) {
+    if (BMPToTMX::supportedImageFormats().contains(
+                suffix, Qt::CaseInsensitive)) {
         QString keyName = QFileInfo(mapName).canonicalFilePath();
         if (mMapImages.contains(keyName))
             return mMapImages[keyName];
@@ -334,6 +335,27 @@ MapImage *MapImageManager::getZombieSpawnImage(const QString &imageName, const Q
     mMapImages[keyName] = mapImage;
     mapImage->chopIntoPieces();
     return mapImage;
+}
+
+bool MapImageManager::reloadImageFile(const QString &imageName)
+{
+    const QString keyName = QFileInfo(imageName).canonicalFilePath();
+    MapImage *mapImage = mMapImages.value(keyName, nullptr);
+    if (!mapImage)
+        return true;
+
+    ImageData data = generateBMPImage(imageName);
+    if (!data.valid)
+        return false;
+
+    mapImage->mImageSize = data.image.size();
+    mapImage->mapFileChanged(data.image, data.scale,
+                             data.levelZeroBounds, data.mapSize,
+                             data.tileSize);
+    mapImage->mLoaded = true;
+    mapImage->chopIntoPieces();
+    emit mapImageChanged(mapImage);
+    return true;
 }
 
 MapImageManager::ImageData MapImageManager::generateMapImage(const QString &mapFilePath, bool force)

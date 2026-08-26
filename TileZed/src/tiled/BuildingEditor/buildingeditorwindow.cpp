@@ -17,6 +17,8 @@
 
 #include "buildingeditorwindow.h"
 #include "ui_buildingeditorwindow.h"
+#include "appissuenotifier.h"
+#include "pztoolsbuild.h"
 
 #include "attributeeditmode.h"
 #include "building.h"
@@ -439,6 +441,7 @@ BuildingEditorWindow::BuildingEditorWindow(QWidget *parent) :
     mDocumentChanging(false)
 {
     ui->setupUi(this);
+    AppIssueNotifier::attach(this);
 
     mInstance = this;
 
@@ -599,7 +602,7 @@ BuildingEditorWindow::BuildingEditorWindow(QWidget *parent) :
     renderDiagnosticsAction->setToolTip(tr(
         "Show FPS, render time, drawn tiles, memory, zoom and renderer mode"));
     renderDiagnosticsAction->setChecked(mSettings.value(
-        QLatin1String("RenderDiagnostics/Enabled"), true).toBool());
+        QLatin1String("RenderDiagnostics/Enabled"), false).toBool());
     ui->menuView->addAction(renderDiagnosticsAction);
     connect(renderDiagnosticsAction, &QAction::toggled, this,
             [this](bool enabled) {
@@ -1537,7 +1540,7 @@ void BuildingEditorWindow::clearDocument()
 void BuildingEditorWindow::updateWindowTitle()
 {
     if (ModeManager::instance().currentMode() == mWelcomeMode) {
-        setWindowTitle(tr("BuildingEd"));
+        setWindowTitle(tr("BuildingEd - %1").arg(PZToolsBuild::label()));
         return;
     }
 
@@ -1547,7 +1550,8 @@ void BuildingEditorWindow::updateWindowTitle()
     else {
         fileName = QDir::toNativeSeparators(fileName);
     }
-    setWindowTitle(tr("[*]%1 - Building Editor").arg(fileName));
+    setWindowTitle(tr("[*]%1 - BuildingEd - %2")
+                   .arg(fileName, PZToolsBuild::label()));
     setWindowFilePath(fileName);
     setWindowModified(mCurrentDocument ? mCurrentDocument->isModified() : false);
 }
@@ -1635,6 +1639,9 @@ void BuildingEditorWindow::captureTileClipboard(bool cut)
             QList<BuildingDocument::ClipboardRoomLayer> roomLayers;
             QHash<Room *, int> roomIndexes;
             QUndoStack *undoStack = mCurrentDocument->undoStack();
+            const bool cutRooms = cut && mTileSelectionScope &&
+                    mTileSelectionScope->layerMode() ==
+                    Tiled::Internal::TileSelectionScope::AllLayers;
             if (cut) {
                 mCurrentDocumentStuff->beginAtomicEdit();
                 undoStack->beginMacro(tr("Cut Building Selection"));
@@ -1670,7 +1677,7 @@ void BuildingEditorWindow::captureTileClipboard(bool cut)
                                 rooms.append(new Room(room));
                             }
                             roomLayer.rooms[x][y] = roomIndexes.value(room);
-                            if (cut) {
+                            if (cutRooms) {
                                 cutGrid[source.x()][source.y()] = nullptr;
                                 roomsCut = true;
                             }

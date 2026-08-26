@@ -66,7 +66,7 @@ BaseGraphicsView::BaseGraphicsView(AllowOpenGL openGL, QWidget *parent)
     , mSnowPreviewButton(new QToolButton(this))
     , mJumboPreviewButton(new QToolButton(this))
     , mRenderDiagnosticsEnabled(QSettings().value(
-          QStringLiteral("RenderDiagnostics/Enabled"), true).toBool())
+          QStringLiteral("RenderDiagnostics/Enabled"), false).toBool())
     , mRenderDiagnosticsLabel(new QLabel(this))
     , mDiagnosticsFps(0.0)
     , mDiagnosticsFrameMs(0.0)
@@ -313,9 +313,11 @@ void BaseGraphicsView::paintEvent(QPaintEvent *event)
         return;
     }
     ZLevelRenderer::resetRenderedTileCount();
+    ZLevelRenderer::setRenderedTileCountingEnabled(true);
     QElapsedTimer renderTimer;
     renderTimer.start();
     QGraphicsView::paintEvent(event);
+    ZLevelRenderer::setRenderedTileCountingEnabled(false);
     const qreal renderMs = qMax<qreal>(
                 0.01, renderTimer.nsecsElapsed() / 1000000.0);
     mDiagnosticsFrameMs = mDiagnosticsFrameMs <= 0.0

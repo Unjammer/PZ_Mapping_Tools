@@ -33,6 +33,7 @@
 #include "object.h"
 
 #include <QColor>
+#include <QHash>
 #include <QList>
 #include <QPoint>
 #ifdef ZOMBOID
@@ -57,10 +58,16 @@ public:
     Tileset *findMatch(Tileset *ts, const QString &imageSource, const QString &imageSource2x);
     void invalidateLookupTables();
     void checkLookupTables();
+    void deduplicateTilesetImages(Tileset *tileset);
+    void rebuildTileImagePool();
+    QString memorySummary() const;
 
     QList<Tileset*> mTilesets;
     QMultiMap<QString,Tileset*> mTilesetByImageSource;
     QMultiMap<QString,Tileset*> mTilesetByImageSource2x;
+    QHash<quint64,QList<Tile*> > mTileImagePool;
+    quint64 mDeduplicatedBytes = 0;
+    quint64 mDeduplicatedImages = 0;
 };
 
 #endif
@@ -279,11 +286,9 @@ public:
 
     const QString &imageSource2x() const { return mImageSource2x; }
 
-    void setImage(QImage image)
-    { mImage = image; }
-
-    QImage image() const
-    { return mImage; }
+    void setImage(QImage image);
+    QImage image() const;
+    void releaseImage() const;
 
     static void replaceTransparentColor(QImage &image, const QColor &transparentColor);
 
@@ -309,7 +314,8 @@ private:
     bool mMissing;
     bool mLoaded;
     QString mImageSource2x;
-    QImage mImage; // With transparent color replaced
+    QSize mAtlasImageSize;
+    mutable QImage mImage; // With transparent color replaced
     int mChangeCount = 0;
 #endif
 };

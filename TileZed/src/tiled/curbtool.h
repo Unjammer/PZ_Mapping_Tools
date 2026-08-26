@@ -19,6 +19,7 @@
 #define CURBTOOL_H
 
 #include "abstracttiletool.h"
+#include "tiletoolpreviewcache.h"
 
 #include "BuildingEditor/singleton.h"
 
@@ -117,17 +118,21 @@ public:
 
     void setCurb(Curb *Curb);
 
-    void setSuppressBlendTiles(bool suppress)
-    { mSuppressBlendTiles = suppress; }
+    void setSuppressBlendTiles(bool suppress);
     bool suppressBlendTiles() const
     { return mSuppressBlendTiles; }
 
 protected:
+    void mapDocumentChanged(MapDocument *oldDocument,
+                            MapDocument *newDocument) override;
     void tilePositionChanged(const QPoint &tilePos);
 
-    QVector<Tile*> resolveTiles(Curb *Curb);
+    const QVector<Tile *> &resolveTiles();
 
 private:
+    void clearPreview();
+    void invalidateTileCache();
+
     enum Corner
     {
         CornerNW,
@@ -147,18 +152,22 @@ private:
     void drawEdge(const QPointF &start, Corner cornerStart, const QPointF &end, Corner cornerEnd, bool far);
     void drawEdgeTile(const QPoint &origin, int x, int y, Edge edge, bool half, bool far,
                       TileLayer &stamp, QMap<QString,QRegion> &eraseRgn,
-                      QMap<QString,QRegion> &noBlendRgn);
+                      QMap<QString,QRegion> &noBlendRgn,
+                      const QVector<Tile *> &tiles);
 
     void raiseLower(const QPointF &start, const QPointF &end);
     void raiseLowerChanges(const QPointF &start, const QPointF &end,
-                           TileLayer &stamp, QMap<QString,QRegion> &eraseRgn);
+                           TileLayer &stamp, QMap<QString,QRegion> &eraseRgn,
+                           const QVector<Tile *> &tiles);
     void raiseLowerTile(int sx, int sy, int ex, int ey, int x, int y,
-                        TileLayer &stamp, QMap<QString, QRegion> &eraseRgn);
+                        TileLayer &stamp, QMap<QString, QRegion> &eraseRgn,
+                        const QVector<Tile *> &tiles);
 
     void getMapChanges(const QPointF &start, Corner cornerStart,
                        const QPointF &end, Corner cornerEnd, bool far,
                        TileLayer &stamp, QMap<QString,QRegion> &eraseRgn,
-                       QMap<QString,QRegion> &noBlendRgn);
+                       QMap<QString,QRegion> &noBlendRgn,
+                       const QVector<Tile *> &tiles);
 
     MapScene *mScene;
     CompositeLayerGroup *mToolTileLayerGroup;
@@ -171,6 +180,8 @@ private:
     Curb *mCurb;
     bool mSuppressBlendTiles;
     QGraphicsPolygonItem *mCursorItem;
+    TileToolPreviewState mPreviewState;
+    TileToolTilesCache mTilesCache;
 };
 
 } // namespace Internal

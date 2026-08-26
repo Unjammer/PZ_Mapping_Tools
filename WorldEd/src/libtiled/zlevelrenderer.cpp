@@ -52,6 +52,11 @@ quint64 &frameRenderedTileCount()
     static thread_local quint64 count = 0;
     return count;
 }
+bool &renderedTileCountingEnabled()
+{
+    static thread_local bool enabled = false;
+    return enabled;
+}
 struct JUMBO
 {
     QString tilesetName;
@@ -76,6 +81,14 @@ static JUMBO s_jumbo[] = {
 void ZLevelRenderer::resetRenderedTileCount()
 {
     frameRenderedTileCount() = 0;
+}
+void ZLevelRenderer::setRenderedTileCountingEnabled(bool enabled)
+{
+    renderedTileCountingEnabled() = enabled;
+}
+bool ZLevelRenderer::isRenderedTileCountingEnabled()
+{
+    return renderedTileCountingEnabled();
 }
 void ZLevelRenderer::addRenderedTileCount(quint64 count)
 {
@@ -572,6 +585,7 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
     layerGroup->prepareDrawing(this, rect);
 
     qreal opacity = painter->opacity();
+    const bool countRenderedTiles = renderedTileCountingEnabled();
 
     for (int y = startPos.y(); y - tileHeight < rect.bottom();
          y += tileHeight / 2)
@@ -674,7 +688,8 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
                         painter->setOpacity(opacities[i] * opacity);
 
                         painter->drawImage(0, 0, img);
-                        addRenderedTileCount();
+                        if (countRenderedTiles)
+                            addRenderedTileCount();
                         if (overlayTile &&
                                 !overlayTile->image().isNull()) {
                             const QTransform overlayTransform =
@@ -686,7 +701,8 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
                             painter->drawImage(
                                         0, 0,
                                         overlayTile->image());
-                            addRenderedTileCount();
+                            if (countRenderedTiles)
+                                addRenderedTileCount();
                             painter->setTransform(
                                         transform * baseTransform);
                         }

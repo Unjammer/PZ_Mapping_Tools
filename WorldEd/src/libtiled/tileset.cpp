@@ -32,6 +32,7 @@
 #include "tile.h"
 
 #include <QBitmap>
+#include <QSet>
 #include <limits>
 
 using namespace Tiled;
@@ -136,6 +137,9 @@ bool Tileset::loadFromImage(const QImage &image, const QString &fileName)
     if (image.isNull())
         return false;
 
+    mImage = QImage();
+    mAtlasImageSize = QSize();
+
 #ifdef ZOMBOID
     int mTileWidth = this->mTileWidth;
     int mTileHeight = this->mTileHeight;
@@ -214,6 +218,7 @@ bool Tileset::loadFromImage(const QImage &image, const QString &fileName)
             tryCreateAtlas(this, image3, 4096);
         }
     }
+    releaseImage();
 
     mImageWidth = image.width();
     mImageHeight = image.height();
@@ -266,7 +271,8 @@ bool Tileset::loadFromCache(Tileset *cached)
     mImageSource2x = cached->imageSource2x();
     mColumnCount = columnCountForWidth(mImageWidth);
     mImageSource = cached->imageSource();
-    mImage = cached->image();
+    mAtlasImageSize = cached->mAtlasImageSize;
+    mImage = QImage();
     mChangeCount = cached->mChangeCount;
     mLoaded = true;
     return true;
@@ -306,6 +312,7 @@ bool Tileset::loadFromNothing(const QSize &imageSize, const QString &fileName)
     mImageHeight = imageSize.height();
     mColumnCount = columnCountForWidth(mImageWidth);
     mImageSource = fileName;
+    mAtlasImageSize = QSize();
     mImage = QImage();
     mLoaded = false;
     return true;
@@ -355,6 +362,38 @@ Tileset *Tileset::clone() const
     return clone;
 }
 
+void Tileset::setImage(QImage image)
+{
+    mImage = image;
+    if (!mImage.isNull())
+        mAtlasImageSize = mImage.size();
+}
+
+QImage Tileset::image() const
+{
+    if (!mImage.isNull() || mAtlasImageSize.isEmpty() || !mLoaded)
+        return mImage;
+    QImage atlas(mAtlasImageSize, QImage::Format_ARGB32);
+    atlas.fill(Qt::transparent);
+    QPainter painter(&atlas);
+    for (Tile *tile : mTiles) {
+        if (!tile || tile->image().isNull())
+            continue;
+        const Tile::UVST &uvst = tile->atlasUVST();
+        const QPoint position(qRound(uvst.u * mAtlasImageSize.width()),
+                              qRound(uvst.v * mAtlasImageSize.height()));
+        painter.drawImage(position, tile->image());
+    }
+    painter.end();
+    mImage = atlas;
+    return mImage;
+}
+
+void Tileset::releaseImage() const
+{
+    mImage = QImage();
+}
+
 void Tileset::replaceTransparentColor(QImage &image, const QColor &transparentColor)
 {
     if (transparentColor.isValid() == false) {
@@ -378,6 +417,81 @@ TilesetImageCache::~TilesetImageCache()
     qDeleteAll(mTilesets);
 }
 
+void TilesetImageCache::deduplicateTilesetImages(Tileset *tileset)
+{
+    for (int index = 0; index < tileset->tileCount(); ++index) {
+        Tile *tile = tileset->tileAt(index);
+        if (!tile || tile->image().isNull())
+            continue;
+        const quint64 hash = tile->imageHash();
+        const QList<Tile *> matches = mTileImagePool.value(hash);
+        Tile *match = nullptr;
+        for (Tile *candidate : matches) {
+            if (tile->hasSameImageData(candidate)) {
+                match = candidate;
+                break;
+            }
+        }
+        if (match) {
+            mDeduplicatedBytes += tile->imageStorageBytes();
+            ++mDeduplicatedImages;
+            tile->setImage(match);
+        } else {
+            mTileImagePool[hash].append(tile);
+        }
+    }
+}
+
+void TilesetImageCache::rebuildTileImagePool()
+{
+    mTileImagePool.clear();
+    mDeduplicatedBytes = 0;
+    mDeduplicatedImages = 0;
+    for (Tileset *tileset : std::as_const(mTilesets))
+        deduplicateTilesetImages(tileset);
+}
+
+QString TilesetImageCache::memorySummary() const
+{
+    quint64 tileCount = 0;
+    quint64 imageCount = 0;
+    quint64 logicalBytes = 0;
+    quint64 residentBytes = 0;
+    quint64 atlasBytes = 0;
+    QSet<qint64> storageKeys;
+    QSet<qint64> atlasStorageKeys;
+    for (Tileset *tileset : mTilesets) {
+        tileCount += quint64(tileset->tileCount());
+        if (!tileset->mImage.isNull()
+                && !atlasStorageKeys.contains(tileset->mImage.cacheKey())) {
+            atlasStorageKeys.insert(tileset->mImage.cacheKey());
+            atlasBytes += quint64(tileset->mImage.sizeInBytes());
+        }
+        for (int index = 0; index < tileset->tileCount(); ++index) {
+            Tile *tile = tileset->tileAt(index);
+            if (!tile || tile->image().isNull())
+                continue;
+            ++imageCount;
+            const quint64 bytes = tile->imageStorageBytes();
+            logicalBytes += bytes;
+            const qint64 storageKey = tile->image().cacheKey();
+            if (!storageKeys.contains(storageKey)) {
+                storageKeys.insert(storageKey);
+                residentBytes += bytes;
+            }
+        }
+    }
+    return QStringLiteral(
+                "Tileset image cache: %1 sheets, %2 tiles, %3 nonempty images, %4 unique pixel buffers, %5 MiB logical, %6 MiB resident, %7 MiB retained CPU atlases, %8 exact duplicates sharing %9 MiB")
+            .arg(mTilesets.size()).arg(tileCount).arg(imageCount)
+            .arg(storageKeys.size())
+            .arg(double(logicalBytes) / 1048576.0, 0, 'f', 1)
+            .arg(double(residentBytes) / 1048576.0, 0, 'f', 1)
+            .arg(double(atlasBytes) / 1048576.0, 0, 'f', 1)
+            .arg(mDeduplicatedImages)
+            .arg(double(mDeduplicatedBytes) / 1048576.0, 0, 'f', 1);
+}
+
 #include <QDebug>
 
 Tileset *TilesetImageCache::addTileset(Tileset *ts)
@@ -386,7 +500,8 @@ Tileset *TilesetImageCache::addTileset(Tileset *ts)
     cached->mTransparentColor = ts->transparentColor();
     cached->mImageSource = ts->imageSource(); // FIXME: make canonical
     cached->mImageSource2x = ts->imageSource2x();
-    cached->mImage = ts->image();
+    cached->mAtlasImageSize = ts->mAtlasImageSize;
+    cached->mImage = QImage();
     cached->mTiles.reserve(ts->tileCount());
     cached->mImageWidth = ts->imageWidth();
     cached->mImageHeight = ts->imageHeight();

@@ -58,11 +58,63 @@ CurbTool::CurbTool(QObject *parent) :
     mCursorItem->setBrush(QColor(0,255,0,64));
 }
 
+void CurbTool::clearPreview()
+{
+    if (!mToolTileLayerGroup)
+        return;
+    mToolTileLayerGroup->clearToolTiles();
+    if (mScene)
+        mScene->update(mToolTilesRect);
+    mToolTileLayerGroup = nullptr;
+    mToolTiles.erase();
+}
+
+void CurbTool::invalidateTileCache()
+{
+    clearPreview();
+    mTilesCache.invalidate();
+    mPreviewState.invalidate();
+}
+
+void CurbTool::mapDocumentChanged(MapDocument *oldDocument,
+                                  MapDocument *newDocument)
+{
+    if (oldDocument)
+        QObject::disconnect(oldDocument, nullptr, this, nullptr);
+    AbstractTileTool::mapDocumentChanged(oldDocument, newDocument);
+    if (newDocument) {
+        connect(newDocument, &MapDocument::mapChanged,
+                this, &CurbTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::currentLayerIndexChanged,
+                this, &CurbTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::currentLevelChanged,
+                this, &CurbTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::layerAboutToBeRemoved,
+                this, &CurbTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::layerLevelChanged,
+                this, &CurbTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::tilesetAdded,
+                this, &CurbTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::tilesetAboutToBeRemoved,
+                this, &CurbTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::tilesetRemoved,
+                this, &CurbTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::tilesetMoved,
+                this, &CurbTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::tilesetFileNameChanged,
+                this, &CurbTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::tilesetNameChanged,
+                this, &CurbTool::invalidateTileCache);
+    }
+    invalidateTileCache();
+}
+
 void CurbTool::activate(MapScene *scene)
 {
     Q_ASSERT(mScene == 0);
     mScene = scene;
     mInitialClick = false;
+    mPreviewState.invalidate();
     scene->addItem(mCursorItem);
     AbstractTileTool::activate(scene);
     CurbToolDialog::instance()->setVisibleLater(true);
@@ -71,12 +123,8 @@ void CurbTool::activate(MapScene *scene)
 void CurbTool::deactivate(MapScene *scene)
 {
     Q_ASSERT(mScene == scene);
-    if (mToolTileLayerGroup != 0) {
-        mToolTileLayerGroup->clearToolTiles();
-        mScene->update(mToolTilesRect);
-        mToolTileLayerGroup = 0;
-        mToolTiles.erase();
-    }
+    clearPreview();
+    mPreviewState.invalidate();
 
     CurbToolDialog::instance()->setVisibleLater(false);
     scene->removeItem(mCursorItem);
@@ -86,21 +134,37 @@ void CurbTool::deactivate(MapScene *scene)
 
 void CurbTool::mouseMoved(const QPointF &pos, Qt::KeyboardModifiers modifiers)
 {
+    AbstractTileTool::mouseMoved(pos, modifiers);
     const MapRenderer *renderer = mapDocument()->renderer();
     Layer *layer = currentTileLayer();
+    if (!layer)
+        return;
     QPointF tilePosF;
     Corner corner;
     toCorner(pos, tilePosF, corner);
     QPoint tilePos(qFloor(tilePosF.x()), qFloor(tilePosF.y()));
 
-    CompositeLayerGroup *lg = mapDocument()->mapComposite()->layerGroupForLevel(mapDocument()->currentLevel());
-    if (mToolTileLayerGroup != 0) {
-        mToolTileLayerGroup->clearToolTiles();
-        mScene->update(mToolTilesRect);
-        mToolTileLayerGroup = 0;
-        mToolTiles.erase();
+    int previewVariant = int(corner);
+    if (mInitialClick) {
+        previewVariant += 4 + 4 * (qAbs(tilePosF.x() - mStartTilePosF.x())
+                                   > qAbs(tilePosF.y() - mStartTilePosF.y()));
     }
+    TileToolPreviewKey previewKey;
+    previewKey.tilePosition = tilePos;
+    previewKey.layer = layer;
+    previewKey.selection = mCurb;
+    previewKey.level = layer->level();
+    previewKey.mode = mInitialClick ? 1 : 0;
+    previewKey.variant = previewVariant;
+    previewKey.modifiers = int(modifiers
+                               & (Qt::AltModifier | Qt::ControlModifier));
+    if (!mPreviewState.accept(previewKey))
+        return;
+
+    CompositeLayerGroup *lg = mapDocument()->mapComposite()->layerGroupForLevel(mapDocument()->currentLevel());
+    clearPreview();
     QPoint topLeft;
+    const QVector<Tile *> &tiles = resolveTiles();
 
     if (!mInitialClick) {
         qreal dx = 0, dy = 0;
@@ -144,11 +208,13 @@ void CurbTool::mouseMoved(const QPointF &pos, Qt::KeyboardModifiers modifiers)
             if (modifiers & Qt::ControlModifier) {
                 mToolTiles.setCells(-topLeft.x(), -topLeft.y(), currentTileLayer(),
                                     QRegion(0, 0, mToolTiles.width(), mToolTiles.height()));
-                raiseLowerChanges(mStartTilePosF, tilePosF, mToolTiles, eraseRgn);
+                raiseLowerChanges(mStartTilePosF, tilePosF, mToolTiles,
+                                  eraseRgn, tiles);
                 QRegion region = eraseRgn.size() ? eraseRgn.values().first() : QRegion();
                 mToolTiles.erase(region.translated(-topLeft));
             } else {
-                getMapChanges(mStartTilePosF, mStartCorner, tilePosF, corner, far, mToolTiles, eraseRgn, noBlendRgn);
+                getMapChanges(mStartTilePosF, mStartCorner, tilePosF, corner,
+                              far, mToolTiles, eraseRgn, noBlendRgn, tiles);
                 // FIXME: should handle eraseRgn and noBlendRgn (noBlend in multiple layers)
                 mToolTiles.resize(QSize(mToolTiles.width() - 1, mToolTiles.height() - 1), QPoint());
             }
@@ -166,16 +232,16 @@ void CurbTool::mouseMoved(const QPointF &pos, Qt::KeyboardModifiers modifiers)
         mCursorItem->setPolygon(poly);
     }
 
-    if (!mToolTiles.isEmpty()) {
+    if (lg && !mToolTiles.isEmpty()) {
         QSize tilesSize(mToolTiles.width(), mToolTiles.height());
         lg->setToolTiles(&mToolTiles, topLeft, QRect(topLeft, tilesSize), currentTileLayer());
-        mToolTilesRect = renderer->boundingRect(QRect(topLeft.x(), topLeft.y(), mToolTiles.width(), mToolTiles.height()),
-                mapDocument()->currentLevel()).adjusted(-3, -(128-32) - 3, 3, 3); // use mMap->drawMargins()
+        mToolTilesRect = tileToolPreviewRect(
+                    mapDocument(), &mToolTiles,
+                    QRect(topLeft, QSize(mToolTiles.width(), mToolTiles.height())));
         mToolTileLayerGroup = lg;
         mScene->update(mToolTilesRect);
     }
 
-    AbstractTileTool::mouseMoved(pos, modifiers);
 }
 
 void CurbTool::mousePressed(QGraphicsSceneMouseEvent *event)
@@ -238,7 +304,18 @@ void CurbTool::languageChanged()
 
 void CurbTool::setCurb(Curb *curb)
 {
+    if (mCurb == curb)
+        return;
     mCurb = curb;
+    invalidateTileCache();
+}
+
+void CurbTool::setSuppressBlendTiles(bool suppress)
+{
+    if (mSuppressBlendTiles == suppress)
+        return;
+    mSuppressBlendTiles = suppress;
+    mPreviewState.invalidate();
 }
 
 void CurbTool::tilePositionChanged(const QPoint &tilePos)
@@ -246,28 +323,13 @@ void CurbTool::tilePositionChanged(const QPoint &tilePos)
     Q_UNUSED(tilePos)
 }
 
-QVector<Tile *> CurbTool::resolveTiles(Curb *curb)
+const QVector<Tile *> &CurbTool::resolveTiles()
 {
-    QVector<Tile *> ret(Curb::ShapeCount, (Tile*)-1);
-    if (!mCurb)
-        return ret;
-    Map *map = mapDocument()->map();
-    QMap<QString,Tileset*> tilesets;
-    foreach (Tileset *ts, map->tilesets())
-        tilesets[ts->name()] = ts;
-
-    for (int i = 0; i < Curb::ShapeCount; i++) {
-        if (curb->mTileNames[i].isEmpty())
-            continue;
-        QString tilesetName;
-        int index;
-        if (BuildingEditor::BuildingTilesMgr::instance()->parseTileName(curb->mTileNames[i], tilesetName, index)) {
-            if (tilesets.contains(tilesetName))
-                ret[i] = tilesets[tilesetName]->tileAt(index);
-        }
-    }
-
-    return ret;
+    static const QVector<QString> emptyNames(Curb::ShapeCount);
+    return mTilesCache.resolve(mapDocument() ? mapDocument()->map() : nullptr,
+                               mCurb ? mCurb->mTileNames : emptyNames,
+                               Curb::ShapeCount,
+                               reinterpret_cast<Tile *>(quintptr(-1)));
 }
 
 void CurbTool::toCorner(const QPointF &scenePos, QPointF &tilePosF, Corner &corner)
@@ -308,7 +370,9 @@ void CurbTool::drawEdge(const QPointF &start, Corner cornerStart,
 
     TileLayer stamp(QString(), 0, 0, width, height);
     QMap<QString,QRegion> eraseRgn, noBlendRgn;
-    getMapChanges(start, cornerStart, end, cornerEnd, far, stamp, eraseRgn, noBlendRgn);
+    const QVector<Tile *> &tiles = resolveTiles();
+    getMapChanges(start, cornerStart, end, cornerEnd, far, stamp,
+                  eraseRgn, noBlendRgn, tiles);
 
     if (!stamp.isEmpty()) {
         PaintTileLayer *cmd = new PaintTileLayer(mapDocument(), currentTileLayer(),
@@ -346,7 +410,8 @@ void CurbTool::drawEdge(const QPointF &start, Corner cornerStart,
 
 void CurbTool::drawEdgeTile(const QPoint &origin, int x, int y, Edge edge, bool half, bool far,
                             TileLayer &stamp, QMap<QString,QRegion> &eraseRgn,
-                            QMap<QString,QRegion> &noBlendRgn)
+                            QMap<QString,QRegion> &noBlendRgn,
+                            const QVector<Tile *> &tiles)
 {
     TileLayer *tileLayer = currentTileLayer();
     if (!tileLayer->contains(x, y))
@@ -368,7 +433,6 @@ void CurbTool::drawEdgeTile(const QPoint &origin, int x, int y, Edge edge, bool 
     if (stamp.contains(x - origin.x(), y - origin.y() + 1) && stamp.cellAt(x - origin.x(), y - origin.y() + 1).tile)
         currentS = stamp.cellAt(x - origin.x(), y - origin.y() + 1).tile;
 
-    QVector<Tile*> tiles = resolveTiles(mCurb);
     Tile *farE = tiles[Curb::FarE];
     Tile *farS = tiles[Curb::FarS];
     Tile *farSE = tiles[Curb::FarSE];
@@ -496,7 +560,8 @@ void CurbTool::raiseLower(const QPointF &start, const QPointF &end)
 
     TileLayer stamp(QString(), 0, 0, width, height);
     QMap<QString,QRegion> eraseRgn;
-    raiseLowerChanges(start, end, stamp, eraseRgn);
+    const QVector<Tile *> &tiles = resolveTiles();
+    raiseLowerChanges(start, end, stamp, eraseRgn, tiles);
 
     if (!stamp.isEmpty()) {
         PaintTileLayer *cmd = new PaintTileLayer(mapDocument(), currentTileLayer(),
@@ -519,7 +584,8 @@ void CurbTool::raiseLower(const QPointF &start, const QPointF &end)
 }
 
 void CurbTool::raiseLowerChanges(const QPointF &start, const QPointF &end,
-                                 TileLayer &stamp, QMap<QString, QRegion> &eraseRgn)
+                                 TileLayer &stamp, QMap<QString, QRegion> &eraseRgn,
+                                 const QVector<Tile *> &tiles)
 {
     int sx = qFloor(start.x()), sy = qFloor(start.y());
     int ex = qFloor(end.x()), ey = qFloor(end.y());
@@ -528,15 +594,16 @@ void CurbTool::raiseLowerChanges(const QPointF &start, const QPointF &end,
 
     if (qAbs(start.x() - end.x()) > qAbs(start.y() - end.y())) {
         for (int x = sx; x <= ex; x++)
-            raiseLowerTile(sx, sy, ex, ey, x, sy, stamp, eraseRgn);
+            raiseLowerTile(sx, sy, ex, ey, x, sy, stamp, eraseRgn, tiles);
     } else {
         for (int y = sy; y <= ey; y++)
-            raiseLowerTile(sx, sy, ex, ey, sx, y, stamp, eraseRgn);
+            raiseLowerTile(sx, sy, ex, ey, sx, y, stamp, eraseRgn, tiles);
     }
 }
 
 void CurbTool::raiseLowerTile(int sx, int sy, int ex, int ey, int x, int y,
-                              TileLayer &stamp, QMap<QString,QRegion> &eraseRgn)
+                              TileLayer &stamp, QMap<QString,QRegion> &eraseRgn,
+                              const QVector<Tile *> &tiles)
 {
     TileLayer *tileLayer = currentTileLayer();
     if (!tileLayer->contains(x, y))
@@ -547,7 +614,6 @@ void CurbTool::raiseLowerTile(int sx, int sy, int ex, int ey, int x, int y,
     Tile *currentE = tileLayer->contains(x + 1, y) ? tileLayer->cellAt(x + 1, y).tile : 0;
     Tile *currentS = tileLayer->contains(x, y + 1) ? tileLayer->cellAt(x, y + 1).tile : 0;
 
-    QVector<Tile*> tiles = resolveTiles(mCurb);
     Tile *farE = tiles[Curb::FarE];
     Tile *farS = tiles[Curb::FarS];
     Tile *nearE = tiles[Curb::NearE];
@@ -640,7 +706,8 @@ void CurbTool::raiseLowerTile(int sx, int sy, int ex, int ey, int x, int y,
 void CurbTool::getMapChanges(const QPointF &start, CurbTool::Corner cornerStart,
                              const QPointF &end, CurbTool::Corner cornerEnd, bool far,
                              TileLayer &stamp, QMap<QString, QRegion> &eraseRgn,
-                             QMap<QString, QRegion> &noBlendRgn)
+                             QMap<QString, QRegion> &noBlendRgn,
+                             const QVector<Tile *> &tiles)
 {
     int sx = qFloor(start.x()), sy = qFloor(start.y());
     int ex = qFloor(end.x()), ey = qFloor(end.y());
@@ -654,7 +721,8 @@ void CurbTool::getMapChanges(const QPointF &start, CurbTool::Corner cornerStart,
                 bool half = ((sx == ex) && (cornerStart == cornerEnd))
                         || ((sx != ex && x == sx) && (cornerStart == CornerSW || cornerStart == CornerNW))
                         || ((sx != ex && x == ex) && (cornerEnd == CornerNE || cornerEnd == CornerSE));
-                drawEdgeTile(origin, x, sy, EdgeS, half, far, stamp, eraseRgn, noBlendRgn);
+                drawEdgeTile(origin, x, sy, EdgeS, half, far, stamp,
+                             eraseRgn, noBlendRgn, tiles);
             }
             return;
         }
@@ -663,7 +731,8 @@ void CurbTool::getMapChanges(const QPointF &start, CurbTool::Corner cornerStart,
             bool half = ((sx == ex) && (cornerStart == cornerEnd))
                     || ((sx != ex && x == sx) && (cornerStart == CornerNE || cornerStart == CornerSE))
                     || ((sx != ex && x == ex) && (cornerEnd == CornerSW || cornerEnd == CornerNW));
-            drawEdgeTile(origin, x, sy, EdgeS, half, far, stamp, eraseRgn, noBlendRgn);
+            drawEdgeTile(origin, x, sy, EdgeS, half, far, stamp,
+                         eraseRgn, noBlendRgn, tiles);
         }
     } else {
         // East edge
@@ -673,7 +742,8 @@ void CurbTool::getMapChanges(const QPointF &start, CurbTool::Corner cornerStart,
                 bool half = ((sy == ey) && (cornerStart == cornerEnd))
                         || ((sy != ey && y == sy) && (cornerStart == CornerNW || cornerStart == CornerNE))
                         || ((sy != ey && y == ey) && (cornerEnd == CornerSW || cornerEnd == CornerSE));
-                drawEdgeTile(origin, sx, y, EdgeE, half, far, stamp, eraseRgn, noBlendRgn);
+                drawEdgeTile(origin, sx, y, EdgeE, half, far, stamp,
+                             eraseRgn, noBlendRgn, tiles);
             }
             return;
         }
@@ -682,7 +752,8 @@ void CurbTool::getMapChanges(const QPointF &start, CurbTool::Corner cornerStart,
             bool half = ((sy == ey) && (cornerStart == cornerEnd))
                     || ((sy != ey && y == sy) && (cornerStart == CornerSW || cornerStart == CornerSE))
                     || ((sy != ey && y == ey) && (cornerEnd == CornerNW || cornerEnd == CornerNE));
-            drawEdgeTile(origin, sx, y, EdgeE, half, far, stamp, eraseRgn, noBlendRgn);
+            drawEdgeTile(origin, sx, y, EdgeE, half, far, stamp,
+                         eraseRgn, noBlendRgn, tiles);
         }
     }
 }

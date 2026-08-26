@@ -85,12 +85,7 @@ void DrawTileToolCursor::setTileRegion(const QRegion &tileRgn)
                                                         mEditor->currentLevel());
         QRectF bounds = polygon.boundingRect();
 
-        // Add tile bounds and pen width to the shape.
-        int tileWidth = 64*3; // 1x Jumbo tree width
-        int tileHeight = 128*2; // 1x Jumbo tree height
-        int floorHeight = 32;
-        int TileScale = 2;
-        bounds.adjust(-4-(tileWidth-64)*TileScale/2, -(tileHeight-floorHeight)*TileScale, 5+(tileWidth-64)*TileScale/2, 5);
+        bounds.adjust(-4, -4, 5, 5);
 
         if (bounds != mBoundingRect) {
             // NOTE-SCENE-CORRUPTION

@@ -18,7 +18,7 @@ win32 {
 }
 
 # MSVC
-win32 {
+msvc {
     QMAKE_CFLAGS_RELEASE += -Zi
     QMAKE_CXXFLAGS_RELEASE += -Zi
     QMAKE_LFLAGS_RELEASE += /DEBUG /OPT:REF
@@ -36,6 +36,7 @@ win32 {
 
 DEFINES += QT_NO_CAST_FROM_ASCII \
     QT_NO_CAST_TO_ASCII
+DEFINES += PZTOOLS_APP_ISSUE_NOTIFIER
 
 INCLUDEPATH += ../../../shared
 
@@ -68,10 +69,14 @@ OBJECTS_DIR = .obj
 
 SOURCES += main.cpp\
     ../firstlaunchdialog.cpp \
+    ../../../shared/appissuenotifier.cpp \
     ../../../shared/partialchunkselection.cpp \
     biomemapgeneratordialog.cpp \
+    chunkdataoverride.cpp \
+    chunkdataoverridedialog.cpp \
     biomemapitem.cpp \
     biomemapimageprocessor.cpp \
+    mappingimageformat.cpp \
     osmterrainimportdialog.cpp \
     osmprojectdata.cpp \
     osmterrainimporter.cpp \
@@ -215,9 +220,14 @@ HEADERS  += mainwindow.h \
     ../firstlaunchdialog.h \
     ../portablesettings.h \
     ../sharedmainwindowgeometrywidget.h \
+    ../../../shared/appissuenotifier.h \
+    ../../../shared/pztoolsbuild.h \
     biomemapgeneratordialog.h \
+    chunkdataoverride.h \
+    chunkdataoverridedialog.h \
     biomemapitem.h \
     biomemapimageprocessor.h \
+    mappingimageformat.h \
     osmterrainimportdialog.h \
     osmprojectdata.h \
     osmterrainimporter.h \

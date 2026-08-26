@@ -274,6 +274,9 @@ private:
     void savePartialChunks();
     QPoint partialChunkAt(const QPointF &scenePos, bool clamp) const;
     QRect partialChunkLassoRect() const;
+    QRectF partialChunkSceneRect(const QRect &chunks) const;
+    void updatePartialChunkLasso(const QRect &oldChunks,
+                                 const QRect &newChunks);
 };
 
 } // namespace Internal

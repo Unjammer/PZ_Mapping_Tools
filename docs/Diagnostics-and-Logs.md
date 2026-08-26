@@ -49,6 +49,29 @@ OpenGL vendor, renderer, and version selected by the driver.
 An unhandled Windows exception is recorded with its exception code, address,
 module path, and module-relative offset when Windows provides them.
 
+## In-application warning and error counters
+
+PZWorldEd, TileZed, and BuildingEd display notification boxes in the
+lower-right corner of their main window when the current process records a
+problem. The appearance follows the Project Zomboid error indicator closely:
+
+- red `ERROR` counts critical, fatal, and explicitly recorded errors
+- orange `WARNING` counts recoverable warnings
+
+The counters receive Qt warning and critical messages from the UI and worker
+threads, including messages that do not open a dialog. Warning and critical
+message boxes are captured too. When a message box repeats the same message
+that was just logged, it contributes only one entry.
+
+Each new message slides the box above the application status area for three
+seconds, then hides it while retaining the list. Click a visible notification
+box to open **Application messages**. The window can show all messages or one
+severity, follows new messages while it remains open, and exposes the
+timestamp, source file or category, thread, and complete message. **Copy
+selected**, **Copy all**, and **Open logs folder** help prepare an issue report.
+**Clear** resets both counters for the current application session. Clearing
+the notification list never deletes a log file.
+
 ## Normal startup
 
 The editors intentionally discover and preload the complete valid Tiles

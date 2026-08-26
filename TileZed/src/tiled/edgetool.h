@@ -19,6 +19,7 @@
 #define EDGETOOL_H
 
 #include "abstracttiletool.h"
+#include "tiletoolpreviewcache.h"
 
 #include "BuildingEditor/singleton.h"
 
@@ -105,17 +106,21 @@ public:
     void setEdges(Edges *edges);
     void setDash(int len, int gap);
 
-    void setSuppressBlendTiles(bool suppress)
-    { mSuppressBlendTiles = suppress; }
+    void setSuppressBlendTiles(bool suppress);
     bool suppressBlendTiles() const
     { return mSuppressBlendTiles; }
 
 protected:
+    void mapDocumentChanged(MapDocument *oldDocument,
+                            MapDocument *newDocument) override;
     void tilePositionChanged(const QPoint &tilePos);
 
-    QVector<Tile*> resolveEdgeTiles(Edges *edges);
+    const QVector<Tile *> &resolveEdgeTiles();
 
 private:
+    void clearPreview();
+    void invalidateTileCache();
+
     enum Edge
     {
         EdgeW,
@@ -132,10 +137,12 @@ private:
 
     void getMapChanges(const QPointF &start, const QPointF &end, Edge edge,
                        TileLayer &stamp, QMap<QString,QRegion> &eraseRgn,
-                       QMap<QString, QRegion> &noBlendRgn);
+                       QMap<QString, QRegion> &noBlendRgn,
+                       const QVector<Tile *> &tiles);
     void drawEdgeTile(const QPoint &origin, int x, int y, Edge edge,
                       TileLayer &stamp, QMap<QString,QRegion> &eraseRgn,
-                      QMap<QString,QRegion> &noBlendRgn);
+                      QMap<QString,QRegion> &noBlendRgn,
+                      const QVector<Tile *> &tiles);
     void drawGapTile(int x, int y, TileLayer &stamp, QMap<QString,QRegion> &eraseRgn,
                      QMap<QString,QRegion> &noBlendRgn);
 
@@ -152,6 +159,8 @@ private:
     int mDashGap;
     bool mSuppressBlendTiles;
     QGraphicsPathItem *mCursorItem;
+    TileToolPreviewState mPreviewState;
+    TileToolTilesCache mTilesCache;
 };
 
 } // namespace Internal

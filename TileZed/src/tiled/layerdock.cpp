@@ -137,6 +137,8 @@ LayerDock::LayerDock(QWidget *parent):
 #ifdef ZOMBOID
     connect(mZomboidLayerSlider, &QAbstractSlider::valueChanged,
             this, &LayerDock::setZomboidLayer);
+    connect(mLayerView, &LayerView::allLayersVisibilityRequested,
+            this, &LayerDock::setAllLayersVisible);
     updateZomboidLayerSlider();
 #endif
 
@@ -161,6 +163,8 @@ void LayerDock::setMapDocument(MapDocument *mapDocument)
                 this, &LayerDock::updateOpacitySlider);
 #ifdef ZOMBOID
         connect(mMapDocument, &MapDocument::currentLayerIndexChanged,
+                this, &LayerDock::updateZomboidLayerSlider);
+        connect(mMapDocument, &MapDocument::maxVisibleLayerChanged,
                 this, &LayerDock::updateZomboidLayerSlider);
 #endif
     }
@@ -250,6 +254,7 @@ void LayerDock::setZomboidLayer(int number)
     if (!mMapDocument)
         return;
 
+    number = qBound(0, number, mMapDocument->map()->layerCount());
     QSettings().setValue(QLatin1String(KEY_LAYER_VISIBILITY), number);
 
     int index = 0;
@@ -263,6 +268,21 @@ void LayerDock::setZomboidLayer(int number)
     }
 
     mMapDocument->setMaxVisibleLayer(number);
+}
+
+void LayerDock::setAllLayersVisible(bool visible)
+{
+    if (!mMapDocument)
+        return;
+
+    const int layerCount = mMapDocument->map()->layerCount();
+    for (int index = 0; index < layerCount; ++index) {
+        if (mMapDocument->map()->layerAt(index)->isVisible() != visible)
+            mMapDocument->setLayerVisible(index, visible);
+    }
+    const int visibility = visible ? layerCount : 0;
+    QSettings().setValue(QLatin1String(KEY_LAYER_VISIBILITY), visibility);
+    mMapDocument->setMaxVisibleLayer(visibility);
 }
 #endif // ZOMBOID
 
@@ -363,8 +383,16 @@ void LayerView::contextMenuEvent(QContextMenuEvent *event)
     menu.addAction(handler->actionAddTileLayer());
     menu.addAction(handler->actionAddObjectGroup());
     menu.addAction(handler->actionAddImageLayer());
+    menu.addSeparator();
+    QAction *checkAll = menu.addAction(tr("Check All"));
+    QAction *uncheckAll = menu.addAction(tr("Uncheck All"));
+    connect(checkAll, &QAction::triggered,
+            this, [this]() { emit allLayersVisibilityRequested(true); });
+    connect(uncheckAll, &QAction::triggered,
+            this, [this]() { emit allLayersVisibilityRequested(false); });
 
     if (layerIndex >= 0) {
+        menu.addSeparator();
         menu.addAction(handler->actionDuplicateLayer());
         menu.addAction(handler->actionMergeLayerDown());
         menu.addAction(handler->actionRemoveLayer());

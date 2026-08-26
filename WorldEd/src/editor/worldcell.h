@@ -434,6 +434,11 @@ public:
     void setMapFilePath(const QString &path);
     QString mapFilePath() const { return mMapFilePath; }
 
+    void setChunkDataOverrideFilePath(const QString &path)
+    { mChunkDataOverrideFilePath = path; }
+    QString chunkDataOverrideFilePath() const
+    { return mChunkDataOverrideFilePath; }
+
     void addLot(const QString &name, int x, int y, int z, int width, int height)
     {
         mLots.append(new WorldCellLot(this, name, x, y, z, width, height));
@@ -460,6 +465,7 @@ private:
     int mX, mY;
     World *mWorld;
     QString mMapFilePath;
+    QString mChunkDataOverrideFilePath;
     WorldCellLotList mLots;
     WorldCellObjectList mObjects;
     InGameMapCell mInGameMap;
@@ -482,6 +488,7 @@ public:
     WorldCellContents(WorldCell *cell, bool takeOwnership)
     {
         mMapFilePath = cell->mapFilePath();
+        mChunkDataOverrideFilePath = cell->chunkDataOverrideFilePath();
         mTemplates = cell->templates();
         mPos = cell->pos();
         if (takeOwnership) {
@@ -490,6 +497,7 @@ public:
             mObjects = cell->objects();
             mInGameMapFeatures = cell->mInGameMap.mFeatures;
             cell->mMapFilePath.clear();
+            cell->mChunkDataOverrideFilePath.clear();
             cell->mTemplates.clear();
             cell->mProperties.clear();
             cell->mLots.clear();
@@ -509,6 +517,7 @@ public:
         Q_ASSERT(cell->isEmpty());
         cell->mTemplates = mTemplates;
         cell->mMapFilePath = mMapFilePath;
+        cell->mChunkDataOverrideFilePath = mChunkDataOverrideFilePath;
         if (transferOwnership) {
             cell->mProperties = mProperties;
             cell->mLots = mLots.setCell(cell);
@@ -518,6 +527,7 @@ public:
                 cell->mInGameMap.mFeatures += feature;
             }
             mMapFilePath.clear();
+            mChunkDataOverrideFilePath.clear();
             mTemplates.clear();
             mProperties.clear();
             mLots.clear();
@@ -541,6 +551,7 @@ public:
         mTemplates = other->templates();
         mProperties = other->properties().clone();
         mMapFilePath = other->mapFilePath();
+        mChunkDataOverrideFilePath = other->chunkDataOverrideFilePath();
         mLots = other->lots().clone(newOwner);
         mObjects = other->objects().clone(newOwner);
         cloneInGameMapFeatures(other->mInGameMapFeatures, newOwner);
@@ -559,6 +570,9 @@ public:
 
     QString mapFilePath() const
     { return mMapFilePath; }
+
+    QString chunkDataOverrideFilePath() const
+    { return mChunkDataOverrideFilePath; }
 
     const PropertyTemplateList &templates() const
     { return mTemplates; }
@@ -615,6 +629,7 @@ private:
     PropertyTemplateList mTemplates;
     PropertyList mProperties;
     QString mMapFilePath;
+    QString mChunkDataOverrideFilePath;
     WorldCellLotList mLots;
     WorldCellObjectList mObjects;
     QList<InGameMapFeature*> mInGameMapFeatures;

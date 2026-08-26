@@ -127,7 +127,9 @@ void PackViewer::openPack()
     ui->actionSaveAllPages->setEnabled(!mPackFile.pages().isEmpty());
 
     delete progress;
-    qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
+    setEnabled(false);
+    qApp->processEvents(QEventLoop::AllEvents);
+    setEnabled(true);
     raise();
     activateWindow();
 }

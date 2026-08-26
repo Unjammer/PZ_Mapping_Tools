@@ -40,6 +40,24 @@ void SetCellMainMap::swap()
 
 /////
 
+SetCellChunkDataOverride::SetCellChunkDataOverride(
+        WorldDocument *doc, WorldCell *cell, const QString &filePath)
+    : QUndoCommand(QCoreApplication::translate(
+                       "Undo Commands", "Set Cell Chunk Data Override"))
+    , mDocument(doc)
+    , mCell(cell)
+    , mFilePath(filePath)
+{
+}
+
+void SetCellChunkDataOverride::swap()
+{
+    mFilePath = mDocument->undoRedo().setCellChunkDataOverrideFilePath(
+                mCell, mFilePath);
+}
+
+/////
+
 
 ReplaceCell::ReplaceCell(WorldDocument *doc, WorldCell *cell, WorldCellContents *contents)
     : QUndoCommand(QCoreApplication::translate("Undo Commands", "Replace Cell"))

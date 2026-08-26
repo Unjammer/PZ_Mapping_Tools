@@ -17,6 +17,8 @@
 
 #include "lotfilesmanager256.h"
 
+#include "chunkdataoverride.h"
+
 #include "../portablesettings.h"
 #include "exportlotsprogressdialog.h"
 #include "generatelotsfailuredialog.h"
@@ -232,6 +234,32 @@ bool LotFilesManager256::generateWorld(WorldDocument *worldDoc, GenerateMode mod
     qInfo() << "LOT export inputs:"
             << "source TMX cells" << populatedSourceCells
             << "placed TBX lots" << placedTbxLots;
+
+    for (int y = 0; y < mWorldDoc->world()->height(); ++y) {
+        for (int x = 0; x < mWorldDoc->world()->width(); ++x) {
+            WorldCell *cell = mWorldDoc->world()->cellAt(x, y);
+            const QString filePath = cell->chunkDataOverrideFilePath();
+            if (filePath.isEmpty())
+                continue;
+            if (gridFormat != WorldGridFormat::Native256) {
+                mError = tr("Chunk data overrides are supported only by Native 256 projects. Cell %1,%2 references %3.")
+                        .arg(cell->displayPos().x())
+                        .arg(cell->displayPos().y())
+                        .arg(QDir::toNativeSeparators(filePath));
+                return false;
+            }
+            QImage overrideImage;
+            QString overrideError;
+            if (!ChunkDataOverride::loadImage(
+                        filePath, &overrideImage, &overrideError)) {
+                mError = tr("Cell %1,%2 has an invalid chunk data override:\n%3")
+                        .arg(cell->displayPos().x())
+                        .arg(cell->displayPos().y())
+                        .arg(overrideError);
+                return false;
+            }
+        }
+    }
 
     mDialog = new ExportLotsProgressDialog(MainWindow::instance());
     ExportLotsProgressDialog& progress = *mDialog;
@@ -1149,7 +1177,12 @@ bool LotFilesWorker256::generateCell()
         for (CompositeLayerGroup *lg : mapComposite->layerGroups()) {
             lg->prepareDrawing2();
         }
-        generateChunkData();
+        if (!generateChunkData()) {
+            mCombinedCellMaps->moveToThread(
+                        mCombinedCellMaps->mMapComposite, qApp->thread());
+            setStatus(Status::Error);
+            return false;
+        }
         clearRemovedBuildingsList();
         mCombinedCellMaps->moveToThread(mCombinedCellMaps->mMapComposite, qApp->thread());
         setStatus(Status::Finished);
@@ -1299,7 +1332,12 @@ bool LotFilesWorker256::generateCell()
 
     file.close();
 
-    generateChunkData();
+    if (!generateChunkData()) {
+        mCombinedCellMaps->moveToThread(
+                    mCombinedCellMaps->mMapComposite, qApp->thread());
+        setStatus(Status::Error);
+        return false;
+    }
 
     clearRemovedBuildingsList();
 
@@ -2288,7 +2326,7 @@ void LotFilesWorker256::generateJumboTrees(CombinedCellMaps& combinedMaps)
     }
 }
 
-void LotFilesWorker256::generateChunkData()
+bool LotFilesWorker256::generateChunkData()
 {
     mRoomRectLookup.clear(0, 0, CHUNKS_PER_CELL_256, CHUNKS_PER_CELL_256, CHUNK_SIZE_256);
     for (LotFile::RoomRect *rr : mRoomRectByLevel[0]) {
@@ -2304,11 +2342,39 @@ void LotFilesWorker256::generateChunkData()
         }
     }
     const GenerateLotsSettings &lotSettings = mWorldDoc->world()->getGenerateLotsSettings();
+    QImage overrideImage;
+    if (mWorldDoc->world()->gridFormat() == WorldGridFormat::Native256
+            && mCell
+            && !mCell->chunkDataOverrideFilePath().isEmpty()) {
+        QString overrideError;
+        if (!ChunkDataOverride::loadImage(
+                    mCell->chunkDataOverrideFilePath(),
+                    &overrideImage, &overrideError)) {
+            mError = tr("Could not load the chunk data override for cell %1,%2:\n%3")
+                    .arg(mCell->displayPos().x())
+                    .arg(mCell->displayPos().y())
+                    .arg(overrideError);
+            return false;
+        }
+        qInfo() << "Applying chunk data override"
+                << mCell->displayPos()
+                << mCell->chunkDataOverrideFilePath();
+    }
     Navigate::ChunkDataFile256 cdf;
     const QBitArray *selectedChunks = mPartialChunks.enabled()
             ? &mPartialChunks.selectedChunks() : nullptr;
-    cdf.fromMap(*mCombinedCellMaps, mCombinedCellMaps->mMapComposite,
-                mRoomRectLookup, lotSettings, selectedChunks);
+    QString writeError;
+    if (!cdf.fromMap(*mCombinedCellMaps,
+                     mCombinedCellMaps->mMapComposite,
+                     mRoomRectLookup, lotSettings, overrideImage,
+                     &writeError, selectedChunks)) {
+        mError = tr("Could not write chunk data for cell %1,%2:\n%3")
+                .arg(mCombinedCellMaps->mCell256X)
+                .arg(mCombinedCellMaps->mCell256Y)
+                .arg(writeError);
+        return false;
+    }
+    return true;
 }
 
 void LotFilesWorker256::clearRemovedBuildingsList()

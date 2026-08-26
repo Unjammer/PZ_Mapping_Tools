@@ -721,7 +721,24 @@ void ZomboidScene::bmpPainted(int bmpIndex, const QRegion &region)
 {
     Q_UNUSED(bmpIndex)
     const MapRenderer *renderer = mMapDocument->renderer();
-    const QMargins margins = mMapDocument->map()->drawMargins();
+    const Map *map = mMapDocument->map();
+    QMargins margins(0, map->tileHeight(), map->tileWidth(), 0);
+    if (CompositeLayerGroup *layerGroup =
+            mMapDocument->mapComposite()->tileLayersForLevel(0)) {
+        for (TileLayer *tileLayer : layerGroup->bmpBlendLayers()) {
+            if (!tileLayer)
+                continue;
+            const QMargins layerMargins = tileLayer->drawMargins();
+            margins.setLeft(qMax(margins.left(), layerMargins.left()));
+            margins.setTop(qMax(margins.top(), layerMargins.top()));
+            margins.setRight(qMax(margins.right(), layerMargins.right()));
+            margins.setBottom(qMax(margins.bottom(), layerMargins.bottom()));
+        }
+    }
+    margins.setTop(qMax(0, margins.top() - map->tileHeight()));
+    margins.setRight(qMax(0, margins.right() - map->tileWidth()));
+    if (renderer->is2x())
+        margins *= 2;
 
     for (const QRect &r : region) {
         update(renderer->boundingRect(r, 0).adjusted(-margins.left(),

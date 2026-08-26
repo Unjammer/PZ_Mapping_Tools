@@ -92,20 +92,14 @@ void ZProgressManager::begin(const QString &text, bool cancellable)
         mDialog->show();
         mDialog->raise();
     }
-    qApp->processEvents(
-                mCancellableDepth > 0
-                ? QEventLoop::AllEvents
-                : QEventLoop::ExcludeUserInputEvents);
+    qApp->processEvents(QEventLoop::AllEvents);
 }
 
 void ZProgressManager::update(const QString &text)
 {
     Q_ASSERT(mDepth > 0);
     mLabel->setText(text);
-    qApp->processEvents(
-                mCancellableDepth > 0
-                ? QEventLoop::AllEvents
-                : QEventLoop::ExcludeUserInputEvents);
+    qApp->processEvents(QEventLoop::AllEvents);
 }
 
 void ZProgressManager::end(bool cancellable)
@@ -117,7 +111,7 @@ void ZProgressManager::end(bool cancellable)
     }
     mCancelButton->setVisible(mCancellableDepth > 0);
 //    mDialog->setValue(mDialog->maximum()); // hides dialog!
-    qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
+    qApp->processEvents(QEventLoop::AllEvents);
     if (--mDepth == 0)
         mDialog->hide();
 }

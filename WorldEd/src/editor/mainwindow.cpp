@@ -17,6 +17,8 @@
 
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "appissuenotifier.h"
+#include "pztoolsbuild.h"
 
 #include "fromtodialog.h"
 #include "bmptotmx.h"
@@ -84,6 +86,7 @@
 #include "writeworldobjectsdialog.h"
 #include "zoomable.h"
 #include "biomemapgeneratordialog.h"
+#include "chunkdataoverridedialog.h"
 #include "osmterrainimportdialog.h"
 #include "osmprojectdata.h"
 #include "biomemapimageprocessor.h"
@@ -129,6 +132,7 @@
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
+#include <QElapsedTimer>
 #include <QGraphicsSceneMouseEvent>
 #include <QMessageBox>
 #include <QLabel>
@@ -1000,6 +1004,7 @@ MainWindow::MainWindow(QWidget *parent)
     , mLotPackWindow(0)
 {
     ui->setupUi(this);
+    AppIssueNotifier::attach(this);
 
     mPartialChunksMenu = new QMenu(tr("Partial Chunks"), this);
     ui->menuBar->insertMenu(ui->helpMenu->menuAction(),
@@ -1211,7 +1216,7 @@ MainWindow::MainWindow(QWidget *parent)
     renderDiagnosticsAction->setToolTip(tr(
         "Show FPS, render time, drawn tiles, memory, zoom and renderer mode"));
     renderDiagnosticsAction->setChecked(mSettings.value(
-        QLatin1String("RenderDiagnostics/Enabled"), true).toBool());
+        QLatin1String("RenderDiagnostics/Enabled"), false).toBool());
     ui->menuView->addAction(renderDiagnosticsAction);
     connect(renderDiagnosticsAction, &QAction::toggled, this,
             [this](bool enabled) {
@@ -1489,6 +1494,13 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::generateBiomeMap);
     connect(ui->actionTerrainImageEditor, &QAction::triggered,
             this, &MainWindow::terrainImageEditor);
+    mChunkDataOverrideAction = new QAction(
+                tr("Native256 Chunk Data Overrides..."), this);
+    mChunkDataOverrideAction->setToolTip(
+                tr("Paint optional per-square values merged into chunkdata during Generate Lots"));
+    ui->menuTerrainEnvironment->addAction(mChunkDataOverrideAction);
+    connect(mChunkDataOverrideAction, &QAction::triggered,
+            this, &MainWindow::chunkDataOverrideEditor);
     connect(ui->actionImportOpenStreetMapTerrain, &QAction::triggered,
             this, &MainWindow::importOpenStreetMapTerrain);
     connect(ui->actionWorldGenPreview, &QAction::triggered,
@@ -1908,7 +1920,7 @@ void MainWindow::changeEvent(QEvent *event)
 
 void MainWindow::retranslateUi()
 {
-    setWindowTitle(tr("PZWorldEd"));
+    setWindowTitle(tr("PZWorldEd - %1").arg(PZToolsBuild::label()));
 }
 
 void MainWindow::newWorld()
@@ -2539,6 +2551,7 @@ bool MainWindow::InitConfigFiles()
                 completeTilesetCatalog, this);
     qInfo() << "WorldEd loaded the complete tileset catalog before project startup:"
             << completeTilesetCatalog.size() << "entries";
+    qInfo().noquote() << TilesetManager::instance()->cacheMemorySummary();
 
     progress.update(tr("Reading BuildingTMX.txt"));
 
@@ -2794,7 +2807,7 @@ void MainWindow::generateBiomeMap()
 {
     WorldDocument *worldDocument = currentWorldDocument();
     if (!worldDocument
-            || !ensureSavedProjectForTerrainWorkflow(worldDocument))
+            || !ensureSavedProjectForAssetWorkflow(worldDocument))
         return;
     BiomeMapGeneratorDialog dialog(worldDocument->world(),
                                    worldDocument->fileName(), this);
@@ -2819,16 +2832,45 @@ void MainWindow::terrainImageEditor()
 {
     WorldDocument *worldDocument = currentWorldDocument();
     if (!worldDocument
-            || !ensureSavedProjectForTerrainWorkflow(worldDocument))
+            || !ensureSavedProjectForAssetWorkflow(worldDocument))
         return;
     TerrainImageEditorDialog dialog(worldDocument, this);
+    dialog.exec();
+}
+void MainWindow::chunkDataOverrideEditor()
+{
+    WorldDocument *worldDocument = currentWorldDocument();
+    if (!worldDocument)
+        return;
+    if (worldDocument->world()->gridFormat()
+            != WorldGridFormat::Native256) {
+        QMessageBox::information(
+                    this, tr("Native256 Project Required"),
+                    tr("Chunk data overrides are available only for projects created with the Native 256 x 256 grid."));
+        return;
+    }
+    WorldCell *cell = nullptr;
+    if (CellDocument *cellDocument = mCurrentDocument->asCellDocument()) {
+        cell = cellDocument->cell();
+    } else if (worldDocument->selectedCellCount() == 1) {
+        cell = worldDocument->selectedCells().first();
+    }
+    if (!cell) {
+        QMessageBox::information(
+                    this, tr("Select One Cell"),
+                    tr("Select exactly one Native256 cell before opening the chunk data override editor."));
+        return;
+    }
+    if (!ensureSavedProjectForAssetWorkflow(worldDocument))
+        return;
+    ChunkDataOverrideDialog dialog(worldDocument, cell, this);
     dialog.exec();
 }
 void MainWindow::importOpenStreetMapTerrain()
 {
     WorldDocument *worldDocument = currentWorldDocument();
     if (worldDocument
-            && !ensureSavedProjectForTerrainWorkflow(worldDocument))
+            && !ensureSavedProjectForAssetWorkflow(worldDocument))
         return;
     OsmTerrainImportDialog importDialog(worldDocument, this);
     if (importDialog.exec() != QDialog::Accepted)
@@ -3341,7 +3383,7 @@ WorldDocument *MainWindow::currentWorldDocument()
     return nullptr;
 }
 
-bool MainWindow::ensureSavedProjectForTerrainWorkflow(
+bool MainWindow::ensureSavedProjectForAssetWorkflow(
         WorldDocument *worldDocument)
 {
     if (!worldDocument)
@@ -3359,9 +3401,9 @@ bool MainWindow::ensureSavedProjectForTerrainWorkflow(
 
     QMessageBox prompt(
                 QMessageBox::Information,
-                tr("Save Project Before Editing Terrain Images"),
-                tr("Main, vegetation and biome images belong to a WorldEd "
-                   "project. Save the PZW first so the images are created "
+                tr("Save Project Before Creating Project Assets"),
+                tr("This operation creates files that belong to a WorldEd "
+                   "project. Save the PZW first so those files are created "
                    "inside the project folder."),
                 QMessageBox::NoButton,
                 this);
@@ -3418,8 +3460,8 @@ bool MainWindow::ensureSavedProjectForTerrainWorkflow(
 
     QMessageBox::critical(
                 this, tr("Project Save Required"),
-                tr("WorldEd could not confirm a valid PZW file. The terrain "
-                   "image workflow was not opened."));
+                tr("WorldEd could not confirm a valid PZW file. The requested "
+                   "project asset workflow was not opened."));
     return false;
 }
 
@@ -3495,6 +3537,8 @@ bool MainWindow::validateCellMoveCoordinateData(
 
     WorldCell *cell = world->cellAt(1, 2);
     cell->setMapFilePath(QStringLiteral("validation.tmx"));
+    cell->setChunkDataOverrideFilePath(
+                QStringLiteral("validation-chunkdata.png"));
     cell->addTemplate(0, propertyTemplate);
     Property *cellProperty = new Property(propertyDefinition,
                                           QStringLiteral("cell-value"));
@@ -3540,6 +3584,8 @@ bool MainWindow::validateCellMoveCoordinateData(
                           const QPoint &expectedFeatureOffset) {
         if (!candidate
                 || candidate->mapFilePath() != QStringLiteral("validation.tmx")
+                || candidate->chunkDataOverrideFilePath()
+                   != QStringLiteral("validation-chunkdata.png")
                 || candidate->templates().size() != 1
                 || candidate->templates().first()->mName
                    != QStringLiteral("ValidationTemplate")
@@ -3691,7 +3737,8 @@ bool MainWindow::validateCellMoveCoordinateData(
         *summary = tr("Native 256 street points, region anchors and local "
                       "road coordinates follow their source cells. Cell "
                       "properties, templates, lots, objects and InGameMap "
-                      "features survive Move, Copy, Paste, Undo and Redo, "
+                      "features plus chunk data override references survive "
+                      "Move, Copy, Paste, Undo and Redo, "
                       "including existing destination features. %1.")
                 .arg(pasteSummary);
     }
@@ -3770,6 +3817,21 @@ bool MainWindow::validateCellPasteInteraction(
                               clickedTarget.y() + 0.5));
     QCoreApplication::sendEvent(scene, &moveEvent);
 
+    const quint64 rebuildCount =
+            PasteCellsTool::instance()->previewRebuildCount();
+    QElapsedTimer sameCellTimer;
+    sameCellTimer.start();
+    for (int index = 0; index < 10000; ++index)
+        QCoreApplication::sendEvent(scene, &moveEvent);
+    const qint64 sameCellNanoseconds = sameCellTimer.nsecsElapsed();
+    if (PasteCellsTool::instance()->previewRebuildCount()
+            != rebuildCount) {
+        finish();
+        if (error)
+            *error = tr("Pointer movement inside one cell rebuilt the paste preview.");
+        return false;
+    }
+
     QGraphicsSceneMouseEvent pressEvent(QEvent::GraphicsSceneMousePress);
     pressEvent.setButton(Qt::LeftButton);
     pressEvent.setButtons(Qt::LeftButton);
@@ -3808,7 +3870,10 @@ bool MainWindow::validateCellPasteInteraction(
 
     finish();
     if (summary)
-        *summary = tr("visible preview, pointer target, single placement and automatic exit verified");
+        *summary = tr("visible preview, pointer target, single placement and "
+                      "automatic exit verified, with 10000 same-cell moves "
+                      "causing no rebuild in %1 ms")
+                .arg(sameCellNanoseconds / 1000000.0, 0, 'f', 3);
     return true;
 }
 
@@ -4255,7 +4320,8 @@ void MainWindow::updateWindowTitle()
     else {
         fileName = QDir::toNativeSeparators(fileName);
     }
-    setWindowTitle(tr("[*]%1 - WorldEd").arg(fileName));
+    setWindowTitle(tr("[*]%1 - PZWorldEd - %2")
+                   .arg(fileName, PZToolsBuild::label()));
     setWindowFilePath(fileName);
     bool isModified = mCurrentDocument ? mCurrentDocument->isModified() : false;
     if (mCurrentDocument && mCurrentDocument->isCellDocument())
@@ -4564,6 +4630,7 @@ void MainWindow::initActionManager()
     actionManager->registerAction(ui->actionZonesToPNG, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.ProjectUtilities.ZonesToPNG"));
     actionManager->registerAction(ui->actionImportOpenStreetMapTerrain, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.Terrain.ImportOpenStreetMap"));
     actionManager->registerAction(ui->actionTerrainImageEditor, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.Terrain.ImageEditor"));
+    actionManager->registerAction(mChunkDataOverrideAction, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.Terrain.ChunkDataOverrides"));
     actionManager->registerAction(ui->actionGenerateBiomeMap, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.Terrain.GenerateBiomeMap"));
     actionManager->registerAction(ui->actionWorldGenPreview, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.WorldGen.Preview"));
     actionManager->registerAction(ui->actionWorldGenPrefabEditor, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.WorldGen.PrefabEditor"));
@@ -6323,6 +6390,13 @@ void MainWindow::updateActions()
     ui->actionCreateWorldImage->setEnabled(hasDoc);
     ui->actionGenerateBiomeMap->setEnabled(hasDoc);
     ui->actionTerrainImageEditor->setEnabled(currentWorldDoc != nullptr);
+    const bool oneChunkDataCell = cellDoc != nullptr
+            || (worldDoc != nullptr && worldDoc->selectedCellCount() == 1);
+    mChunkDataOverrideAction->setEnabled(
+                currentWorldDoc != nullptr
+                && world != nullptr
+                && world->gridFormat() == WorldGridFormat::Native256
+                && oneChunkDataCell);
     ui->actionImportOpenStreetMapTerrain->setEnabled(true);
     ui->actionWorldGenPreview->setEnabled(
                 currentWorldDoc != nullptr

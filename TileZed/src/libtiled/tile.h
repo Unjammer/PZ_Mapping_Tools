@@ -94,6 +94,9 @@ public:
     void setImage(const QImage &image);
     void setImage(const Tile *tile);
     void setEmptyImage(int width, int height);
+    quint64 imageHash() const;
+    quint64 imageStorageBytes() const;
+    bool hasSameImageData(const Tile *tile) const;
 
     /**
      * Returns the width of this tile.

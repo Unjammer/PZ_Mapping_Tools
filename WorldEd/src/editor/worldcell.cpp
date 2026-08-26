@@ -113,6 +113,7 @@ WorldCellObject *WorldCell::removeObject(int index)
 bool WorldCell::isEmpty() const
 {
     if (!mMapFilePath.isEmpty()
+            || !mChunkDataOverrideFilePath.isEmpty()
             || !mLots.isEmpty()
             || !mObjects.isEmpty()
             || !mInGameMap.mFeatures.isEmpty()
@@ -279,4 +280,6 @@ void WorldCellContents::mergeOnto(WorldCell *cell)
     cloneInGameMapFeatures(cell->inGameMap().features(), cell);
     if (mMapFilePath.isEmpty())
         mMapFilePath = cell->mapFilePath();
+    if (mChunkDataOverrideFilePath.isEmpty())
+        mChunkDataOverrideFilePath = cell->chunkDataOverrideFilePath();
 }

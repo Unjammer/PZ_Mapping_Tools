@@ -901,6 +901,7 @@ public:
     qreal layerOpacity(int level, Tiled::TileLayer *tl) const;
 
     void setHighlightRoomPosition(const QPoint &tilePos);
+    void updateRoomHighlightRegion(const QRegion &region, int level);
     QRegion getBuildingRegion(const QPoint &tilePos, QRegion &roomRgn);
     QString roomNameAt(const QPointF &scenePos);
 
@@ -1173,6 +1174,9 @@ private:
     void savePartialChunks();
     QPoint partialChunkAt(const QPointF &scenePos, bool clamp) const;
     QRect partialChunkLassoRect() const;
+    QRectF partialChunkSceneRect(const QRect &chunks) const;
+    void updatePartialChunkLasso(const QRect &oldChunks,
+                                 const QRect &newChunks);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(CellScene::PendingFlags)

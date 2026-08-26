@@ -644,6 +644,15 @@ void MapDocument::toggleOtherLayers(int index)
 }
 
 #ifdef ZOMBOID
+void MapDocument::setMaxVisibleLayer(int index)
+{
+    const int clamped = qBound(0, index, mMap->layerCount());
+    if (mMaxVisibleLayer == clamped)
+        return;
+    mMaxVisibleLayer = clamped;
+    emit maxVisibleLayerChanged(clamped);
+}
+
 void MapDocument::setLayerVisible(int layerIndex, bool visible)
 {
     int row = mMap->layerCount() - layerIndex - 1;

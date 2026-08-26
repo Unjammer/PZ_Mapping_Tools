@@ -375,6 +375,7 @@ public:
     void check();
     Tiled::Internal::TileDefTileset *tileset(const QString &tilesetName);
     Tiled::Internal::TileDefTile *tile(const QString &tilesetName, int tileIndex);
+    QString filePathForTileset(const QString &tilesetName);
     TileDefWatcherFile *fileByName(const QString &filePath);
     TileDefWatcherFile *fileByName(const QString &filePath, const QList<TileDefWatcherFile*> &files);
 

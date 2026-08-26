@@ -411,7 +411,16 @@ void MapScene::updateCurrentLayerHighlight()
 void MapScene::regionChanged(const QRegion &region, Layer *layer)
 {
     const MapRenderer *renderer = mMapDocument->renderer();
-    const QMargins margins = mMapDocument->map()->drawMargins();
+    QMargins margins = mMapDocument->map()->drawMargins();
+    if (TileLayer *tileLayer = layer ? layer->asTileLayer() : nullptr) {
+        margins = tileLayer->drawMargins();
+        margins.setTop(qMax(0, margins.top()
+                            - mMapDocument->map()->tileHeight()));
+        margins.setRight(qMax(0, margins.right()
+                              - mMapDocument->map()->tileWidth()));
+        if (renderer->is2x())
+            margins *= 2;
+    }
 
     for (const QRect &r : region) {
         update(renderer->boundingRect(r, layer->level()).adjusted(-margins.left(),
@@ -785,9 +794,13 @@ void MapScene::mouseMoveEvent(QGraphicsSceneMouseEvent *mouseEvent)
         return;
 
     if (mPartialChunkLassoActive) {
-        mPartialChunkLassoCurrent = partialChunkAt(
+        const QPoint nextChunk = partialChunkAt(
                     mouseEvent->scenePos(), true);
-        update();
+        if (nextChunk != mPartialChunkLassoCurrent) {
+            const QRect oldChunks = partialChunkLassoRect();
+            mPartialChunkLassoCurrent = nextChunk;
+            updatePartialChunkLasso(oldChunks, partialChunkLassoRect());
+        }
         mouseEvent->accept();
         return;
     }
@@ -813,7 +826,7 @@ void MapScene::mousePressEvent(QGraphicsSceneMouseEvent *mouseEvent)
             mPartialChunkLassoCurrent = chunk;
             mPartialChunkLassoSelect = !mPartialChunks.isSelected(
                         chunk.x(), chunk.y());
-            update();
+            update(partialChunkSceneRect(partialChunkLassoRect()));
             mouseEvent->accept();
             return;
         }
@@ -831,8 +844,13 @@ void MapScene::mousePressEvent(QGraphicsSceneMouseEvent *mouseEvent)
 void MapScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *mouseEvent)
 {
     if (mPartialChunkLassoActive && mouseEvent->button() == Qt::LeftButton) {
-        mPartialChunkLassoCurrent = partialChunkAt(
+        const QPoint nextChunk = partialChunkAt(
                     mouseEvent->scenePos(), true);
+        if (nextChunk != mPartialChunkLassoCurrent) {
+            const QRect oldChunks = partialChunkLassoRect();
+            mPartialChunkLassoCurrent = nextChunk;
+            updatePartialChunkLasso(oldChunks, partialChunkLassoRect());
+        }
         const QRect chunks = partialChunkLassoRect();
         for (int y = chunks.top(); y <= chunks.bottom(); ++y) {
             for (int x = chunks.left(); x <= chunks.right(); ++x)
@@ -840,7 +858,6 @@ void MapScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *mouseEvent)
         }
         mPartialChunkLassoActive = false;
         savePartialChunks();
-        update();
         emit partialChunkSelectionChanged();
         mouseEvent->accept();
         return;
@@ -874,6 +891,29 @@ QRect MapScene::partialChunkLassoRect() const
 {
     return QRect(mPartialChunkLassoStart,
                  mPartialChunkLassoCurrent).normalized();
+}
+
+QRectF MapScene::partialChunkSceneRect(const QRect &chunks) const
+{
+    if (!mMapDocument || chunks.isEmpty())
+        return QRectF();
+    const int chunkSize = PZTools::PartialChunkSelection::ChunkSize;
+    const QRect tiles(chunks.x() * chunkSize,
+                      chunks.y() * chunkSize,
+                      chunks.width() * chunkSize,
+                      chunks.height() * chunkSize);
+    return mMapDocument->renderer()->boundingRect(
+                tiles, mMapDocument->currentLevel()).adjusted(-2, -2, 2, 2);
+}
+
+void MapScene::updatePartialChunkLasso(const QRect &oldChunks,
+                                       const QRect &newChunks)
+{
+    const QRegion changed =
+            PZTools::PartialChunkSelection::changedLassoRegion(
+                oldChunks, newChunks);
+    for (const QRect &chunks : changed)
+        update(partialChunkSceneRect(chunks));
 }
 
 /**

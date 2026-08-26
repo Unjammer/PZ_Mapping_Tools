@@ -68,7 +68,7 @@ protected:
     void contextMenuEvent(QContextMenuEvent *event);
 
 private slots:
-    void editTileProperties();
+    void editTileDefinition();
     void setDrawGrid(bool drawGrid);
 
     void adjustScale();

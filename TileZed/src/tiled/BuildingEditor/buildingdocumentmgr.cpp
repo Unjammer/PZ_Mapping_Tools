@@ -58,6 +58,9 @@ void BuildingDocumentMgr::closeDocument(int index)
 
     BuildingDocument *doc = mDocuments.takeAt(index);
     emit documentAboutToClose(index, doc);
+    qInfo() << "BuildingEd closing document: undo commands"
+            << doc->undoStack()->count()
+            << "index" << doc->undoStack()->index();
     if (doc == mCurrent) {
         if (mDocuments.size())
             setCurrentDocument(mDocuments.first());

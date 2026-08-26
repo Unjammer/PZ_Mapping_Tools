@@ -131,8 +131,6 @@ private:
     bool validateWorkingImageSize(const QSize &size,
                                   const QString &operation);
     bool maybeDiscardChanges();
-    bool savePngAtomically(const QImage &image, const QString &path,
-                           QString *error) const;
     bool validateAttachment(QString *error) const;
     bool attachImagesToWorld(const QString &groundPath, QString *error);
     void beginImageEdit(const QString &label);

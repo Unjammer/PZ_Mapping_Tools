@@ -82,6 +82,25 @@ private:
 
 /////
 
+class SetCellChunkDataOverride : public QUndoCommand
+{
+public:
+    SetCellChunkDataOverride(WorldDocument *doc, WorldCell *cell,
+                             const QString &filePath);
+
+    void undo() { swap(); }
+    void redo() { swap(); }
+
+private:
+    void swap();
+
+    WorldDocument *mDocument;
+    WorldCell *mCell;
+    QString mFilePath;
+};
+
+/////
+
 class ReplaceCell : public QUndoCommand
 {
 public:

@@ -33,7 +33,9 @@
 #include "toolmanager.h"
 
 #include <QTabWidget>
+#include <QDebug>
 #include <QUndoGroup>
+#include <QUndoStack>
 #include <QFileInfo>
 
 using namespace Tiled;
@@ -210,6 +212,9 @@ void DocumentManager::closeCurrentDocument()
     mTabWidget->removeTab(index);
 #ifdef ZOMBOID
     emit documentAboutToClose(index, mapDocument);
+    qInfo() << "TileZed closing document: undo commands"
+            << mapDocument->undoStack()->count()
+            << "index" << mapDocument->undoStack()->index();
 #endif
     delete mapView;
     delete mapDocument;

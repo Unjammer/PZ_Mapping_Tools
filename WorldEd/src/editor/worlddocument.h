@@ -99,6 +99,8 @@ public:
     QSize resizeWorld(const QSize &newSize, QVector<WorldCell*> &cells);
 
     QString setCellMapName(WorldCell *cell, const QString &mapName);
+    QString setCellChunkDataOverrideFilePath(WorldCell *cell,
+                                             const QString &filePath);
     WorldCellContents *setCellContents(WorldCell *cell, WorldCellContents *contents);
 
     void addCellLot(WorldCell *cell, int index, WorldCellLot *lot);
@@ -305,6 +307,8 @@ public:
     void trimWorldToBounds(const QRect &bounds);
 
     void setCellMapName(WorldCell *cell, const QString &mapName);
+    void setCellChunkDataOverrideFilePath(WorldCell *cell,
+                                          const QString &filePath);
     void addCellLot(WorldCell *cell, int index, WorldCellLot *lot);
     void removeCellLot(WorldCell *cell, int index);
     void moveCellLot(WorldCellLot *lot, const QPoint &pos);

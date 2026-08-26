@@ -57,11 +57,63 @@ FenceTool::FenceTool(QObject *parent) :
     mCursorItem->setBrush(QColor(0,255,0,64));
 }
 
+void FenceTool::clearPreview()
+{
+    if (!mToolTileLayerGroup)
+        return;
+    mToolTileLayerGroup->clearToolTiles();
+    if (mScene)
+        mScene->update(mToolTilesRect);
+    mToolTileLayerGroup = nullptr;
+    mToolTiles.erase();
+}
+
+void FenceTool::invalidateTileCache()
+{
+    clearPreview();
+    mTilesCache.invalidate();
+    mPreviewState.invalidate();
+}
+
+void FenceTool::mapDocumentChanged(MapDocument *oldDocument,
+                                   MapDocument *newDocument)
+{
+    if (oldDocument)
+        QObject::disconnect(oldDocument, nullptr, this, nullptr);
+    AbstractTileTool::mapDocumentChanged(oldDocument, newDocument);
+    if (newDocument) {
+        connect(newDocument, &MapDocument::mapChanged,
+                this, &FenceTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::currentLayerIndexChanged,
+                this, &FenceTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::currentLevelChanged,
+                this, &FenceTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::layerAboutToBeRemoved,
+                this, &FenceTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::layerLevelChanged,
+                this, &FenceTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::tilesetAdded,
+                this, &FenceTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::tilesetAboutToBeRemoved,
+                this, &FenceTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::tilesetRemoved,
+                this, &FenceTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::tilesetMoved,
+                this, &FenceTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::tilesetFileNameChanged,
+                this, &FenceTool::invalidateTileCache);
+        connect(newDocument, &MapDocument::tilesetNameChanged,
+                this, &FenceTool::invalidateTileCache);
+    }
+    invalidateTileCache();
+}
+
 void FenceTool::activate(MapScene *scene)
 {
     Q_ASSERT(mScene == 0);
     mScene = scene;
     mInitialClick = false;
+    mPreviewState.invalidate();
     scene->addItem(mCursorItem);
     AbstractTileTool::activate(scene);
     FenceToolDialog::instance()->setVisibleLater(true);
@@ -70,12 +122,8 @@ void FenceTool::activate(MapScene *scene)
 void FenceTool::deactivate(MapScene *scene)
 {
     Q_ASSERT(mScene == scene);
-    if (mToolTileLayerGroup != 0) {
-        mToolTileLayerGroup->clearToolTiles();
-        mScene->update(mToolTilesRect);
-        mToolTileLayerGroup = 0;
-        mToolTiles.erase();
-    }
+    clearPreview();
+    mPreviewState.invalidate();
 
     FenceToolDialog::instance()->setVisibleLater(false);
     scene->removeItem(mCursorItem);
@@ -85,23 +133,42 @@ void FenceTool::deactivate(MapScene *scene)
 
 void FenceTool::mouseMoved(const QPointF &pos, Qt::KeyboardModifiers modifiers)
 {
+    AbstractTileTool::mouseMoved(pos, modifiers);
     const MapRenderer *renderer = mapDocument()->renderer();
     Layer *layer = currentTileLayer();
+    if (!layer)
+        return;
     const QPointF tilePosF = renderer->pixelToTileCoords(pos, layer ? layer->level() : 0);
     QPoint tilePos = QPoint(qFloor(tilePosF.x()), qFloor(tilePosF.y()));
     QPointF m(tilePosF.x() - tilePos.x(), tilePosF.y() - tilePos.y());
     qreal dW = m.x(), dN = m.y(), dE = 1.0 - dW, dS = 1.0 - dN;
+    bool west = dW < dE && dW < dN && dW < dS;
+    bool east = dE <= dW && dE < dN && dE < dS;
+    bool south = (dW < dE && !west && dS <= dN)
+            || (dW >= dE && !east && dS <= dN);
+    int previewVariant = west || south;
+    if (mInitialClick) {
+        previewVariant = 2 + (qAbs(tilePosF.x() - mStartTilePosF.x())
+                              > qAbs(tilePosF.y() - mStartTilePosF.y()));
+    }
+    TileToolPreviewKey previewKey;
+    previewKey.tilePosition = tilePos;
+    previewKey.layer = layer;
+    previewKey.selection = mFence;
+    previewKey.level = layer->level();
+    previewKey.mode = mInitialClick ? 1 : 0;
+    previewKey.variant = previewVariant;
+    previewKey.modifiers = int(modifiers
+                               & (Qt::AltModifier | Qt::ControlModifier));
+    if (!mPreviewState.accept(previewKey))
+        return;
+
     QPainterPath path;
 
     CompositeLayerGroup *lg = mapDocument()->mapComposite()->layerGroupForLevel(mapDocument()->currentLevel());
-    if (mToolTileLayerGroup != 0) {
-        mToolTileLayerGroup->clearToolTiles();
-        mScene->update(mToolTilesRect);
-        mToolTileLayerGroup = 0;
-        mToolTiles.erase();
-    }
+    clearPreview();
     QPoint topLeft;
-    QVector<QVector<Cell> > toolTiles;
+    const QVector<Tile *> &tiles = resolveTiles();
 
     if (!mInitialClick) {
         QPolygonF polyN = renderer->tileToPixelCoords(QRectF(tilePos.x(), tilePos.y(), 1, 0.25), layer->level());
@@ -109,18 +176,15 @@ void FenceTool::mouseMoved(const QPointF &pos, Qt::KeyboardModifiers modifiers)
         QPolygonF polyW = renderer->tileToPixelCoords(QRectF(tilePos.x(), tilePos.y(), 0.25, 1), layer->level());
         QPolygonF polyE = renderer->tileToPixelCoords(QRectF(tilePos.x() + 0.75, tilePos.y(), 0.25, 1), layer->level());
         polyN += polyN.first(), polyS += polyS.first(), polyW += polyW.first(), polyE += polyE.first();
-        bool west = dW < dE && dW < dN && dW < dS;
-        bool east = dE <= dW && dE < dN && dE < dS;
-        bool south = (dW < dE && !west && dS <= dN) || (dW >= dE && !east && dS <= dN);
         if (modifiers & Qt::AltModifier) {
             path.addPolygon((west || south) ? polyW : polyN);
-            if (Tile *tile = gateTile(tilePos.x(), tilePos.y(), west || south)) {
+            if (Tile *tile = gateTile(tilePos.x(), tilePos.y(), west || south,
+                                      tiles)) {
                 topLeft = tilePos;
                 mToolTiles.resize(QSize(1, 1), QPoint());
                 mToolTiles.setCell(0, 0, Cell(tile));
             }
         } else if (modifiers & Qt::ControlModifier) {
-            QVector<Tile*> tiles = resolveTiles(mFence);
             if (Tile *tile = tiles[Fence::Post]) {
                 topLeft = tilePos;
                 mToolTiles.resize(QSize(1, 1), QPoint());
@@ -130,7 +194,8 @@ void FenceTool::mouseMoved(const QPointF &pos, Qt::KeyboardModifiers modifiers)
             }
         } else {
             path.addPolygon(polyN), path.addPolygon(polyW);
-            if (Tile *tile = fenceTile(tilePos.x(), tilePos.y(), west || south)) {
+            if (Tile *tile = fenceTile(tilePos.x(), tilePos.y(), west || south,
+                                       tiles)) {
                 topLeft = tilePos;
                 mToolTiles.resize(QSize(1, 1), QPoint());
                 mToolTiles.setCell(0, 0, Cell(tile));
@@ -149,7 +214,8 @@ void FenceTool::mouseMoved(const QPointF &pos, Qt::KeyboardModifiers modifiers)
 
             topLeft = QPoint(qMin(mStartTilePos.x(), tilePos.x()), mStartTilePos.y());
             mToolTiles.resize(QSize(qAbs(tilePos.x() - mStartTilePos.x()) + 1, 1), QPoint());
-            getNorthEdgeTiles(mStartTilePos.x(), mStartTilePos.y(), tilePos.x(), mToolTiles);
+            getNorthEdgeTiles(mStartTilePos.x(), mStartTilePos.y(), tilePos.x(),
+                              mToolTiles, tiles);
         } else {
             qreal dx = 0;
             QRectF r = QRectF(mStartTilePos.x() + dx, mStartTilePos.y(), 0.25, 1)
@@ -159,15 +225,17 @@ void FenceTool::mouseMoved(const QPointF &pos, Qt::KeyboardModifiers modifiers)
 
             topLeft = QPoint(mStartTilePos.x(), qMin(mStartTilePos.y(), tilePos.y()));
             mToolTiles.resize(QSize(1, qAbs(tilePos.y() - mStartTilePos.y()) + 1), QPoint());
-            getWestEdgeTiles(mStartTilePos.x(), mStartTilePos.y(), tilePos.y(), mToolTiles);
+            getWestEdgeTiles(mStartTilePos.x(), mStartTilePos.y(), tilePos.y(),
+                             mToolTiles, tiles);
         }
     }
 
-    if (!mToolTiles.isEmpty()) {
+    if (lg && !mToolTiles.isEmpty()) {
         QSize tilesSize(mToolTiles.width(), mToolTiles.height());
         lg->setToolTiles(&mToolTiles, topLeft, QRect(topLeft, tilesSize), currentTileLayer());
-        mToolTilesRect = renderer->boundingRect(QRect(topLeft.x(), topLeft.y(), mToolTiles.width(), mToolTiles.height()),
-                mapDocument()->currentLevel()).adjusted(-3, -(128-32) - 3, 3, 3); // use mMap->drawMargins()
+        mToolTilesRect = tileToolPreviewRect(
+                    mapDocument(), &mToolTiles,
+                    QRect(topLeft, QSize(mToolTiles.width(), mToolTiles.height())));
         mToolTileLayerGroup = lg;
         mScene->update(mToolTilesRect);
     }
@@ -175,8 +243,6 @@ void FenceTool::mouseMoved(const QPointF &pos, Qt::KeyboardModifiers modifiers)
     path.setFillRule(Qt::WindingFill);
     path = path.simplified();
     mCursorItem->setPath(path);
-
-    AbstractTileTool::mouseMoved(pos, modifiers);
 }
 
 void FenceTool::mousePressed(QGraphicsSceneMouseEvent *event)
@@ -249,7 +315,10 @@ void FenceTool::languageChanged()
 
 void FenceTool::setFence(Fence *fence)
 {
+    if (mFence == fence)
+        return;
     mFence = fence;
+    invalidateTileCache();
 }
 
 void FenceTool::tilePositionChanged(const QPoint &tilePos)
@@ -257,34 +326,19 @@ void FenceTool::tilePositionChanged(const QPoint &tilePos)
     Q_UNUSED(tilePos)
 }
 
-QVector<Tile *> FenceTool::resolveTiles(Fence *fence)
+const QVector<Tile *> &FenceTool::resolveTiles()
 {
-    QVector<Tile *> ret(Fence::ShapeCount);
-    if (!fence) return ret;
-    Map *map = mapDocument()->map();
-    QMap<QString,Tileset*> tilesets;
-    foreach (Tileset *ts, map->tilesets())
-        tilesets[ts->name()] = ts;
-
-    for (int i = 0; i < Fence::ShapeCount; i++) {
-//        ret[i] = (Tile*) -1;
-        if (fence->mTileNames[i].isEmpty())
-            continue;
-        QString tilesetName;
-        int index;
-        if (BuildingEditor::BuildingTilesMgr::instance()->parseTileName(fence->mTileNames[i], tilesetName, index)) {
-            if (tilesets.contains(tilesetName))
-                ret[i] = tilesets[tilesetName]->tileAt(index);
-        }
-    }
-
-    return ret;
+    static const QVector<QString> emptyNames(Fence::ShapeCount);
+    return mTilesCache.resolve(mapDocument() ? mapDocument()->map() : nullptr,
+                               mFence ? mFence->mTileNames : emptyNames,
+                               Fence::ShapeCount, nullptr);
 }
 
 void FenceTool::drawWestEdge(int sx, int sy, int ey)
 {
     TileLayer stamp(QString(), 0, 0, 1, qAbs(ey - sy) + 1);
-    getWestEdgeTiles(sx, sy, ey, stamp);
+    const QVector<Tile *> &tiles = resolveTiles();
+    getWestEdgeTiles(sx, sy, ey, stamp, tiles);
 
     TileLayer *tileLayer = currentTileLayer();
 
@@ -300,7 +354,8 @@ void FenceTool::drawWestEdge(int sx, int sy, int ey)
 void FenceTool::drawNorthEdge(int sx, int sy, int ex)
 {
     TileLayer stamp(QString(), 0, 0, qAbs(ex - sx) + 1, 1);
-    getNorthEdgeTiles(sx, sy, ex, stamp);
+    const QVector<Tile *> &tiles = resolveTiles();
+    getNorthEdgeTiles(sx, sy, ex, stamp, tiles);
 
     TileLayer *tileLayer = currentTileLayer();
 
@@ -321,7 +376,7 @@ void FenceTool::drawPost(int x, int y)
 
     Tile *CURRENT = tileLayer->cellAt(x, y).tile;
 
-    QVector<Tile*> tiles = resolveTiles(mFence);
+    const QVector<Tile *> &tiles = resolveTiles();
 
     // Drawing a post on an exising one erases it.
     if (CURRENT == tiles[Fence::Post]) {
@@ -350,7 +405,8 @@ void FenceTool::drawGate(int x, int y, bool west)
     if (!tileLayer->contains(x, y))
         return;
 
-    Tile *tile = gateTile(x, y, west);
+    const QVector<Tile *> &tiles = resolveTiles();
+    Tile *tile = gateTile(x, y, west, tiles);
     if (!tile) return;
 
     TileLayer stamp(QString(), 0, 0, 1, 1);
@@ -365,13 +421,12 @@ void FenceTool::drawGate(int x, int y, bool west)
     mapDocument()->emitRegionEdited(QRect(x, y, stamp.width(), stamp.height()), tileLayer);
 }
 
-Tile *FenceTool::fenceTile(int x, int y, bool west)
+Tile *FenceTool::fenceTile(int x, int y, bool west,
+                          const QVector<Tile *> &tiles)
 {
     TileLayer *tileLayer = currentTileLayer();
     if (!tileLayer->contains(x, y))
         return 0;
-
-    QVector<Tile*> tiles = resolveTiles(mFence);
 
     Tile *CURRENT = tileLayer->cellAt(x, y).tile;
     Tile *tile = 0;
@@ -383,9 +438,9 @@ Tile *FenceTool::fenceTile(int x, int y, bool west)
     return tile;
 }
 
-void FenceTool::getWestEdgeTiles(int sx, int sy, int ey, TileLayer &stamp)
+void FenceTool::getWestEdgeTiles(int sx, int sy, int ey, TileLayer &stamp,
+                                 const QVector<Tile *> &tiles)
 {
-    QVector<Tile*> tiles = resolveTiles(mFence);
     Tile *t[2] = { tiles[Fence::West1], tiles[Fence::West2] };
 
     TileLayer *tileLayer = currentTileLayer();
@@ -417,9 +472,9 @@ void FenceTool::getWestEdgeTiles(int sx, int sy, int ey, TileLayer &stamp)
     }
 }
 
-void FenceTool::getNorthEdgeTiles(int sx, int sy, int ex, TileLayer &stamp)
+void FenceTool::getNorthEdgeTiles(int sx, int sy, int ex, TileLayer &stamp,
+                                  const QVector<Tile *> &tiles)
 {
-    QVector<Tile*> tiles = resolveTiles(mFence);
     Tile *t[2] = { tiles[Fence::North1], tiles[Fence::North2] };
 
     TileLayer *tileLayer = currentTileLayer();
@@ -451,13 +506,12 @@ void FenceTool::getNorthEdgeTiles(int sx, int sy, int ex, TileLayer &stamp)
     }
 }
 
-Tile *FenceTool::gateTile(int x, int y, bool west)
+Tile *FenceTool::gateTile(int x, int y, bool west,
+                         const QVector<Tile *> &tiles)
 {
     TileLayer *tileLayer = currentTileLayer();
     if (!tileLayer->contains(x, y))
         return 0;
-
-    QVector<Tile*> tiles = resolveTiles(mFence);
 
     Tile *CURRENT = tileLayer->cellAt(x, y).tile;
     Tile *tile = 0;

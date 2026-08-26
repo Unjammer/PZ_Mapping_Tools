@@ -32,6 +32,7 @@
 #include "tile.h"
 
 #include <QBitmap>
+#include <QSet>
 
 using namespace Tiled;
 
@@ -257,6 +258,73 @@ Tileset *Tileset::clone() const
 TilesetImageCache::~TilesetImageCache()
 {
     qDeleteAll(mTilesets);
+}
+
+void TilesetImageCache::deduplicateTilesetImages(Tileset *tileset)
+{
+    for (int index = 0; index < tileset->tileCount(); ++index) {
+        Tile *tile = tileset->tileAt(index);
+        if (!tile || tile->image().isNull())
+            continue;
+        const quint64 hash = tile->imageHash();
+        const QList<Tile *> matches = mTileImagePool.value(hash);
+        Tile *match = nullptr;
+        for (Tile *candidate : matches) {
+            if (tile->hasSameImageData(candidate)) {
+                match = candidate;
+                break;
+            }
+        }
+        if (match) {
+            mDeduplicatedBytes += tile->imageStorageBytes();
+            ++mDeduplicatedImages;
+            tile->setImage(match);
+        } else {
+            mTileImagePool[hash].append(tile);
+        }
+    }
+}
+
+void TilesetImageCache::rebuildTileImagePool()
+{
+    mTileImagePool.clear();
+    mDeduplicatedBytes = 0;
+    mDeduplicatedImages = 0;
+    for (Tileset *tileset : std::as_const(mTilesets))
+        deduplicateTilesetImages(tileset);
+}
+
+QString TilesetImageCache::memorySummary() const
+{
+    quint64 tileCount = 0;
+    quint64 imageCount = 0;
+    quint64 logicalBytes = 0;
+    quint64 residentBytes = 0;
+    QSet<qint64> storageKeys;
+    for (Tileset *tileset : mTilesets) {
+        tileCount += quint64(tileset->tileCount());
+        for (int index = 0; index < tileset->tileCount(); ++index) {
+            Tile *tile = tileset->tileAt(index);
+            if (!tile || tile->image().isNull())
+                continue;
+            ++imageCount;
+            const quint64 bytes = tile->imageStorageBytes();
+            logicalBytes += bytes;
+            const qint64 storageKey = tile->image().cacheKey();
+            if (!storageKeys.contains(storageKey)) {
+                storageKeys.insert(storageKey);
+                residentBytes += bytes;
+            }
+        }
+    }
+    return QStringLiteral(
+                "Tileset image cache: %1 sheets, %2 tiles, %3 nonempty images, %4 unique pixel buffers, %5 MiB logical, %6 MiB resident, %7 exact duplicates sharing %8 MiB")
+            .arg(mTilesets.size()).arg(tileCount).arg(imageCount)
+            .arg(storageKeys.size())
+            .arg(double(logicalBytes) / 1048576.0, 0, 'f', 1)
+            .arg(double(residentBytes) / 1048576.0, 0, 'f', 1)
+            .arg(mDeduplicatedImages)
+            .arg(double(mDeduplicatedBytes) / 1048576.0, 0, 'f', 1);
 }
 
 #include <QDebug>

@@ -988,6 +988,15 @@ void WorldDocument::changeLuaSettings(const LuaSettings &settings)
     undoStack()->push(new ChangeLuaSettings(this, settings));
 }
 
+void WorldDocument::setCellChunkDataOverrideFilePath(
+        WorldCell *cell, const QString &filePath)
+{
+    Q_ASSERT(cell && cell->world() == world());
+    if (cell->chunkDataOverrideFilePath() == filePath)
+        return;
+    undoStack()->push(new SetCellChunkDataOverride(this, cell, filePath));
+}
+
 void WorldDocument::changeOtherWorlds(const QStringList &paths)
 {
     if (paths == mWorld->otherWorlds())
@@ -1431,6 +1440,16 @@ int WorldDocumentUndoRedo::setLotLevel(WorldCellLot *lot, int level)
 
     emit lotLevelChanged(lot);
     return oldLevel;
+}
+
+QString WorldDocumentUndoRedo::setCellChunkDataOverrideFilePath(
+        WorldCell *cell, const QString &filePath)
+{
+    const QString oldPath = cell->chunkDataOverrideFilePath();
+    emit cellContentsAboutToChange(cell);
+    cell->setChunkDataOverrideFilePath(filePath);
+    emit cellContentsChanged(cell);
+    return oldPath;
 }
 
 int WorldDocumentUndoRedo::reorderCellLot(WorldCellLot *lot, int index)

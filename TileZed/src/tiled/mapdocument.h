@@ -147,7 +147,7 @@ public:
     int currentLevel() const { return mCurrentLevel; }
 
     /* For the visibility slider in the LayerDock. */
-    void setMaxVisibleLayer(int index) { mMaxVisibleLayer = index; }
+    void setMaxVisibleLayer(int index);
     int maxVisibleLayer() const { return mMaxVisibleLayer; }
 #endif
 
@@ -346,6 +346,7 @@ signals:
     void layerLevelChanged(int index, int oldLevel);
 
     void currentLevelChanged(int z);
+    void maxVisibleLayerChanged(int index);
 #endif
 
     /**

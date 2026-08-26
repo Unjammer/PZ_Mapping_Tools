@@ -5,7 +5,7 @@ include(../qtlockedfile/qtlockedfile.pri)
 include(../worlded/worlded.pri)
 
 # MSVC
-win32 {
+msvc {
     QMAKE_CFLAGS_RELEASE += -Zi
     QMAKE_CXXFLAGS_RELEASE += -Zi
     QMAKE_LFLAGS_RELEASE += /DEBUG /OPT:REF
@@ -41,6 +41,7 @@ INCLUDEPATH += $$top_srcdir/../shared
 DEFINES += QT_NO_CAST_FROM_ASCII \
     QT_NO_CAST_TO_ASCII
 DEFINES += ZOMBOID
+DEFINES += PZTOOLS_APP_ISSUE_NOTIFIER
 
 macx {
     QMAKE_LIBDIR_FLAGS += -L$$OUT_PWD/../../bin/TileZed.app/Contents/Frameworks
@@ -65,7 +66,8 @@ macx {
 #RCC_DIR = .rcc
 #OBJECTS_DIR = .obj
 
-SOURCES += ../../../shared/partialchunkselection.cpp \
+SOURCES += ../../../shared/appissuenotifier.cpp \
+    ../../../shared/partialchunkselection.cpp \
     aboutdialog.cpp \
     BuildingEditor/attributeeditmode.cpp \
     BuildingEditor/attributeeditmode_p.cpp \
@@ -296,6 +298,7 @@ SOURCES += ../../../shared/partialchunkselection.cpp \
     createpackdialog.cpp \
     texturepackfile.cpp \
     texturepacker.cpp \
+    tiletoolpreviewcache.cpp \
     packcompare.cpp \
     packextractdialog.cpp \
     containeroverlayview.cpp \
@@ -311,6 +314,8 @@ HEADERS += aboutdialog.h \
     ../firstlaunchdialog.h \
     ../portablesettings.h \
     ../sharedmainwindowgeometrywidget.h \
+    ../../../shared/appissuenotifier.h \
+    ../../../shared/pztoolsbuild.h \
     BuildingEditor/attributeeditmode.h \
     BuildingEditor/attributeeditmode_p.h \
     BuildingEditor/buildingattributesdock.h \
@@ -325,6 +330,7 @@ HEADERS += aboutdialog.h \
     abstractoverlay.h \
     abstracttiletool.h \
     abstracttool.h \
+    tiletoolpreviewcache.h \
     addremovelayer.h \
     addremovemapobject.h \
     addremovetileset.h \

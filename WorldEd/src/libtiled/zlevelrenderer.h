@@ -46,6 +46,8 @@ public:
     ZLevelRenderer(const Map *map) : MapRenderer(map) { set2x(true); }
 
     static void resetRenderedTileCount();
+    static void setRenderedTileCountingEnabled(bool enabled);
+    static bool isRenderedTileCountingEnabled();
     static void addRenderedTileCount(quint64 count = 1);
     static quint64 renderedTileCount();
 

@@ -67,6 +67,7 @@ public:
     static bool closeYerself();
 
     void displayTile(const QString &tileName);
+    bool openTile(const QString &fileName, const QString &tileName);
 
     // UNDO/REDO
     void insertTileset(int index, Tileset *ts, TileDefTileset *defTileset);

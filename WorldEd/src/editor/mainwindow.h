@@ -222,6 +222,7 @@ public slots:
 
     void generateBiomeMap();
     void terrainImageEditor();
+    void chunkDataOverrideEditor();
     void importOpenStreetMapTerrain();
     void worldGenPreview();
     void worldGenPrefabEditor();
@@ -237,7 +238,7 @@ private:
 
     bool confirmSave();
     bool confirmAllSave();
-    bool ensureSavedProjectForTerrainWorkflow(
+    bool ensureSavedProjectForAssetWorkflow(
             WorldDocument *worldDocument);
 
     void writeSettings();
@@ -282,6 +283,7 @@ private:
     QAction *mShowWorldMapOverlayAction = nullptr;
     QAction *mShowWorldMapForestOverlayAction = nullptr;
     QAction *mClearWorldMapOverlaysAction = nullptr;
+    QAction *mChunkDataOverrideAction = nullptr;
     UndoDock *mUndoDock;
     LayersDock *mLayersDock;
     LotsDock *mLotsDock;

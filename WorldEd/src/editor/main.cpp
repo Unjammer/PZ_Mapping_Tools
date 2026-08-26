@@ -23,6 +23,7 @@
 #include <QSettings>
 #include <QSslSocket>
 #include <QTimer>
+#include <QTemporaryDir>
 #include <QXmlStreamReader>
 #include <limits>
 #include "mainwindow.h"
@@ -36,12 +37,14 @@
 #include "biomemapgeneratordialog.h"
 #include "biomemapimageprocessor.h"
 #include "biomemapitem.h"
+#include "chunkdataoverride.h"
 #include "osmterrainimportdialog.h"
 #include "osmterrainimporter.h"
 #include "otherworldsdialog.h"
 #include "cellscene.h"
 #include "defaultsfile.h"
 #include "expectedpropertiesdialog.h"
+#include "generatelotsdialog.h"
 #include "scenetools.h"
 #include "toolmanager.h"
 #include "preferences.h"
@@ -60,6 +63,8 @@
 #include "InGameMap/ingamemapwriterbinary.h"
 #include "world.h"
 #include "worlddocument.h"
+#include "worldreader.h"
+#include "worldwriter.h"
 #include "worldobjectvalidation.h"
 #include "worldscene.h"
 #include "worldview.h"
@@ -108,6 +113,67 @@ int main(int argc, char *argv[])
     bool validateTilesetCleanup = false;
     bool validateCellMoveCoordinates = false;
     for (const QString &argument : commandLineArguments) {
+        if (argument == QLatin1String(
+                    "--validate-chunkdata-overrides")) {
+            QString summary;
+            QString error;
+            if (!ChunkDataOverride::validateWorkflow(&summary, &error)) {
+                qCritical().noquote()
+                        << "Chunk data override validation failed:" << error;
+                return 58;
+            }
+            QTemporaryDir directory;
+            if (!directory.isValid()) {
+                qCritical() << "Chunk data override PZW validation could not create a temporary directory";
+                return 58;
+            }
+            const QString projectPath = directory.filePath(
+                        QStringLiteral("project.pzw"));
+            const QString overridePath = directory.filePath(
+                        QStringLiteral("chunkdata-overrides/chunkdata_0_0.png"));
+            QImage overrideImage(ChunkDataOverride::ImageSize,
+                                 ChunkDataOverride::ImageSize,
+                                 QImage::Format_ARGB32);
+            overrideImage.fill(Qt::transparent);
+            overrideImage.setPixel(8, 9, qRgba(17, 0, 0, 255));
+            if (!ChunkDataOverride::saveImage(
+                        overridePath, overrideImage, &error)) {
+                qCritical().noquote()
+                        << "Chunk data override PZW validation failed:" << error;
+                return 58;
+            }
+            World *source = new World(1, 1, WorldGridFormat::Native256);
+            source->cellAt(0, 0)->setChunkDataOverrideFilePath(overridePath);
+            WorldWriter writer;
+            if (!writer.writeWorld(source, projectPath)) {
+                qCritical().noquote()
+                        << "Chunk data override PZW write failed:"
+                        << writer.errorString();
+                delete source;
+                return 58;
+            }
+            delete source;
+            WorldReader reader;
+            World *loaded = reader.readWorld(projectPath);
+            if (!loaded
+                    || loaded->gridFormat() != WorldGridFormat::Native256
+                    || QFileInfo(loaded->cellAt(0, 0)
+                                 ->chunkDataOverrideFilePath())
+                       .absoluteFilePath()
+                       != QFileInfo(overridePath).absoluteFilePath()) {
+                qCritical().noquote()
+                        << "Chunk data override PZW round trip failed:"
+                        << reader.errorString();
+                delete loaded;
+                return 58;
+            }
+            delete loaded;
+            qInfo().noquote()
+                    << "Chunk data override validation passed:"
+                    << summary
+                    << ", PZW relative-path round trip passed";
+            return 0;
+        }
         if (argument == QLatin1String(
                     "--validate-spawnpoint-export")) {
             QString summary;
@@ -259,6 +325,17 @@ int main(int argc, char *argv[])
                 return 56;
             }
             qInfo() << "Preferences no-op validation passed: unchanged Tiles directory did not reload tilesets";
+            return 0;
+        }
+        if (argument == QLatin1String(
+                    "--validate-generate-lots-paths")) {
+            QString error;
+            if (!GenerateLotsDialog::validatePathSelection(&error)) {
+                qCritical().noquote()
+                        << "Generate Lots path validation failed:" << error;
+                return 57;
+            }
+            qInfo() << "Generate Lots path validation passed";
             return 0;
         }
         if (argument == QLatin1String(

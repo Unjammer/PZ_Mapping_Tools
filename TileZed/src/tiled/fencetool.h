@@ -19,6 +19,7 @@
 #define FENCETOOL_H
 
 #include "abstracttiletool.h"
+#include "tiletoolpreviewcache.h"
 
 #include "BuildingEditor/singleton.h"
 
@@ -104,19 +105,28 @@ public:
     void setFence(Fence *fence);
 
 protected:
+    void mapDocumentChanged(MapDocument *oldDocument,
+                            MapDocument *newDocument) override;
     void tilePositionChanged(const QPoint &tilePos);
 
-    QVector<Tile*> resolveTiles(Fence *fence);
+    const QVector<Tile *> &resolveTiles();
 
 private:
+    void clearPreview();
+    void invalidateTileCache();
+
     void drawWestEdge(int sx, int sy, int ey);
     void drawNorthEdge(int sx, int sy, int ex);
     void drawPost(int x, int y);
     void drawGate(int x, int y, bool west);
-    Tile *fenceTile(int x, int y, bool west);
-    void getWestEdgeTiles(int sx, int sy, int ey, TileLayer &stamp);
-    void getNorthEdgeTiles(int sx, int sy, int ex, TileLayer &stamp);
-    Tile *gateTile(int x, int y, bool west);
+    Tile *fenceTile(int x, int y, bool west,
+                    const QVector<Tile *> &tiles);
+    void getWestEdgeTiles(int sx, int sy, int ey, TileLayer &stamp,
+                          const QVector<Tile *> &tiles);
+    void getNorthEdgeTiles(int sx, int sy, int ex, TileLayer &stamp,
+                           const QVector<Tile *> &tiles);
+    Tile *gateTile(int x, int y, bool west,
+                   const QVector<Tile *> &tiles);
 
     MapScene *mScene;
     CompositeLayerGroup *mToolTileLayerGroup;
@@ -127,6 +137,8 @@ private:
     Fence *mFence;
     QGraphicsPathItem *mCursorItem;
     QRectF mToolTilesRect;
+    TileToolPreviewState mPreviewState;
+    TileToolTilesCache mTilesCache;
 };
 
 } // namespace Internal

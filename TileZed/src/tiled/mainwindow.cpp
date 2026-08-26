@@ -26,6 +26,8 @@
 
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "appissuenotifier.h"
+#include "pztoolsbuild.h"
 
 #include "pztoolsabout.h"
 #include "addremovemapobject.h"
@@ -170,6 +172,7 @@ using namespace Tiled::Utils;
 
 #ifdef ZOMBOID
 #include "BuildingEditor/buildingpreferences.h"
+#include "BuildingEditor/buildingfloor.h"
 #include "BuildingEditor/buildingtiles.h"
 #include "BuildingEditor/buildingtemplates.h"
 #include "BuildingEditor/buildingtmx.h"
@@ -293,6 +296,7 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     mInstance = this;
 #endif
     mUi->setupUi(this);
+    AppIssueNotifier::attach(this);
 #ifdef ZOMBOID
     mPartialChunksMenu = new QMenu(tr("Partial Chunks"), this);
     mUi->menuBar->insertMenu(mUi->menuHelp->menuAction(),
@@ -829,7 +833,7 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     renderDiagnosticsAction->setToolTip(tr(
         "Show FPS, render time, drawn tiles, memory, zoom and renderer mode"));
     renderDiagnosticsAction->setChecked(mSettings.value(
-        QLatin1String("RenderDiagnostics/Enabled"), true).toBool());
+        QLatin1String("RenderDiagnostics/Enabled"), false).toBool());
     mUi->menuView->addAction(renderDiagnosticsAction);
     connect(renderDiagnosticsAction, &QAction::toggled, this,
             [this](bool enabled) {
@@ -1244,7 +1248,11 @@ void MainWindow::openLastFiles()
 #ifdef ZOMBOID
 bool MainWindow::InitConfigFiles()
 {
-    return InitConfigFiles(this);
+    setEnabled(false);
+    qApp->processEvents(QEventLoop::AllEvents);
+    const bool result = InitConfigFiles(this);
+    setEnabled(true);
+    return result;
 }
 bool MainWindow::InitConfigFiles(QWidget *parent)
 {
@@ -1331,6 +1339,7 @@ bool MainWindow::InitConfigFiles(QWidget *parent)
     TilesetManager::instance()->waitForTilesets(completeTilesetCatalog);
     qInfo() << "Loaded complete tileset catalog before editor startup:"
             << completeTilesetCatalog.size() << "entries";
+    qInfo().noquote() << TilesetManager::instance()->cacheMemorySummary();
     progress.update(tr("Building configuration [1/4]: Reading %1...")
                     .arg(BuildingTMX::instance()->txtName()));
     qInfo().noquote() << "Loading building configuration"
@@ -2279,6 +2288,49 @@ void MainWindow::tilePropertiesEditor()
     TileDefDialog::instance()->raise();
 }
 
+void MainWindow::editTileDefinition(Tile *tile)
+{
+    if (!tile)
+        return;
+
+    TilePropertyMgr *propertyManager = TilePropertyMgr::instance();
+    if (!propertyManager->hasReadTxt() && !propertyManager->readTxt()) {
+        QMessageBox::warning(this, tr("Tile Properties Error"),
+                             tr("%1\n(while reading %2)")
+                             .arg(propertyManager->errorString(),
+                                  propertyManager->txtName()));
+        TilePropertyMgr::deleteInstance();
+        return;
+    }
+
+    TileDefWatcher *watcher = BuildingEditor::getTileDefWatcher();
+    const QString tilesetName = tile->tileset()->name();
+    const QString filePath = watcher->filePathForTileset(tilesetName);
+    if (filePath.isEmpty()) {
+        const QStringList configuredFiles =
+                Preferences::instance()->tilePropertiesFiles();
+        const QString configured = configuredFiles.isEmpty()
+                ? tr("No TileDef files are configured.")
+                : tr("Configured TileDef files:\n%1")
+                  .arg(configuredFiles.join(QLatin1Char('\n')));
+        QMessageBox::warning(
+                    this, tr("Tile Definition Not Found"),
+                    tr("No configured .tiles or .tiles.txt file defines "
+                       "tileset %1.\n\n%2\n\nAdd the matching file in "
+                       "Edit > Preferences > Tile Property Files.")
+                    .arg(tilesetName, configured));
+        return;
+    }
+
+    mTileDefDialog = TileDefDialog::instance();
+    const QString tileName = BuildingTilesMgr::nameForTile(tile);
+    if (!mTileDefDialog->openTile(filePath, tileName))
+        return;
+    mTileDefDialog->show();
+    mTileDefDialog->raise();
+    mTileDefDialog->activateWindow();
+}
+
 void MainWindow::compareTileDef()
 {
     TilePropertyMgr *mgr = TilePropertyMgr::instance();
@@ -2325,6 +2377,8 @@ void MainWindow::containerOverlayDialog()
     mContainerOverlayDialog->raise();
     mContainerOverlayDialog->activateWindow();
 
+    setEnabled(false);
+
     TileMetaInfoMgr *mgr = TileMetaInfoMgr::instance();
     const QList<Tileset*> tilesets = mgr->tilesets();
     for (Tileset *ts : tilesets) {
@@ -2335,6 +2389,8 @@ void MainWindow::containerOverlayDialog()
             break;
         }
     }
+
+    setEnabled(true);
 }
 
 void MainWindow::tileOverlayDialog()
@@ -2344,6 +2400,8 @@ void MainWindow::tileOverlayDialog()
     }
     mTileOverlayDialog->show();
     mTileOverlayDialog->raise();
+
+    setEnabled(false);
 
     TileMetaInfoMgr *mgr = TileMetaInfoMgr::instance();
     const QList<Tileset*> tilesets = mgr->tilesets();
@@ -2355,6 +2413,8 @@ void MainWindow::tileOverlayDialog()
             break;
         }
     }
+
+    setEnabled(true);
 }
 
 #include "enflatulatordialog.h"
@@ -2384,6 +2444,8 @@ void MainWindow::snowEditor()
     mSnowEditor->raise();
     mSnowEditor->activateWindow();
 
+    setEnabled(false);
+
     TileMetaInfoMgr *mgr = TileMetaInfoMgr::instance();
     const QList<Tileset*> tilesets = mgr->tilesets();
     for (Tileset *ts : tilesets) {
@@ -2394,6 +2456,8 @@ void MainWindow::snowEditor()
             break;
         }
     }
+
+    setEnabled(true);
 }
 
 void MainWindow::proceduralLootEditor()
@@ -4050,11 +4114,13 @@ void MainWindow::readSettings()
 void MainWindow::updateWindowTitle()
 {
     if (mMapDocument) {
-        setWindowTitle(tr("[*]%1 - Tiled").arg(mMapDocument->displayName()));
+        setWindowTitle(tr("[*]%1 - TileZed - %2")
+                       .arg(mMapDocument->displayName(),
+                            PZToolsBuild::label()));
         setWindowFilePath(mMapDocument->fileName());
         setWindowModified(mMapDocument->isModified());
     } else {
-        setWindowTitle(QApplication::applicationName());
+        setWindowTitle(tr("TileZed - %1").arg(PZToolsBuild::label()));
         setWindowFilePath(QString());
         setWindowModified(false);
     }

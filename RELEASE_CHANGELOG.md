@@ -1,78 +1,144 @@
-# Changes since Build 20260818b
+# PZ Mapping Tools - Build 20260825c
+
+_Changes since Build 20260820b_
 
 The exact public release baseline used for this changelog is
-[`42.20B260818b`](https://github.com/Unjammer/PZ_Mapping_Tools/releases/tag/42.20B260818b),
+[`42.20B260820b`](https://github.com/Unjammer/PZ_Mapping_Tools/releases/tag/42.20B260820b),
 commit
-[`89617f75aa29ed824d6ee96d00fccc58a69aeed7`](https://github.com/Unjammer/PZ_Mapping_Tools/commit/89617f75aa29ed824d6ee96d00fccc58a69aeed7),
-published on 2026-08-19 at 01:12 UTC as **Build 20260818b**.
+[`d724a62e33f13659a1d9799943a8e3d03fe152c2`](https://github.com/Unjammer/PZ_Mapping_Tools/commit/d724a62e33f13659a1d9799943a8e3d03fe152c2),
+published on 2026-08-20 as **Build 20260820b**.
 
-This changelog contains only user-visible work added after that tagged release.
+This changelog contains only user-visible work added after that tagged
+release.
 
 ## Shared / All applications
 
-- Malformed TMX and TBX references, dimensions, colors, coordinates, and
-  thumbnail metadata are rejected safely instead of reaching unchecked
-  container access or being accepted as valid cached data. TMX maps and tile
-  layers are limited to 300 x 300 tiles across creation, resizing, and loading.
-  Map resizing asks for confirmation before existing content is cropped.
+- PZWorldEd, TileZed, and BuildingEd now collect process-wide warnings and
+  errors in lower-right notification counters inspired by the Project Zomboid
+  error indicator. Errors use red and warnings use orange. A new message
+  slides the counter into view, retains the complete timestamped list, and
+  then hides the counter without discarding its contents. Clicking a visible
+  counter opens a live, filterable message list with copy controls, source and
+  thread details, log-folder access, and a Clear action. Messages emitted by
+  background workers and warning or critical message boxes are included
+  without counting an immediately repeated log message twice.
+- The current build identifier is centralized and displayed in the main
+  window title of PZWorldEd, TileZed, and BuildingEd. The current identifier is
+  **Build 20260825c**.
+- The complete tileset catalogue now shares pixel storage between extracted
+  tiles whose image data and tile metadata are exactly identical. Tileset
+  names, ordering, IDs, offsets, transparent-tile handling, and complete TMX
+  headers remain unchanged.
+- The PZWorldEd and TileZed Maps browsers can now sort by **Name**, **Size**,
+  or **Last modified** by clicking the column header. Repeated clicks reverse
+  the order. Name sorting follows Windows case-insensitive behavior, file size
+  is sorted numerically, timestamps use the actual file modification time,
+  and directories remain grouped before files.
 
 ## PZWorldEd
 
-- Confirming Preferences with an unchanged Tiles directory no longer reloads
-  the complete tileset catalogue or reconstructs every open map and lot.
-  Preference changes are applied coherently before the dialog closes.
-- Right-clicking a supported special object opens a guided property editor
-  limited to the fields expected for its type. WaterFlow, WaterZone, RoomTone,
-  SpawnPoint, ParkingStall, Vehicle, Mannequin, Animal, Basement, and WorldGen
-  use enum lists, profession checklists, booleans, text fields, or numeric
-  controls as appropriate. Missing expected properties are added on Save,
-  unrelated custom properties are retained, and the complete existing
-  Properties dock remains available. The same menu is available while Select
-  or Create Object is active and always targets the zone geometry directly
-  under the pointer. Choose Basement Access is offered only for a Basement
-  zone. Closing the menu, including with a second right-click, performs no
-  action.
-- Cell Move, Copy, and Paste retain the complete cell payload. This includes
-  the assigned map, lots, cell properties and notes, cell templates, zones and
-  objects with their properties, notes, templates, visibility, geometry points
-  and polyline widths, plus InGameMap features and properties.
-- Ctrl+V and **Edit > Paste** open the same translucent placement preview
-  anchored to the selected destination cell. Multi-cell layouts retain their
-  relative positions, remain inside the project bounds, and may be confirmed
-  by click or Enter. InGameMap features use the destination cell coordinates,
-  and existing destination features remain intact through Paste, Undo, and
-  Redo. The preview follows the pointer even when world thumbnails are hidden,
-  uses green for empty targets and orange for occupied targets, and
-  recalculates the destination from the confirming click. One confirmation
-  performs one paste and returns to normal cell selection. Non-empty targets
-  require explicit confirmation with No as the default.
-- World-map overlay placement converts source cells to absolute map-square
-  coordinates before projecting them over the World view. Build 42.20
-  256-square overlay data now aligns over both Native256 and Legacy300
-  projects.
-- World-map XML and binary output is normalized to the Build 42.20 256-square
-  cell grid. XML records `cellSize="256"`, while Legacy300 features are
-  re-bucketed and clipped across the required 256-square world-map cells.
+- Empty Linked World entries are ignored without producing a warning. A
+  configured non-empty Linked World path still reports a warning when it
+  cannot be read.
+- Native256 projects can attach a per-cell 256 x 256 RGBA chunk-data override
+  from **Tools > Terrain & Environment**. Transparent pixels inherit generated
+  metadata while opaque red-channel values from 0 through 31 replace it with
+  combinations of Solid, North wall, West wall, Water, and Room. The editor
+  explains the meaning of every flag, validates the selected file before LOT
+  generation, and preserves the cell reference through PZW save and load,
+  Move, Copy, Paste, Undo, and Redo. Legacy300 projects cannot use it.
+- Generate Lots directory and file choosers select a newly chosen path
+  immediately. The displayed history entry and the path used for LOT export
+  no longer require a second selection to update.
+- Cell Paste recalculates its preview only when the target cell changes and
+  reuses precomputed source-cell offsets. Pointer movement inside the same
+  cell no longer revisits every copied cell.
+- Partial Chunks lassos redraw only changed chunks, and the optional
+  room-under-pointer highlight redraws only the affected rooms. Render
+  diagnostics are disabled by default, and rendered-tile counting runs only
+  when diagnostics are explicitly enabled.
+- The terrain image editor now opens, edits, and saves both PNG and BMP main
+  and `_veg` image pairs. Save As offers both formats, the matching extension
+  is retained for the pair, and each saved file is encoded in the format named
+  by its extension. Existing BMP projects therefore remain BMP projects
+  instead of being silently rewritten with PNG data.
+- Zombie Heatmap editing now preserves PNG or BMP according to the configured
+  file extension. Saved images retain their dimensions and mapping color
+  values and reopen through the same WorldEd workflow.
+- Saving an attached terrain image refreshes its loaded World view image so
+  the edited result is visible without reopening the project.
+- PZWorldEd no longer retains a CPU atlas for every loaded tilesheet. Raster
+  rendering uses the extracted tile images directly. OpenGL atlases are built
+  only for sheets that are actually uploaded and their temporary CPU copy is
+  released after upload.
+- Basement access previews are loaded only when their Basement object is
+  selected. Opening a cell no longer loads every access source referenced by
+  its objects, and WorldEd can close normally while the cell is opening.
+
+## TileZed
+
+- The tileset context menu opens the selected tile in the Project Zomboid
+  TileDefs editor instead of editing arbitrary TMX tile metadata. TileZed uses
+  the same ordered `.tiles` and `.tiles.txt` resolution as rendering, loads the
+  file that defines the selected tileset, and selects the exact tile index.
+  Missing definitions report the configured files and direct the user to the
+  relevant Preferences list.
+- The experimental OpenGL viewport is disabled. TileZed consistently uses the
+  Qt raster viewport with minimal dirty-region updates, avoiding severe
+  driver-dependent Brush Tool slowdowns.
+- Edge, Fence, and Curb previews rebuild only when their effective tile,
+  level, layer, orientation, selection, mode, or modifiers change. Their
+  tileset resolution is cached locally, invalidated by real map, layer,
+  configuration, or tileset changes, and reused for complete short or long
+  previews instead of scanning every tileset for every preview tile.
+- Partial Chunks lassos redraw only changed chunks. Normal tile edits use the
+  affected layer's sprite margins, while BMP edits use only the generated BMP
+  layers, so an unrelated Jumbo tile no longer expands every dirty region.
+  Render diagnostics are disabled by default.
+- The Layers visibility threshold is restored from the portable TileZed INI,
+  clamped to the open map's layer count, and applied before rendering. The
+  Layers and Levels visibility sliders stay synchronized while maps are
+  opened or changed.
+- The Layers list context menu now provides **Check All** and **Uncheck All**
+  commands for changing every layer visibility checkbox in one action.
 
 ## BuildingEd
 
-- Building dimensions are limited to 300 x 300 tiles during creation, TBX
-  loading, and resizing. Furniture layouts, roof dimensions, and wall lengths
-  use the same maximum. Destructive resize operations require confirmation.
-  Clipboard placement that would exceed the limit warns before continuing and
-  crops only clipboard content outside the bounded building grid.
-- The Layers visibility threshold is saved to and restored from the portable
-  application INI.
-- Moving a clipboard preview reuses its converted isometric tile grid instead
-  of resolving every copied tile again for each pointer position.
-- Room name and internal-name edits commit when editing finishes or a list
-  value is selected. Metadata-only room changes no longer rebuild every
-  isometric floor.
+- Tile, furniture, mixed-tileset, and **Building > Tiles** browsers distinguish
+  a valid transparent tile with the crossed-eye marker from an unresolved
+  asset shown with the red missing-source marker.
+- Moving a tile preview redraws only the affected tile area. Extended margins
+  are reserved for Jumbo, Jumbo XL, and Jumbo XXL tiles instead of being
+  applied to every tile under the pointer. Preview tile resolution no longer
+  rebuilds the complete tileset lookup on each move.
+- BuildingEd consistently uses the Qt raster viewport with minimal
+  dirty-region updates. The experimental OpenGL option is disabled, and
+  render diagnostics are off by default so normal rendering does not count
+  every drawn tile.
+- Structural edits now regenerate the automatic building layers only in the
+  visible Object, Tile, or Attribute mode. Hidden isometric views synchronize
+  once when their mode is opened, avoiding duplicate floor-wide work while
+  placing or changing rooms, walls, windows, doors, stairs, roofs, and
+  furniture.
+- Closing a TBX document now releases its complete building model and removes
+  its per-document view entries, preventing closed buildings from accumulating
+  in memory during long editing sessions.
+- Cut now respects its layer scope. **Current Layer**, **Visible Layers**, and
+  **Specific Layers** remove only their selected explicit tile layers and keep
+  the room layout intact. **All Layers** also removes the selected room layout,
+  while Undo restores the complete operation.
+- Opening a building ignores tileset notifications while its isometric map is
+  only partially constructed. BuildingEd also processes required startup UI
+  events while its main window is disabled, avoiding the upstream opening
+  crash and startup hang paths.
+- The unlit-room mask now tracks its actual map bounds and rejects coordinates
+  outside them, preventing invalid mask access after composite bounds change.
+- West-wall trim now recognizes all supported window-frame variants.
 
 ## Credits and special thanks
 
-- Tim Baker for the original WorldEd and TileZed work that remains the upstream
-  foundation of these tools.
+- Tim Baker for the original WorldEd and TileZed work that remains the
+  upstream foundation of these tools.
 - Alree / Unjammer for the unofficial Qt 5 continuation, current maintenance,
   new features, fixes, integrations, and releases.
 - A very special thank you to Fred 'Military Surplus' Cooper.
@@ -81,4 +147,5 @@ This changelog contains only user-visible work added after that tagged release.
   files, screenshots, logs, and practical workflow feedback.
 
 Legal authorship and third-party attribution are documented in `AUTHORS.txt`,
-`FEATURE_PROVENANCE.md`, `UPSTREAM-HISTORY.md`, and the bundled license notices.
+`FEATURE_PROVENANCE.md`, `UPSTREAM-HISTORY.md`, and the bundled license
+notices.

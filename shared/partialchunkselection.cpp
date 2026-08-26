@@ -72,6 +72,12 @@ QString PartialChunkSelection::filePath(const QString &mapPath)
     return mapPath + QStringLiteral(".pzchunks");
 }
 
+QRegion PartialChunkSelection::changedLassoRegion(
+        const QRect &oldChunks, const QRect &newChunks)
+{
+    return QRegion(oldChunks).xored(QRegion(newChunks));
+}
+
 bool PartialChunkSelection::load(const QString &mapPath, QString *error)
 {
     mEnabled = false;
@@ -192,6 +198,15 @@ bool PartialChunkSelection::validate(QString *error)
             || missing.selectedCount() != ChunksPerCell * ChunksPerCell) {
         if (error)
             *error = QStringLiteral("A map without a sidecar did not use the safe defaults.");
+        return false;
+    }
+    const QRect oldLasso(2, 3, 2, 2);
+    const QRect newLasso(2, 3, 3, 2);
+    if (!changedLassoRegion(oldLasso, oldLasso).isEmpty()
+            || changedLassoRegion(oldLasso, newLasso)
+               != QRegion(QRect(4, 3, 1, 2))) {
+        if (error)
+            *error = QStringLiteral("The partial chunk lasso invalidation region was incorrect.");
         return false;
     }
     return true;
