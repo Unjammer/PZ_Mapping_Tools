@@ -103,21 +103,35 @@ void resolvedObjectProperties(PropertyHolder *holder, PropertyList &result)
     }
 }
 
-bool openInTileZed(const QString &mapPath, QWidget *parent)
+bool isBuildingPath(const QString &mapPath)
 {
-    const QString tileZedPath = QDir(QApplication::applicationDirPath())
-            .absoluteFilePath(QLatin1String("TileZed.exe"));
-    if (!QFileInfo::exists(tileZedPath)) {
-        QMessageBox::warning(parent, QObject::tr("TileZed not found"),
-                             QObject::tr("TileZed.exe was not found next to PZWorldEd.exe:\n%1")
-                             .arg(tileZedPath));
+    return mapPath.endsWith(QLatin1String(".tbx"), Qt::CaseInsensitive);
+}
+
+QString editorNameForPath(const QString &mapPath)
+{
+    return isBuildingPath(mapPath)
+            ? QStringLiteral("BuildingEd")
+            : QStringLiteral("TileZed");
+}
+
+bool openInMapEditor(const QString &mapPath, QWidget *parent)
+{
+    const QString editorName = editorNameForPath(mapPath);
+    const QString editorPath = QDir(QApplication::applicationDirPath())
+            .absoluteFilePath(editorName + QLatin1String(".exe"));
+    if (!QFileInfo::exists(editorPath)) {
+        QMessageBox::warning(parent,
+                             QObject::tr("%1 not found").arg(editorName),
+                             QObject::tr("%1.exe was not found next to PZWorldEd.exe:\n%2")
+                             .arg(editorName, editorPath));
         return false;
     }
-    if (!QProcess::startDetached(tileZedPath, QStringList() << mapPath,
+    if (!QProcess::startDetached(editorPath, QStringList() << mapPath,
                                  QFileInfo(mapPath).absolutePath())) {
         QMessageBox::warning(parent, QObject::tr("Unable to open map"),
-                             QObject::tr("TileZed could not be started for:\n%1")
-                             .arg(mapPath));
+                             QObject::tr("%1 could not be started for:\n%2")
+                             .arg(editorName, mapPath));
         return false;
     }
     return true;
@@ -190,6 +204,7 @@ QString chooseBasementAccess(QWidget *parent, const QString &currentAccess)
     accessList.sortItems(Qt::AscendingOrder);
 
     const auto refreshPreview = [&]() {
+        MapImageManager::instance()->releaseOwner(&dialog);
         QListWidgetItem *listItem = accessList.currentItem();
         okButton->setEnabled(listItem != nullptr);
         if (!listItem) {
@@ -208,7 +223,8 @@ QString chooseBasementAccess(QWidget *parent, const QString &currentAccess)
             details.setText(QDir::toNativeSeparators(path));
             return;
         }
-        MapImage *mapImage = MapImageManager::instance()->getMapImage(path);
+        MapImage *mapImage = MapImageManager::instance()->getMapImage(
+                    path, QString(), &dialog);
         if (mapImage && !mapImage->image().isNull()) {
             preview.setPixmap(QPixmap::fromImage(mapImage->image()).scaled(
                                   preview.size() - QSize(12, 12),
@@ -1343,7 +1359,9 @@ void SubMapTool::startMoving()
 
     foreach (SubMapItem *item, mMovingItems) {
         item->subMap()->setHiddenDuringDrag(true);
-        DnDItem *dndItem = new DnDItem(item->subMap()->mapInfo(), mScene->renderer(), item->subMap()->levelOffset());
+        DnDItem *dndItem = new DnDItem(
+                    item->subMap()->mapInfo(), mScene->renderer(),
+                    item->subMap()->levelOffset(), mScene->worldDocument());
         dndItem->setHotSpot(0, 0);
         mDnDItems.append(dndItem);
         dndItem->setZValue(10000);
@@ -1428,10 +1446,13 @@ void SubMapTool::showContextMenu(const QPointF &scenePos, const QPoint &screenPo
         if (subMap) {
             QMenu menu;
             QIcon tiledIcon(QLatin1String(":images/tiled-icon-16.png"));
-            QAction *openAction = menu.addAction(tiledIcon, tr("Open in TileZed"));
+            const QString mapPath = subMap->mapInfo()->path();
+            QAction *openAction = menu.addAction(
+                        tiledIcon,
+                        tr("Open in %1").arg(editorNameForPath(mapPath)));
             QAction *action = menu.exec(screenPos);
             if (action == openAction)
-                openInTileZed(subMap->mapInfo()->path(), mScene->views().value(0));
+                openInMapEditor(mapPath, mScene->views().value(0));
         }
         return;
     }
@@ -1502,7 +1523,10 @@ void SubMapTool::showContextMenu(const QPointF &scenePos, const QPoint &screenPo
     QAction *removeAction = menu.addAction(removeIcon, tr("Remove Lot"));
     menu.addSeparator();
     QIcon tiledIcon(QLatin1String(":images/tiled-icon-16.png"));
-    QAction *openAction = menu.addAction(tiledIcon, tr("Open in TileZed"));
+    const QString mapPath = item->subMap()->mapInfo()->path();
+    QAction *openAction = menu.addAction(
+                tiledIcon,
+                tr("Open in %1").arg(editorNameForPath(mapPath)));
 
     QAction *action = menu.exec(screenPos);
     if (action == nullptr) return;
@@ -1577,7 +1601,7 @@ void SubMapTool::showContextMenu(const QPointF &scenePos, const QPoint &screenPo
         mScene->worldDocument()->removeCellLot(mScene->cell(), lotIndex);
     }
     if (action == openAction) {
-        openInTileZed(item->subMap()->mapInfo()->path(), mScene->views().value(0));
+        openInMapEditor(mapPath, mScene->views().value(0));
     }
 }
 
@@ -3799,7 +3823,7 @@ void WorldCellTool::showContextMenu(const QPointF &scenePos, const QPoint &scree
         return;
     }
     if (action == openAction) {
-        openInTileZed(item->cell()->mapFilePath(), mScene->views().value(0));
+        openInMapEditor(item->cell()->mapFilePath(), mScene->views().value(0));
     }
     if (mScene->worldDocument()->selectedCells().contains(item->cell())) {
         const bool wantsImages = !item->wantsImages();
@@ -3815,7 +3839,9 @@ void WorldCellTool::showContextMenu(const QPointF &scenePos, const QPoint &scree
                     }
                 }
                 if (action == recreateThumbnailAction) {
-                    if (MapImageManager::instance()->recreateMapImage(item2->mapFilePath())) {
+                    if (MapImageManager::instance()->recreateMapImage(
+                                item2->mapFilePath(), QString(),
+                                mScene->worldDocument())) {
                         ++recreated;
                         if (!item2->wantsImages())
                             item2->thumbnailsAreGo();
@@ -3839,7 +3865,9 @@ void WorldCellTool::showContextMenu(const QPointF &scenePos, const QPoint &scree
             }
         }
         if (action == recreateThumbnailAction) {
-            const bool queued = MapImageManager::instance()->recreateMapImage(item->mapFilePath());
+            const bool queued = MapImageManager::instance()->recreateMapImage(
+                        item->mapFilePath(), QString(),
+                        mScene->worldDocument());
             if (queued && !item->wantsImages())
                 item->thumbnailsAreGo();
             MainWindow::instance()->statusBar()->showMessage(

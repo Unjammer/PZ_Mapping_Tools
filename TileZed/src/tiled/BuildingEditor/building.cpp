@@ -50,6 +50,7 @@ Building::~Building()
 {
     qDeleteAll(mFloors);
     qDeleteAll(mRooms);
+    qDeleteAll(mRetainedTileEntries);
     delete mBasementAccess;
 }
 

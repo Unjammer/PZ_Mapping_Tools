@@ -336,8 +336,10 @@ void TemplateRoomsDialog::synchUI()
     }
     ui->clearTile->setEnabled(enabled);
 
-    ui->randomTile->setEnabled(mRoom != nullptr);
-    ui->chooseTile->setEnabled(mRoom != nullptr);
+    const bool hasTile = mRoom != nullptr && mTileRow >= 0
+            && mTileRow < Room::TileCount;
+    ui->randomTile->setEnabled(hasTile);
+    ui->chooseTile->setEnabled(hasTile);
 
     if (mRoom) {
         int index = ui->name->findText(mRoom->Name);
@@ -537,7 +539,7 @@ void TemplateRoomsDialog::setTilePixmap()
 
 BuildingTileEntry *TemplateRoomsDialog::selectedTile()
 {
-    if (mRoom == 0 || mTileRow == -1)
+    if (mRoom == 0 || mTileRow < 0 || mTileRow >= Room::TileCount)
         return 0;
 
     BuildingTileEntry *entry = mRoom->tile(mTileRow);
@@ -564,6 +566,8 @@ QRgb TemplateRoomsDialog::pickColorForNewRoom()
 
 void TemplateRoomsDialog::clearTile()
 {
+    if (!mRoom || mTileRow < 0 || mTileRow >= Room::TileCount)
+        return;
     BuildingTileCategory *category = BuildingTilesMgr::instance()->category(mRoom->categoryEnum(mTileRow));
     if (category->canAssignNone()) {
         Room editedRoom(mRoom);
@@ -574,6 +578,8 @@ void TemplateRoomsDialog::clearTile()
 
 void TemplateRoomsDialog::randomTile()
 {
+    if (!mRoom || mTileRow < 0 || mTileRow >= Room::TileCount)
+        return;
     BuildingTileCategory *category = BuildingTilesMgr::instance()->category(mRoom->categoryEnum(mTileRow));
     QList<BuildingTileEntry*> entries = category->entries();
     if (category->canAssignNone()) {
@@ -587,6 +593,8 @@ void TemplateRoomsDialog::randomTile()
 
 void TemplateRoomsDialog::chooseTile()
 {
+    if (!mRoom || mTileRow < 0 || mTileRow >= Room::TileCount)
+        return;
     BuildingTileCategory *category = BuildingTilesMgr::instance()->category(
                 mRoom->categoryEnum(mTileRow));
     ChooseBuildingTileDialog dialog(tr("Choose %1 tile for '%2'")

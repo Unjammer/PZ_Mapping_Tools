@@ -463,7 +463,8 @@ class DnDItem : public QGraphicsItem
 {
 public:
     DnDItem(MapInfo *mapInfo, Tiled::MapRenderer *renderer, int level,
-            QGraphicsItem *parent = 0, bool persistentPreview = false);
+            QObject *imageOwner, QGraphicsItem *parent = 0,
+            bool persistentPreview = false);
 
     QRectF boundingRect() const;
 

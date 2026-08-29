@@ -1418,7 +1418,9 @@ void BuildingReaderPrivate::fix(Building *building)
             } else {
                 for (int i = 0; i < object->tiles().size(); i++) {
                     BuildingTileEntry *entry = object->tile(i);
-                    if (entry && !entry->isNone()) {
+                    if (!entry) {
+                        object->setTile(BuildingTilesMgr::instance()->noneTileEntry(), i);
+                    } else if (!entry->isNone()) {
                         object->setTile(fixEntry(entry), i);
                     }
                 }
@@ -1451,7 +1453,8 @@ void BuildingReaderPrivate::fix(Building *building)
     }
     building->setUsedTiles(usedTiles);
 
-    qDeleteAll(deadEntries);
+    building->retainTileEntries(deadEntries.values());
+    deadEntries.clear();
     qDeleteAll(deadFurniture);
     qDeleteAll(deadCategories);
     qDeleteAll(deadTiles);
@@ -1493,12 +1496,17 @@ BuildingTileEntry *BuildingReaderPrivate::fixEntry(BuildingTileEntry *entry)
         BuildingTileCategory *category = BuildingTilesMgr::instance()->category(categoryName);
         deadCategories.insert(entry->mCategory);
         entry->mCategory = category;
+        const int previousTileCount = entry->mTiles.size();
+        entry->mTiles.resize(category->enumCount());
+        entry->mOffsets.resize(category->enumCount());
         for (int i = 0; i < category->enumCount(); i++) {
-            if (BuildingTile *btile = entry->tile(i)) {
+            if (i < previousTileCount) {
+                BuildingTile *btile = entry->mTiles[i];
                 if (btile != BuildingTilesMgr::instance()->noneTile())
                     deadTiles.insert(btile);
                 entry->setTile(i, BuildingTilesMgr::instance()->get(btile->name()));
-            }
+            } else
+                entry->setTile(i, BuildingTilesMgr::instance()->noneTile());
         }
         if (BuildingTileEntry *match = category->findMatchForVersion(entry, buildingTilesFileVersion())) {
             fixedEntries[entry] = match;

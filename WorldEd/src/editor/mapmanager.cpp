@@ -87,6 +87,7 @@ MapManager::MapManager() :
     mNextThreadForJob(0)
 #ifdef WORLDED
     , mReferenceEpoch(0)
+    , mPurgeUnreferencedImmediately(true)
 #endif
 {
     connect(mFileSystemWatcher, &FileSystemWatcher::fileChanged,
@@ -624,29 +625,42 @@ void MapManager::removeReferenceToMap(MapInfo *mapInfo)
         Q_ASSERT(mapInfo->mMapRefCount > 0);
         mapInfo->mMapRefCount--;
         noise() << "MapManager refCount-- =" << mapInfo->mMapRefCount << mapInfo->mFilePath;
-        purgeUnreferencedMaps();
+        purgeUnreferencedMaps(mPurgeUnreferencedImmediately);
     }
 }
 
-void MapManager::purgeUnreferencedMaps()
+void MapManager::setPurgeUnreferencedImmediately(bool immediate)
+{
+    mPurgeUnreferencedImmediately = immediate;
+    if (immediate)
+        purgeUnreferencedMaps(true);
+}
+
+void MapManager::purgeUnreferencedMaps(bool force)
 {
     int unpurged = 0;
+    int purged = 0;
     foreach (MapInfo *mapInfo, mMapInfo) {
         const bool bigMap = mapInfo->size() == QSize(300, 300)
                 || mapInfo->size() == QSize(256, 256);
         if ((mapInfo->mMap && mapInfo->mMapRefCount <= 0) &&
-                ((bigMap && (mapInfo->mReferenceEpoch <= mReferenceEpoch - 10)) ||
+                (force ||
+                (bigMap && (mapInfo->mReferenceEpoch <= mReferenceEpoch - 10)) ||
                 (mapInfo->mReferenceEpoch <= mReferenceEpoch - 50))) {
             noise() << "MapManager purging" << mapInfo->mFilePath;
             TilesetManager *tilesetMgr = TilesetManager::instance();
             tilesetMgr->removeReferences(mapInfo->mMap->tilesets());
             delete mapInfo->mMap;
             mapInfo->mMap = 0;
+            ++purged;
         }
         else if (mapInfo->mMap && mapInfo->mMapRefCount <= 0)
             unpurged++;
     }
     if (unpurged) noise() << "MapManager unpurged =" << unpurged;
+    if (force && purged)
+        qInfo() << "MapManager force-purged" << purged
+                << "zero-reference maps";
 }
 
 void MapManager::newMapFileCreated(const QString &path)

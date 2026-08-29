@@ -17,6 +17,7 @@
 
 #include <QApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QMessageBox>
@@ -24,6 +25,7 @@
 #include <QSslSocket>
 #include <QTimer>
 #include <QTemporaryDir>
+#include <QThread>
 #include <QXmlStreamReader>
 #include <limits>
 #include "mainwindow.h"
@@ -60,6 +62,7 @@
 #include "regionsdock.h"
 #include "InGameMap/ingamemapreader.h"
 #include "InGameMap/ingamemapfeaturegenerator.h"
+#include "InGameMap/ingamemapwriter.h"
 #include "InGameMap/ingamemapwriterbinary.h"
 #include "world.h"
 #include "worlddocument.h"
@@ -110,9 +113,17 @@ int main(int argc, char *argv[])
     QString validateNative256RoomDefsTmx;
     QString validateInGameMapBuildingGeneration;
     QString validateWorldMapOverlays;
+    QString validateThumbnailLifecycleProject;
     bool validateTilesetCleanup = false;
     bool validateCellMoveCoordinates = false;
     for (const QString &argument : commandLineArguments) {
+        const QString thumbnailLifecyclePrefix =
+                QLatin1String("--validate-thumbnail-lifecycle=");
+        if (argument.startsWith(thumbnailLifecyclePrefix)) {
+            validateThumbnailLifecycleProject =
+                    argument.mid(thumbnailLifecyclePrefix.length());
+            continue;
+        }
         if (argument == QLatin1String(
                     "--validate-chunkdata-overrides")) {
             QString summary;
@@ -311,9 +322,17 @@ int main(int argc, char *argv[])
                         << error;
                 return 55;
             }
+            QString budgetSummary;
+            if (!validateInGameMapRendererBudget(
+                        &budgetSummary, &error)) {
+                qCritical().noquote()
+                        << "InGameMap renderer-budget validation failed:"
+                        << error;
+                return 55;
+            }
             qInfo().noquote()
                     << "InGameMap road-generation validation passed:"
-                    << summary;
+                    << summary << ";" << budgetSummary;
             return 0;
         }
         if (argument == QLatin1String(
@@ -600,11 +619,29 @@ int main(int argc, char *argv[])
             int minY = std::numeric_limits<int>::max();
             int maxX = std::numeric_limits<int>::min();
             int maxY = std::numeric_limits<int>::min();
+            int cellSize = 256;
             QXmlStreamReader scanner(&scanFile);
             while (!scanner.atEnd()) {
                 scanner.readNext();
-                if (!scanner.isStartElement() ||
-                        scanner.name() != QLatin1String("cell"))
+                if (!scanner.isStartElement())
+                    continue;
+                if (scanner.name() == QLatin1String("world")) {
+                    const QString value = scanner.attributes().value(
+                                QLatin1String("cellSize")).toString();
+                    if (!value.isEmpty()) {
+                        bool ok = false;
+                        const int declaredCellSize = value.toInt(&ok);
+                        if (!ok || (declaredCellSize != 256 &&
+                                    declaredCellSize != 300)) {
+                            qCritical() << "InGameMap validation found an "
+                                           "unsupported cellSize:" << value;
+                            return 7;
+                        }
+                        cellSize = declaredCellSize;
+                    }
+                    continue;
+                }
+                if (scanner.name() != QLatin1String("cell"))
                     continue;
                 bool xOk = false;
                 bool yOk = false;
@@ -625,7 +662,9 @@ int main(int argc, char *argv[])
                 return 7;
             }
             World world(maxX - minX + 1, maxY - minY + 1,
-                        WorldGridFormat::Legacy300);
+                        cellSize == 300
+                        ? WorldGridFormat::Legacy300
+                        : WorldGridFormat::Native256);
             GenerateLotsSettings settings;
             settings.worldOrigin = QPoint(minX, minY);
             world.setGenerateLotsSettings(settings);
@@ -635,16 +674,26 @@ int main(int argc, char *argv[])
                             << reader.errorString();
                 return 8;
             }
-            const QString outputFile =
+            const QString outputXml =
+                    fileName + QLatin1String(".validated.xml");
+            InGameMapWriter xmlWriter;
+            if (!xmlWriter.writeWorld(&world, outputXml)) {
+                qCritical() << "InGameMap validation could not write XML:"
+                            << xmlWriter.errorString();
+                return 9;
+            }
+            const QString outputBinary =
                     fileName + QLatin1String(".validated.bin");
-            InGameMapWriterBinary writer;
-            if (!writer.writeWorld(&world, outputFile)) {
-                qCritical() << "InGameMap validation could not write:"
-                            << writer.errorString();
+            InGameMapWriterBinary binaryWriter;
+            if (!binaryWriter.writeWorld(&world, outputBinary)) {
+                qCritical() << "InGameMap validation could not write binary:"
+                            << binaryWriter.errorString();
                 return 9;
             }
             qInfo() << "InGameMap validation passed:" << fileName
-                    << "converted output:" << outputFile;
+                    << "input cellSize:" << cellSize
+                    << "converted XML:" << outputXml
+                    << "converted binary:" << outputBinary;
             return 0;
         }
         const QString bmpValidationPrefix =
@@ -777,6 +826,7 @@ int main(int argc, char *argv[])
             || !validateNative256RoomDefsTmx.isEmpty()
             || !validateInGameMapBuildingGeneration.isEmpty()
             || !validateWorldMapOverlays.isEmpty()
+            || !validateThumbnailLifecycleProject.isEmpty()
             || !renderTilesetCleanupRoot.isEmpty()
             || validateTilesetCleanup
             || validateCellMoveCoordinates;
@@ -799,6 +849,95 @@ int main(int argc, char *argv[])
         qInfo().noquote()
                 << "Cell move coordinate validation passed:"
                 << dataSummary << interactionSummary;
+        return 0;
+    }
+
+    if (!validateThumbnailLifecycleProject.isEmpty()) {
+        if (!w.openFile(validateThumbnailLifecycleProject)) {
+            qCritical() << "Thumbnail lifecycle validation could not open"
+                        << validateThumbnailLifecycleProject;
+            return 60;
+        }
+        Document *document = DocumentManager::instance()->currentDocument();
+        WorldDocument *worldDocument =
+                document ? document->asWorldDocument() : nullptr;
+        QString mapPath;
+        if (worldDocument) {
+            for (WorldCell *cell : worldDocument->world()->cells()) {
+                if (cell && !cell->mapFilePath().isEmpty()) {
+                    mapPath = cell->mapFilePath();
+                    break;
+                }
+            }
+        }
+        if (!worldDocument || mapPath.isEmpty()) {
+            qCritical() << "Thumbnail lifecycle validation found no cell map";
+            DocumentManager::instance()->closeAllDocuments();
+            return 60;
+        }
+        MapImageManager *imageManager = MapImageManager::instance();
+        MapImage *mapImage = imageManager->getMapImage(
+                    mapPath, QString(), worldDocument);
+        if (!mapImage) {
+            qCritical() << "Thumbnail lifecycle validation could not load"
+                        << mapPath;
+            DocumentManager::instance()->closeAllDocuments();
+            return 60;
+        }
+        MapInfo *mapInfo = mapImage->mapInfo();
+        if (!mapInfo
+                || !imageManager->recreateMapImage(
+                    mapPath, QString(), worldDocument)) {
+            qCritical() << "Thumbnail lifecycle validation could not render"
+                        << mapPath;
+            DocumentManager::instance()->closeAllDocuments();
+            return 60;
+        }
+        QElapsedTimer renderTimer;
+        renderTimer.start();
+        while (renderTimer.elapsed() < 60000
+               && (!mapImage->isLoaded() || !mapInfo->map())) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            QThread::msleep(10);
+        }
+        if (!mapImage->isLoaded() || !mapInfo->map()) {
+            qCritical() << "Thumbnail lifecycle validation did not render"
+                        << mapPath;
+            DocumentManager::instance()->closeAllDocuments();
+            return 60;
+        }
+        const int projectReferences =
+                imageManager->mapImageReferenceCount(mapImage);
+        QObject secondaryOwner;
+        MapImage *sharedImage = imageManager->getMapImage(
+                    mapPath, QString(), &secondaryOwner);
+        const bool shared = sharedImage == mapImage
+                && imageManager->mapImageReferenceCount(mapImage)
+                == projectReferences + 1;
+        imageManager->releaseOwner(&secondaryOwner);
+        const bool secondaryReleased =
+                imageManager->mapImageReferenceCount(mapImage)
+                == projectReferences;
+        DocumentManager::instance()->closeAllDocuments();
+        QElapsedTimer timer;
+        timer.start();
+        while (timer.elapsed() < 30000
+               && (imageManager->containsMapImage(mapImage)
+                   || (mapInfo && mapInfo->map()))) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            QThread::msleep(10);
+        }
+        const bool released = !imageManager->containsMapImage(mapImage);
+        const bool mapPurged = !mapInfo || !mapInfo->map();
+        if (!shared || !secondaryReleased || !released || !mapPurged) {
+            qCritical() << "Thumbnail lifecycle validation failed"
+                        << "shared" << shared
+                        << "secondaryReleased" << secondaryReleased
+                        << "thumbnailReleased" << released
+                        << "mapPurged" << mapPurged;
+            return 60;
+        }
+        qInfo() << "Thumbnail lifecycle validation passed for" << mapPath;
         return 0;
     }
 

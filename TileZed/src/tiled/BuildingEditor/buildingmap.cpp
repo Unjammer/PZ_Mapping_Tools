@@ -46,6 +46,8 @@
 #include <QDebug>
 #include <QElapsedTimer>
 
+#include <algorithm>
+
 using namespace BuildingEditor;
 using namespace Tiled;
 using namespace Tiled::Internal;
@@ -233,55 +235,130 @@ QStringList BuildingMap::requiredLayerNames()
     return ret;
 }
 
+QRegion BuildingMap::expandedUpdateRegion(BuildingFloor *floor,
+                                          const QRegion &region) const
+{
+    if (!floor || region.isEmpty())
+        return QRegion();
+    return QRegion(region.boundingRect().adjusted(-3, -3, 3, 3))
+            & floor->bounds(1, 1);
+}
+
+void BuildingMap::requestLayout(BuildingFloor *floor, bool updateRealFloor,
+                                const QRegion &region, bool fullUpdate,
+                                bool updateShadowFloor)
+{
+    if (!floor || (!fullUpdate && region.isEmpty()))
+        return;
+    pendingLayoutToSquares.insert(floor);
+    if (updateRealFloor)
+        pendingRealLayoutToSquares.insert(floor);
+    if (updateShadowFloor)
+        pendingShadowLayoutToSquares.insert(floor);
+    if (fullUpdate)
+        pendingFullSquaresToTileLayers.insert(floor);
+    else
+        pendingSquaresToTileLayers[floor] |= expandedUpdateRegion(floor, region);
+    schedulePending();
+}
+
+void BuildingMap::requestObjectLayout(BuildingFloor *floor,
+                                      BuildingObject *object,
+                                      const QRegion &region,
+                                      bool updateRealFloor,
+                                      bool updateShadowFloor)
+{
+    requestLayout(floor, updateRealFloor, region, false,
+                  updateShadowFloor);
+    if (object && object->affectsFloorAbove() && floor
+            && floor->floorAbove()) {
+        requestLayout(floor->floorAbove(), updateRealFloor, region, false,
+                      updateShadowFloor);
+    }
+}
+
+QRegion BuildingMap::floorGridDifference(
+        BuildingFloor *floor,
+        const QVector<QVector<Room*> > &grid) const
+{
+    if (!floor)
+        return QRegion();
+    const QVector<QVector<Room*> > &current =
+            mShadowBuilding->floor(floor->level())->grid();
+    if (current.size() != grid.size())
+        return floor->bounds();
+    QRegion changed;
+    for (int x = 0; x < current.size(); ++x) {
+        if (current.at(x).size() != grid.at(x).size())
+            return floor->bounds();
+        for (int y = 0; y < current.at(x).size(); ++y) {
+            if (current.at(x).at(y) != grid.at(x).at(y))
+                changed |= QRect(x, y, 1, 1);
+        }
+    }
+    return changed;
+}
+
 void BuildingMap::setCursorObject(BuildingFloor *floor, BuildingObject *object)
 {
     if (mCursorObjectFloor && (mCursorObjectFloor != floor)) {
-        pendingLayoutToSquares.insert(mCursorObjectFloor);
-        if (mCursorObjectFloor->floorAbove())
-            pendingLayoutToSquares.insert(mCursorObjectFloor->floorAbove());
-        schedulePending();
+        requestLayout(mCursorObjectFloor, false, mCursorObjectRegion);
+        if (mCursorObjectAffectsFloorAbove
+                && mCursorObjectFloor->floorAbove()) {
+            requestLayout(mCursorObjectFloor->floorAbove(), false,
+                          mCursorObjectRegion);
+        }
         mCursorObjectFloor = nullptr;
     }
 
     if (mShadowBuilding->setCursorObject(floor, object)) {
-        pendingLayoutToSquares.insert(floor);
-        if (floor && floor->floorAbove())
-            pendingLayoutToSquares.insert(floor->floorAbove());
-        schedulePending();
+        QRegion region = mCursorObjectRegion;
+        if (object)
+            region |= object->bounds();
+        requestLayout(floor, false, region);
+        if (floor && floor->floorAbove()
+                && (mCursorObjectAffectsFloorAbove
+                    || (object && object->affectsFloorAbove()))) {
+            requestLayout(floor->floorAbove(), false, region);
+        }
         mCursorObjectFloor = object ? floor : nullptr;
+        mCursorObjectRegion = object ? QRegion(object->bounds()) : QRegion();
+        mCursorObjectAffectsFloorAbove = object
+                && object->affectsFloorAbove();
     }
 }
 
 void BuildingMap::dragObject(BuildingFloor *floor, BuildingObject *object, const QPoint &offset)
 {
+    QRegion region = mDragObjectRegions.value(object, object->bounds());
+    region |= object->bounds().translated(offset);
     mShadowBuilding->dragObject(floor, object, offset);
-    pendingLayoutToSquares.insert(floor);
-    if (floor->floorAbove())
-        pendingLayoutToSquares.insert(floor->floorAbove());
-    schedulePending();
+    requestObjectLayout(floor, object, region, false);
+    mDragObjectRegions[object] = object->bounds().translated(offset);
 }
 
 void BuildingMap::resetDrag(BuildingFloor *floor, BuildingObject *object)
 {
+    QRegion region = mDragObjectRegions.take(object);
+    region |= object->bounds();
     mShadowBuilding->resetDrag(object);
-    pendingLayoutToSquares.insert(floor);
-    if (floor->floorAbove())
-        pendingLayoutToSquares.insert(floor->floorAbove());
-    schedulePending();
+    requestObjectLayout(floor, object, region, false);
 }
 
 void BuildingMap::changeFloorGrid(BuildingFloor *floor, const QVector<QVector<Room*> > &grid)
 {
+    const QRegion region = floorGridDifference(floor, grid);
     mShadowBuilding->changeFloorGrid(floor, grid);
-    pendingLayoutToSquares.insert(floor);
-    schedulePending();
+    if (!region.isEmpty())
+        requestLayout(floor, false, region);
 }
 
 void BuildingMap::resetFloorGrid(BuildingFloor *floor)
 {
+    const QRegion region = floorGridDifference(floor, floor->grid());
     mShadowBuilding->resetFloorGrid(floor);
-    pendingLayoutToSquares.insert(floor);
-    schedulePending();
+    if (!region.isEmpty())
+        requestLayout(floor, false, region);
 }
 
 void BuildingMap::changeUserTiles(BuildingFloor *floor, const QMap<QString,FloorTileGrid*> &tiles)
@@ -926,9 +1003,14 @@ void BuildingMap::floorRemoved(BuildingFloor *floor)
 void BuildingMap::floorEdited(BuildingFloor *floor)
 {
     mShadowBuilding->floorEdited(floor);
+    requestLayout(floor, true, QRegion(), true);
+}
 
-    pendingLayoutToSquares.insert(floor);
-    schedulePending();
+void BuildingMap::roomAtPositionChanged(BuildingFloor *floor,
+                                        const QPoint &pos)
+{
+    mShadowBuilding->floorEdited(floor);
+    requestLayout(floor, true, QRect(pos, QSize(1, 1)));
 }
 
 void BuildingMap::floorTilesChanged(BuildingFloor *floor)
@@ -936,12 +1018,7 @@ void BuildingMap::floorTilesChanged(BuildingFloor *floor)
     mShadowBuilding->floorTilesChanged(floor);
 
     pendingEraseUserTiles.insert(floor);
-
-    // Painting tiles in the Walls/Walls2 layer affects which grime tiles are chosen.
-//    if (tiles.contains(QLatin1Literal("Walls")) || tiles.contains(QLatin1Literal("Walls2")))
-        pendingLayoutToSquares.insert(floor);
-
-    schedulePending();
+    requestLayout(floor, true, QRegion(), true);
 }
 
 void BuildingMap::floorTilesChanged(BuildingFloor *floor, const QString &layerName,
@@ -951,45 +1028,26 @@ void BuildingMap::floorTilesChanged(BuildingFloor *floor, const QString &layerNa
 
     pendingUserTilesToLayer[floor][layerName] |= bounds;
 
-    // Painting tiles in the Walls/Walls2 layer affects which grime tiles are chosen.
     if (layerName == QLatin1String("Walls") || layerName == QLatin1String("Walls2"))
-        pendingLayoutToSquares.insert(floor);
-
-    schedulePending();
+        requestLayout(floor, true, bounds);
+    else
+        schedulePending();
 }
 
 void BuildingMap::objectAdded(BuildingObject *object)
 {
     BuildingFloor *floor = object->floor();
-    pendingLayoutToSquares.insert(floor);
-
-    // Stairs affect the floor tiles on the floor above.
-    // Roofs sometimes affect the floor tiles on the floor above.
-    if (BuildingFloor *floorAbove = floor->floorAbove()) {
-        if (object->affectsFloorAbove())
-            pendingLayoutToSquares.insert(floorAbove);
-    }
-
-    schedulePending();
-
-    mShadowBuilding->objectAdded(object);
+    const bool shadowChanged = mShadowBuilding->objectAdded(object);
+    requestObjectLayout(floor, object, object->bounds(), true,
+                        shadowChanged);
 }
 
 void BuildingMap::objectAboutToBeRemoved(BuildingObject *object)
 {
     BuildingFloor *floor = object->floor();
-    pendingLayoutToSquares.insert(floor);
-
-    // Stairs affect the floor tiles on the floor above.
-    // Roofs sometimes affect the floor tiles on the floor above.
-    if (BuildingFloor *floorAbove = floor->floorAbove()) {
-        if (object->affectsFloorAbove())
-            pendingLayoutToSquares.insert(floorAbove);
-    }
-
-    schedulePending();
-
+    const QRegion region(object->bounds());
     mShadowBuilding->objectAboutToBeRemoved(object);
+    requestObjectLayout(floor, object, region, true);
 }
 
 void BuildingMap::objectRemoved(BuildingObject *object)
@@ -1000,35 +1058,18 @@ void BuildingMap::objectRemoved(BuildingObject *object)
 void BuildingMap::objectMoved(BuildingObject *object)
 {
     BuildingFloor *floor = object->floor();
-    pendingLayoutToSquares.insert(floor);
-
-    // Stairs affect the floor tiles on the floor above.
-    // Roofs sometimes affect the floor tiles on the floor above.
-    if (BuildingFloor *floorAbove = floor->floorAbove()) {
-        if (object->affectsFloorAbove())
-            pendingLayoutToSquares.insert(floorAbove);
-    }
-
-    schedulePending();
-
+    QRegion region(object->bounds());
+    if (BuildingObject *shadowObject = mShadowBuilding->shadowObject(object))
+        region |= shadowObject->bounds();
     mShadowBuilding->objectMoved(object);
+    requestObjectLayout(floor, object, region, true);
 }
 
 void BuildingMap::objectTileChanged(BuildingObject *object)
 {
     BuildingFloor *floor = object->floor();
-    pendingLayoutToSquares.insert(floor);
-
-    // Stairs affect the floor tiles on the floor above.
-    // Roofs sometimes affect the floor tiles on the floor above.
-    if (BuildingFloor *floorAbove = floor->floorAbove()) {
-        if (object->affectsFloorAbove())
-            pendingLayoutToSquares.insert(floorAbove);
-    }
-
-    schedulePending();
-
     mShadowBuilding->objectTileChanged(object);
+    requestObjectLayout(floor, object, object->bounds(), true);
 }
 
 void BuildingMap::roomAdded(Room *room)
@@ -1107,10 +1148,21 @@ void BuildingMap::handlePending()
     const bool recreatedAll = pendingRecreateAll;
     const bool resizedBuilding = pendingBuildingResized;
     const int layoutFloorCount = pendingLayoutToSquares.size();
+    const int realLayoutFloorCount = pendingRealLayoutToSquares.size();
+    const int shadowLayoutFloorCount = pendingShadowLayoutToSquares.size();
     const int squareFloorCount = pendingSquaresToTileLayers.size();
     const int erasedFloorCount = pendingEraseUserTiles.size();
     const int userTileFloorCount = pendingUserTilesToLayer.size();
     QMap<int,QRegion> updatedLevels;
+    qint64 checkpointMs = elapsed.elapsed();
+    qint64 recreateMs = 0;
+    qint64 prepareMs = 0;
+    qint64 layoutMs = 0;
+    qint64 generatedLayersMs = 0;
+    qint64 eraseUserTilesMs = 0;
+    qint64 userTilesMs = 0;
+    qint64 notifyMs = 0;
+    qint64 generatedCellCount = 0;
 
     if (pendingRecreateAll) {
         emit aboutToRecreateLayers(); // LayerGroupItems need to get ready
@@ -1118,10 +1170,15 @@ void BuildingMap::handlePending()
         pendingBuildingResized = false;
         pendingEraseUserTiles.clear(); // no need to erase, we just recreated the layers
     }
+    recreateMs = elapsed.elapsed() - checkpointMs;
+    checkpointMs = elapsed.elapsed();
 
     if (pendingRecreateAll || pendingBuildingResized) {
         QList<BuildingFloor*> floors = mBuilding->floors();
         pendingLayoutToSquares = QSet<BuildingFloor*>(floors.begin(), floors.end());
+        pendingRealLayoutToSquares = pendingLayoutToSquares;
+        pendingShadowLayoutToSquares = pendingLayoutToSquares;
+        pendingFullSquaresToTileLayers = pendingLayoutToSquares;
         pendingUserTilesToLayer.clear();
         foreach (BuildingFloor *floor, mBuilding->floors()) {
             foreach (QString layerName, floor->grimeLayers()) {
@@ -1156,21 +1213,35 @@ void BuildingMap::handlePending()
         delete mShadowBuilding;
         mShadowBuilding = new ShadowBuilding(mBuilding);
     }
+    prepareMs = elapsed.elapsed() - checkpointMs;
+    checkpointMs = elapsed.elapsed();
 
     if (!pendingLayoutToSquares.isEmpty()) {
-        foreach (BuildingFloor *floor, pendingLayoutToSquares) {
-            floor->LayoutToSquares(); // not sure this belongs in this class
-            pendingSquaresToTileLayers[floor] = floor->bounds(1, 1);
-
-            mShadowBuilding->floor(floor->level())->LayoutToSquares();
+        QList<BuildingFloor*> floors = pendingLayoutToSquares.values();
+        std::sort(floors.begin(), floors.end(),
+                  [](BuildingFloor *left, BuildingFloor *right) {
+            return left->level() < right->level();
+        });
+        foreach (BuildingFloor *floor, floors) {
+            if (pendingRealLayoutToSquares.contains(floor))
+                floor->LayoutToSquares();
+            if (pendingShadowLayoutToSquares.contains(floor))
+                mShadowBuilding->floor(floor->level())->LayoutToSquares();
+            if (pendingFullSquaresToTileLayers.contains(floor)
+                    || !pendingSquaresToTileLayers.contains(floor)) {
+                pendingSquaresToTileLayers[floor] = floor->bounds(1, 1);
+            }
         }
     }
+    layoutMs = elapsed.elapsed() - checkpointMs;
+    checkpointMs = elapsed.elapsed();
 
     if (!pendingSquaresToTileLayers.isEmpty()) {
         foreach (BuildingFloor *floor, pendingSquaresToTileLayers.keys()) {
             CompositeLayerGroup *layerGroup = mBlendMapComposite->layerGroupForLevel(floor->level());
-            QRect area = pendingSquaresToTileLayers[floor].boundingRect(); // TODO: only affected region
+            QRect area = pendingSquaresToTileLayers[floor].boundingRect();
             BuildingSquaresToTileLayers(floor, area, layerGroup);
+            generatedCellCount += qint64(area.width()) * area.height();
             if (layerGroup->needsSynch()) {
                 mMapComposite->layerGroupForLevel(floor->level())->setNeedsSynch(true);
                 layerGroup->synch(); // Don't really need to synch the blend-over-map, but do need
@@ -1180,6 +1251,8 @@ void BuildingMap::handlePending()
             updatedLevels[floor->level()] |= area;
         }
     }
+    generatedLayersMs = elapsed.elapsed() - checkpointMs;
+    checkpointMs = elapsed.elapsed();
 
     if (!pendingEraseUserTiles.isEmpty()) {
         foreach (BuildingFloor *floor, pendingEraseUserTiles) {
@@ -1191,6 +1264,8 @@ void BuildingMap::handlePending()
             updatedLevels[floor->level()] |= floor->bounds();
         }
     }
+    eraseUserTilesMs = elapsed.elapsed() - checkpointMs;
+    checkpointMs = elapsed.elapsed();
 
     if (!pendingUserTilesToLayer.isEmpty()) {
         foreach (BuildingFloor *floor, pendingUserTilesToLayer.keys()) {
@@ -1202,6 +1277,8 @@ void BuildingMap::handlePending()
             }
         }
     }
+    userTilesMs = elapsed.elapsed() - checkpointMs;
+    checkpointMs = elapsed.elapsed();
 
     if (pendingRecreateAll)
         emit layersRecreated();
@@ -1210,6 +1287,7 @@ void BuildingMap::handlePending()
 
     foreach (int level, updatedLevels.keys())
         emit layersUpdated(level, updatedLevels[level]);
+    notifyMs = elapsed.elapsed() - checkpointMs;
 
     const qint64 elapsedMs = elapsed.elapsed();
     if (elapsedMs >= 100) {
@@ -1217,15 +1295,26 @@ void BuildingMap::handlePending()
                    << elapsedMs << "ms, recreate" << recreatedAll
                    << "resize" << resizedBuilding
                    << "layout floors" << layoutFloorCount
+                   << "real layout floors" << realLayoutFloorCount
+                   << "shadow layout floors" << shadowLayoutFloorCount
                    << "square floors" << squareFloorCount
                    << "erased floors" << erasedFloorCount
                    << "user-tile floors" << userTileFloorCount
-                   << "updated levels" << updatedLevels.size();
+                   << "updated levels" << updatedLevels.size()
+                   << "building size" << mBuilding->size()
+                   << "generated cells" << generatedCellCount
+                   << "phases ms"
+                   << recreateMs << prepareMs << layoutMs
+                   << generatedLayersMs << eraseUserTilesMs
+                   << userTilesMs << notifyMs;
     }
     pending = false;
     pendingRecreateAll = false;
     pendingBuildingResized = false;
     pendingLayoutToSquares.clear();
+    pendingRealLayoutToSquares.clear();
+    pendingShadowLayoutToSquares.clear();
+    pendingFullSquaresToTileLayers.clear();
     pendingSquaresToTileLayers.clear();
     pendingEraseUserTiles.clear();
     pendingUserTilesToLayer.clear();
@@ -1447,7 +1536,7 @@ void ShadowBuilding::floorTilesChanged(BuildingFloor *floor,
     delete grid;
 }
 
-void ShadowBuilding::objectAdded(BuildingObject *object)
+bool ShadowBuilding::objectAdded(BuildingObject *object)
 {
     foreach (BuildingModifier *bmod, mModifiers) {
         if (AddObjectModifier *mod = dynamic_cast<AddObjectModifier*>(bmod)) {
@@ -1466,10 +1555,11 @@ void ShadowBuilding::objectAdded(BuildingObject *object)
         BuildingObject *shadowObject = mOriginalToShadowObject[object];
         shadowFloor->removeObject(shadowObject->index());
         shadowFloor->insertObject(object->index(), shadowObject);
-        return;
+        return false;
     }
 
     shadowFloor->insertObject(object->index(), cloneObject(shadowFloor, object));
+    return true;
 }
 
 void ShadowBuilding::objectAboutToBeRemoved(BuildingObject *object)

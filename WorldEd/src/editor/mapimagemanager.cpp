@@ -102,6 +102,9 @@ MapImageManager::MapImageManager() :
         connect(mImageRenderWorkers[i],
                 &MapImageRenderWorker::imageRendered,
                 this, &MapImageManager::imageRenderedByThread);
+        connect(mImageRenderWorkers[i],
+                &MapImageRenderWorker::imageRenderFailed,
+                this, &MapImageManager::imageRenderFailedByThread);
         connect(mImageRenderWorkers[i], &MapImageRenderWorker::jobDone,
                 this, &MapImageManager::renderJobDone);
         mImageRenderThreads[i]->start();
@@ -136,6 +139,18 @@ MapImageManager::~MapImageManager()
         delete mImageRenderWorkers[i];
         delete mImageRenderThreads[i];
     }
+
+#ifdef WORLDED
+    for (const RenderPreparation &preparation : qAsConst(mRenderPreparations)) {
+        for (MapInfo *referencedMap : preparation.referencedMaps)
+            MapManager::instance()->removeReferenceToMap(referencedMap);
+    }
+#endif
+    mRenderPreparations.clear();
+    qDeleteAll(mActiveRenders.keys());
+    mActiveRenders.clear();
+    qDeleteAll(mMapImages);
+    mMapImages.clear();
 }
 
 MapImageManager *MapImageManager::instance()
@@ -151,7 +166,93 @@ void MapImageManager::deleteInstance()
     mInstance = 0;
 }
 
-MapImage *MapImageManager::getMapImage(const QString &mapName, const QString &relativeTo)
+void MapImageManager::retainMapImage(MapImage *mapImage, QObject *owner)
+{
+    if (!mapImage)
+        return;
+    QObject *effectiveOwner = owner ? owner : this;
+    if (mImageOwners[mapImage].contains(effectiveOwner))
+        return;
+    mImageOwners[mapImage].insert(effectiveOwner);
+    mOwnerImages[effectiveOwner].insert(mapImage);
+    if (effectiveOwner != this) {
+        connect(effectiveOwner, &QObject::destroyed,
+                this, &MapImageManager::releaseOwner,
+                Qt::UniqueConnection);
+    }
+}
+
+void MapImageManager::releaseOwner(QObject *owner)
+{
+    if (!owner)
+        return;
+    const QSet<MapImage*> images = mOwnerImages.take(owner);
+    int removed = 0;
+    int pending = 0;
+    for (MapImage *mapImage : images) {
+        auto owners = mImageOwners.find(mapImage);
+        if (owners == mImageOwners.end())
+            continue;
+        owners->remove(owner);
+        if (!owners->isEmpty())
+            continue;
+        mImageOwners.erase(owners);
+        if (discardMapImageIfUnused(mapImage))
+            ++removed;
+        else
+            ++pending;
+    }
+    if (!images.isEmpty()) {
+        qInfo() << "Thumbnail owner released" << images.size()
+                << "images, removed" << removed
+                << "pending" << pending
+                << "cached" << mMapImages.size();
+    }
+}
+
+bool MapImageManager::containsMapImage(MapImage *mapImage) const
+{
+    return mMapImages.values().contains(mapImage);
+}
+
+int MapImageManager::mapImageReferenceCount(MapImage *mapImage) const
+{
+    return mImageOwners.value(mapImage).size();
+}
+
+bool MapImageManager::discardMapImageIfUnused(MapImage *mapImage)
+{
+    if (!mapImage || !mapImage->mLoaded
+            || !mImageOwners.value(mapImage).isEmpty())
+        return false;
+    removeMapImage(mapImage);
+    return true;
+}
+
+void MapImageManager::removeMapImage(MapImage *mapImage)
+{
+    mForceRebuildAfterLoad.remove(mapImage);
+    mDeferredMapImages.removeAll(mapImage);
+    mImageOwners.remove(mapImage);
+    for (auto it = mOwnerImages.begin(); it != mOwnerImages.end();) {
+        it->remove(mapImage);
+        if (it->isEmpty())
+            it = mOwnerImages.erase(it);
+        else
+            ++it;
+    }
+    for (auto it = mMapImages.begin(); it != mMapImages.end();) {
+        if (it.value() == mapImage)
+            it = mMapImages.erase(it);
+        else
+            ++it;
+    }
+    delete mapImage;
+}
+
+MapImage *MapImageManager::getMapImage(const QString &mapName,
+                                       const QString &relativeTo,
+                                       QObject *owner)
 {
     // Do not emit mapImageChanged as a result of worker threads finishing
     // loading any images while we are creating a new thumbnail image.
@@ -165,8 +266,11 @@ MapImage *MapImageManager::getMapImage(const QString &mapName, const QString &re
     if (BMPToTMX::supportedImageFormats().contains(
                 suffix, Qt::CaseInsensitive)) {
         QString keyName = QFileInfo(mapName).canonicalFilePath();
-        if (mMapImages.contains(keyName))
-            return mMapImages[keyName];
+        if (mMapImages.contains(keyName)) {
+            MapImage *mapImage = mMapImages[keyName];
+            retainMapImage(mapImage, owner);
+            return mapImage;
+        }
         ImageData data = generateBMPImage(mapName);
         if (!data.valid)
             return 0;
@@ -176,9 +280,10 @@ MapImage *MapImageManager::getMapImage(const QString &mapName, const QString &re
                                        data.levelZeroBounds.height(), 1, 1);
         MapImage *mapImage = new MapImage(data.image, data.scale,
                                           data.levelZeroBounds, data.mapSize, data.tileSize,
-                                          mapInfo);
+                                          mapInfo, true);
         mapImage->mLoaded = true;
         mMapImages[keyName] = mapImage;
+        retainMapImage(mapImage, owner);
         mapImage->chopIntoPieces();
         return mapImage;
     }
@@ -188,8 +293,11 @@ MapImage *MapImageManager::getMapImage(const QString &mapName, const QString &re
     if (mapFilePath.isEmpty())
         return 0;
 
-    if (mMapImages.contains(mapFilePath))
-        return mMapImages[mapFilePath];
+    if (mMapImages.contains(mapFilePath)) {
+        MapImage *mapImage = mMapImages[mapFilePath];
+        retainMapImage(mapImage, owner);
+        return mapImage;
+    }
 
     ImageData data = generateMapImage(mapFilePath);
     if (!data.valid)
@@ -229,10 +337,13 @@ MapImage *MapImageManager::getMapImage(const QString &mapName, const QString &re
     mapImage->setSources(sources);
 
     mMapImages.insert(mapFilePath, mapImage);
+    retainMapImage(mapImage, owner);
     return mapImage;
 }
 
-bool MapImageManager::recreateMapImage(const QString &mapName, const QString &relativeTo)
+bool MapImageManager::recreateMapImage(const QString &mapName,
+                                       const QString &relativeTo,
+                                       QObject *owner)
 {
     mError.clear();
     QString mapFilePath = MapManager::instance()->pathForMap(mapName, relativeTo);
@@ -262,11 +373,13 @@ bool MapImageManager::recreateMapImage(const QString &mapName, const QString &re
         mapImage->mLoaded = false;
         mapImage->mSources += mapInfo;
         mMapImages.insert(mapFilePath, mapImage);
+        retainMapImage(mapImage, owner);
         queueRenderJob(mapImage);
         qInfo() << "Recreating thumbnail at width" << thumbnailImageWidth()
                 << "for" << mapFilePath;
         return true;
     }
+    retainMapImage(mapImage, owner);
     if (!mapImage->mLoaded) {
         mForceRebuildAfterLoad.insert(mapImage);
         qInfo() << "Thumbnail recreation queued after current load for" << mapFilePath;
@@ -313,13 +426,18 @@ void MapImageManager::queueRenderJob(MapImage *mapImage)
                               Q_ARG(QString, imageFileName));
 }
 
-MapImage *MapImageManager::getZombieSpawnImage(const QString &imageName, const QString &relativeTo)
+MapImage *MapImageManager::getZombieSpawnImage(const QString &imageName,
+                                               const QString &relativeTo,
+                                               QObject *owner)
 {
     Q_UNUSED(relativeTo)
 
     QString keyName = QFileInfo(imageName).canonicalFilePath();
-    if (mMapImages.contains(keyName))
-        return mMapImages[keyName];
+    if (mMapImages.contains(keyName)) {
+        MapImage *mapImage = mMapImages[keyName];
+        retainMapImage(mapImage, owner);
+        return mapImage;
+    }
     ImageData data = generateZombieSpawnImage(imageName);
     if (!data.valid) {
         return nullptr;
@@ -330,9 +448,10 @@ MapImage *MapImageManager::getZombieSpawnImage(const QString &imageName, const Q
                                    data.levelZeroBounds.height(), 1, 1);
     MapImage *mapImage = new MapImage(data.image, data.scale,
                                       data.levelZeroBounds, data.mapSize, data.tileSize,
-                                      mapInfo);
+                                      mapInfo, true);
     mapImage->mLoaded = true;
     mMapImages[keyName] = mapImage;
+    retainMapImage(mapImage, owner);
     mapImage->chopIntoPieces();
     return mapImage;
 }
@@ -755,6 +874,8 @@ void MapImageManager::imageLoadedByThread(QImage *image, MapImage *mapImage)
     mapImage->mLoaded = true;
     delete image;
 
+    if (discardMapImageIfUnused(mapImage))
+        return;
     if (mForceRebuildAfterLoad.remove(mapImage)) {
         scheduleMapImageRebuild(mapImage);
         return;
@@ -837,14 +958,27 @@ void MapImageManager::imageRenderedByThread(MapImageData imgData,
         qInfo() << "Thumbnail saved to" << imageInfo.absoluteFilePath();
     }
     if (mForceRebuildAfterLoad.remove(mapImage)) {
+        if (discardMapImageIfUnused(mapImage))
+            return;
         scheduleMapImageRebuild(mapImage);
         return;
     }
 
+    if (discardMapImageIfUnused(mapImage))
+        return;
     if (mDeferralDepth > 0)
         mDeferredMapImages += mapImage;
     else
         emit mapImageChanged(mapImage);
+}
+
+void MapImageManager::imageRenderFailedByThread(MapImage *mapImage)
+{
+    mForceRebuildAfterLoad.remove(mapImage);
+    mapImage->mImage.fill(Qt::transparent);
+    mapImage->mLoaded = true;
+    emit mapImageFailedToLoad(mapImage);
+    discardMapImageIfUnused(mapImage);
 }
 
 void MapImageManager::renderJobDone(MapComposite *mapComposite)
@@ -971,6 +1105,7 @@ void MapImageManager::failRenderMapPreparation(
     QMetaObject::invokeMethod(renderWorker,
                               "mapFailedToLoad", Qt::QueuedConnection);
     emit mapImageFailedToLoad(mapImage);
+    discardMapImageIfUnused(mapImage);
 }
 void MapImageManager::mapFailedToLoad(MapInfo *mapInfo)
 {
@@ -1081,7 +1216,9 @@ void MapImageManager::processDeferrals()
 
 ///// ///// ///// ///// /////
 
-MapImage::MapImage(QImage image, qreal scale, const QRectF &levelZeroBounds, const QSize &mapSize, const QSize &tileSize, MapInfo *mapInfo)
+MapImage::MapImage(QImage image, qreal scale, const QRectF &levelZeroBounds,
+                   const QSize &mapSize, const QSize &tileSize,
+                   MapInfo *mapInfo, bool ownsMapInfo)
     : mImage(image)
     , mInfo(mapInfo)
     , mLevelZeroBounds(levelZeroBounds)
@@ -1090,10 +1227,17 @@ MapImage::MapImage(QImage image, qreal scale, const QRectF &levelZeroBounds, con
     , mMapSize(mapSize)
     , mTileSize(tileSize)
     , mLoaded(false)
+    , mOwnsMapInfo(ownsMapInfo)
 #ifdef WORLDED
     , mImageSize(image.size())
 #endif
 {
+}
+
+MapImage::~MapImage()
+{
+    if (mOwnsMapInfo)
+        delete mInfo;
 }
 
 QPointF MapImage::tileToPixelCoords(qreal x, qreal y)
@@ -1258,6 +1402,8 @@ void MapImageRenderWorker::work()
         if (data.valid())
             emit imageRendered(data, job.mapImage,
                                imageSaved, job.imageFileName);
+        else
+            emit imageRenderFailed(job.mapImage);
     }
 }
 

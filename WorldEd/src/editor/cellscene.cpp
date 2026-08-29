@@ -446,7 +446,8 @@ void CellMiniMapItem::updateCellImage()
     mMapImageBounds = QRect();
 
     if (!mCell->mapFilePath().isEmpty()) {
-        mMapImage = MapImageManager::instance()->getMapImage(mCell->mapFilePath());
+        mMapImage = MapImageManager::instance()->getMapImage(
+                    mCell->mapFilePath(), QString(), mScene->worldDocument());
         if (mMapImage) {
             qreal tileScale = mScene->renderer()->boundingRect(QRect(0,0,1,1)).width() / (qreal)mMapImage->tileSize().width();
             QPointF offset = mMapImage->tileToImageCoords(0, 0) / mMapImage->scale() * tileScale;
@@ -459,7 +460,8 @@ void CellMiniMapItem::updateCellImage()
 void CellMiniMapItem::updateLotImage(int index)
 {
     WorldCellLot *lot = mCell->lots().at(index);
-    MapImage *mapImage = MapImageManager::instance()->getMapImage(lot->mapName()/*, mapFilePath()*/);
+    MapImage *mapImage = MapImageManager::instance()->getMapImage(
+                lot->mapName(), QString(), mScene->worldDocument());
     if (mapImage) {
         qreal tileScale = mScene->renderer()->boundingRect(QRect(0,0,1,1)).width() / (qreal)mapImage->tileSize().width();
         QPointF offset = mapImage->tileToImageCoords(0, 0) / mapImage->scale() * tileScale;
@@ -4837,7 +4839,7 @@ void BasementItem::refreshAccessPreview()
     if (!mAccessPreview || mAccessPreviewPath != sourcePath) {
         delete mAccessPreview;
         mAccessPreview = new DnDItem(mapInfo, mRenderer, mObject->level(),
-                                     this, true);
+                                     mScene->worldDocument(), this, true);
         mAccessPreview->setAcceptedMouseButtons(Qt::NoButton);
         mAccessPreview->setZValue(-1.0);
         mAccessPreviewPath = sourcePath;
@@ -5375,10 +5377,12 @@ void CellRoadItem::setDragOffset(const QPoint &offset)
 /////
 
 DnDItem::DnDItem(MapInfo *mapInfo, MapRenderer *renderer, int level,
-                 QGraphicsItem *parent, bool persistentPreview)
+                 QObject *imageOwner, QGraphicsItem *parent,
+                 bool persistentPreview)
     : QGraphicsItem(parent)
     , mMapInfo(mapInfo)
-    , mMapImage(MapImageManager::instance()->getMapImage(mapInfo->path()))
+    , mMapImage(MapImageManager::instance()->getMapImage(
+                    mapInfo->path(), QString(), imageOwner))
     , mRenderer(renderer)
     , mLevel(level)
     , mPersistentPreview(persistentPreview)
@@ -8531,7 +8535,8 @@ void CellScene::dragEnterEvent(QGraphicsSceneDragDropEvent *event)
         if (mapInfo == nullptr)
             continue;
 
-        mDnDItem = new DnDItem(mapInfo, mRenderer, level);
+        mDnDItem = new DnDItem(mapInfo, mRenderer, level,
+                               worldDocument());
         QPoint tilePos = mRenderer->pixelToTileCoords(event->scenePos(), level).toPoint();
         mDnDItem->setTilePosition(tilePos);
         addItem(mDnDItem);

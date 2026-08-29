@@ -20,6 +20,7 @@
 #include "celldocument.h"
 #include "cellscene.h"
 #include "document.h"
+#include "mapimagemanager.h"
 #include "mapmanager.h"
 #include "worlddocument.h"
 
@@ -76,6 +77,8 @@ void DocumentManager::addDocument(Document *doc)
     }
 
     mDocuments.insert(insertAt, doc);
+    if (doc->asWorldDocument())
+        MapManager::instance()->setPurgeUnreferencedImmediately(false);
 
     mUndoGroup->addStack(doc->undoStack());
     mFailedToAdd = false;
@@ -93,15 +96,15 @@ void DocumentManager::closeDocument(int index)
 
     // If the document being closed is a WorldDocument, then force all
     // associated CellDocuments to close first.
-    if (WorldDocument *worldDoc = mDocuments[index]->asWorldDocument()) {
+    WorldDocument *closingWorld = mDocuments[index]->asWorldDocument();
+    if (closingWorld) {
         for (int i = mDocuments.size() - 1; i >= 0; i--) {
             if (CellDocument *cellDoc = mDocuments[i]->asCellDocument()) {
-                if (cellDoc->worldDocument() == worldDoc)
+                if (cellDoc->worldDocument() == closingWorld)
                     closeDocument(i);
             }
         }
-        // Re-get the index of the document to close
-        index = indexOf(worldDoc);
+        index = indexOf(closingWorld);
     }
 
     Document *doc = mDocuments.takeAt(index);
@@ -116,7 +119,20 @@ void DocumentManager::closeDocument(int index)
             setCurrentDocument((Document*)0);
     }
 //    mUndoGroup->removeStack(doc->undoStack());
+    if (closingWorld)
+        MapImageManager::instance()->releaseOwner(closingWorld);
     delete doc;
+    if (closingWorld) {
+        bool hasWorldDocument = false;
+        for (Document *remaining : qAsConst(mDocuments)) {
+            if (remaining->asWorldDocument()) {
+                hasWorldDocument = true;
+                break;
+            }
+        }
+        if (!hasWorldDocument)
+            MapManager::instance()->setPurgeUnreferencedImmediately(true);
+    }
 }
 
 void DocumentManager::closeDocument(Document *doc)

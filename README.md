@@ -117,6 +117,10 @@ Important additions include:
 - Raster rendering does not retain a CPU atlas for every tilesheet. OpenGL
   atlases are assembled only for sheets that are actually uploaded, then the
   temporary CPU atlas is released after upload.
+- Project thumbnails are owned by the open PZW documents that use them. When
+  the final project closes, unused thumbnail images and every loaded TMX map
+  with zero references are released immediately. The complete global tileset
+  catalogue remains resident for deterministic legacy-map compatibility.
 - InGameMap Forest export with the Forest pyramid and strict Build 42.20
   binary-header validation before existing files are replaced
 - InGameMap building outlines from both placed TBX lots and RoomDefs embedded
@@ -136,6 +140,9 @@ Important additions include:
   from the first entry in **InGameMap**, the annotation button on the main
   toolbar, or **Ctrl+Alt+A**
 - Basement entrance placement preview and visual access picker
+- Right-clicking a TBX building lot opens it directly in BuildingEd. An
+  already-running BuildingEd window receives the selected building instead of
+  starting another editor instance.
 - Confirmed vertical building-lot placement with source and resulting world
   level ranges, selected underground outlines, and a confirmed ground-opening
   action for basement stairs
@@ -193,6 +200,9 @@ Important additions include:
 - The Layers and Levels visibility sliders stay synchronized, clamp stored
   values to the open map, and provide **Check All** and **Uncheck All** from
   the Layers list context menu.
+- Bracket-key shortcuts are stored without being mistaken for configuration
+  lists. Older shortcut files that lost the default **Decrease BMP Brush
+  Size** `[` binding restore it automatically.
 - The Maps browser sorts directories and files by Name, numeric Size, or
   actual Last modified time when its column headers are clicked.
 - The Qt raster viewport is used consistently. The experimental OpenGL
@@ -231,8 +241,26 @@ Important additions include:
   Object, Tile, or Attribute mode. Hidden isometric views synchronize when
   their mode is opened instead of repeating the same floor-wide work after
   every room, wall, window, door, stair, roof, or furniture change.
+- Placement previews and object dragging update only the temporary structural
+  plan. Committed object and room edits regenerate automatic layers around the
+  affected cells, including the floor above for stairs and similar objects.
+  An object committed from its active preview reuses that prepared temporary
+  structure.
+- Switching between Iso, Tiles, and Attributes repaints the current level as
+  soon as the destination mode becomes visible, including buildings without
+  rooms.
+- A running BuildingEd instance receives TBX files opened from PZWorldEd,
+  TileZed, Explorer, or another BuildingEd launch.
 - Closing a TBX releases its building model and all per-document editor views
   so closed buildings do not accumulate during a long session.
+- TBX tile definitions replaced by matching catalogue entries remain valid for
+  the lifetime of the building, preventing stale references while automatic
+  layers and the preview map are constructed.
+- Older TBX tile entries are expanded to the current category layout during
+  loading. Stair objects with an empty tile entry remain valid and no longer
+  crash automatic-layer or welcome-thumbnail rendering.
+- Room tile actions require a valid selected tile row. Clear, Random, and
+  Choose remain disabled when only a room row is selected.
 - Editing a room name or internal name commits when the field is finished or a
   list entry is selected. Text entry no longer rebuilds every isometric floor
   after each character.
@@ -508,6 +536,13 @@ and binary outputs to the Build 42.20 256-square grid. Legacy300 project
 features that cross a 256-square boundary are split into the required output
 cells without changing their absolute map-square position. Native256 projects
 remain one-to-one.
+
+World-map export also accounts for every expanded road polygon triangulated by
+the Build 42 renderer. A cell that would exceed the renderer's signed 16-bit
+index position is simplified conservatively. If simplification alone is not
+enough, only the smallest internal road fragments required to make the export
+safe are omitted from XML and binary output. The PZW source features are never
+changed, and the portable log identifies every affected cell and road class.
 
 **InGameMap > Generate Building Features** detects placed TBX lots and
 RoomDefs embedded directly in assigned cell TMX maps. Room rectangles are

@@ -1717,7 +1717,8 @@ void BaseCellItem::updateCellImage()
         Q_ASSERT(!mUpdatingImage);
         mUpdatingImage = true;
 #endif
-        mMapImage = MapImageManager::instance()->getMapImage(mapFilePath());
+        mMapImage = MapImageManager::instance()->getMapImage(
+                    mapFilePath(), QString(), mScene->worldDocument());
 #ifndef QT_NO_DEBUG
         mUpdatingImage = false;
 #endif
@@ -1733,7 +1734,8 @@ void BaseCellItem::insertLotImage(int index)
 {
     WorldCellLot *lot = lots().at(index);
     MapImage *mapImage = mWantsImages
-            ? MapImageManager::instance()->getMapImage(lot->mapName()/*, mapFilePath()*/)
+            ? MapImageManager::instance()->getMapImage(
+                lot->mapName(), QString(), mScene->worldDocument())
             : nullptr;
     if (mapImage) {
         mLotImages.insert(index, LotImage(QRectF(), mapImage, lot->level()));
@@ -2537,7 +2539,8 @@ WorldBMPItem::WorldBMPItem(WorldScene *scene, WorldBMP *bmp)
     , mSelected(false)
     , mDragging(false)
 {
-    mMapImage = MapImageManager::instance()->getMapImage(bmp->filePath());
+    mMapImage = MapImageManager::instance()->getMapImage(
+                bmp->filePath(), QString(), mScene->worldDocument());
     if (!mMapImage) qDebug() << MapImageManager::instance()->errorString();
 
     // I chopped up the image to make OpenGL happy (no 6000x3000 textures), but

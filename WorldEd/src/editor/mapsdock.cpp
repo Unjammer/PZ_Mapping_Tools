@@ -388,6 +388,8 @@ void MapsDock::onMapsDirectoryChanged()
 
 void MapsDock::selectionChanged()
 {
+    MapImageManager::instance()->releaseOwner(this);
+    mPreviewMapImage = nullptr;
     updateFindButtons();
     if (!mPreviewToggle->isChecked()) {
         mPreviewLabel->setPixmap(QPixmap());
@@ -413,7 +415,8 @@ void MapsDock::selectionChanged()
         mPreviewMapImage = nullptr;
         return;
     }
-    MapImage *mapImage = MapImageManager::instance()->getMapImage(path);
+    MapImage *mapImage = MapImageManager::instance()->getMapImage(
+                path, QString(), this);
     if (mapImage) {
         if (mapImage->isLoaded()) {
             QImage image = mapImage->image().scaled(256, 123, Qt::KeepAspectRatio,
@@ -439,6 +442,7 @@ void MapsDock::setPreviewExpanded(bool expanded)
     if (expanded) {
         selectionChanged();
     } else {
+        MapImageManager::instance()->releaseOwner(this);
         mPreviewLabel->setPixmap(QPixmap());
         mPreviewMapImage = nullptr;
     }

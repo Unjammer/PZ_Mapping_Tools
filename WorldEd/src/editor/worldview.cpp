@@ -207,7 +207,8 @@ void WorldMiniMapItem::insertBmp(int index, WorldBMP *bmp)
 {
     WorldBMPImage bmpImage;
     bmpImage.bmp = bmp;
-    bmpImage.mapImage = MapImageManager::instance()->getMapImage(bmp->filePath());
+    bmpImage.mapImage = MapImageManager::instance()->getMapImage(
+                bmp->filePath(), QString(), mScene->worldDocument());
     mImages.insert(index, bmpImage);
     update();
 }

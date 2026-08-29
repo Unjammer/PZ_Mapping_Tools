@@ -762,19 +762,21 @@ void BuildingFloor::LayoutToSquares()
             ReplaceWindow(window, squares);
         }
         if (Stairs *stairs = object->asStairs()) {
-            // Stair objects are 5 tiles long but only have 3 tiles.
-            if (stairs->isN()) {
-                for (int i = 1; i <= 3; i++)
-                    ReplaceFurniture(x, y + i, squares,
-                                     stairs->tile()->tile(stairs->getOffset(x, y + i)),
-                                     Square::SectionFurniture,
-                                     Square::SectionFurniture4);
-            } else {
-                for (int i = 1; i <= 3; i++)
-                    ReplaceFurniture(x + i, y, squares,
-                                     stairs->tile()->tile(stairs->getOffset(x + i, y)),
-                                     Square::SectionFurniture,
-                                     Square::SectionFurniture4);
+            if (BuildingTileEntry *entry = stairs->tile()) {
+                // Stair objects are 5 tiles long but only have 3 tiles.
+                if (stairs->isN()) {
+                    for (int i = 1; i <= 3; i++)
+                        ReplaceFurniture(x, y + i, squares,
+                                         entry->tile(stairs->getOffset(x, y + i)),
+                                         Square::SectionFurniture,
+                                         Square::SectionFurniture4);
+                } else {
+                    for (int i = 1; i <= 3; i++)
+                        ReplaceFurniture(x + i, y, squares,
+                                         entry->tile(stairs->getOffset(x + i, y)),
+                                         Square::SectionFurniture,
+                                         Square::SectionFurniture4);
+                }
             }
             mStairs += stairs;
         }

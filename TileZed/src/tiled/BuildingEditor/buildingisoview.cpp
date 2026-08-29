@@ -1282,10 +1282,9 @@ void BuildingIsoScene::currentLayerChanged()
 
 void BuildingIsoScene::roomAtPositionChanged(BuildingFloor *floor, const QPoint &pos)
 {
-    Q_UNUSED(pos);
     if (deferStructuralMapUpdate())
         return;
-    mBuildingMap->floorEdited(floor);
+    mBuildingMap->roomAtPositionChanged(floor, pos);
 }
 
 void BuildingIsoScene::roomDefinitionChanged()
@@ -1704,6 +1703,7 @@ void BuildingIsoView::showEvent(QShowEvent *event)
     QGraphicsView::showEvent(event);
     if (scene())
         scene()->applyDeferredUpdates();
+    viewport()->update();
 }
 void BuildingIsoView::setRenderDiagnosticsEnabled(bool enabled)
 {

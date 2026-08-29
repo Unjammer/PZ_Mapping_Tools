@@ -203,7 +203,8 @@ public:
 #ifdef WORLDED
     void addReferenceToMap(MapInfo *mapInfo);
     void removeReferenceToMap(MapInfo *mapInfo);
-    void purgeUnreferencedMaps();
+    void purgeUnreferencedMaps(bool force = false);
+    void setPurgeUnreferencedImmediately(bool immediate);
 
     void newMapFileCreated(const QString &path);
 #endif
@@ -267,6 +268,7 @@ private:
     int mNextThreadForJob;
 #ifdef WORLDED
     int mReferenceEpoch;
+    bool mPurgeUnreferencedImmediately;
 #endif
     QString mError;
 };

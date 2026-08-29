@@ -332,8 +332,10 @@ void RoomsDialog::synchUI()
     }
     ui->clearTile->setEnabled(enabled);
 
-    ui->randomTile->setEnabled(hasRoom);
-    ui->chooseTile->setEnabled(hasRoom);
+    const bool hasTile = hasRoom && mTileRow >= 0
+            && mTileRow < Room::TileCount;
+    ui->randomTile->setEnabled(hasTile);
+    ui->chooseTile->setEnabled(hasTile);
 
     if (mRoom) {
         int index = ui->name->findText(mRoom->Name);
@@ -553,7 +555,7 @@ void RoomsDialog::setTilePixmap()
 
 BuildingTileEntry *RoomsDialog::selectedTile()
 {
-    if (mRoom == 0 || mTileRow == -1)
+    if (mRoom == 0 || mTileRow < 0 || mTileRow >= Room::TileCount)
         return 0;
 
     BuildingTileEntry *entry = mRoom->tile(mTileRow);
@@ -580,6 +582,8 @@ QRgb RoomsDialog::pickColorForNewRoom()
 
 void RoomsDialog::clearTile()
 {
+    if (!mRoom || mTileRow < 0 || mTileRow >= Room::TileCount)
+        return;
     BuildingTileCategory *category = BuildingTilesMgr::instance()->category(mRoom->categoryEnum(mTileRow));
     if (category->canAssignNone()) {
         Room editedRoom(mRoom);
@@ -590,6 +594,8 @@ void RoomsDialog::clearTile()
 
 void RoomsDialog::randomTile()
 {
+    if (!mRoom || mTileRow < 0 || mTileRow >= Room::TileCount)
+        return;
     BuildingTileCategory *category = BuildingTilesMgr::instance()->category(mRoom->categoryEnum(mTileRow));
     QList<BuildingTileEntry*> entries = category->entries();
     if (category->canAssignNone()) {
@@ -603,6 +609,8 @@ void RoomsDialog::randomTile()
 
 void RoomsDialog::chooseTile()
 {
+    if (!mRoom || mTileRow < 0 || mTileRow >= Room::TileCount)
+        return;
     BuildingTileCategory *category = BuildingTilesMgr::instance()->category(
                 mRoom->categoryEnum(mTileRow));
     ChooseBuildingTileDialog dialog(tr("Choose %1 tile for '%2'")

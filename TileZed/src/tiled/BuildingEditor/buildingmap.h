@@ -66,7 +66,7 @@ public:
     BuildingFloor *floor(int level) const;
 
     BuildingObject *shadowObject(BuildingObject *object)
-    { return mOriginalToShadowObject[object]; }
+    { return mOriginalToShadowObject.value(object, nullptr); }
 
     void buildingRotated();
     void buildingResized();
@@ -79,7 +79,7 @@ public:
     void floorTilesChanged(BuildingFloor *floor, const QString &layerName,
                            const QRect &bounds);
 
-    void objectAdded(BuildingObject *object);
+    bool objectAdded(BuildingObject *object);
     void objectAboutToBeRemoved(BuildingObject *object);
     void objectRemoved(BuildingObject *object);
     void objectMoved(BuildingObject *object);
@@ -191,6 +191,7 @@ public:
     void floorAdded(BuildingFloor *floor);
     void floorRemoved(BuildingFloor *floor);
     void floorEdited(BuildingFloor *floor);
+    void roomAtPositionChanged(BuildingFloor *floor, const QPoint &pos);
 
     void floorTilesChanged(BuildingFloor *floor);
     void floorTilesChanged(BuildingFloor *floor, const QString &layerName,
@@ -227,6 +228,16 @@ private:
 
     void userTilesToLayer(BuildingFloor *floor, const QString &layerName,
                           const QRect &bounds);
+    QRegion expandedUpdateRegion(BuildingFloor *floor,
+                                 const QRegion &region) const;
+    void requestLayout(BuildingFloor *floor, bool updateRealFloor,
+                       const QRegion &region, bool fullUpdate = false,
+                       bool updateShadowFloor = true);
+    void requestObjectLayout(BuildingFloor *floor, BuildingObject *object,
+                             const QRegion &region, bool updateRealFloor,
+                             bool updateShadowFloor = true);
+    QRegion floorGridDifference(BuildingFloor *floor,
+                                const QVector<QVector<Room*> > &grid) const;
 
     inline void schedulePending()
     {
@@ -246,13 +257,19 @@ private:
     QMap<QString,int> mLayerToSection;
 
     BuildingFloor *mCursorObjectFloor;
+    QRegion mCursorObjectRegion;
+    bool mCursorObjectAffectsFloorAbove = false;
     ShadowBuilding *mShadowBuilding;
     QMap<BuildingFloor*,QRegion> mSuppressTiles;
+    QMap<BuildingObject*,QRegion> mDragObjectRegions;
 
     bool pending;
     bool pendingRecreateAll;
     bool pendingBuildingResized;
     QSet<BuildingFloor*> pendingLayoutToSquares; // LayoutToSquares
+    QSet<BuildingFloor*> pendingRealLayoutToSquares;
+    QSet<BuildingFloor*> pendingShadowLayoutToSquares;
+    QSet<BuildingFloor*> pendingFullSquaresToTileLayers;
     QMap<BuildingFloor*,QRegion> pendingSquaresToTileLayers; // BuildingSquaresToTileLayers
     QSet<BuildingFloor*> pendingEraseUserTiles; // TileLayer::erase on all user-tile layers
     QMap<BuildingFloor*,QMap<QString,QRegion> > pendingUserTilesToLayer; // floorTilesToLayer

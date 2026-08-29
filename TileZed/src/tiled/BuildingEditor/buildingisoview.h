@@ -241,6 +241,8 @@ public:
     void applyDeferredUpdates();
     bool hasDeferredStructuralMapRebuild() const
     { return mDeferredStructuralMapRebuild; }
+    BuildingMap *buildingMap() const
+    { return mBuildingMap; }
 
 private:
     void BuildingToMap();

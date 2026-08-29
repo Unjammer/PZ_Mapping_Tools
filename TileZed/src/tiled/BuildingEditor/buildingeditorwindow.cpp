@@ -736,6 +736,55 @@ BuildingEditorWindow::~BuildingEditorWindow()
     delete ui;
 }
 
+void BuildingEditorWindow::setDiagnosticShortcutsEnabled(bool enabled)
+{
+    if (!enabled || !mDiagnosticActions.isEmpty())
+        return;
+
+    auto addDiagnosticAction = [this](const QString &name,
+                                      const QString &shortcut,
+                                      BaseTool *tool) {
+        QAction *action = new QAction(name, this);
+        action->setShortcut(QKeySequence(shortcut));
+        action->setShortcutContext(Qt::ApplicationShortcut);
+        addAction(action);
+        mDiagnosticActions.append(action);
+        connect(action, &QAction::triggered, this, [this, name, tool]() {
+            if (!mCurrentDocument || !mCurrentDocumentStuff) {
+                qWarning() << "BuildingEd diagnostic shortcut ignored without an open building:" << name;
+                return;
+            }
+            if (tool == PencilTool::instance() && !currentRoom()
+                    && currentBuilding()->roomCount() > 0) {
+                setCurrentRoom(currentBuilding()->room(0));
+            }
+            mCurrentDocumentStuff->toObject();
+            tool->makeCurrent();
+            qInfo() << "BuildingEd diagnostic shortcut selected" << name
+                    << "for building" << currentBuilding()->size()
+                    << "level" << mCurrentDocument->currentLevel();
+        });
+    };
+
+    addDiagnosticAction(QStringLiteral("room"), QStringLiteral("Shift+F5"),
+                        PencilTool::instance());
+    addDiagnosticAction(QStringLiteral("wall"), QStringLiteral("Shift+F6"),
+                        WallTool::instance());
+    addDiagnosticAction(QStringLiteral("door"), QStringLiteral("Shift+F7"),
+                        DoorTool::instance());
+    addDiagnosticAction(QStringLiteral("window"), QStringLiteral("Shift+F8"),
+                        WindowTool::instance());
+    addDiagnosticAction(QStringLiteral("stairs"), QStringLiteral("Shift+F9"),
+                        StairsTool::instance());
+    addDiagnosticAction(QStringLiteral("furniture"), QStringLiteral("Shift+F10"),
+                        FurnitureTool::instance());
+
+    qInfo() << "BuildingEd diagnostic shortcuts enabled: Shift+F5 through Shift+F10";
+    statusBar()->showMessage(
+                tr("Diagnostic shortcuts enabled: Shift+F5 Room, F6 Wall, F7 Door, F8 Window, F9 Stairs, F10 Furniture"),
+                15000);
+}
+
 void BuildingEditorWindow::closeEvent(QCloseEvent *event)
 {
     if (confirmAllSave()) {

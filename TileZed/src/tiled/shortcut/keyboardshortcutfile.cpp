@@ -20,9 +20,11 @@
 #include "BuildingEditor/simplefile.h"
 
 #include <QFileInfo>
+#include <QUrl>
 
 #define VERSION1 1
-#define VERSION_LATEST VERSION1
+#define VERSION2 2
+#define VERSION_LATEST VERSION2
 
 KeyboardShortcutFile::KeyboardShortcutFile()
 {
@@ -60,6 +62,15 @@ bool KeyboardShortcutFile::read(const QString &fileName)
                 if (id.isEmpty()) {
                     continue;
                 }
+                if (version == VERSION1
+                        && id == QLatin1String("Other.BMP.BrushSizeMinus")
+                        && sequence.startsWith(
+                            QLatin1String("Other.BMP.BrushSizePlus ="))) {
+                    sequence = QStringLiteral("[");
+                } else if (version >= VERSION2) {
+                    sequence = QUrl::fromPercentEncoding(
+                                sequence.toLatin1());
+                }
                 KeyboardShortcut shortcut;
                 shortcut.id = id;
                 shortcut.sequence = QKeySequence(sequence, QKeySequence::SequenceFormat::PortableText);
@@ -85,7 +96,10 @@ bool KeyboardShortcutFile::write(const QString &fileName, const QList<KeyboardSh
         return a.id < b.id;
     });
     for (const KeyboardShortcut &shortcut : sorted) {
-        block.addValue(shortcut.id, shortcut.sequence.toString(QKeySequence::SequenceFormat::PortableText));
+        const QByteArray encoded = QUrl::toPercentEncoding(
+                    shortcut.sequence.toString(
+                        QKeySequence::SequenceFormat::PortableText));
+        block.addValue(shortcut.id, QString::fromLatin1(encoded));
     }
     simpleFile.blocks += block;
     if (!simpleFile.write(fileName)) {

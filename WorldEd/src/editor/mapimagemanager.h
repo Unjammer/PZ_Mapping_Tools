@@ -101,6 +101,7 @@ signals:
     void mapNeeded(MapImage *mapImage);
     void imageRendered(MapImageData data, MapImage *mapImage,
                        bool imageSaved, QString imageFileName);
+    void imageRenderFailed(MapImage *mapImage);
     void jobDone(MapComposite *mapComposite);
 
 public slots:
@@ -127,7 +128,10 @@ private:
 class MapImage
 {
 public:
-    MapImage(QImage image, qreal scale, const QRectF &levelZeroBounds, const QSize &mapSize, const QSize &tileSize, MapInfo *mapInfo);
+    MapImage(QImage image, qreal scale, const QRectF &levelZeroBounds,
+             const QSize &mapSize, const QSize &tileSize, MapInfo *mapInfo,
+             bool ownsMapInfo = false);
+    ~MapImage();
 
     void setImage(const QImage &image) { mImage = image; }
     QImage image() const {return mImage; }
@@ -199,6 +203,7 @@ private:
     QSize mMapSize;
     QSize mTileSize;
     bool mLoaded;
+    bool mOwnsMapInfo;
 
 #ifdef WORLDED
     // For WorldEd world images.
@@ -218,12 +223,22 @@ public:
     static MapImageManager *instance();
     static void deleteInstance();
 
-    MapImage *getMapImage(const QString &mapName, const QString &relativeTo = QString());
+    MapImage *getMapImage(const QString &mapName,
+                          const QString &relativeTo = QString(),
+                          QObject *owner = nullptr);
 
-    bool recreateMapImage(const QString &mapName, const QString &relativeTo = QString());
+    bool recreateMapImage(const QString &mapName,
+                          const QString &relativeTo = QString(),
+                          QObject *owner = nullptr);
+
+    void releaseOwner(QObject *owner);
+    bool containsMapImage(MapImage *mapImage) const;
+    int mapImageReferenceCount(MapImage *mapImage) const;
 
 #ifdef WORLDED
-    MapImage *getZombieSpawnImage(const QString &imageName, const QString &relativeTo = QString());
+    MapImage *getZombieSpawnImage(const QString &imageName,
+                                  const QString &relativeTo = QString(),
+                                  QObject *owner = nullptr);
     bool reloadImageFile(const QString &imageName);
 #endif
 
@@ -283,6 +298,7 @@ private slots:
     void renderThreadNeedsMap(MapImage *mapImage);
     void imageRenderedByThread(MapImageData imgData, MapImage *mapImage,
                                bool imageSaved, QString imageFileName);
+    void imageRenderFailedByThread(MapImage *mapImage);
     void renderJobDone(MapComposite *mapComposite);
 
     void mapLoaded(MapInfo *mapInfo);
@@ -305,8 +321,13 @@ private:
     QFileInfo imageFileInfo(const QString &mapFilePath);
     QFileInfo imageDataFileInfo(const QFileInfo &imageFileInfo);
     bool scheduleMapImageRebuild(MapImage *mapImage);
+    void retainMapImage(MapImage *mapImage, QObject *owner);
+    bool discardMapImageIfUnused(MapImage *mapImage);
+    void removeMapImage(MapImage *mapImage);
 
     QMap<QString,MapImage*> mMapImages;
+    QHash<QObject*, QSet<MapImage*> > mOwnerImages;
+    QHash<MapImage*, QSet<QObject*> > mImageOwners;
     QSet<MapImage*> mForceRebuildAfterLoad;
     QString mError;
 

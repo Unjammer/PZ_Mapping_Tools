@@ -707,6 +707,14 @@
   duplicates and collinear points. It rejects shapes that cannot be represented
   safely.</p>
 
+  <p>Road polygons receive additional expanded triangulations at several map
+  zoom levels in Build 42. Export safety therefore budgets all seven forms of
+  each road polygon. A renderer-heavy cell is simplified conservatively. If it
+  still exceeds the signed 16-bit index position, the exporter omits only the
+  smallest internal road fragments required for safe XML and binary files.
+  Source PZW features remain unchanged, and the portable log lists the affected
+  cell and road classes.</p>
+
   <table>
     <thead><tr><th>Rejected condition</th><th>Reason</th></tr></thead>
     <tbody>
@@ -1004,7 +1012,7 @@
       <tr><td>WorldGen or loot Save targets the game</td><td>The selected output root is inside the read-only game installation.</td><td>Select the map project or mod root; project Lua belongs below its own <code>media/lua/server</code>.</td></tr>
       <tr><td>Biome preview differs from a save</td><td>The preview is representative and lacks save noise or authored-map replacement context.</td><td>Review the WorldGen scope section and validate the staged result in-game.</td></tr>
       <tr><td>No incorrect-sRGB-profile warning appears</td><td>The exact non-fatal libpng iCCP warning is intentionally suppressed.</td><td>Other PNG warnings/errors remain logged; report a visible decode failure, not the absent profile warning.</td></tr>
-      <tr><td>InGameMap export drops a polygon</td><td>Degenerate or unrepresentable geometry.</td><td>Search logs for the cell, feature index and rejection reason.</td></tr>
+      <tr><td>InGameMap export drops a polygon</td><td>Degenerate geometry, an unrepresentable shape, or a renderer-heavy road cell.</td><td>Search logs for the cell, feature index, rejection reason, and omitted road classes.</td></tr>
     </tbody>
   </table>
 

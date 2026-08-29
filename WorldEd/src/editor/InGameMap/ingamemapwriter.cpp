@@ -25,11 +25,14 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QMap>
+#include <QSet>
 #include <QTemporaryFile>
 #include <QXmlStreamWriter>
 #include <QDebug>
 #include <QtMath>
 
+#include <algorithm>
 #include <limits>
 
 namespace {
@@ -41,6 +44,16 @@ bool hasInGameMapProperty(InGameMapFeature *feature,
             return true;
     }
     return false;
+}
+
+QString inGameMapPropertyValue(InGameMapFeature *feature,
+                               const QString &propertyName)
+{
+    for (const InGameMapProperty &property : feature->mProperties) {
+        if (property.mKey == propertyName)
+            return property.mValue;
+    }
+    return QString();
 }
 
 double distanceToSegmentSquared(const InGameMapPoint &point,
@@ -145,9 +158,15 @@ int rendererIndexEstimate(const QList<InGameMapExportFeature> &features)
         const qint64 baseTriangleIndices = qMax<qint64>(
                     3, qint64(3) *
                     (pointCount + holeCount * 2 - 2));
-        estimate += baseTriangleIndices *
-                (hasInGameMapProperty(item.feature,
-                                      QStringLiteral("highway")) ? 7 : 1);
+        if (hasInGameMapProperty(item.feature,
+                                 QStringLiteral("highway"))) {
+            const qint64 offsetTriangleIndices = qMax<qint64>(
+                        3, qint64(3) *
+                        (pointCount * 2 + holeCount * 4 - 2));
+            estimate += baseTriangleIndices + offsetTriangleIndices * 6;
+        } else {
+            estimate += baseTriangleIndices;
+        }
     }
     return int(qMin<qint64>(estimate,
                 std::numeric_limits<int>::max()));
@@ -162,6 +181,77 @@ int exportPointCount(const QList<InGameMapExportFeature> &features)
             count += coordinates.size();
     }
     return count;
+}
+
+qint64 geometryAreaTwice(const InGameMapGeometry &geometry)
+{
+    qint64 area = 0;
+    for (int coordinateIndex = 0;
+         coordinateIndex < geometry.mCoordinates.size();
+         ++coordinateIndex) {
+        const InGameMapCoordinates &coordinates =
+                geometry.mCoordinates.at(coordinateIndex);
+        qint64 ringArea = 0;
+        for (int pointIndex = 0;
+             pointIndex < coordinates.size(); ++pointIndex) {
+            const InGameMapPoint &first = coordinates.at(pointIndex);
+            const InGameMapPoint &second = coordinates.at(
+                        (pointIndex + 1) % coordinates.size());
+            ringArea += qRound64(first.x) * qRound64(second.y) -
+                    qRound64(second.x) * qRound64(first.y);
+        }
+        const qint64 absoluteArea = qAbs(ringArea);
+        area += coordinateIndex == 0 ? absoluteArea : -absoluteArea;
+    }
+    return qMax<qint64>(0, area);
+}
+
+qint64 geometrySpan(const InGameMapGeometry &geometry)
+{
+    qint64 minimumX = std::numeric_limits<qint64>::max();
+    qint64 minimumY = std::numeric_limits<qint64>::max();
+    qint64 maximumX = std::numeric_limits<qint64>::min();
+    qint64 maximumY = std::numeric_limits<qint64>::min();
+    for (const InGameMapCoordinates &coordinates : geometry.mCoordinates) {
+        for (const InGameMapPoint &point : coordinates) {
+            const qint64 x = qRound64(point.x);
+            const qint64 y = qRound64(point.y);
+            minimumX = qMin(minimumX, x);
+            minimumY = qMin(minimumY, y);
+            maximumX = qMax(maximumX, x);
+            maximumY = qMax(maximumY, y);
+        }
+    }
+    if (minimumX > maximumX || minimumY > maximumY)
+        return 0;
+    return qMax(maximumX - minimumX, maximumY - minimumY);
+}
+
+bool geometryTouchesCellBoundary(const InGameMapGeometry &geometry,
+                                 int cellSize)
+{
+    for (const InGameMapCoordinates &coordinates : geometry.mCoordinates) {
+        for (const InGameMapPoint &point : coordinates) {
+            const qint64 x = qRound64(point.x);
+            const qint64 y = qRound64(point.y);
+            if (x <= 0 || y <= 0 || x >= cellSize || y >= cellSize)
+                return true;
+        }
+    }
+    return false;
+}
+
+int highwayPriority(InGameMapFeature *feature)
+{
+    const QString value = inGameMapPropertyValue(
+                feature, QStringLiteral("highway"));
+    if (value == QLatin1String("primary"))
+        return 3;
+    if (value == QLatin1String("secondary"))
+        return 2;
+    if (value == QLatin1String("tertiary"))
+        return 1;
+    return 0;
 }
 }
 
@@ -362,20 +452,18 @@ bool fitInGameMapRendererBudget(
         int *repairedFeatures,
         QString *error)
 {
-    static const int safeIndexBudget = 24000;
+    static const int safeIndexBudget = 28000;
     static const int safePointBufferShorts = 28000;
     const int originalPoints = exportPointCount(features);
     const int originalEstimate = rendererIndexEstimate(features);
     if (originalPoints * 2 <= safePointBufferShorts &&
             originalEstimate <= safeIndexBudget)
         return true;
-    int changedFeatures = 0;
+    QSet<InGameMapFeature *> repaired;
     double usedTolerance = 0.0;
     const QVector<double> tolerances =
-            {1.0, 2.0, 3.0, 4.0, 6.0, 8.0,
-             12.0, 16.0, 24.0, 32.0, 48.0, 64.0};
+            {1.0, 2.0, 3.0, 4.0};
     for (double tolerance : tolerances) {
-        changedFeatures = 0;
         for (InGameMapExportFeature &item : features) {
             if (!item.geometry.isPolygon() ||
                     !hasInGameMapProperty(item.feature,
@@ -395,9 +483,9 @@ bool fitInGameMapRendererBudget(
             if (rendererIndexEstimate(
                         {InGameMapExportFeature{
                              item.feature, sanitized}}) <
-                    rendererIndexEstimate({item})) {
+                        rendererIndexEstimate({item})) {
                 item.geometry = sanitized;
-                ++changedFeatures;
+                repaired.insert(item.feature);
             }
         }
         usedTolerance = tolerance;
@@ -405,36 +493,189 @@ bool fitInGameMapRendererBudget(
                 rendererIndexEstimate(features) <= safeIndexBudget)
             break;
     }
-    const int finalPoints = exportPointCount(features);
-    const int finalEstimate = rendererIndexEstimate(features);
     const QPoint worldCoordinates =
             cell->world()->getGenerateLotsSettings().worldOrigin +
             QPoint(cell->x(), cell->y());
-    if (changedFeatures > 0) {
-        if (repairedFeatures)
-            *repairedFeatures += changedFeatures;
+    int currentPoints = exportPointCount(features);
+    int currentEstimate = rendererIndexEstimate(features);
+    if (!repaired.isEmpty()) {
         qWarning().noquote()
                 << QStringLiteral("InGameMap %1 simplified renderer-heavy highways: output=\"%2\" cell=%3,%4 tolerance=%5 points=%6->%7 estimated-indices=%8->%9 changed-features=%10")
                    .arg(formatName, outputPath)
                    .arg(worldCoordinates.x()).arg(worldCoordinates.y())
                    .arg(usedTolerance)
-                   .arg(originalPoints).arg(finalPoints)
-                   .arg(originalEstimate).arg(finalEstimate)
-                   .arg(changedFeatures);
+                   .arg(originalPoints).arg(currentPoints)
+                   .arg(originalEstimate).arg(currentEstimate)
+                   .arg(repaired.size());
     }
-    if (finalPoints * 2 > safePointBufferShorts ||
-            finalEstimate > safeIndexBudget) {
+
+    struct RemovalCandidate
+    {
+        int index;
+        bool boundary;
+        int priority;
+        qint64 area;
+        qint64 span;
+        int cost;
+    };
+    QVector<RemovalCandidate> candidates;
+    for (int index = 0; index < features.size(); ++index) {
+        const InGameMapExportFeature &item = features.at(index);
+        if (!item.geometry.isPolygon() ||
+                !hasInGameMapProperty(item.feature,
+                                      QStringLiteral("highway")))
+            continue;
+        candidates += RemovalCandidate{
+                index,
+                geometryTouchesCellBoundary(item.geometry,
+                                            cell->world()->cellSize()),
+                highwayPriority(item.feature),
+                geometryAreaTwice(item.geometry),
+                geometrySpan(item.geometry),
+                rendererIndexEstimate({item})};
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [](const RemovalCandidate &first,
+                 const RemovalCandidate &second) {
+        if (first.boundary != second.boundary)
+            return !first.boundary;
+        if (first.priority != second.priority)
+            return first.priority < second.priority;
+        if (first.area != second.area)
+            return first.area < second.area;
+        if (first.span != second.span)
+            return first.span < second.span;
+        if (first.cost != second.cost)
+            return first.cost < second.cost;
+        return first.index < second.index;
+    });
+
+    QSet<int> removedIndexes;
+    QMap<QString, int> removedTypes;
+    for (const RemovalCandidate &candidate : std::as_const(candidates)) {
+        if (currentPoints * 2 <= safePointBufferShorts &&
+                currentEstimate <= safeIndexBudget)
+            break;
+        const InGameMapExportFeature &item = features.at(candidate.index);
+        removedIndexes.insert(candidate.index);
+        repaired.insert(item.feature);
+        removedTypes[inGameMapPropertyValue(
+                    item.feature, QStringLiteral("highway"))]++;
+        currentEstimate -= candidate.cost;
+        for (const InGameMapCoordinates &coordinates :
+             item.geometry.mCoordinates)
+            currentPoints -= coordinates.size();
+    }
+    if (!removedIndexes.isEmpty()) {
+        QList<InGameMapExportFeature> retained;
+        retained.reserve(features.size() - removedIndexes.size());
+        for (int index = 0; index < features.size(); ++index) {
+            if (!removedIndexes.contains(index))
+                retained += features.at(index);
+        }
+        features.swap(retained);
+        QStringList removedSummary;
+        for (auto it = removedTypes.cbegin();
+             it != removedTypes.cend(); ++it) {
+            removedSummary += QStringLiteral("%1=%2")
+                    .arg(it.key()).arg(it.value());
+        }
+        qWarning().noquote()
+                << QStringLiteral("InGameMap %1 omitted smallest renderer-heavy highway fragments: output=\"%2\" cell=%3,%4 omitted=%5 types={%6} points=%7->%8 estimated-indices=%9->%10")
+                   .arg(formatName, outputPath)
+                   .arg(worldCoordinates.x()).arg(worldCoordinates.y())
+                   .arg(removedIndexes.size())
+                   .arg(removedSummary.join(QLatin1Char(',')))
+                   .arg(originalPoints).arg(currentPoints)
+                   .arg(originalEstimate).arg(currentEstimate);
+    }
+
+    if (repairedFeatures)
+        *repairedFeatures += repaired.size();
+
+    if (currentPoints * 2 > safePointBufferShorts ||
+            currentEstimate > safeIndexBudget) {
         if (error) {
             *error = QCoreApplication::translate(
                         "InGameMapWriter",
                         "InGameMap cell %1,%2 is too complex for the "
-                        "game's 16-bit world-map renderer after safe "
+                        "game's 16-bit world-map renderer after safe road "
                         "simplification (%3 points, estimated %4 indices).")
                     .arg(worldCoordinates.x()).arg(worldCoordinates.y())
-                    .arg(finalPoints).arg(finalEstimate);
+                    .arg(currentPoints).arg(currentEstimate);
             qCritical().noquote() << *error;
         }
         return false;
+    }
+    return true;
+}
+
+bool validateInGameMapRendererBudget(QString *summary, QString *error)
+{
+    World world(1, 1, WorldGridFormat::Native256);
+    WorldCell *cell = world.cellAt(0, 0);
+    QList<InGameMapExportFeature> firstPass;
+    for (int index = 0; index < 400; ++index) {
+        InGameMapFeature *feature = new InGameMapFeature(
+                    &cell->inGameMap());
+        feature->mGeometry.mType = QStringLiteral("Polygon");
+        const int x = index == 0 ? 0 : 1 + index % 20 * 12;
+        const int y = index == 0 ? 0 : 1 + index / 20 * 12;
+        InGameMapCoordinates coordinates;
+        coordinates += InGameMapPoint(x, y);
+        coordinates += InGameMapPoint(x + 5, y);
+        coordinates += InGameMapPoint(x, y + 5);
+        feature->mGeometry.mCoordinates += coordinates;
+        feature->mProperties += InGameMapProperty(
+                    QStringLiteral("highway"),
+                    index == 0
+                    ? QStringLiteral("primary")
+                    : QStringLiteral("tertiary"));
+        cell->inGameMap().mFeatures += feature;
+        firstPass += InGameMapExportFeature{
+                feature, feature->mGeometry};
+    }
+    QList<InGameMapExportFeature> secondPass = firstPass;
+    int firstRepairs = 0;
+    int secondRepairs = 0;
+    QString firstError;
+    QString secondError;
+    if (!fitInGameMapRendererBudget(
+                firstPass, cell, QStringLiteral("<validation>"),
+                QStringLiteral("first"), &firstRepairs, &firstError) ||
+            !fitInGameMapRendererBudget(
+                secondPass, cell, QStringLiteral("<validation>"),
+                QStringLiteral("second"), &secondRepairs, &secondError)) {
+        if (error)
+            *error = !firstError.isEmpty() ? firstError : secondError;
+        return false;
+    }
+    bool identical = firstPass.size() == secondPass.size();
+    for (int index = 0; identical && index < firstPass.size(); ++index)
+        identical = firstPass.at(index).feature ==
+                secondPass.at(index).feature;
+    const InGameMapFeature *boundaryFeature =
+            cell->inGameMap().mFeatures.first();
+    bool boundaryRetained = false;
+    for (const InGameMapExportFeature &item : std::as_const(firstPass))
+        boundaryRetained |= item.feature == boundaryFeature;
+    if (!identical || !boundaryRetained ||
+            firstPass.size() >= 400 || firstRepairs <= 0 ||
+            firstRepairs != secondRepairs) {
+        if (error) {
+            *error = QCoreApplication::translate(
+                        "InGameMapWriter",
+                        "Renderer-budget repair was not deterministic or "
+                        "did not preserve the boundary road.");
+        }
+        return false;
+    }
+    if (summary) {
+        *summary = QCoreApplication::translate(
+                    "InGameMapWriter",
+                    "%1 renderer-heavy fragments retained from 400 with "
+                    "deterministic boundary-road preservation")
+                .arg(firstPass.size());
     }
     return true;
 }

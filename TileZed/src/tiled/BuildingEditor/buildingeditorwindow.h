@@ -29,6 +29,7 @@
 class ActionManager;
 class KeyboardShortcutWindow;
 
+class QAction;
 class QComboBox;
 class QLabel;
 class QSplitter;
@@ -194,6 +195,7 @@ public:
     bool closeYerself();
 
     bool Startup();
+    void setDiagnosticShortcutsEnabled(bool enabled);
 
     void readSettings();
     void startSettingsAutoSave();
@@ -388,6 +390,7 @@ private:
     Core::Internal::FancyTabWidget *mTabWidget;
 
     bool mDocumentChanging;
+    QList<QAction*> mDiagnosticActions;
 };
 
 } // namespace BuildingEditor

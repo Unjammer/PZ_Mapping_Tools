@@ -110,6 +110,9 @@ public:
     const QList<BuildingTileEntry*> &usedTiles() const
     { return mUsedTiles; }
 
+    void retainTileEntries(const QList<BuildingTileEntry*> &entries)
+    { mRetainedTileEntries += entries; }
+
     void setUsedFurniture(const QList<FurnitureTiles*> &tiles)
     { mUsedFurniture = tiles; }
 
@@ -207,6 +210,7 @@ private:
     QList<Room*> mRooms;
     QVector<BuildingTileEntry*> mTiles;
     QList<BuildingTileEntry*> mUsedTiles;
+    QList<BuildingTileEntry*> mRetainedTileEntries;
     QList<FurnitureTiles*> mUsedFurniture;
     Tiled::Properties mProperties;
     BasementAccess *mBasementAccess = nullptr;
