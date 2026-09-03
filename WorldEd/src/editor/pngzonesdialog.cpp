@@ -21,6 +21,7 @@
 #include "simplefile.h"
 #include "world.h"
 #include "worldcell.h"
+#include "worldobjectvalidation.h"
 
 #include "InGameMap/clipper.hpp"
 
@@ -58,6 +59,7 @@ PNGZonesDialog::PNGZonesDialog(World *world, QWidget *parent) :
             continue;
         }
         QListWidgetItem *item = new QListWidgetItem(ot->name());
+        item->setToolTip(WorldObjectValidation::typeDescription(ot->name()));
         QColor color = Qt::white;
         if (WorldObjectGroup *og = world->objectGroups().find(ot->name())) {
             color = og->color();

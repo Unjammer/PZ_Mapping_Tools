@@ -2661,6 +2661,7 @@ void MainWindow::currentLevelMenuTriggered(QAction *action)
 void MainWindow::aboutToShowObjGrpMenu()
 {
     mObjectGroupMenu->clear();
+    mObjectGroupMenu->setToolTipsVisible(true);
     CellDocument *cellDoc = mCurrentDocument->asCellDocument();
     if (!cellDoc)
         return;
@@ -2673,6 +2674,9 @@ void MainWindow::aboutToShowObjGrpMenu()
         // This extra space is so the down arrow doesn't overlap the text
         name += QLatin1Char(' ');
         QAction *action = new QAction(name, mObjectGroupMenu);
+        if (og->type())
+            action->setToolTip(WorldObjectValidation::typeDescription(
+                                   og->type()->name()));
         if (og == cellDoc->currentObjectGroup()) {
             action->setCheckable(true);
             action->setChecked(true);
@@ -4357,7 +4361,11 @@ static void generateLots8x8(MainWindow *mainWin, Document *doc,
                     dialog.holeFillTileName());
     }
     if (lotManager->generateWorld(worldDoc, mode) == false) {
-        QMessageBox::warning(mainWin, mainWin->tr("Lot Generation Failed!"), LotFilesManager256::instance()->errorString());
+        if (!lotManager->errorString().isEmpty()) {
+            QMessageBox::warning(mainWin,
+                                 mainWin->tr("Lot Generation Failed!"),
+                                 lotManager->errorString());
+        }
         return;
     }
     QString modError;

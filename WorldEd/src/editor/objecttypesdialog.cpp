@@ -21,6 +21,7 @@
 #include "world.h"
 #include "worldcell.h"
 #include "worlddocument.h"
+#include "worldobjectvalidation.h"
 
 ObjectTypesDialog::ObjectTypesDialog(WorldDocument *worldDoc, QWidget *parent)
     : QDialog(parent)
@@ -154,6 +155,10 @@ void ObjectTypesDialog::setList()
 {
     QListWidget *view = ui->typesView;
     view->clear();
-    // Skip the null object type at the start of the list
-    view->insertItems(0, mWorldDoc->world()->objectTypes().names().mid(1));
+    const QStringList names = mWorldDoc->world()->objectTypes().names().mid(1);
+    for (const QString &name : names) {
+        QListWidgetItem *item = new QListWidgetItem(name);
+        item->setToolTip(WorldObjectValidation::typeDescription(name));
+        view->addItem(item);
+    }
 }

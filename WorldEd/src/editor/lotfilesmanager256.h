@@ -193,6 +193,8 @@ public:
     static bool validateReferencedRoomDefs(const QString &tmxPath,
                                            QString *summary,
                                            QString *error);
+    static bool validateMissingMapReferenceCleanup(QString *summary,
+                                                   QString *error);
 
     QString errorString() const { return mError; }
 
@@ -217,6 +219,7 @@ private:
     LotFilesWorker256 *getFirstWorkerWithStatus(LotFilesWorker256::Status status);
     LotFilesWorker256 *getIdleWorker();
     LotFilesWorker256 *getBusyWorker();
+    bool resolveMissingMapReferences(GenerateMode mode);
 
     static LotFilesManager256 *mInstance;
 

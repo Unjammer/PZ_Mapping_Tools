@@ -52,6 +52,7 @@ private:
     bool mUseOpenGL;
     QComboBox *mThemeCombo;
     QCheckBox *mSyncThemeCheckBox;
+    QCheckBox *mErrorsOnlyNotifications;
     QLineEdit *mProjectZomboidDirectory;
     QComboBox *mAutoSaveCombo;
 };

@@ -26,6 +26,7 @@
 #include "world.h"
 #include "worldcell.h"
 #include "worlddocument.h"
+#include "worldobjectvalidation.h"
 
 #include "maprenderer.h"
 #include "tilelayer.h"
@@ -337,6 +338,7 @@ void ObjectsViewDelegate::setEditorData(QWidget *editor, const QModelIndex &inde
             QStringList types = obj->cell()->world()->objectTypes().names().mid(1);
             comboBox->addItem(tr("<no type>"));
             comboBox->addItems(types);
+            WorldObjectValidation::applyTypeTooltips(comboBox);
             int comboIndex = obj->type()->name().isEmpty()
                     ? 0 : types.indexOf(obj->type()->name()) + 1;
             comboBox->setCurrentIndex(comboIndex);
@@ -750,6 +752,10 @@ QVariant ObjectsModel::data(const QModelIndex &index, int role) const
         }
         case Qt::DisplayRole:
             return og->name().isEmpty() ? QLatin1String("<no group>") : og->name();
+        case Qt::ToolTipRole:
+            return og->type()
+                    ? WorldObjectValidation::typeDescription(og->type()->name())
+                    : QString();
         default:
             return QVariant();
         }
@@ -779,6 +785,11 @@ QVariant ObjectsModel::data(const QModelIndex &index, int role) const
         }
         case Qt::EditRole:
             return (index.column() == typeColumn()) ? obj->type()->name() : obj->name();
+        case Qt::ToolTipRole:
+            return index.column() == typeColumn()
+                    ? WorldObjectValidation::typeDescription(
+                          obj->type()->name())
+                    : QString();
         case Qt::DecorationRole:
             return QVariant();
         case Qt::ForegroundRole: {

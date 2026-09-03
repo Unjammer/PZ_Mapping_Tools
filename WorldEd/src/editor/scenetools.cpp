@@ -565,6 +565,7 @@ void CreateObjectTool::editObjectPreset()
     QStringList typeNames = mScene->world()->objectTypes().names();
     typeNames.removeAll(QString());
     typeCombo.addItems(typeNames);
+    WorldObjectValidation::applyTypeTooltips(&typeCombo);
     const int typeIndex = typeCombo.findText(mObjectTypeName);
     if (typeIndex >= 0)
         typeCombo.setCurrentIndex(typeIndex);

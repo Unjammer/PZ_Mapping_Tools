@@ -44,6 +44,8 @@ public:
     static AppIssueSummary summary();
     static QVector<AppIssue> issues();
     static void clear();
+    static bool errorsOnlyNotifications();
+    static void setErrorsOnlyNotifications(bool errorsOnly);
 };
 
 class AppIssueNotifier

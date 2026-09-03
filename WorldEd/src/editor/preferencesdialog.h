@@ -62,6 +62,7 @@ private:
     QDoubleSpinBox *mRoadSimplificationRailway;
     QSpinBox *mRoadPointSpacingRailway;
     QCheckBox *mSyncThemeCheckBox;
+    QCheckBox *mErrorsOnlyNotifications;
     QComboBox *mAutoSaveCombo;
     QListWidget *mTreeFeatureTiles;
     QListWidget *mPrimaryRoadFeatureTiles;

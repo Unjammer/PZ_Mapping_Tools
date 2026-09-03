@@ -1,4 +1,4 @@
-# PZ Mapping Tools - Build 20260828
+# PZ Mapping Tools - Build 20260903
 
 _Changes since Build 20260827_
 
@@ -11,8 +11,42 @@ published on 2026-08-27 as **Build 20260827**.
 This changelog contains only user-visible work added after that tagged
 release.
 
+## Included applications
+
+- The Windows release now includes one complete, coherent, app-local
+  Microsoft Visual C++ x64 runtime that is newer than the compiler used for
+  the applications. Only the three DLLs imported by the applications, Qt,
+  and their plugins are included. A separate Visual C++ Redistributable
+  installation is no longer required. The deployment process also prevents
+  the older runtime associated with the Qt 5 kit from replacing the required
+  compiler runtime.
+- Preferences now includes a Notifications page with a per-application
+  option to show only errors in the application message indicator. Enabling
+  it immediately removes retained warning notifications and suppresses new
+  ones. Warnings remain in the log files, and warning dialogs that require a
+  response remain visible.
+
 ## PZWorldEd
 
+- Generate Lots now checks every source cell required by the requested
+  export before loading its TMX files. When a missing TMX reference is the
+  only content of an otherwise empty cell, WorldEd offers to create a dated
+  PZW snapshot and remove that stale reference in one undoable action.
+  References attached to cells containing lots, zones, properties, or other
+  project data are reported but never removed automatically.
+- The WorldEd zone catalogue now includes the Build 42.20.3 `SpawnOrigin`
+  type with a distinct display color. Animal and Basement zones also have
+  explicit colors. SpawnOrigin export accepts only non-empty rectangles at
+  non-negative whole map-square coordinates and adds no unused properties.
+- The Regions editor and WorldEd object catalogue now expose all four
+  Build 42.20.3 utility-zone types: `NoGas`, `NoPower`, `NoWater`, and
+  `NoPowerOrWater`. These zones require no custom properties and use distinct
+  editor display colors.
+- Every built-in WorldEd zone type now displays a concise Build 42.20.3
+  runtime-purpose tooltip in zone-selection and inspection workflows.
+- The guided Mannequin property editor now exposes all six properties read by
+  Build 42.20.3. The obsolete `medium` AnimalType choice was removed while
+  existing custom values remain loadable.
 - Project thumbnails now have explicit document ownership. Closing a project
   releases its thumbnail images when no other open document uses them.
 - Closing the final project immediately purges every loaded TMX map with zero

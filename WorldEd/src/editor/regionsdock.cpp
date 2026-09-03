@@ -8,6 +8,7 @@
 #include "world.h"
 #include "worldcell.h"
 #include "worlddocument.h"
+#include "worldobjectvalidation.h"
 #include "worldscene.h"
 #include "zoomable.h"
 extern "C" {
@@ -264,11 +265,14 @@ RegionsDock::RegionsDock(QWidget *parent)
     mTypeCombo->addItems(QStringList()
                          << QStringLiteral("Region")
                          << QStringLiteral("BuildingName")
-                         << QStringLiteral("Mannequin")
-                         << QStringLiteral("NoGas")
-                         << QStringLiteral("NoPowerOrWater")
-                         << QStringLiteral("ParkingStall")
-                         << QStringLiteral("ZombiesType"));
+                          << QStringLiteral("Mannequin")
+                          << QStringLiteral("NoGas")
+                          << QStringLiteral("NoPower")
+                          << QStringLiteral("NoWater")
+                          << QStringLiteral("NoPowerOrWater")
+                          << QStringLiteral("ParkingStall")
+                          << QStringLiteral("ZombiesType"));
+    WorldObjectValidation::applyTypeTooltips(mTypeCombo);
     identityLayout->addRow(tr("Name:"), mNameEdit);
     identityLayout->addRow(tr("Type:"), mTypeCombo);
     mainLayout->addLayout(identityLayout);
@@ -906,6 +910,32 @@ bool RegionsDock::validateEditor(QString *summary, QString *error)
         "}\n");
     source.close();
     RegionsDock dock;
+    for (int i = 0; i < dock.mTypeCombo->count(); ++i) {
+        if (!dock.mTypeCombo->itemData(
+                    i, Qt::ToolTipRole).toString().isEmpty()) {
+            continue;
+        }
+        if (error)
+            *error = QStringLiteral("The Regions tooltip is missing for %1.")
+                    .arg(dock.mTypeCombo->itemText(i));
+        return false;
+    }
+    const QStringList utilityTypes = QStringList()
+            << QStringLiteral("NoGas")
+            << QStringLiteral("NoPower")
+            << QStringLiteral("NoWater")
+            << QStringLiteral("NoPowerOrWater");
+    for (const QString &type : utilityTypes) {
+        const int index = dock.mTypeCombo->findText(
+                    type, Qt::MatchFixedString);
+        if (index >= 0 && !dock.mTypeCombo->itemData(
+                    index, Qt::ToolTipRole).toString().isEmpty())
+            continue;
+        if (error)
+            *error = QStringLiteral("The Regions type list or tooltip is missing %1.")
+                    .arg(type);
+        return false;
+    }
     QVector<RegionRecord> parsed;
     if (!dock.readFile(sourceName, &parsed, error))
         return false;
@@ -941,7 +971,7 @@ bool RegionsDock::validateEditor(QString *summary, QString *error)
         *summary = QStringLiteral(
                     "4 ordered rectangles, duplicate names, custom types, "
                     "escaped strings, typed properties, add/remove, and "
-                    "UTF-8 Lua round trip");
+                    "UTF-8 Lua round trip, with all utility-zone choices");
     }
     return true;
 }
@@ -1109,6 +1139,8 @@ void RegionsDock::rebuildList()
         QTreeWidgetItem *item = new RegionTreeWidgetItem(mRegionList);
         item->setText(0, region.name);
         item->setText(1, region.type);
+        item->setToolTip(1, WorldObjectValidation::typeDescription(
+                             region.type));
         const int values[] = {
             region.x, region.y, region.z, region.width, region.height
         };

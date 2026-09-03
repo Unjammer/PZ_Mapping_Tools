@@ -34,6 +34,8 @@
 #include "worldcell.h"
 #include "worldconstants.h"
 #include "worlddocument.h"
+#include "worldreader.h"
+#include "worldwriter.h"
 
 #include "BuildingEditor/buildingfloor.h"
 #include "BuildingEditor/buildingtiles.h"
@@ -49,13 +51,21 @@
 #include "tileset.h"
 
 #include <QDebug>
+#include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QQueue>
 #include <QRandomGenerator>
+#include <QTemporaryDir>
 #include <QThread>
+#include <QUndoStack>
+
+#include <algorithm>
 
 using namespace Tiled;
 
@@ -97,6 +107,177 @@ static QRect chunkAlignedBounds(const QRect &bounds, int chunkSize)
     const int bottom = int(std::ceil(
             (bounds.bottom() + 1) / double(chunkSize))) * chunkSize;
     return QRect(left, top, right - left, bottom - top);
+}
+
+namespace {
+
+struct MissingCellMapReference
+{
+    WorldCell *cell = nullptr;
+    QString path;
+    bool onlyCellContent = false;
+};
+
+bool mapReferenceIsOnlyCellContent(WorldCell *cell)
+{
+    return cell
+            && cell->chunkDataOverrideFilePath().isEmpty()
+            && cell->lots().isEmpty()
+            && cell->objects().isEmpty()
+            && cell->inGameMap().features().isEmpty()
+            && cell->properties().isEmpty()
+            && cell->templates().isEmpty();
+}
+
+QSet<WorldCell*> sourceCellsForLotExport(
+        WorldDocument *worldDoc, LotFilesManager256::GenerateMode mode)
+{
+    QSet<WorldCell*> result;
+    if (!worldDoc || !worldDoc->world())
+        return result;
+    World *world = worldDoc->world();
+    if (mode == LotFilesManager256::GenerateAll) {
+        for (int y = 0; y < world->height(); ++y) {
+            for (int x = 0; x < world->width(); ++x)
+                result.insert(world->cellAt(x, y));
+        }
+        return result;
+    }
+
+    const QPoint origin = world->getGenerateLotsSettings().worldOrigin;
+    for (WorldCell *selected : worldDoc->selectedCells()) {
+        if (!selected || selected->mapFilePath().isEmpty())
+            continue;
+        const QRect outputBounds = CombinedCellMaps::outputCellRect(
+                    world->gridFormat(),
+                    QRect(origin + selected->pos(), QSize(1, 1)));
+        const QRect sourceBounds = CombinedCellMaps::sourceCellRect(
+                    world->gridFormat(), outputBounds);
+        for (int y = sourceBounds.top(); y <= sourceBounds.bottom(); ++y) {
+            for (int x = sourceBounds.left(); x <= sourceBounds.right(); ++x) {
+                if (WorldCell *cell = world->cellAt(x - origin.x(),
+                                                    y - origin.y()))
+                    result.insert(cell);
+            }
+        }
+    }
+    return result;
+}
+
+QVector<MissingCellMapReference> missingCellMapReferences(
+        WorldDocument *worldDoc, LotFilesManager256::GenerateMode mode)
+{
+    QVector<MissingCellMapReference> result;
+    const QSet<WorldCell*> sourceCells = sourceCellsForLotExport(
+                worldDoc, mode);
+    for (WorldCell *cell : sourceCells) {
+        if (!cell || cell->mapFilePath().isEmpty()
+                || QFileInfo(cell->mapFilePath()).isFile())
+            continue;
+        MissingCellMapReference reference;
+        reference.cell = cell;
+        reference.path = cell->mapFilePath();
+        reference.onlyCellContent = mapReferenceIsOnlyCellContent(cell);
+        result.append(reference);
+    }
+    std::sort(result.begin(), result.end(),
+              [](const MissingCellMapReference &left,
+                 const MissingCellMapReference &right) {
+        const QPoint leftPos = left.cell->displayPos();
+        const QPoint rightPos = right.cell->displayPos();
+        if (leftPos.y() != rightPos.y())
+            return leftPos.y() < rightPos.y();
+        return leftPos.x() < rightPos.x();
+    });
+    return result;
+}
+
+bool backupAndClearMissingMapReferences(
+        WorldDocument *worldDoc,
+        const QVector<MissingCellMapReference> &references,
+        QString *backupPath, QString *error)
+{
+    if (backupPath)
+        backupPath->clear();
+    if (error)
+        error->clear();
+    if (!worldDoc || worldDoc->fileName().isEmpty()) {
+        if (error) {
+            *error = QCoreApplication::translate(
+                        "LotFilesManager256",
+                        "Save the WorldEd project before removing missing "
+                        "TMX references. No reference was changed.");
+        }
+        return false;
+    }
+
+    const QFileInfo projectInfo(worldDoc->fileName());
+    const QString timestamp = QDateTime::currentDateTime().toString(
+                QStringLiteral("yyyyMMdd-HHmmss-zzz"));
+    const QString backupDirectory = projectInfo.absoluteDir().filePath(
+                QStringLiteral(".pztools-backups/missing-map-references-%1")
+                .arg(timestamp));
+    if (!QDir().mkpath(backupDirectory)) {
+        if (error) {
+            *error = QCoreApplication::translate(
+                        "LotFilesManager256",
+                        "Could not create the missing-reference backup "
+                        "directory:\n%1\n\nNo reference was changed.")
+                    .arg(QDir::toNativeSeparators(backupDirectory));
+        }
+        return false;
+    }
+
+    const QString savedBackupPath = QDir(backupDirectory).filePath(
+                projectInfo.fileName());
+    WorldWriter writer;
+    if (!writer.writeWorld(worldDoc->world(), savedBackupPath)) {
+        if (error) {
+            *error = QCoreApplication::translate(
+                        "LotFilesManager256",
+                        "Could not create the WorldEd project backup:\n%1"
+                        "\n\n%2\n\nNo reference was changed.")
+                    .arg(QDir::toNativeSeparators(savedBackupPath),
+                         writer.errorString());
+        }
+        return false;
+    }
+
+    QUndoStack *undoStack = worldDoc->undoStack();
+    undoStack->beginMacro(QCoreApplication::translate(
+                              "Undo Commands",
+                              "Remove Missing TMX References"));
+    int removed = 0;
+    for (const MissingCellMapReference &reference : references) {
+        if (!reference.onlyCellContent || !reference.cell
+                || reference.cell->mapFilePath().isEmpty()
+                || QFileInfo(reference.cell->mapFilePath()).isFile())
+            continue;
+        worldDoc->setCellMapName(reference.cell, QString());
+        ++removed;
+    }
+    undoStack->endMacro();
+    if (!removed) {
+        if (error) {
+            *error = QCoreApplication::translate(
+                        "LotFilesManager256",
+                        "No empty-cell TMX reference was eligible for "
+                        "removal. The backup remains available at:\n%1")
+                    .arg(QDir::toNativeSeparators(savedBackupPath));
+        }
+        return false;
+    }
+
+    if (backupPath)
+        *backupPath = savedBackupPath;
+    qInfo().noquote()
+            << QStringLiteral("Missing TMX reference cleanup removed %1 "
+                              "empty-cell reference(s), backup %2")
+               .arg(removed)
+               .arg(QDir::toNativeSeparators(savedBackupPath));
+    return true;
+}
+
 }
 /////
 
@@ -210,6 +391,9 @@ void LotFilesManager256::stopThreads()
 bool LotFilesManager256::generateWorld(WorldDocument *worldDoc, GenerateMode mode)
 {
     mWorldDoc = worldDoc;
+    mError.clear();
+    if (!resolveMissingMapReferences(mode))
+        return false;
     const GenerateLotsSettings &lotSettings = mWorldDoc->world()->getGenerateLotsSettings();
     const WorldGridFormat gridFormat = mWorldDoc->world()->gridFormat();
     mCellBounds256 = CombinedCellMaps::outputCellRect(
@@ -443,6 +627,102 @@ bool LotFilesManager256::generateWorld(WorldDocument *worldDoc, GenerateMode mod
     QMessageBox::information(MainWindow::instance(),
                              tr("Generate Lot Files"), stats);
 #endif
+    return true;
+}
+
+bool LotFilesManager256::resolveMissingMapReferences(GenerateMode mode)
+{
+    const QVector<MissingCellMapReference> references =
+            missingCellMapReferences(mWorldDoc, mode);
+    if (references.isEmpty())
+        return true;
+
+    QVector<MissingCellMapReference> removable;
+    QStringList details;
+    int protectedCount = 0;
+    for (const MissingCellMapReference &reference : references) {
+        if (reference.onlyCellContent)
+            removable.append(reference);
+        else
+            ++protectedCount;
+        const QPoint displayPos = reference.cell->displayPos();
+        const QPoint projectPos = reference.cell->pos();
+        details += tr("Cell %1,%2 (project cell %3,%4)%5\n%6")
+                .arg(displayPos.x()).arg(displayPos.y())
+                .arg(projectPos.x()).arg(projectPos.y())
+                .arg(reference.onlyCellContent
+                     ? tr(" - empty except for this reference")
+                     : tr(" - contains other project data"))
+                .arg(QDir::toNativeSeparators(reference.path));
+    }
+
+    if (removable.isEmpty()) {
+        mError = tr("Generate Lots found %1 missing assigned TMX file(s). "
+                    "The affected cells also contain other project data, "
+                    "so WorldEd did not remove their references. Restore or "
+                    "reassign these files before exporting.\n\n%2")
+                .arg(references.size())
+                .arg(details.join(QLatin1String("\n\n")));
+        return false;
+    }
+
+    QMessageBox prompt(QMessageBox::Warning,
+                       tr("Missing TMX References"),
+                       tr("WorldEd found %1 empty cell(s) that still point "
+                          "to TMX files which no longer exist.")
+                       .arg(removable.size()),
+                       QMessageBox::NoButton,
+                       MainWindow::instance());
+    QString information = tr(
+                "These stale references prevent Generate Lots from "
+                "continuing. WorldEd can create a dated PZW backup of the "
+                "current project state, then remove only the references "
+                "whose cells contain no other project data.");
+    if (protectedCount > 0) {
+        information += tr(
+                    "\n\n%1 additional missing reference(s) belong to "
+                    "cells containing other data. They will not be removed "
+                    "automatically, and Generate Lots will remain stopped "
+                    "until they are restored or reassigned.")
+                .arg(protectedCount);
+    }
+    prompt.setInformativeText(information);
+    prompt.setDetailedText(details.join(QLatin1String("\n\n")));
+    QPushButton *removeButton = prompt.addButton(
+                tr("Back Up and Remove Empty References"),
+                QMessageBox::AcceptRole);
+    prompt.addButton(QMessageBox::Cancel);
+    prompt.setDefaultButton(removeButton);
+    prompt.exec();
+    if (prompt.clickedButton() != removeButton) {
+        mError.clear();
+        return false;
+    }
+
+    QString backupPath;
+    if (!backupAndClearMissingMapReferences(
+                mWorldDoc, removable, &backupPath, &mError))
+        return false;
+
+    if (protectedCount > 0) {
+        mError = tr("Removed %1 empty-cell TMX reference(s) after creating "
+                    "this backup:\n%2\n\nGenerate Lots is still blocked by "
+                    "%3 missing reference(s) in cells that contain other "
+                    "project data. Restore or reassign those TMX files.")
+                .arg(removable.size())
+                .arg(QDir::toNativeSeparators(backupPath))
+                .arg(protectedCount);
+        return false;
+    }
+
+    QMessageBox::information(
+                MainWindow::instance(), tr("Missing References Removed"),
+                tr("Removed %1 missing TMX reference(s) from empty cells. "
+                   "The project is marked as modified and the change can "
+                   "be undone.\n\nBackup:\n%2\n\nGenerate Lots will now "
+                   "continue.")
+                .arg(removable.size())
+                .arg(QDir::toNativeSeparators(backupPath)));
     return true;
 }
 
@@ -3058,6 +3338,156 @@ bool LotFilesManager256::validateNative256Geometry(QString *error)
                     "300-to-256 path.");
         }
         return false;
+    }
+    return true;
+}
+bool LotFilesManager256::validateMissingMapReferenceCleanup(
+        QString *summary, QString *error)
+{
+    if (summary)
+        summary->clear();
+    if (error)
+        error->clear();
+
+    QTemporaryDir temporaryDirectory;
+    if (!temporaryDirectory.isValid()) {
+        if (error)
+            *error = temporaryDirectory.errorString();
+        return false;
+    }
+
+    const QString tmxDirectory = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("tmx"));
+    if (!QDir().mkpath(tmxDirectory)) {
+        if (error)
+            *error = QStringLiteral("Could not create the validation TMX directory.");
+        return false;
+    }
+    const QString existingMap = QDir(tmxDirectory).filePath(
+                QStringLiteral("49_21.tmx"));
+    QFile existingFile(existingMap);
+    if (!existingFile.open(QIODevice::WriteOnly)) {
+        if (error)
+            *error = existingFile.errorString();
+        return false;
+    }
+    existingFile.close();
+
+    const QString removableMap = QDir(tmxDirectory).filePath(
+                QStringLiteral("48_22.tmx"));
+    const QString protectedMap = QDir(tmxDirectory).filePath(
+                QStringLiteral("49_22.tmx"));
+    const QString lotMap = QDir(tmxDirectory).filePath(
+                QStringLiteral("protected.tbx"));
+    const QString projectPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("validation.pzw"));
+
+    World *world = new World(6, 2, WorldGridFormat::Legacy300);
+    GenerateLotsSettings settings = world->getGenerateLotsSettings();
+    settings.worldOrigin = QPoint(44, 21);
+    world->setGenerateLotsSettings(settings);
+    WorldCell *selectedCell = world->cellAt(5, 0);
+    WorldCell *removableCell = world->cellAt(4, 1);
+    WorldCell *protectedCell = world->cellAt(5, 1);
+    selectedCell->setMapFilePath(existingMap);
+    removableCell->setMapFilePath(removableMap);
+    protectedCell->setMapFilePath(protectedMap);
+    protectedCell->addLot(lotMap, 0, 0, 0, 10, 10);
+
+    WorldWriter initialWriter;
+    if (!initialWriter.writeWorld(world, projectPath)) {
+        if (error)
+            *error = initialWriter.errorString();
+        delete world;
+        return false;
+    }
+
+    WorldDocument document(world, projectPath);
+    document.setSelectedCells({ selectedCell });
+    const QVector<MissingCellMapReference> references =
+            missingCellMapReferences(&document, GenerateSelected);
+    QVector<MissingCellMapReference> removable;
+    int protectedCount = 0;
+    for (const MissingCellMapReference &reference : references) {
+        if (reference.onlyCellContent)
+            removable.append(reference);
+        else
+            ++protectedCount;
+    }
+    if (references.size() != 2 || removable.size() != 1
+            || protectedCount != 1
+            || removable.first().cell != removableCell) {
+        if (error) {
+            *error = QStringLiteral(
+                        "Selected legacy export detected %1 missing references, "
+                        "%2 removable and %3 protected.")
+                    .arg(references.size()).arg(removable.size())
+                    .arg(protectedCount);
+        }
+        return false;
+    }
+
+    QString backupPath;
+    QString cleanupError;
+    if (!backupAndClearMissingMapReferences(
+                &document, removable, &backupPath, &cleanupError)) {
+        if (error)
+            *error = cleanupError;
+        return false;
+    }
+    if (!QFileInfo::exists(backupPath)
+            || !removableCell->mapFilePath().isEmpty()
+            || protectedCell->mapFilePath() != protectedMap
+            || document.undoStack()->count() != 1) {
+        if (error) {
+            *error = QStringLiteral(
+                        "Cleanup changed an ineligible cell, failed to create "
+                        "the backup, or did not create one undo transaction.");
+        }
+        return false;
+    }
+
+    WorldReader reader;
+    World *backupWorld = reader.readWorld(backupPath);
+    if (!backupWorld) {
+        if (error)
+            *error = reader.errorString();
+        return false;
+    }
+    const bool backupRetainedReferences =
+            backupWorld->cellAt(4, 1)->mapFilePath() == removableMap
+            && backupWorld->cellAt(5, 1)->mapFilePath() == protectedMap
+            && backupWorld->cellAt(5, 1)->lots().size() == 1;
+    delete backupWorld;
+    if (!backupRetainedReferences) {
+        if (error) {
+            *error = QStringLiteral(
+                        "The backup did not retain the original missing "
+                        "references and protected cell data.");
+        }
+        return false;
+    }
+
+    document.undoStack()->undo();
+    if (removableCell->mapFilePath() != removableMap
+            || protectedCell->mapFilePath() != protectedMap) {
+        if (error)
+            *error = QStringLiteral("Undo did not restore the removed reference.");
+        return false;
+    }
+    document.undoStack()->redo();
+    if (!removableCell->mapFilePath().isEmpty()
+            || protectedCell->mapFilePath() != protectedMap) {
+        if (error)
+            *error = QStringLiteral("Redo did not reapply the safe cleanup.");
+        return false;
+    }
+
+    if (summary) {
+        *summary = QStringLiteral(
+                    "selected legacy neighbors detected, one empty-cell "
+                    "reference removed, protected data retained, backup "
+                    "round-trip and undo/redo passed");
     }
     return true;
 }

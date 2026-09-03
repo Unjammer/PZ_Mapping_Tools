@@ -84,6 +84,18 @@ objectgroup
     defaulttype = SpawnPoint
 }
 
+objecttype
+{
+    name = SpawnOrigin
+}
+
+objectgroup
+{
+    name = SpawnOrigin
+    color = #00c2a8
+    defaulttype = SpawnOrigin
+}
+
 property
 {
     name = FaceDirection
@@ -183,6 +195,16 @@ objecttype
 
 objecttype
 {
+    name = NoPower
+}
+
+objecttype
+{
+    name = NoWater
+}
+
+objecttype
+{
     name = NoPowerOrWater
 }
 
@@ -269,6 +291,20 @@ objectgroup
     name = LootZone
     color = #c060ff
     defaulttype = LootZone
+}
+
+objectgroup
+{
+    name = NoPower
+    color = #e6c229
+    defaulttype = NoPower
+}
+
+objectgroup
+{
+    name = NoWater
+    color = #3a86ff
+    defaulttype = NoWater
 }
 
 objectgroup
@@ -459,6 +495,7 @@ property
 {
     name = Outfit
     default =
+    description = Outfit applied when no mannequin script overrides it.
 }
 
 enum
@@ -476,6 +513,7 @@ property
 {
     name = Pose
     default = pose01
+    description = Pose applied when no mannequin script overrides it.
     enum = Pose
 }
 
@@ -483,6 +521,7 @@ property
 {
     name = Script
     default =
+    description = Mannequin script name. When set, it supplies the scripted configuration.
 }
 
 enum
@@ -852,7 +891,6 @@ enum
     name = Animal
     values = [
         small
-        medium
         large
         predator
         deer
@@ -899,6 +937,7 @@ objecttype
 objectgroup
 {
     name = Animal
+    color = #0080ff
     defaulttype = Animal
 }
 
@@ -954,6 +993,7 @@ objecttype
 objectgroup
 {
     name = Basement
+    color = #6c5ce7
     defaulttype = Basement
 }
 

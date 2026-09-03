@@ -46,9 +46,21 @@ twice when it was just logged. Click a visible box to inspect the complete
 timestamped message, source and thread, copy one or all entries, open the logs
 folder, filter by severity, or clear the current counters.
 
+The Notifications page in each application's Preferences can limit this
+indicator to errors only. Suppressed warnings remain available in the log
+files, and warning dialogs that require a response are not hidden.
+
 The title of each main application window displays the current centralized
 build identifier so screenshots and reports can identify the exact binary in
 use.
+
+The Windows release includes the Qt libraries, platform and image plugins,
+OpenSSL libraries, and one coherent app-local Microsoft Visual C++ x64
+runtime. Only `msvcp140.dll`, `vcruntime140.dll`, and
+`vcruntime140_1.dll` are required by the applications and included. Windows
+and Wine provide the Universal CRT as a system component. End users do not
+need to install the Visual C++ Redistributable or use a separate `vcrun`
+component before launching the tools.
 
 The complete tileset catalogue shares the immutable pixel storage of exact
 duplicate extracted tile images within each application process. Sheet names,
@@ -73,6 +85,11 @@ Important additions include:
 - Optional hole filling during LOT generation
 - Generate Lots path choosers update the displayed history entry and active
   export setting immediately after the first selection
+- Before Generate Lots reads TMX files, it identifies missing references in
+  the source cells required by the export. Empty cells whose missing TMX is
+  their only content can be cleaned after confirmation. WorldEd first writes
+  a dated PZW snapshot below `.pztools-backups`, keeps the cleanup undoable,
+  and never removes a reference from a cell that contains other project data.
 - Project Doctor for paths, missing tilesets, and project cleanup
 - Build 42.20 Biomemap reference and separate red and green painting modes
 - Main, vegetation, and Biomemap editing require a saved PZW and use the
@@ -89,13 +106,24 @@ Important additions include:
 - Native256 `spawnpoints.lua` output with absolute `posX`, `posY`, and `posZ`
   values instead of the historical 300-square `worldX` and `worldY` format
 - Creation defaults and non-blocking export validation for SpawnPoint,
-  WaterFlow, WaterZone, and RoomTone objects
+  WaterFlow, WaterZone, RoomTone, and SpawnOrigin objects
+- The WorldEd zone catalogue includes the Build 42.20.3 `SpawnOrigin` type.
+  SpawnOrigin has no runtime properties and must be a non-empty rectangle at
+  non-negative whole map-square coordinates. Animal, Basement, and
+  SpawnOrigin groups have explicit, distinct display colors.
+- The Regions editor lists the four Build 42.20.3 utility zones: `NoGas`,
+  `NoPower`, `NoWater`, and `NoPowerOrWater`. They require no properties and
+  have distinct display colors in the WorldEd object catalogue.
+- Every built-in WorldEd zone type has a concise runtime-purpose tooltip in
+  Regions, object creation and editing, search, object-group selection, and
+  PNG zone export.
 - A right-click guided property editor for WaterFlow, WaterZone, RoomTone,
   SpawnPoint, ParkingStall, Vehicle, Mannequin, Animal, Basement, and WorldGen
   objects. It is available with both Select and Create Object, targets only
   the zone geometry directly under the pointer, and shows the fields expected
   for that type through enum lists, profession checklists, booleans, and
-  numeric controls. Closing the context menu performs no action. The complete
+  numeric controls. Mannequin editing includes all six properties consumed by
+  Build 42.20.3. Closing the context menu performs no action. The complete
   Properties dock remains available unchanged.
 - Moving selected cells also translates Street points, Region anchors, Road
   endpoints, and fully covered terrain-image placements in the same Undo
@@ -616,6 +644,15 @@ Preferences and logs are stored under `settings`. Logs include OS, CPU, RAM,
 display-adapter, Qt, and process information useful for support without
 recording a username, hostname, serial number, IP address, or stable machine
 identifier.
+
+The same complete Windows directory may be tested through a current Wine or
+CrossOver environment on macOS without installing the Microsoft runtime into
+that Wine prefix. Keep the extracted directory writable and together. Wine
+and macOS use remains experimental and unsupported until a release is tested
+on the target systems. This is Windows application compatibility through
+Wine, not a native macOS release. A native macOS release still requires a
+separately compiled, deployed, signed, notarized, and tested application
+bundle.
 
 WorldEd reloads the tileset catalogue only when the effective Tiles directory
 changes. Confirming other Preferences does not rebuild open maps or lots.

@@ -3,6 +3,7 @@
 #include "world.h"
 #include "worldcell.h"
 
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QtMath>
 
@@ -132,6 +133,9 @@ QStringList WorldObjectValidation::expectedPropertyNames(
     }
     if (typeName == QLatin1String("Mannequin")) {
         return QStringList() << QLatin1String("Female")
+                             << QLatin1String("Outfit")
+                             << QLatin1String("Pose")
+                             << QLatin1String("Script")
                              << QLatin1String("Skin")
                              << QLatin1String("Direction");
     }
@@ -155,6 +159,86 @@ QStringList WorldObjectValidation::expectedPropertyNames(
         WorldCellObject *object)
 {
     return expectedPropertyNames(typeName(object));
+}
+
+QString WorldObjectValidation::typeDescription(const QString &typeName)
+{
+    if (typeName == QLatin1String("SpawnPoint"))
+        return translated("Defines a player start exported to spawnpoints.lua. Select one or more professions.");
+    if (typeName == QLatin1String("SpawnOrigin"))
+        return translated("Defines an area used as an origin by the zombie population and respawn systems.");
+    if (typeName == QLatin1String("TownZone"))
+        return translated("Classifies an urban area for foraging, ambient audio, trapping, loot respawn, and related zone queries.");
+    if (typeName == QLatin1String("Forest"))
+        return translated("Classifies a forest area for foraging, ambient audio, trapping, zombie grouping, and related events.");
+    if (typeName == QLatin1String("DeepForest"))
+        return translated("Classifies dense forest for foraging, ambient audio, trapping, zombie grouping, and related events.");
+    if (typeName == QLatin1String("Nav"))
+        return translated("Defines a vector road or navigation strip used by vehicle stories, crashes, events, audio, and road queries. It is distinct from raster ForagingNav.");
+    if (typeName == QLatin1String("Vegitation"))
+        return translated("Classifies vegetation terrain for foraging, ambient audio, trapping, and related zone queries. The runtime spelling is intentional.");
+    if (typeName == QLatin1String("TrailerPark"))
+        return translated("Classifies a trailer-park area for foraging, ambient audio, trapping, loot respawn, and poor-area logic.");
+    if (typeName == QLatin1String("Farm"))
+        return translated("Classifies a farm area for ambient audio, rural stories, poor-area logic, and related zone queries.");
+    if (typeName == QLatin1String("ParkingStall"))
+        return translated("Defines a rectangle or polyline where vehicles may spawn. The zone name selects the vehicle distribution.");
+    if (typeName == QLatin1String("FarmLand"))
+        return translated("Classifies farmland for foraging, rural stories, off-road vehicle behavior, and related zone queries.");
+    if (typeName == QLatin1String("LootZone"))
+        return translated("Assigns a geographic wealth or environment name such as Rich or Poor. It is not a general loot-distribution selector.");
+    if (typeName == QLatin1String("NoPower"))
+        return translated("Disables electrical grid power inside the zone. Local generators may still provide electricity.");
+    if (typeName == QLatin1String("NoWater"))
+        return translated("Disables piped water inside the zone.");
+    if (typeName == QLatin1String("NoPowerOrWater"))
+        return translated("Disables both electrical grid power and piped water inside the zone. It does not affect fuel pumps.");
+    if (typeName == QLatin1String("NoGas"))
+        return translated("Makes fuel pumps inside the zone initialize empty. The Infinite Fuel sandbox setting still overrides it.");
+    if (typeName == QLatin1String("Ranch"))
+        return translated("Defines a candidate area for randomized livestock ranches. The zone name selects the animal or ranch definition.");
+    if (typeName == QLatin1String("ZombiesType"))
+        return translated("Selects a themed zombie outfit or distribution definition, such as restaurant, police, factory, or rich-area zombies.");
+    if (typeName == QLatin1String("ZoneStory"))
+        return translated("Defines a candidate rectangle for randomized outdoor scenes. The zone name selects the story category.");
+    if (typeName == QLatin1String("WaterFlow"))
+        return translated("Defines a point controlling animated water-flow direction and speed.");
+    if (typeName == QLatin1String("WaterZone"))
+        return translated("Overrides shore and water rendering information in a rectangle. It does not create water tiles.");
+    if (typeName == QLatin1String("Mannequin"))
+        return translated("Applies configuration to mannequins already placed inside the zone.");
+    if (typeName == QLatin1String("RoomTone"))
+        return translated("Defines an interior audio point. Build 42.20.3 loads active room tones from roomtones.lua.");
+    if (typeName == QLatin1String("Animal"))
+        return translated("Defines a virtual-animal movement or activity network using points and polylines with actions such as Follow, Eat, and Sleep.");
+    if (typeName == QLatin1String("Basement"))
+        return translated("Defines candidate basement bounds, entrances, and access information used by basement generation.");
+    if (typeName == QLatin1String("WorldGen"))
+        return translated("Controls world generation inside the zone. Build 42.20.3 primarily uses Rocks=false to prevent procedural rocks and ore.");
+    if (typeName == QLatin1String("BuildingName"))
+        return translated("Assigns a name to a building area, including named keys before room and building fallback names.");
+    if (typeName == QLatin1String("Region"))
+        return translated("Defines a named geographic region used by regional content and location classification.");
+    return QString();
+}
+
+void WorldObjectValidation::applyTypeTooltips(QComboBox *comboBox)
+{
+    if (!comboBox)
+        return;
+    for (int i = 0; i < comboBox->count(); ++i) {
+        comboBox->setItemData(i, typeDescription(comboBox->itemText(i)),
+                              Qt::ToolTipRole);
+    }
+    comboBox->setToolTip(typeDescription(comboBox->currentText()));
+    if (comboBox->property("pzTypeTooltipsConnected").toBool())
+        return;
+    comboBox->setProperty("pzTypeTooltipsConnected", true);
+    QObject::connect(comboBox, &QComboBox::currentTextChanged, comboBox,
+                     [comboBox](const QString &text) {
+        comboBox->setToolTip(
+                    WorldObjectValidation::typeDescription(text));
+    });
 }
 
 bool WorldObjectValidation::supportsBasementAccess(
@@ -212,7 +296,8 @@ bool WorldObjectValidation::requiresRectangle(WorldCellObject *object)
 {
     const QString type = typeName(object);
     return requiresUnitRectangle(object)
-            || type == QLatin1String("WaterZone");
+            || type == QLatin1String("WaterZone")
+            || type == QLatin1String("SpawnOrigin");
 }
 
 bool WorldObjectValidation::validateSpawnPoint(WorldCellObject *object,
@@ -335,6 +420,18 @@ bool WorldObjectValidation::validateExportObject(WorldCellObject *object,
                                   QLatin1String("EntireBuilding")))) {
             if (reason)
                 *reason = translated("RoomTone must define RoomTone and a boolean EntireBuilding property");
+            return false;
+        }
+    } else if (type == QLatin1String("SpawnOrigin")) {
+        const QPointF position = object->absoluteWorldPosition();
+        if (!object->isRectangle() || object->width() < 1
+                || object->height() < 1
+                || !isIntegral(object->width())
+                || !isIntegral(object->height())
+                || !hasIntegralPosition(object)
+                || position.x() < 0 || position.y() < 0) {
+            if (reason)
+                *reason = translated("SpawnOrigin must be a non-empty rectangle aligned to non-negative whole map-square coordinates");
             return false;
         }
     }

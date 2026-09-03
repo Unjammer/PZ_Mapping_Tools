@@ -18,6 +18,7 @@
 #include "buildingpreferencesdialog.h"
 #include "ui_buildingpreferencesdialog.h"
 
+#include "appissuenotifier.h"
 #include "buildingpreferences.h"
 #include "preferences.h"
 #include "../../portablesettings.h"
@@ -26,11 +27,13 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFileDialog>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
+#include <QVBoxLayout>
 
 using namespace BuildingEditor;
 
@@ -40,6 +43,8 @@ BuildingPreferencesDialog::BuildingPreferencesDialog(QWidget *parent) :
     mThemeCombo(new QComboBox(this)),
     mSyncThemeCheckBox(new QCheckBox(
           tr("Apply to TileZed, BuildingEd and WorldEd"), this)),
+    mErrorsOnlyNotifications(new QCheckBox(
+          tr("Show only errors in application notifications"), this)),
     mProjectZomboidDirectory(new QLineEdit(this)),
     mAutoSaveCombo(new QComboBox(this))
 {
@@ -48,6 +53,24 @@ BuildingPreferencesDialog::BuildingPreferencesDialog(QWidget *parent) :
     ui->tabWidget->addTab(
                 new SharedMainWindowGeometryWidget(parent, ui->tabWidget),
                 tr("Window Setup"));
+
+    QWidget *notificationsTab = new QWidget(ui->tabWidget);
+    QVBoxLayout *notificationsLayout = new QVBoxLayout(notificationsTab);
+    QGroupBox *notificationsGroup = new QGroupBox(
+                tr("Application Notifications"), notificationsTab);
+    QVBoxLayout *notificationsGroupLayout = new QVBoxLayout(
+                notificationsGroup);
+    mErrorsOnlyNotifications->setChecked(
+                AppIssueCenter::errorsOnlyNotifications());
+    notificationsGroupLayout->addWidget(mErrorsOnlyNotifications);
+    QLabel *notificationsDescription = new QLabel(tr(
+            "Warnings remain available in the log files. Warning dialogs "
+            "that require a response are not hidden."), notificationsGroup);
+    notificationsDescription->setWordWrap(true);
+    notificationsGroupLayout->addWidget(notificationsDescription);
+    notificationsLayout->addWidget(notificationsGroup);
+    notificationsLayout->addStretch();
+    ui->tabWidget->addTab(notificationsTab, tr("Notifications"));
 
     QString configPath = prefs()->configPath();
     ui->configDirEdit->setText(QDir::toNativeSeparators(configPath));
@@ -165,5 +188,7 @@ void BuildingPreferencesDialog::accept()
     Tiled::Internal::Preferences::instance()
             ->setProjectZomboidDirectory(
                 mProjectZomboidDirectory->text().trimmed());
+    AppIssueCenter::setErrorsOnlyNotifications(
+                mErrorsOnlyNotifications->isChecked());
     QDialog::accept();
 }

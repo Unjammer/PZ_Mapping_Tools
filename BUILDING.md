@@ -259,13 +259,47 @@ The exact internal arrangement may use `.app` bundles on macOS and a standard
 data directories available through the paths compiled by qmake or through a
 documented package-relative lookup.
 
-On Windows, copy the three newly linked executables to `bin` and run
-`windeployqt` against them. Copy rebuilt shared DLLs and plugins only when
-their content changed. `windeployqt` does not supply the OpenSSL runtime used
-by Qt Network. Place compatible `libssl-1_1-x64.dll` and
-`libcrypto-1_1-x64.dll` files beside the executables and retain
-`licenses/OpenSSL-1.1.1.txt` plus the matching entry in
-`THIRD_PARTY_NOTICES.txt`.
+On Windows, use the maintained deployment script after both builds complete:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File C:\PZ_Mapping_Tools\source\tools\Deploy-WindowsPortableRuntime.ps1 `
+  -TileZedBuildDirectory C:\PZ_Mapping_Tools\build\tilezed `
+  -WorldEdBuildDirectory C:\PZ_Mapping_Tools\build\worlded `
+  -DestinationDirectory C:\PZ_Mapping_Tools\package\PZTools `
+  -QtBinDirectory C:\Qt\Qt5.14.2\5.14.2\msvc2017_64\bin
+```
+
+The destination must already contain the maintained application data
+directories described above. The script copies changed executables, PDBs,
+shared libraries, plugins, documentation, and licenses. It runs
+`windeployqt` without the compiler-runtime option, then supplies one coherent
+app-local Microsoft Visual C++ x64 runtime. Only `msvcp140.dll`,
+`vcruntime140.dll`, and `vcruntime140_1.dll` are copied because those are the
+runtime files imported by the current applications, Qt libraries, and
+plugins. Every selected runtime file is verified as Microsoft-signed and must
+be at least as new as the newest linker version found in the deployed
+binaries.
+
+By default, the script selects the newest x64 Visual C++ minimum-runtime MSI
+from the build machine's package cache or a suitable Visual Studio
+redistributable directory. `-VcRuntimeDirectory` accepts an extracted
+`Microsoft.VC*.CRT` directory. `-VcRuntimeMinimumMsi` accepts an official
+`vc_runtimeMinimum_x64.msi` directly. Do not combine runtime DLLs from
+different releases.
+
+`windeployqt` does not supply the OpenSSL runtime used by Qt Network. Place
+compatible `libssl-1_1-x64.dll` and `libcrypto-1_1-x64.dll` files beside the
+executables before running the script, or pass their directory through
+`-OpenSslDirectory`. Retain `licenses/OpenSSL-1.1.1.txt` and the matching
+entry in `THIRD_PARTY_NOTICES.txt`.
+
+The resulting Windows directory does not require a system Visual C++ runtime
+installation. The same package may be tested through Wine or CrossOver on
+macOS without installing a separate `vcrun` component because Wine provides
+the Universal CRT system implementation. Wine and macOS use remains
+experimental and unsupported until tested on the target systems. A native
+macOS release requires the separate application bundle workflow above.
 
 On Linux, deploy the Qt libraries and platform plugins with a maintained
 deployment tool or distribution package recipe. Preserve origin-relative

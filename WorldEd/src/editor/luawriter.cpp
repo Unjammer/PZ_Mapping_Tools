@@ -744,6 +744,7 @@ struct ExportValidationDefinitions
         addType(world, QLatin1String("WaterFlow"));
         addType(world, QLatin1String("WaterZone"));
         addType(world, QLatin1String("RoomTone"));
+        addType(world, QLatin1String("SpawnOrigin"));
     }
 };
 
@@ -927,14 +928,37 @@ bool LuaWriter::validateZoneExport(QString *summary, QString *error)
         return false;
     }
 
+    WorldCellObject *spawnOrigin = definitions.addObject(
+                world, QLatin1String("SpawnOrigin"), 0, 0,
+                12, 13, 20, 30);
+    spawnOrigin->setName(QLatin1String("population-origin"));
+    if (!WorldObjectValidation::validateExportObject(spawnOrigin, &reason)) {
+        if (error)
+            *error = QLatin1String("SpawnOrigin rectangle failed: ") + reason;
+        return false;
+    }
+
+    WorldCellObject *invalidOrigin = definitions.addObject(
+                world, QLatin1String("SpawnOrigin"), 0, 0, 14, 15);
+    invalidOrigin->setName(QLatin1String("invalid-origin"));
+    invalidOrigin->setGeometryType(ObjectGeometryType::Point);
+    if (WorldObjectValidation::validateExportObject(invalidOrigin, &reason)) {
+        if (error)
+            *error = QLatin1String("Non-rectangular SpawnOrigin was accepted");
+        return false;
+    }
+
     LuaWriter writer;
     QBuffer objectBuffer;
     objectBuffer.open(QIODevice::WriteOnly);
     writer.d->mWarnings.clear();
     writer.d->writeWorldObjects(&world, &objectBuffer);
-    if (writer.d->mWarnings.size() != 2
+    if (writer.d->mWarnings.size() != 3
             || objectBuffer.data().contains("invalid-flow")
-            || objectBuffer.data().contains("invalid-spawn")) {
+            || objectBuffer.data().contains("invalid-spawn")
+            || objectBuffer.data().contains("invalid-origin")
+            || !objectBuffer.data().contains("type = \"SpawnOrigin\"")
+            || !objectBuffer.data().contains("width = 20, height = 30")) {
         if (error)
             *error = QString::fromLatin1(
                         "Invalid-zone filtering failed with %1 warning(s)")
@@ -944,7 +968,7 @@ bool LuaWriter::validateZoneExport(QString *summary, QString *error)
 
     if (summary) {
         *summary = QLatin1String(
-                    "creation defaults passed, WaterZone areas were preserved, and invalid WaterFlow and SpawnPoint records were skipped with warnings");
+                    "creation defaults passed, WaterZone and SpawnOrigin areas were preserved, and invalid WaterFlow, SpawnPoint, and SpawnOrigin records were skipped with warnings");
     }
     return true;
 }

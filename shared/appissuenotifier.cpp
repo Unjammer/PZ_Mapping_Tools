@@ -42,6 +42,7 @@ struct IssueState
     int errorCount = 0;
     quint64 nextSequence = 1;
     quint64 revision = 0;
+    bool errorsOnlyNotifications = false;
 };
 
 IssueState &issueState()
@@ -72,6 +73,10 @@ void appendIssue(AppIssueSeverity severity,
         return;
     IssueState &state = issueState();
     QMutexLocker locker(&state.mutex);
+    if (severity == AppIssueSeverity::Warning &&
+            state.errorsOnlyNotifications) {
+        return;
+    }
     if (dialogOrigin) {
         const QDateTime threshold = QDateTime::currentDateTime().addMSecs(-1500);
         for (int index = state.issues.size() - 1; index >= 0; --index) {
@@ -98,6 +103,23 @@ void appendIssue(AppIssueSeverity severity,
         ++state.errorCount;
     else
         ++state.warningCount;
+    ++state.revision;
+}
+
+void applyErrorsOnlyNotifications(bool errorsOnly)
+{
+    IssueState &state = issueState();
+    QMutexLocker locker(&state.mutex);
+    if (state.errorsOnlyNotifications == errorsOnly)
+        return;
+    state.errorsOnlyNotifications = errorsOnly;
+    if (!errorsOnly)
+        return;
+    for (int index = state.issues.size() - 1; index >= 0; --index) {
+        if (state.issues.at(index).severity == AppIssueSeverity::Warning)
+            state.issues.removeAt(index);
+    }
+    state.warningCount = 0;
     ++state.revision;
 }
 
@@ -646,6 +668,20 @@ void AppIssueCenter::clear()
     ++state.revision;
 }
 
+bool AppIssueCenter::errorsOnlyNotifications()
+{
+    IssueState &state = issueState();
+    QMutexLocker locker(&state.mutex);
+    return state.errorsOnlyNotifications;
+}
+
+void AppIssueCenter::setErrorsOnlyNotifications(bool errorsOnly)
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("Notifications/ErrorsOnly"), errorsOnly);
+    applyErrorsOnlyNotifications(errorsOnly);
+}
+
 void AppIssueNotifier::attach(QMainWindow *window)
 {
     if (!window || window->property("PZToolsIssueNotifier").toBool())
@@ -657,5 +693,7 @@ void AppIssueNotifier::attach(QMainWindow *window)
 
 void AppIssueNotifier::initialize()
 {
+    applyErrorsOnlyNotifications(QSettings().value(
+                QStringLiteral("Notifications/ErrorsOnly"), false).toBool());
     installMessageBoxCapture();
 }

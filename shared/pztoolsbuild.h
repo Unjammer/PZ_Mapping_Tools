@@ -3,7 +3,7 @@
 
 #include <QString>
 
-#define PZTOOLS_BUILD_ID "20260828"
+#define PZTOOLS_BUILD_ID "20260903"
 
 namespace PZToolsBuild {
 

@@ -24,6 +24,7 @@
 #include "world.h"
 #include "worldcell.h"
 #include "worlddocument.h"
+#include "worldobjectvalidation.h"
 #include "worldscene.h"
 
 #include <QListWidget>
@@ -419,6 +420,7 @@ void SearchDock::setCombo2(SearchResults::SearchBy searchBy)
             else
                 ui->combo2->addItem(objType->name(), QVariant::fromValue(objType));
         }
+        WorldObjectValidation::applyTypeTooltips(ui->combo2);
     }
     if (searchBy == SearchResults::SearchBy::PropertyDef) {
         for (PropertyDef *propertyDef : world->propertyDefinitions()) {

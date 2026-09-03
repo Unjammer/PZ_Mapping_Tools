@@ -21,6 +21,7 @@
 #include "preferencesdialog.h"
 #include "ui_preferencesdialog.h"
 
+#include "appissuenotifier.h"
 #include "languagemanager.h"
 #include "mainwindow.h"
 #include "objecttypesmodel.h"
@@ -113,6 +114,8 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) :
     mUi(new Ui::PreferencesDialog),
     mLanguages(LanguageManager::instance()->availableLanguages()),
     mSyncThemeCheckBox(nullptr),
+    mErrorsOnlyNotifications(new QCheckBox(
+          tr("Show only errors in application notifications"), this)),
     mProjectZomboidDirectory(nullptr),
     mAutoSaveCombo(new QComboBox(this))
 {
@@ -264,6 +267,26 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) :
     savingLayout->addWidget(autoSaveGroup);
     savingLayout->addStretch();
     mUi->tabWidget->addTab(savingTab, tr("Saving"));
+
+    QWidget *notificationsTab = new QWidget(mUi->tabWidget);
+    QVBoxLayout *notificationsLayout = new QVBoxLayout(notificationsTab);
+    QGroupBox *notificationsGroup = new QGroupBox(
+                tr("Application Notifications"), notificationsTab);
+    QVBoxLayout *notificationsGroupLayout = new QVBoxLayout(
+                notificationsGroup);
+    mErrorsOnlyNotifications->setChecked(
+                AppIssueCenter::errorsOnlyNotifications());
+    notificationsGroupLayout->addWidget(mErrorsOnlyNotifications);
+    QLabel *notificationsDescription = new QLabel(tr(
+            "Warnings remain available in the log files. Warning dialogs "
+            "that require a response are not hidden."), notificationsGroup);
+    notificationsDescription->setWordWrap(true);
+    notificationsGroupLayout->addWidget(notificationsDescription);
+    notificationsLayout->addWidget(notificationsGroup);
+    notificationsLayout->addStretch();
+    mUi->tabWidget->addTab(notificationsTab, tr("Notifications"));
+    connect(mErrorsOnlyNotifications, &QAbstractButton::toggled,
+            this, &AppIssueCenter::setErrorsOnlyNotifications);
 #endif // ZOMBOID
 
     connect(mUi->objectTypesTable->selectionModel(),

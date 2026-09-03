@@ -95,6 +95,7 @@ private:
     QStringList mLanguages;
     ObjectTypesModel *mObjectTypesModel;
     QCheckBox *mSyncThemeCheckBox;
+    QCheckBox *mErrorsOnlyNotifications;
     QLineEdit *mProjectZomboidDirectory;
     QComboBox *mAutoSaveCombo;
 };

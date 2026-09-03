@@ -18,6 +18,7 @@
 #include "preferencesdialog.h"
 #include "ui_preferencesdialog.h"
 
+#include "appissuenotifier.h"
 #include "preferences.h"
 #include "tilemetainfomgr.h"
 #include "vehiclemeshpreview.h"
@@ -57,6 +58,8 @@ PreferencesDialog::PreferencesDialog(WorldDocument *worldDoc, QWidget *parent)
     , mRoadPointSpacingRailway(new QSpinBox(this))
     , mSyncThemeCheckBox(new QCheckBox(
           tr("Apply to TileZed, BuildingEd and WorldEd"), this))
+    , mErrorsOnlyNotifications(new QCheckBox(
+          tr("Show only errors in application notifications"), this))
     , mAutoSaveCombo(new QComboBox(this))
     , mTreeFeatureTiles(new QListWidget(this))
     , mPrimaryRoadFeatureTiles(new QListWidget(this))
@@ -367,6 +370,24 @@ PreferencesDialog::PreferencesDialog(WorldDocument *worldDoc, QWidget *parent)
     savingLayout->addStretch();
     ui->tabWidget->addTab(savingTab, tr("Saving"));
 
+    QWidget *notificationsTab = new QWidget(ui->tabWidget);
+    QVBoxLayout *notificationsLayout = new QVBoxLayout(notificationsTab);
+    QGroupBox *notificationsGroup = new QGroupBox(
+                tr("Application Notifications"), notificationsTab);
+    QVBoxLayout *notificationsGroupLayout = new QVBoxLayout(
+                notificationsGroup);
+    mErrorsOnlyNotifications->setChecked(
+                AppIssueCenter::errorsOnlyNotifications());
+    notificationsGroupLayout->addWidget(mErrorsOnlyNotifications);
+    QLabel *notificationsDescription = new QLabel(tr(
+            "Warnings remain available in the log files. Warning dialogs "
+            "that require a response are not hidden."), notificationsGroup);
+    notificationsDescription->setWordWrap(true);
+    notificationsGroupLayout->addWidget(notificationsDescription);
+    notificationsLayout->addWidget(notificationsGroup);
+    notificationsLayout->addStretch();
+    ui->tabWidget->addTab(notificationsTab, tr("Notifications"));
+
 }
 
 void PreferencesDialog::browseTilesDirectory()
@@ -511,6 +532,8 @@ void PreferencesDialog::accept()
     prefs->setTertiaryRoadFeatureTiles(tileNames(mTertiaryRoadFeatureTiles));
     prefs->setShowAdjacentMaps(ui->showAdjacent->isChecked());
     prefs->setZombieSpawnImageOpacity(ui->zombieSpawnImageOpacity->value() / 100.0);
+    AppIssueCenter::setErrorsOnlyNotifications(
+                mErrorsOnlyNotifications->isChecked());
     QDialog::accept();
 }
 

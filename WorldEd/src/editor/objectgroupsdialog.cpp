@@ -21,6 +21,7 @@
 #include "world.h"
 #include "worldcell.h"
 #include "worlddocument.h"
+#include "worldobjectvalidation.h"
 
 ObjectGroupsDialog::ObjectGroupsDialog(WorldDocument *worldDoc, QWidget *parent)
     : QDialog(parent)
@@ -54,6 +55,7 @@ ObjectGroupsDialog::ObjectGroupsDialog(WorldDocument *worldDoc, QWidget *parent)
         items.insert(0, name);
     }
     ui->objectTypeCombo->insertItems(0, items);
+    WorldObjectValidation::applyTypeTooltips(ui->objectTypeCombo);
     connect(ui->objectTypeCombo, qOverload<int>(&QComboBox::activated),
             this, &ObjectGroupsDialog::typeChanged);
 
@@ -238,6 +240,9 @@ void ObjectGroupsDialog::setList()
 
         QListWidgetItem *item = new QListWidgetItem(og->name());
         item->setData(Qt::DecorationRole, og->color());
+        if (og->type())
+            item->setToolTip(WorldObjectValidation::typeDescription(
+                                 og->type()->name()));
 //        item->setData(Qt::UserRole, QVariant::fromValue<WorldObjectGroup*>(og));
         mItemToGroup[item] = og;
 

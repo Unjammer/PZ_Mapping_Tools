@@ -358,6 +358,22 @@ int main(int argc, char *argv[])
             return 0;
         }
         if (argument == QLatin1String(
+                    "--validate-missing-map-reference-cleanup")) {
+            QString summary;
+            QString error;
+            if (!LotFilesManager256::validateMissingMapReferenceCleanup(
+                        &summary, &error)) {
+                qCritical().noquote()
+                        << "Missing map-reference cleanup validation failed:"
+                        << error;
+                return 59;
+            }
+            qInfo().noquote()
+                    << "Missing map-reference cleanup validation passed:"
+                    << summary;
+            return 0;
+        }
+        if (argument == QLatin1String(
                     "--validate-ingamemap-forest-export")) {
             QString summary;
             QString error;
@@ -453,6 +469,38 @@ int main(int argc, char *argv[])
                 qCritical().noquote()
                         << "WorldDefaults.txt validation failed:"
                         << defaults.errorString();
+                return 25;
+            }
+            const QStringList utilityZoneTypes = QStringList()
+                    << QStringLiteral("NoGas")
+                    << QStringLiteral("NoPower")
+                    << QStringLiteral("NoWater")
+                    << QStringLiteral("NoPowerOrWater");
+            const QStringList utilityZoneColors = QStringList()
+                    << QStringLiteral("#f08650")
+                    << QStringLiteral("#e6c229")
+                    << QStringLiteral("#3a86ff")
+                    << QStringLiteral("#7f7f7f");
+            for (int i = 0; i < utilityZoneTypes.size(); ++i) {
+                const QString &typeName = utilityZoneTypes.at(i);
+                WorldObjectGroup *group = defaults.mObjectGroups.find(typeName);
+                if (!defaults.mObjectTypes.contains(typeName) || !group ||
+                        group->type()->name() != typeName ||
+                        group->color().name() != utilityZoneColors.at(i)) {
+                    qCritical().noquote()
+                            << "WorldDefaults.txt utility-zone validation failed:"
+                            << typeName;
+                    return 25;
+                }
+            }
+            for (ObjectType *objectType : defaults.mObjectTypes) {
+                if (!WorldObjectValidation::typeDescription(
+                            objectType->name()).isEmpty()) {
+                    continue;
+                }
+                qCritical().noquote()
+                        << "WorldDefaults.txt zone-tooltip validation failed:"
+                        << objectType->name();
                 return 25;
             }
             for (const QString &typeName :

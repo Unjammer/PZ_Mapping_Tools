@@ -10,6 +10,20 @@ message, and correct the path, input, or configuration before trying again.
 
 ## First checks for all three applications
 
+### `VCRUNTIME140_1.dll` is missing or the application does not start through Wine
+
+**What it means:** the application directory is incomplete or contains a
+mixture of compiler-runtime versions from different releases.
+
+**What to do:** restore the complete current portable release and launch the
+executable from its `bin` directory. The release includes its own Microsoft
+Visual C++ x64 runtime, so a separate Visual C++ Redistributable installation
+or Wine `vcrun` component is not required.
+
+**How to prevent it:** move or extract the complete release directory instead
+of copying individual executables and DLLs. On macOS, Wine or CrossOver runs
+the Windows build. It is not a native macOS application bundle.
+
 ### Where are the logs?
 
 Each application creates a new log in `settings/logs` inside the portable
