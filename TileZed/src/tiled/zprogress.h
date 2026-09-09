@@ -21,10 +21,9 @@
 #include "tiled_global.h"
 
 #include <QDialog>
+#include <QPointer>
 
-class QLabel;
-class QProgressBar;
-class QPushButton;
+namespace PZTools { class LoadingDialog; }
 
 class ZProgressManager : public QObject
 {
@@ -35,6 +34,7 @@ public:
 
     void begin(const QString &text, bool cancellable = false);
     void update(const QString &text);
+    void updateTilesets(int completed, int total);
     void end(bool cancellable = false);
 
     bool wasCanceled() const
@@ -54,10 +54,7 @@ private:
     ZProgressManager();
 
     QWidget *mMainWindow;
-    QDialog *mDialog;
-    QLabel *mLabel;
-    QProgressBar *mProgressBar;
-    QPushButton *mCancelButton;
+    QPointer<PZTools::LoadingDialog> mDialog;
     int mDepth;
     int mCancellableDepth;
     bool mCanceled;
@@ -81,6 +78,11 @@ public:
     void update(const QString &text)
     {
         ZProgressManager::instance()->update(text);
+    }
+
+    void updateTilesets(int completed, int total)
+    {
+        ZProgressManager::instance()->updateTilesets(completed, total);
     }
 
     bool wasCanceled() const

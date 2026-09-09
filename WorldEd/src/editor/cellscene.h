@@ -857,7 +857,6 @@ public:
 
     void setTool(AbstractTool *tool);
 
-    void viewTransformChanged(BaseGraphicsView *view);
 
     Tiled::Map *map() const { return mMap; }
 

@@ -1865,6 +1865,7 @@ MainWindow::MainWindow(QWidget *parent)
     mViewHint.valid = false;
 
     updateActions();
+    updateWindowTitle();
 
 }
 
@@ -6129,8 +6130,6 @@ void MainWindow::readSettings()
         const bool restored = restoreGeometry(geom);
         qInfo() << "Main-window geometry restored:" << restored;
     }
-    else
-        resize(800, 600);
     const QByteArray state = mSettings.value(QLatin1String("state"),
                                              QByteArray()).toByteArray();
     if (!state.isEmpty())
@@ -6160,7 +6159,7 @@ void MainWindow::readSettings()
     if (dockRegionsWithSearch)
         mSettings.setValue(regionsDockSearchTabKey, true);
     mSettings.endGroup();
-    PortableSettings::applyOneShotMainWindowGeometry(this);
+    PortableSettings::applyStartupMainWindowGeometry(this);
     QTimer::singleShot(0, this, [this, leftWidth, rightWidth,
                                 leftTopHeight, leftBottomHeight,
                                 rightTopHeight, rightBottomHeight,

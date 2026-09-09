@@ -14,8 +14,9 @@ alone. It covered the public Tim Baker repositories, the historical Unjammer
 WorldEd and TileZed forks, the local reconstruction branches used to assemble
 the maintained Qt 5 trees, the combined PZ_Mapping_Tools repository, and
 preserved pre-fork C# mapping utilities. The C# archives are historical design
-and implementation evidence. They were not copied into the current C++/Qt
-applications and are not presented as public PZ Mapping Tools releases.
+and implementation evidence and are not presented as public PZ Mapping Tools
+releases. The native TileSetZ feature separately adapts Alree / Unjammer's C#
+TileSetZ texture projections and original PNG masks into the C++/Qt editor.
 
 The earliest verified date is used whenever an exact first implementation
 cannot be proved. Equivalent later work does not erase an earlier independent
@@ -71,6 +72,7 @@ The precise combined-tree baselines and branch relationships are documented in
 | Theme assets | Various bundled QSS sources and contributors | Separate from application integration | Notices retained where applicable | `THIRD_PARTY_COMPONENT` |
 | Tile IDs and names in editor palettes | TileZed `b5fb778e`, 2023-03-06 | Tim later added `tileset_index` tooltips in `c8a4e143` | Maintained implementation predates later upstream tooltip | `NOT_PORTED_ALREADY_IMPLEMENTED` |
 | Tile and tilesheet export actions | TileZed `b5fb778e`, 2023-03-06 | Original extraction foundations existed upstream | Expanded by Unjammer | `UNJAMMER_ORIGINAL` |
+| Native TileSetZ texture and tilesheet editor | Alree / Unjammer C# TileSetZ projections and masks, adapted in Build 20260908 | No upstream implementation used | Native pixel editing, texture cutting and mask generation | `UNJAMMER_ORIGINAL` |
 | Advanced Tiles Unpacker | TileZed `b5fb778e`, 2023-03-06, reconstructed at `8701cb95` | Original pack tools inherited | Current extractor is substantially extended | `UNJAMMER_ORIGINAL` |
 | Complete pack, tileset, tile, and object extraction | Preserved C# `PZ_Mapper` pack reader from 2023, current C++ implementation in combined tree | No matching audited upstream workflow | Current | `UNJAMMER_ORIGINAL` |
 | Lua mapping API corrections | TileZed `b5fb778e`, 2023-03-06 | Tim later fixed macOS Lua menu retention in `5108244c` | Both provenances retained by change | `INDEPENDENT_PARALLEL_IMPLEMENTATION` |

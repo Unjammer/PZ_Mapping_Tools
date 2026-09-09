@@ -27,6 +27,7 @@
 #include "world.h"
 #include "worldcell.h"
 #include "worldobjectvalidation.h"
+#include "worldreader.h"
 
 #include "BuildingEditor/roofhiding.h"
 
@@ -35,8 +36,15 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QMap>
+#include <QScopedPointer>
 #include <QSet>
 #include <QtMath>
+
+extern "C" {
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+}
 
 using namespace Lua;
 
@@ -311,18 +319,10 @@ public:
                                     .arg(reason);
                             continue;
                         }
-                        PropertyList properties;
-                        resolveProperties(obj, properties);
-                        if (Property *p = properties.find(pd)) {
-                            QStringList professions = p->mValue.split(QLatin1String(","), Qt::SkipEmptyParts);
-                            foreach (QString profession, professions) {
-                                profession = profession.trimmed();
-                                if (!profession.isEmpty()
-                                        && !spawnByProfession[profession].contains(obj)) {
-                                    spawnByProfession[profession] += obj;
-                                }
-                            }
-                        }
+                        const QStringList professions =
+                                WorldObjectValidation::spawnProfessions(obj);
+                        for (const QString &profession : professions)
+                            spawnByProfession[profession] += obj;
                     }
                 }
             }
@@ -852,14 +852,116 @@ bool LuaWriter::validateSpawnPointExport(QString *summary, QString *error)
         return false;
     }
 
+    struct ProfessionCase {
+        QString value;
+        QStringList expected;
+        bool useTemplate;
+        bool hasEnum;
+    };
+    const QStringList availableProfessions = QStringList()
+            << QStringLiteral("unemployed") << QStringLiteral("carpenter")
+            << QStringLiteral("customprofession");
+    const QStringList unemployed = QStringList(QStringLiteral("unemployed"));
+    const QList<ProfessionCase> professionCases = {
+        { QStringLiteral("all"), unemployed, false, true },
+        { QStringLiteral(" ALL , carpenter,all "),
+          unemployed + QStringList(QStringLiteral("carpenter")), false, true },
+        { QStringLiteral("all,unemployed"), unemployed, true, true },
+        { QStringLiteral(" carpenter,carpenter "),
+          QStringList() << QStringLiteral("carpenter"), false, true },
+        { QStringLiteral("customprofession"),
+          QStringList() << QStringLiteral("customprofession"), true, false },
+        { QStringLiteral("all,otherprofession"),
+          unemployed + QStringList(QStringLiteral("otherprofession")), false, true },
+        { QStringLiteral("all"), unemployed, false, false },
+        { QStringLiteral(" , "), QStringList(), false, true }
+    };
+    int professionCaseCount = 0;
+    for (WorldGridFormat format : { WorldGridFormat::Legacy300,
+                                  WorldGridFormat::Native256 }) {
+        for (const ProfessionCase &test : professionCases) {
+            World project(2, 2, format);
+            definitions.configure(project);
+            PropertyDef *property = project.propertyDefinition(
+                        QStringLiteral("Professions"));
+            property->mEnum->setValues(availableProfessions
+                                      + QStringList({ QStringLiteral("all"),
+                                                      QStringLiteral("carpenter"),
+                                                      QStringLiteral(" ") }));
+            if (!test.hasEnum)
+                property->mEnum = nullptr;
+            GenerateLotsSettings exportSettings = project.getGenerateLotsSettings();
+            exportSettings.worldOrigin = QPoint(2, 3);
+            project.setGenerateLotsSettings(exportSettings);
+            WorldCellObject *point = definitions.addObject(
+                        project, QStringLiteral("SpawnPoint"), 1, 1, 7, 9, 4, 3);
+            point->setLevel(-2);
+            PropertyTemplate propertyTemplate;
+            if (test.useTemplate) {
+                propertyTemplate.addProperty(0, new Property(property, test.value));
+                point->addTemplate(0, &propertyTemplate);
+            } else {
+                definitions.addProperty(point, QStringLiteral("Professions"), test.value);
+            }
+
+            QBuffer exported;
+            exported.open(QIODevice::WriteOnly);
+            writer.d->mWarnings.clear();
+            writer.d->writeSpawnPoints(&project, &exported);
+            if (test.useTemplate)
+                point->removeTemplate(0);
+            if (writer.d->mWarnings.size() != (test.expected.isEmpty() ? 1 : 0)
+                    || point->size() != QSizeF(4, 3)) {
+                if (error)
+                    *error = QStringLiteral("Legacy SpawnPoint compatibility failed for '%1'").arg(test.value);
+                return false;
+            }
+
+            QByteArray script = exported.data()
+                    + "\nlocal points = SpawnPoints()\n"
+                      "assert(points.all == nil and points.ALL == nil)\n"
+                      "local expected = {}\n";
+            for (const QString &profession : test.expected)
+                script += "expected[\"" + profession.toUtf8() + "\"] = true\n";
+            const int cellSize = format == WorldGridFormat::Legacy300 ? 300 : 256;
+            script += QStringLiteral(
+                        "for profession, list in pairs(points) do\n"
+                        "assert(expected[profession], profession)\n"
+                        "assert(#list == 1)\n"
+                        "assert(list[1].posX == %1 and list[1].posY == %2 and list[1].posZ == -2)\n"
+                        "assert(list[1].worldX == nil and list[1].worldY == nil)\n"
+                        "expected[profession] = nil\n"
+                        "end\nassert(next(expected) == nil)\n")
+                    .arg(3 * cellSize + 7).arg(4 * cellSize + 9).toUtf8();
+            lua_State *state = luaL_newstate();
+            if (!state) {
+                if (error)
+                    *error = QStringLiteral("Unable to initialize Lua");
+                return false;
+            }
+            luaL_openlibs(state);
+            const bool valid = luaL_loadbuffer(state, script.constData(),
+                                               size_t(script.size()), "SpawnPoint export") == LUA_OK
+                    && lua_pcall(state, 0, 0, 0) == LUA_OK;
+            if (!valid && error)
+                *error = QString::fromUtf8(lua_tostring(state, -1));
+            lua_close(state);
+            if (!valid)
+                return false;
+            ++professionCaseCount;
+        }
+    }
+
     if (summary) {
-        *summary = QLatin1String(
-                    "Native-256 absolute positions, cell boundaries, cross-cell locals, negative locals and negative world origins passed");
+        *summary = QStringLiteral(
+                    "Native-256 absolute positions, cell boundaries, cross-cell locals, negative locals and negative world origins passed. %1 Legacy300/Native256 profession exports executed in Lua, including all-to-unemployed conversion, custom professions, inherited properties, rectangular points and negative levels")
+                .arg(professionCaseCount);
     }
     return true;
 }
 
-bool LuaWriter::validateZoneExport(QString *summary, QString *error)
+bool LuaWriter::validateZoneExport(QString *summary, QString *error,
+                                   const QString &projectPath)
 {
     World world(1, 1, WorldGridFormat::Native256);
     ExportValidationDefinitions definitions;
@@ -905,6 +1007,37 @@ bool LuaWriter::validateZoneExport(QString *summary, QString *error)
         return false;
     }
 
+    WorldCellObject *areaRoomTone = definitions.addObject(
+                world, QLatin1String("RoomTone"), 0, 0, 12, 13, 274, 265);
+    areaRoomTone->setName(QLatin1String("area-room-tone"));
+    areaRoomTone->setLevel(-15);
+    definitions.addProperty(areaRoomTone, QLatin1String("RoomTone"),
+                            QLatin1String("Bunker"));
+    if (!WorldObjectValidation::validateExportObject(areaRoomTone, &reason)) {
+        if (error)
+            *error = QLatin1String("Rectangular RoomTone failed: ") + reason;
+        return false;
+    }
+
+    WorldCellObject *buildingRoomTone = definitions.addObject(
+                world, QLatin1String("RoomTone"), 0, 0, 20, 21, 199, 221);
+    buildingRoomTone->setName(QLatin1String("building-room-tone"));
+    definitions.addProperty(buildingRoomTone, QLatin1String("RoomTone"),
+                            QLatin1String("Bunker"));
+    definitions.addProperty(buildingRoomTone, QLatin1String("EntireBuilding"),
+                            QLatin1String("true"));
+
+    WorldCellObject *invalidRoomTone = definitions.addObject(
+                world, QLatin1String("RoomTone"), 0, 0, 30, 31);
+    invalidRoomTone->setName(QLatin1String("invalid-room-tone"));
+    definitions.addProperty(invalidRoomTone, QLatin1String("RoomTone"),
+                            QLatin1String("Bunker"));
+    definitions.addProperty(invalidRoomTone, QLatin1String("EntireBuilding"),
+                            QLatin1String("invalid"));
+    WorldCellObject *unnamedRoomTone = definitions.addObject(
+                world, QLatin1String("RoomTone"), 0, 0, 32, 33);
+    unnamedRoomTone->setName(QLatin1String("unnamed-room-tone"));
+
     WorldCellObject *spawnPoint = definitions.addObject(
                 world, QLatin1String("SpawnPoint"), 0, 0, 10, 10);
     WorldObjectValidation::applyCreationDefaults(spawnPoint);
@@ -920,11 +1053,9 @@ bool LuaWriter::validateZoneExport(QString *summary, QString *error)
     WorldCellObject *invalidSpawn = definitions.addObject(
                 world, QLatin1String("SpawnPoint"), 0, 0, 11, 11);
     invalidSpawn->setName(QLatin1String("invalid-spawn"));
-    definitions.addProperty(invalidSpawn, QLatin1String("Professions"),
-                            QLatin1String("all"));
     if (WorldObjectValidation::validateSpawnPoint(invalidSpawn, &reason)) {
         if (error)
-            *error = QLatin1String("SpawnPoint profession 'all' was accepted");
+            *error = QLatin1String("SpawnPoint without professions was accepted");
         return false;
     }
 
@@ -953,10 +1084,12 @@ bool LuaWriter::validateZoneExport(QString *summary, QString *error)
     objectBuffer.open(QIODevice::WriteOnly);
     writer.d->mWarnings.clear();
     writer.d->writeWorldObjects(&world, &objectBuffer);
-    if (writer.d->mWarnings.size() != 3
+    if (writer.d->mWarnings.size() != 5
             || objectBuffer.data().contains("invalid-flow")
             || objectBuffer.data().contains("invalid-spawn")
             || objectBuffer.data().contains("invalid-origin")
+            || objectBuffer.data().contains("invalid-room-tone")
+            || objectBuffer.data().contains("unnamed-room-tone")
             || !objectBuffer.data().contains("type = \"SpawnOrigin\"")
             || !objectBuffer.data().contains("width = 20, height = 30")) {
         if (error)
@@ -966,9 +1099,57 @@ bool LuaWriter::validateZoneExport(QString *summary, QString *error)
         return false;
     }
 
+    if (!requireOutput(objectBuffer.data(),
+                       "name = \"area-room-tone\", type = \"RoomTone\", "
+                       "x = 12, y = 13, z = -15, width = 274, height = 265, "
+                       "properties = { RoomTone = \"Bunker\" }", error)
+            || !requireOutput(objectBuffer.data(),
+                              "name = \"building-room-tone\", "
+                              "type = \"RoomTone\", x = 20, y = 21, z = 0, "
+                              "width = 199, height = 221, "
+                              "properties = { RoomTone = \"Bunker\", "
+                              "EntireBuilding = true }", error)) {
+        return false;
+    }
+
+    QString projectSummary;
+    if (!projectPath.isEmpty()) {
+        WorldReader reader;
+        QScopedPointer<World> project(reader.readWorld(projectPath));
+        if (!project) {
+            if (error)
+                *error = reader.errorString();
+            return false;
+        }
+        int roomToneCount = 0;
+        for (WorldCell *cell : project->cells()) {
+            for (WorldCellObject *object : cell->objects()) {
+                if (object->type()->name() == QLatin1String("RoomTone"))
+                    ++roomToneCount;
+            }
+        }
+        QBuffer projectBuffer;
+        projectBuffer.open(QIODevice::WriteOnly);
+        writer.d->mWarnings.clear();
+        writer.d->writeWorldObjects(project.data(), &projectBuffer);
+        const int exportedRoomTones = projectBuffer.data().count(
+                    "type = \"RoomTone\"");
+        if (roomToneCount == 0 || exportedRoomTones != roomToneCount) {
+            if (error) {
+                *error = QStringLiteral("Project exported %1 of %2 RoomTone records: %3")
+                        .arg(exportedRoomTones).arg(roomToneCount)
+                        .arg(writer.d->mWarnings.join(QLatin1Char('\n')));
+            }
+            return false;
+        }
+        projectSummary = QStringLiteral(". Project exported all %1 RoomTone records, with %2 other object warning(s)")
+                .arg(roomToneCount).arg(writer.d->mWarnings.size());
+    }
+
     if (summary) {
         *summary = QLatin1String(
-                    "creation defaults passed, WaterZone and SpawnOrigin areas were preserved, and invalid WaterFlow, SpawnPoint, and SpawnOrigin records were skipped with warnings");
+                    "creation defaults passed, WaterZone and SpawnOrigin areas were preserved, rectangular RoomTones retained position and scope, and invalid records were skipped with warnings")
+                + projectSummary;
     }
     return true;
 }

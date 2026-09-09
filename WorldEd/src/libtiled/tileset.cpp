@@ -253,11 +253,11 @@ bool Tileset::loadFromCache(Tileset *cached)
         Tile *tile = cached->tileAt(tileNum);
         if (tileNum < oldTilesetSize) {
             mTiles.at(tileNum)->setImage(tile);
-            mTiles.at(tileNum)->setAtlasUVST(tile->atlasUVST());
-            mTiles.at(tileNum)->setAtlasSize(tile->atlasSize());
         } else {
             mTiles.append(new Tile(tile, tileNum, this));
         }
+        mTiles.at(tileNum)->setAtlasUVST(tile->atlasUVST());
+        mTiles.at(tileNum)->setAtlasSize(tile->atlasSize());
     }
 
     // Blank out any remaining tiles to avoid confusion

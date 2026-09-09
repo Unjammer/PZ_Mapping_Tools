@@ -16,12 +16,9 @@
  */
 
 #include "zprogress.h"
+#include "loadingdialog.h"
 
 #include <QApplication>
-#include <QLabel>
-#include <QProgressBar>
-#include <QPushButton>
-#include <QVBoxLayout>
 
 ZProgressManager *ZProgressManager::mInstance = 0;
 
@@ -35,8 +32,6 @@ ZProgressManager *ZProgressManager::instance()
 ZProgressManager::ZProgressManager()
     : mMainWindow(0)
     , mDialog(0)
-    , mProgressBar(0)
-    , mCancelButton(0)
     , mDepth(0)
     , mCancellableDepth(0)
     , mCanceled(false)
@@ -47,48 +42,39 @@ ZProgressManager::ZProgressManager()
 
 void ZProgressManager::setMainWindow(QWidget *mainWindow)
 {
-    if (mMainWindow) {
-        mDialog->setParent(mMainWindow = mainWindow);
-        mDialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::Dialog);
+    if (mDialog && mMainWindow == mainWindow)
+        return;
+    mMainWindow = mainWindow;
+    if (mDialog) {
+        mDialog->setParent(mainWindow, PZTools::LoadingDialog::flags());
+        if (mDepth > 0)
+            mDialog->show();
         return;
     }
-    mMainWindow = mainWindow;
-    mDialog = new QDialog(mainWindow);
-    QVBoxLayout *layout = new QVBoxLayout();
-    mLabel = new QLabel();
-    mLabel->setMinimumSize(420, 20);
-    mLabel->setWordWrap(true);
-    mProgressBar = new QProgressBar();
-    mProgressBar->setRange(0, 0);
-    mProgressBar->setTextVisible(false);
-    layout->addWidget(mLabel);
-    layout->addWidget(mProgressBar);
-    mCancelButton = new QPushButton(tr("Cancel"));
-    mCancelButton->setVisible(false);
-    layout->addWidget(mCancelButton);
-    connect(mCancelButton, &QPushButton::clicked, this, [this]() {
+    mDialog = new PZTools::LoadingDialog(mainWindow);
+    connect(mDialog->cancelButton(), &QPushButton::clicked, this, [this]() {
         mCanceled = true;
-        mCancelButton->setEnabled(false);
-        mLabel->setText(tr("Cancelling..."));
+        mDialog->cancelButton()->setEnabled(false);
+        mDialog->setStatus(tr("Cancelling..."));
     });
-    mDialog->setWindowModality(Qt::WindowModal);
-    mDialog->setLayout(layout);
-    mDialog->setWindowTitle(tr("Loading"));
-    mDialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::Dialog);
 }
 
 void ZProgressManager::begin(const QString &text, bool cancellable)
 {
-    mLabel->setText(text);
+    if (!mDialog)
+        setMainWindow(mMainWindow);
+    mDialog->setEnabled(true);
+    mDialog->setStatus(text);
     if (mDepth == 0) {
         mCanceled = false;
         mCancellableDepth = 0;
     }
     if (cancellable)
         ++mCancellableDepth;
-    mCancelButton->setVisible(mCancellableDepth > 0);
-    mCancelButton->setEnabled(!mCanceled);
+    mDialog->cancelButton()->setVisible(mCancellableDepth > 0);
+    mDialog->cancelButton()->setEnabled(!mCanceled);
     if (mDepth++ == 0) {
+        mDialog->adjustSize();
         mDialog->show();
         mDialog->raise();
     }
@@ -98,8 +84,14 @@ void ZProgressManager::begin(const QString &text, bool cancellable)
 void ZProgressManager::update(const QString &text)
 {
     Q_ASSERT(mDepth > 0);
-    mLabel->setText(text);
+    mDialog->setStatus(text);
     qApp->processEvents(QEventLoop::AllEvents);
+}
+
+void ZProgressManager::updateTilesets(int completed, int total)
+{
+    Q_ASSERT(mDepth > 0);
+    mDialog->setTilesetProgress(completed, total);
 }
 
 void ZProgressManager::end(bool cancellable)
@@ -109,8 +101,7 @@ void ZProgressManager::end(bool cancellable)
         Q_ASSERT(mCancellableDepth > 0);
         --mCancellableDepth;
     }
-    mCancelButton->setVisible(mCancellableDepth > 0);
-//    mDialog->setValue(mDialog->maximum()); // hides dialog!
+    mDialog->cancelButton()->setVisible(mCancellableDepth > 0);
     qApp->processEvents(QEventLoop::AllEvents);
     if (--mDepth == 0)
         mDialog->hide();

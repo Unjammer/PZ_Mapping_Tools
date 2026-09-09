@@ -25,6 +25,7 @@
 #include <QObject>
 #include <QSet>
 #include <QStringList>
+#include <limits>
 
 class MapComposite;
 class MapInfo;
@@ -97,6 +98,8 @@ public:
 
     ~MapImageRenderWorker();
 
+    static bool validateBasementThumbnails(QString *error);
+
 signals:
     void mapNeeded(MapImage *mapImage);
     void imageRendered(MapImageData data, MapImage *mapImage,
@@ -112,7 +115,7 @@ public slots:
     void resume(MapImage *mapImage, const QString &imageFileName);
 
 private:
-    MapImageData generateMapImage(MapComposite *mapComposite);
+    MapImageData generateMapImage(MapComposite *mapComposite, int firstLevel);
 
     class Job {
     public:
@@ -136,6 +139,7 @@ public:
     void setImage(const QImage &image) { mImage = image; }
     QImage image() const {return mImage; }
     MapInfo *mapInfo() const { return mInfo; }
+    int firstLevel() const { return mFirstLevel; }
 
     QPointF tileToPixelCoords(qreal x, qreal y);
 
@@ -204,6 +208,7 @@ private:
     QSize mTileSize;
     bool mLoaded;
     bool mOwnsMapInfo;
+    int mFirstLevel = std::numeric_limits<int>::min();
 
 #ifdef WORLDED
     // For WorldEd world images.
@@ -225,7 +230,8 @@ public:
 
     MapImage *getMapImage(const QString &mapName,
                           const QString &relativeTo = QString(),
-                          QObject *owner = nullptr);
+                          QObject *owner = nullptr,
+                          int firstLevel = std::numeric_limits<int>::min());
 
     bool recreateMapImage(const QString &mapName,
                           const QString &relativeTo = QString(),
@@ -269,7 +275,8 @@ protected:
         bool threadRender;
     };
 
-    ImageData generateMapImage(const QString &mapFilePath, bool force = false);
+    ImageData generateMapImage(const QString &mapFilePath, bool force = false,
+                              int firstLevel = std::numeric_limits<int>::min());
 #if 0
     ImageData generateMapImage(MapComposite *mapComposite);
 #endif
@@ -318,7 +325,8 @@ private:
     void finishRenderMapPreparation(MapImageRenderWorker *worker);
     void failRenderMapPreparation(MapImageRenderWorker *worker);
     void queueRenderJob(MapImage *mapImage);
-    QFileInfo imageFileInfo(const QString &mapFilePath);
+    QFileInfo imageFileInfo(const QString &mapFilePath,
+                           int firstLevel = std::numeric_limits<int>::min());
     QFileInfo imageDataFileInfo(const QFileInfo &imageFileInfo);
     bool scheduleMapImageRebuild(MapImage *mapImage);
     void retainMapImage(MapImage *mapImage, QObject *owner);

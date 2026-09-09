@@ -15,6 +15,7 @@ public:
     static PropertyList resolvedProperties(PropertyHolder *holder);
     static QString resolvedValue(WorldCellObject *object,
                                  const QString &propertyName);
+    static QStringList spawnProfessions(WorldCellObject *object);
     static QStringList expectedObjectTypes();
     static QStringList expectedPropertyNames(const QString &typeName);
     static QStringList expectedPropertyNames(WorldCellObject *object);

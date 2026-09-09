@@ -247,11 +247,8 @@ bool cameraRay(float pixelX, float pixelY,
     const float uiY = 2.0f - pixelY / 128.0f;
     const float ndcX = uiX * 2.0f - 1.0f;
     const float ndcY = uiY - 1.0f;
-    bool invertible = false;
-    const QMatrix4x4 inverse =
-            (projectionMatrix() * modelViewMatrix()).inverted(&invertible);
-    if (!invertible)
-        return false;
+    static const QMatrix4x4 inverse =
+            (projectionMatrix() * modelViewMatrix()).inverted();
     const QVector3D nearPoint =
             mappedPoint(inverse, QVector3D(ndcX, ndcY, -1.0f));
     const QVector3D farPoint =
@@ -354,9 +351,9 @@ bool pointInPolygon(const QPointF &point, const QVector<QPointF> &polygon)
 
 float normalizedDepth(const QVector3D &scenePoint)
 {
-    const QMatrix4x4 mvp = projectionMatrix() * modelViewMatrix();
+    static const QMatrix4x4 mvp = projectionMatrix() * modelViewMatrix();
     const float depth = mappedPoint(mvp, scenePoint).z();
-    const float depthNW =
+    static const float depthNW =
             qAbs(mappedPoint(mvp, QVector3D(-0.5f, 0.0f, -0.5f)).z());
     if (qFuzzyIsNull(depthNW))
         return -1.0f;
@@ -674,21 +671,30 @@ bool DepthGeometryDocument::save(const QString &filePath,
     return true;
 }
 
-float DepthGeometryRasterizer::depthAt(const DepthPrimitive &primitive,
-                                       float pixelX, float pixelY)
+namespace {
+struct PreparedDepthPrimitive
 {
-    QVector3D origin;
-    QVector3D direction;
-    if (!cameraRay(pixelX, pixelY, &origin, &direction))
-        return -1.0f;
-    const QMatrix4x4 object = objectMatrix(primitive);
+    const DepthPrimitive *primitive;
+    QMatrix4x4 object;
+    QMatrix4x4 inverse;
     bool invertible = false;
-    const QMatrix4x4 inverse = object.inverted(&invertible);
-    if (!invertible)
+
+    explicit PreparedDepthPrimitive(const DepthPrimitive &value)
+        : primitive(&value), object(objectMatrix(value))
+    {
+        inverse = object.inverted(&invertible);
+    }
+};
+
+float preparedDepthAt(const PreparedDepthPrimitive &prepared,
+                      const QVector3D &origin, const QVector3D &direction)
+{
+    if (!prepared.invertible)
         return -1.0f;
-    const QVector3D localOrigin = mappedPoint(inverse, origin);
+    const DepthPrimitive &primitive = *prepared.primitive;
+    const QVector3D localOrigin = mappedPoint(prepared.inverse, origin);
     const QVector3D localDirection =
-            mappedDirection(inverse, direction).normalized();
+            mappedDirection(prepared.inverse, direction).normalized();
     float distance = 0.0f;
     QVector3D localHit;
     if (primitive.type == DepthPrimitiveType::Box) {
@@ -713,7 +719,81 @@ float DepthGeometryRasterizer::depthAt(const DepthPrimitive &primitive,
                             primitive.points))
             return -1.0f;
     }
-    return normalizedDepth(mappedPoint(object, localHit));
+    return normalizedDepth(mappedPoint(prepared.object, localHit));
+}
+}
+
+QImage DepthGeometryRasterizer::estimatePixels(const QImage &sourceTile,
+                                              PixelEstimate mode)
+{
+    QImage result(DepthWidth, DepthHeight, QImage::Format_ARGB32);
+    result.fill(Qt::transparent);
+    const QImage source = sourceTile.convertToFormat(QImage::Format_ARGB32);
+    const int width = qMin(result.width(), source.width());
+    const int height = qMin(result.height(), source.height());
+    const QPointF projectedOrigin = project(QVector3D());
+    const float verticalPixels = float(projectedOrigin.y() -
+            project(QVector3D(0, 1, 0)).y());
+    for (int x = 0; x < width; ++x) {
+        int bottom = height - 1;
+        while (bottom >= 0 && qAlpha(source.pixel(x, bottom)) == 0)
+            --bottom;
+        for (int y = 0; y <= bottom; ++y) {
+            if (qAlpha(source.pixel(x, y)) == 0)
+                continue;
+            const float groundY = (mode == GroundSurface ? y : bottom) + 0.5f;
+            QVector3D origin;
+            QVector3D direction;
+            cameraRay(x + 0.5f, groundY, &origin, &direction);
+            const QVector3D ground = origin - direction * (origin.y() / direction.y());
+            const float elevation = mode == VerticalObject
+                    ? float(bottom - y) / verticalPixels : 0.0f;
+            const float depth = normalizedDepth(ground + QVector3D(0, elevation, 0));
+            const int value = qRound(qBound(0.0f, depth, 1.0f) * 255.0f);
+            result.setPixel(x, y, qRgba(value, value, value, 255));
+        }
+    }
+    return result;
+}
+
+DepthPrimitive DepthGeometryRasterizer::fittedBox(const QImage &sourceTile)
+{
+    QRect bounds;
+    for (int y = 0; y < qMin(DepthHeight, sourceTile.height()); ++y) {
+        for (int x = 0; x < qMin(DepthWidth, sourceTile.width()); ++x) {
+            if (qAlpha(sourceTile.pixel(x, y)))
+                bounds |= QRect(x, y, 1, 1);
+        }
+    }
+    DepthPrimitive box = DepthPrimitive::makeBox();
+    if (bounds.isEmpty())
+        return box;
+    const float extent = bounds.width() / 128.0f;
+    const QPointF projectedOrigin = project(QVector3D());
+    const float verticalPixels = float(projectedOrigin.y() -
+            project(QVector3D(0, 1, 0)).y());
+    const float height = qMax(1.0f, bounds.height() - bounds.width() * 0.5f)
+            / verticalPixels;
+    box.minimum = QVector3D(-extent * 0.5f, 0, -extent * 0.5f);
+    box.maximum = QVector3D(extent * 0.5f, height, extent * 0.5f);
+    QVector3D origin;
+    QVector3D direction;
+    cameraRay(bounds.x() + bounds.width() * 0.5f,
+              bounds.y() + bounds.height() - extent * 32.0f,
+              &origin, &direction);
+    box.translate = origin - direction * (origin.y() / direction.y());
+    box.translate.setY(0);
+    return box;
+}
+
+float DepthGeometryRasterizer::depthAt(const DepthPrimitive &primitive,
+                                       float pixelX, float pixelY)
+{
+    QVector3D origin;
+    QVector3D direction;
+    if (!cameraRay(pixelX, pixelY, &origin, &direction))
+        return -1.0f;
+    return preparedDepthAt(PreparedDepthPrimitive(primitive), origin, direction);
 }
 
 QImage DepthGeometryRasterizer::rasterize(
@@ -731,6 +811,10 @@ QImage DepthGeometryRasterizer::rasterize(
     }
     const QImage source =
             sourceTile.convertToFormat(QImage::Format_ARGB32);
+    QVector<PreparedDepthPrimitive> prepared;
+    prepared.reserve(primitives.size());
+    for (const DepthPrimitive &primitive : primitives)
+        prepared.append(PreparedDepthPrimitive(primitive));
     for (int y = 0; y < DepthHeight; ++y) {
         for (int x = 0; x < DepthWidth; ++x) {
             if (respectSourceAlpha &&
@@ -738,9 +822,12 @@ QImage DepthGeometryRasterizer::rasterize(
                      qAlpha(source.pixel(x, y)) == 0))
                 continue;
             float nearest = 2.0f;
-            for (const DepthPrimitive &primitive : primitives) {
-                const float depth = depthAt(
-                            primitive, x + 0.5f, y + 0.5f);
+            QVector3D origin;
+            QVector3D direction;
+            if (!cameraRay(x + 0.5f, y + 0.5f, &origin, &direction))
+                continue;
+            for (const PreparedDepthPrimitive &primitive : prepared) {
+                const float depth = preparedDepthAt(primitive, origin, direction);
                 if (depth >= 0.0f)
                     nearest = qMin(nearest, depth);
             }

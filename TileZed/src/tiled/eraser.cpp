@@ -27,6 +27,7 @@
 #include "mapscene.h"
 #ifdef ZOMBOID
 #include "preferences.h"
+#include "curbtool.h"
 #endif
 #include "tilelayer.h"
 
@@ -50,6 +51,8 @@ Eraser::Eraser(QObject *parent)
 #ifdef ZOMBOID
 void Eraser::deactivate(MapScene *scene)
 {
+    if (mErasing)
+        mapDocument()->undoStack()->endMacro();
     mErasing = false;
     AbstractTileTool::deactivate(scene);
 }
@@ -89,6 +92,9 @@ void Eraser::mousePressed(QGraphicsSceneMouseEvent *event)
         return;
 
     if (event->button() == Qt::LeftButton) {
+#ifdef ZOMBOID
+        mapDocument()->undoStack()->beginMacro(tr("Erase"));
+#endif
         mErasing = true;
 #ifdef ZOMBOID
         mMergeable = false;
@@ -99,8 +105,12 @@ void Eraser::mousePressed(QGraphicsSceneMouseEvent *event)
 
 void Eraser::mouseReleased(QGraphicsSceneMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton)
+    if (event->button() == Qt::LeftButton && mErasing) {
+#ifdef ZOMBOID
+        mapDocument()->undoStack()->endMacro();
+#endif
         mErasing = false;
+    }
 }
 
 void Eraser::languageChanged()
@@ -118,6 +128,8 @@ void Eraser::doErase(bool mergeable)
     QRegion eraseRegion = brushRegion() & tileLayer->bounds();
     if (eraseRegion.isEmpty())
         return;
+
+    CurbTool::restoreBlendTiles(mapDocument(), tileLayer, eraseRegion);
 
     EraseTiles *erase = new EraseTiles(mapDocument(), tileLayer, eraseRegion);
     erase->setMergeable(mMergeable);

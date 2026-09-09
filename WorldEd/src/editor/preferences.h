@@ -36,6 +36,8 @@ public:
 
     QString configPath() const;
     QString configPath(const QString &fileName) const;
+    void reloadSharedPaths();
+    static bool validateSharedPaths(QString *errorString);
 
     QString appConfigPath() const;
     QString appConfigPath(const QString &fileName) const;

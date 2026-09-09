@@ -358,6 +358,7 @@ class TileDefWatcherFile
 {
 public:
     TileDefWatcherFile(const QString &filePath);
+    ~TileDefWatcherFile();
     void check(Tiled::Internal::FileSystemWatcher &watcher);
 
     QString mFilePath;
@@ -371,6 +372,7 @@ class TileDefWatcher : public QObject
     Q_OBJECT
 public:
     TileDefWatcher();
+    ~TileDefWatcher();
 
     void check();
     Tiled::Internal::TileDefTileset *tileset(const QString &tilesetName);
@@ -390,6 +392,9 @@ public:
     Tiled::Internal::FileSystemWatcher *mWatcher;
     QList<TileDefWatcherFile*> mFiles;
     QTimer mChangedFilesTimer;
+
+private:
+    bool mNeedsCheck = true;
 };
 
 }

@@ -16,7 +16,6 @@ win32 {
 }
 
 macx {
-    QMAKE_LIBDIR_FLAGS += -L$$OUT_PWD/../../../../bin/TileZed.app/Contents/Frameworks
     LIBS += -framework Foundation
 } else:win32 {
     LIBS += -L$$top_builddir/lib

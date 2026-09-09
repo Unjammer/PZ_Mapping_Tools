@@ -19,7 +19,7 @@ PZTools-Qt5-Latest/
 The newest 20 files per application are retained. A new session never appends
 to an unrelated older log.
 
-The first lines identify the log path, installation root, active
+The first lines identify the exact application build, log path, installation root, active
 configuration directory, settings file, operating system, CPU, logical
 processor count, total and available RAM, display adapters, Qt version, ABI,
 and process bitness.
@@ -132,6 +132,23 @@ Without a TMX argument, the command runs the built-in brush, undo, Rules, and
 Blends checks only.
 
 ## Reproducing a problem
+
+BuildingEd can check room highlight regions against the direct calculation,
+including edits, Undo, Redo and rotation:
+
+```powershell
+BuildingEd.exe --validate-room-highlight C:\path\to\building.tbx
+```
+
+The tile-property cache check is available in all three applications. It
+checks property-patch ordering and refresh behavior and measures unchanged
+lookups using the configured property files:
+
+```powershell
+TileZed.exe --validate-tile-properties-cache
+BuildingEd.exe --validate-tile-properties-cache
+PZWorldEd.exe --validate-tile-properties-cache
+```
 
 1. Close unrelated PZTools instances.
 2. Start the executable from the current release `bin` directory.

@@ -34,9 +34,10 @@ feature work from the Build 41 era, followed by dedicated Build 42 branches.
 Preserved C# mapping utilities provide older evidence of Alree / Unjammer work
 on chunks, compiled maps, TileDefs, texture packs, TMX/PZW generation, map
 images, and building extraction beginning with verified Git commits in March
-2022. Those archives are historical precursors, not dependencies or copied
-source for the current C++ applications. Exact dates for archives without Git
-history are intentionally not inferred from file metadata alone.
+2022. Those archives are historical precursors. The native TileSetZ editor
+separately adapts the C# TileSetZ texture projections and includes its original
+PNG masks, without requiring the C# application. Exact dates for archives
+without Git history are intentionally not inferred from file metadata alone.
 
 The historical forks, reconstruction histories, and current combined history
 remain distinct evidence layers. A later equivalent Tim Baker implementation

@@ -27,6 +27,7 @@
 #include "bmptool.h"
 #include "bmptooldialog.h"
 #include "depthmapeditor.h"
+#include "tilesetzeditor.h"
 #include "lootdistributiondialog.h"
 #include "mainwindow.h"
 #include "minimap.h"
@@ -34,6 +35,9 @@
 #include "packextractdialog.h"
 #include "languagemanager.h"
 #include "preferences.h"
+#include "pztoolsbuild.h"
+#include "tiledefwatchervalidation.h"
+#include "tilesetimageloadervalidation.h"
 #include "stampbrush.h"
 #include "tiledapplication.h"
 #include "tiledefcompare.h"
@@ -43,6 +47,9 @@
 #include "../portablesettings.h"
 #ifdef ZOMBOID
 #include "BuildingEditor/building.h"
+#include "BuildingEditor/roomhighlightvalidation.h"
+#include "BuildingEditor/buildingcatalogvalidation.h"
+#include "tileworkflowvalidation.h"
 #include "BuildingEditor/buildingdocument.h"
 #include "BuildingEditor/buildingdocumentmgr.h"
 #include "BuildingEditor/buildingeditorwindow.h"
@@ -1881,10 +1888,12 @@ public:
     bool showedVersion;
     bool disableOpenGL;
     bool validateBuildingCategories;
+    bool validateRoomHighlight = false;
     bool validateBuildingClipboard;
     bool buildingDebugKeys;
     bool validateBrushPerformance;
     bool validateDepthMapEditor;
+    bool validateTileSetZ = false;
     bool validateLootDistributions;
     bool validatePackTools;
     bool validateAutomapperRules;
@@ -1904,6 +1913,8 @@ private:
     void setBuildingDebugKeys();
     void setValidateBrushPerformance();
     void setValidateDepthMapEditor();
+    void setValidateTileSetZ() { validateTileSetZ = true; }
+    void setValidateRoomHighlight() { validateRoomHighlight = true; }
     void setValidateLootDistributions();
     void setValidatePackTools();
     void setValidateAutomapperRules();
@@ -1984,6 +1995,12 @@ CommandLineHandler::CommandLineHandler()
                 QChar(),
                 QLatin1String("--validate-depthmap-editor"),
                 QLatin1String("Validate Build 42 depth atlas editing and PNG output"));
+    option<&CommandLineHandler::setValidateTileSetZ>(
+                QChar(), QLatin1String("--validate-tilesetz"),
+                QLatin1String("Validate TileSetZ masks, texture cutting and tile editing"));
+    option<&CommandLineHandler::setValidateRoomHighlight>(
+                QChar(), QLatin1String("--validate-room-highlight"),
+                QLatin1String("Validate room highlight caching with a TBX building"));
     option<&CommandLineHandler::setValidateLootDistributions>(
                 QChar(),
                 QLatin1String("--validate-loot-distributions"),
@@ -2156,6 +2173,7 @@ int main(int argc, char *argv[])
 #endif
     PortableSettings::configure();
     PortableSettings::installLogging();
+    qInfo().noquote() << "Application" << PZToolsBuild::label();
     PortableSettings::prepareVersionedSettings();
 #ifdef BUILD_INFO_VERSION
     a.setApplicationVersion(QLatin1String(AS_STRING(BUILD_INFO_VERSION)));
@@ -2169,6 +2187,32 @@ int main(int argc, char *argv[])
 
     LanguageManager *languageManager = LanguageManager::instance();
     languageManager->installTranslators();
+
+    if (a.arguments().contains(QStringLiteral("--validate-shared-paths"))) {
+        QString error;
+        const bool valid = Preferences::validateSharedPaths(&error);
+        qInfo().noquote() << "Shared paths validation:"
+                         << (valid ? QStringLiteral("PASS") : error);
+        return valid ? 0 : 1;
+    }
+
+    if (a.arguments().contains(QStringLiteral("--validate-tileset-image-loader"))) {
+        QString summary;
+        QString error;
+        const bool valid = TilesetImageLoaderValidation::run(&summary, &error);
+        qInfo().noquote() << "Tileset image loader validation:"
+                         << (valid ? QStringLiteral("PASS: ") + summary : error);
+        return valid ? 0 : 1;
+    }
+
+    if (a.arguments().contains(QStringLiteral("--validate-tile-properties-cache"))) {
+        QString summary;
+        QString error;
+        const bool valid = TileDefWatcherValidation::run(&summary, &error);
+        qInfo().noquote() << "Tile-property cache validation:"
+                         << (valid ? QStringLiteral("PASS: ") + summary : error);
+        return valid ? 0 : 1;
+    }
 
     CommandLineHandler commandLine;
     if (!commandLine.parse(QCoreApplication::arguments()))
@@ -2185,6 +2229,13 @@ int main(int argc, char *argv[])
                 << "TileZed brush-performance validation:"
                 << (valid ? QStringLiteral("PASS: %1").arg(summary)
                           : QStringLiteral("FAIL: %1").arg(error));
+        return valid ? 0 : 1;
+    }
+    if (commandLine.validateTileSetZ) {
+        QString error;
+        const bool valid = TileSetZEditor::runSelfTest(&error);
+        qInfo().noquote() << "TileSetZ validation:"
+                        << (valid ? QStringLiteral("PASS") : QStringLiteral("FAIL: %1").arg(error));
         return valid ? 0 : 1;
     }
     if (commandLine.validateDepthMapEditor) {
@@ -2332,6 +2383,7 @@ int main(int argc, char *argv[])
     }
     const bool buildingEditorValidation =
             commandLine.validateBuildingCategories
+            || commandLine.validateRoomHighlight
             || commandLine.validateBuildingClipboard
             || commandLine.validateTilesetCatalog;
     if (buildingEditorMode && !buildingEditorValidation && a.isRunning()) {
@@ -2347,6 +2399,7 @@ int main(int argc, char *argv[])
     }
     if (!FirstLaunchDialog::ensureSharedPaths())
         return 0;
+    Preferences::instance()->reloadSharedPaths();
     if (commandLine.disableOpenGL) {
         Preferences::instance()->setUseOpenGL(false);
         if (buildingEditorMode)
@@ -2421,7 +2474,25 @@ int main(int argc, char *argv[])
                 QCoreApplication::exit(valid ? 0 : 2);
                 return;
             }
+            if (commandLine.validateRoomHighlight) {
+                QString summary;
+                QString error;
+                const QStringList paths = commandLine.filesToOpen();
+                const bool valid = !paths.isEmpty() && BuildingEditor::validateRoomHighlight(
+                            paths.first(), &summary, &error);
+                if (paths.isEmpty())
+                    error = QStringLiteral("A TBX building path is required");
+                qInfo().noquote() << "BuildingEd room highlight validation:"
+                                 << (valid ? QStringLiteral("PASS: %1").arg(summary)
+                                           : QStringLiteral("FAIL: %1").arg(error));
+                QCoreApplication::exit(valid ? 0 : 1);
+                return;
+            }
             if (commandLine.validateBuildingCategories) {
+                QString catalogIdentityError;
+                const bool catalogIdentityValid = BuildingEditor::validateBuildingCatalogIdentity(&catalogIdentityError);
+                qInfo().noquote() << "BuildingEd material identity validation:"
+                                 << (catalogIdentityValid ? QStringLiteral("PASS") : catalogIdentityError);
                 BuildingEditor::BuildingTemplate *buildingTemplate = nullptr;
                 BuildingEditor::BuildingTemplates *templates =
                         BuildingEditor::BuildingTemplates::instance();
@@ -2598,8 +2669,12 @@ int main(int argc, char *argv[])
                                 : QStringLiteral("FAIL: %1")
                                   .arg(fixtureClipboardError));
                 }
-                const bool allValid = valid && luaFurnitureValid
-                        && clipboardValid && fixtureClipboardValid;
+                QString workflowError;
+                const bool workflowsValid = BuildingEditor::validateBuildingEditorWorkflows(&buildingEditor, &workflowError);
+                if (!workflowsValid)
+                    qWarning().noquote() << workflowError;
+                const bool allValid = valid && luaFurnitureValid && catalogIdentityValid
+                        && clipboardValid && fixtureClipboardValid && workflowsValid;
                 qInfo() << "BuildingEd category validation result:"
                         << (allValid ? "PASS" : "FAIL");
                 BuildingEditor::BuildingDocumentMgr::instance()
@@ -2683,7 +2758,15 @@ int main(int argc, char *argv[])
                     ? QStringLiteral("PASS")
                     : QStringLiteral("FAIL: %1")
                       .arg(transparentTileError));
-        return catalogValid && tagsValid && transparentTileValid ? 0 : 3;
+        QString tileSetZError;
+        const bool tileSetZValid = w.validateTileSetZCatalog(&tileSetZError);
+        if (!tileSetZValid)
+            qWarning().noquote() << "TileSetZ catalogue validation:" << tileSetZError;
+        QString workflowError;
+        const bool workflowsValid = validateTileWorkflows(&workflowError);
+        if (!workflowsValid)
+            qWarning().noquote() << workflowError;
+        return catalogValid && tagsValid && transparentTileValid && tileSetZValid && workflowsValid ? 0 : 3;
     }
     QSettings sessionSettings(QSettings::IniFormat, QSettings::UserScope,
                               QLatin1String("TheIndieStone"),

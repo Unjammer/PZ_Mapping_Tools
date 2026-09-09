@@ -74,8 +74,6 @@ static int VERSION1 = 1; // Added 4-byte 'LOTH' at start of .lotheader files.
 
 static int VERSION_LATEST = VERSION1;
 
-#define MERGE_ROOMS_ACROSS_CELL_BOUNDARIES 1
-
 static QString nameOfTileset(const Tileset *tileset)
 {
     QString name = tileset->imageSource();
@@ -1902,30 +1900,11 @@ bool LotFilesWorker256::generateHeader(CombinedCellMaps& combinedMaps, MapCompos
         return false;
     }
     mInputRoomRectCount = mRoomRects.size();
-#if 0
-    for (WorldCell *cell : combinedMaps.mCells) {
-        for (MapComposite *subMap : mapComposite->subMaps()) {
-#if 1
-            if (!combinedMaps.mCellMaps.contains(subMap)) {
-                continue;
-            }
-#else
-            if (subMap->origin()
-                    != (cell->pos() + lotSettings.worldOrigin
-                        - QPoint(combinedMaps.mMinSourceCellX,
-                                 combinedMaps.mMinSourceCellY))
-                            * combinedMaps.mSourceCellSize)
-                continue;
-#endif
-            if (processObjectGroups(combinedMaps, cell, subMap) == false) {
-                return false;
-            }
-        }
-    }
-#endif
+    return groupRoomDefinitions(combinedMaps);
+}
 
-    // Merge adjacent RoomRects on the same level into rooms.
-    // Only RoomRects with matching names and with # in the name are merged.
+bool LotFilesWorker256::groupRoomDefinitions(CombinedCellMaps &combinedMaps)
+{
     QPoint relativeToCell256(
             -(combinedMaps.mCell256X * CELL_SIZE_256
               - combinedMaps.mMinSourceCellX
@@ -1971,6 +1950,7 @@ bool LotFilesWorker256::generateHeader(CombinedCellMaps& combinedMaps, MapCompos
             if (rr->room == nullptr) {
                 rr->room = new LotFile::Room(rr->nameWithoutSuffix(), rr->floor);
                 rr->room->rects += rr;
+                rr->room->sourceCell = rr->sourceCell;
                 roomList += rr->room;
             }
             if (!rr->name.contains(QLatin1Char('#')))
@@ -1980,11 +1960,8 @@ bool LotFilesWorker256::generateHeader(CombinedCellMaps& combinedMaps, MapCompos
             for (LotFile::RoomRect *comp : qAsConst(rrList2)) {
                 if (comp == rr)
                     continue;
-#if MERGE_ROOMS_ACROSS_CELL_BOUNDARIES == 0
-                // Don't merge rects across 300x300 cell boundaries, like the south wall in the Studio map.
-                if (rr->mCell != comp->mCell)
+                if (rr->sourceCell != comp->sourceCell)
                     continue;
-#endif
                 if (comp->room == rr->room)
                     continue;
                 if (rr->inSameRoom(comp)) {
@@ -2031,11 +2008,8 @@ bool LotFilesWorker256::generateHeader(CombinedCellMaps& combinedMaps, MapCompos
         for (LotFile::Room *comp : qAsConst(roomList2)) {
             if (comp == r)
                 continue;
-#if MERGE_ROOMS_ACROSS_CELL_BOUNDARIES == 0
-            // Don't merge rooms across 300x300 cell boundaries, like the south wall in the Studio map.
-            if (r->mCell != comp->mCell)
+            if (r->sourceCell != comp->sourceCell)
                 continue;
-#endif
             if (r->building == comp->building)
                 continue;
             if ((r->floor < 0) != (comp->floor < 0)) {
@@ -2744,16 +2718,17 @@ uint LotFilesWorker256::cellToGid(const Cell *cell)
 #endif
 }
 
-bool LotFilesWorker256::processObjectGroups(CombinedCellMaps &combinedMaps, MapComposite *mapComposite)
+bool LotFilesWorker256::processObjectGroups(CombinedCellMaps &combinedMaps, MapComposite *mapComposite, const WorldCell *sourceCell)
 {
+    sourceCell = combinedMaps.mSourceCells.value(mapComposite, sourceCell);
     for (ObjectGroup *og : mapComposite->map()->objectGroups()) {
-        if (!processObjectGroup(combinedMaps, og, mapComposite->levelRecursive(), mapComposite->originRecursive())) {
+        if (!processObjectGroup(combinedMaps, og, mapComposite->levelRecursive(), mapComposite->originRecursive(), sourceCell)) {
             return false;
         }
     }
 
     for (MapComposite *subMap : mapComposite->subMaps()) {
-        if (!processObjectGroups(combinedMaps, subMap)) {
+        if (!processObjectGroups(combinedMaps, subMap, sourceCell)) {
             return false;
         }
     }
@@ -2761,7 +2736,7 @@ bool LotFilesWorker256::processObjectGroups(CombinedCellMaps &combinedMaps, MapC
     return true;
 }
 
-bool LotFilesWorker256::processObjectGroup(CombinedCellMaps &combinedMaps, ObjectGroup *objectGroup, int levelOffset, const QPoint &offset)
+bool LotFilesWorker256::processObjectGroup(CombinedCellMaps &combinedMaps, ObjectGroup *objectGroup, int levelOffset, const QPoint &offset, const WorldCell *sourceCell)
 {
     int level = objectGroup->level();
     level += levelOffset;
@@ -2815,6 +2790,7 @@ bool LotFilesWorker256::processObjectGroup(CombinedCellMaps &combinedMaps, Objec
             if (!mPartialChunks.enabled()) {
                 LotFile::RoomRect *rr = new LotFile::RoomRect(
                             name, x, y, level, w, h);
+                rr->sourceCell = sourceCell;
                 mRoomRects += rr;
                 mRoomRectByLevel[level] += rr;
                 continue;
@@ -2838,6 +2814,7 @@ bool LotFilesWorker256::processObjectGroup(CombinedCellMaps &combinedMaps, Objec
                     LotFile::RoomRect *rr = new LotFile::RoomRect(
                                 partialName, piece.x(), piece.y(), level,
                                 piece.width(), piece.height());
+                    rr->sourceCell = sourceCell;
                     mRoomRects += rr;
                     mRoomRectByLevel[level] += rr;
                 }
@@ -3058,6 +3035,7 @@ int CombinedCellMaps::checkLoading(WorldDocument *worldDoc)
         }
         MapComposite* subMap = mMapComposite->addMap(info, cellPos, 0);
         subMap->setCellMap(true);
+        mSourceCells.insert(subMap, cell);
         mCellMaps += subMap;
     }
     for (WorldCell* cell : qAsConst(mCells)) {
@@ -3068,7 +3046,8 @@ int CombinedCellMaps::checkLoading(WorldDocument *worldDoc)
                  - mMinSourceCellY) * mSourceCellSize);
         for (WorldCellLot *lot : cell->lots()) {
             MapInfo *info = MapManager::instance()->mapInfo(lot->mapName());
-            mMapComposite->addMap(info, lot->pos() + cellPos, lot->level());
+            MapComposite *subMap = mMapComposite->addMap(info, lot->pos() + cellPos, lot->level());
+            mSourceCells.insert(subMap, cell);
         }
     }
 #if 1
@@ -3080,7 +3059,8 @@ int CombinedCellMaps::checkLoading(WorldDocument *worldDoc)
                  - mMinSourceCellX) * mSourceCellSize,
                 (cell->y() + lotSettings.worldOrigin.y()
                  - mMinSourceCellY) * mSourceCellSize);
-        mMapComposite->addMap(info, lot->pos() + cellPos, lot->level());
+        MapComposite *subMap = mMapComposite->addMap(info, lot->pos() + cellPos, lot->level());
+        mSourceCells.insert(subMap, cell);
     }
 #endif
     mMapComposite->synch(); //
@@ -3196,6 +3176,162 @@ QRect CombinedCellMaps::toCellRect300(const QRect &cellRect256)
     int maxCell300Y = std::ceil(((cellRect256.bottom() + 1) * CELL_SIZE_256 - 1) / float(CELL_HEIGHT));
     return QRect(minCell300X, minCell300Y, maxCell300X - minCell300X, maxCell300Y - minCell300Y);
 }
+bool LotFilesManager256::validateRoomOwnership(QString *error)
+{
+    QTemporaryDir directory;
+    if (!directory.isValid()) {
+        if (error)
+            *error = QStringLiteral("Could not create the LOT validation directory.");
+        return false;
+    }
+    LotFilesManager256 manager;
+    int checked = 0;
+    auto runCase = [&](WorldGridFormat format, bool separateSources,
+                       bool separateLevels, bool reverse, int output) {
+        WorldDocument document(new World(2, 1, format));
+        GenerateLotsSettings settings;
+        settings.exportDir = directory.path();
+        document.world()->setGenerateLotsSettings(settings);
+        manager.mWorldDoc = &document;
+        LotFilesWorker256 worker(&manager, nullptr);
+        CombinedCellMaps combined;
+        const bool native = format == WorldGridFormat::Native256;
+        combined.mCell256X = (native ? 0 : 56) + output;
+        combined.mCell256Y = native ? 0 : 7;
+        combined.mSourceCellSize = native ? 256 : 300;
+        combined.mSourceChunkSize = native ? 8 : 10;
+        combined.mSourceChunksPerCell = native ? 32 : 30;
+        const QRect sourceBounds = CombinedCellMaps::sourceCellRect(
+                    format, QRect(combined.mCell256X, combined.mCell256Y, 1, 1));
+        combined.mMinSourceCellX = sourceBounds.x();
+        combined.mMinSourceCellY = sourceBounds.y();
+        combined.mCellsWidth = sourceBounds.width();
+        combined.mCellsHeight = sourceBounds.height();
+        worker.mCombinedCellMaps = &combined;
+        worker.mMinLevel = -15;
+        worker.mMaxLevel = 0;
+        const QRect left = native ? QRect(250, 10, 6, 5)
+                                  : QRect(14452, 1810, 248, 10);
+        const QRect right = native ? QRect(256, 10, 4, 5)
+                                   : QRect(14700, 1810, 30, 10);
+        const int leftLevel = separateLevels ? -3 : -15;
+        const QPoint sourceOrigin(combined.mMinSourceCellX * combined.mSourceCellSize,
+                                  combined.mMinSourceCellY * combined.mSourceCellSize);
+        const QPoint outputOrigin(combined.mCell256X * 256, combined.mCell256Y * 256);
+        QStringList expected;
+        auto rectangleKey = [](int level, const QRect &rect) {
+            return QStringLiteral("%1:%2,%3,%4,%5")
+                    .arg(level).arg(rect.x()).arg(rect.y())
+                    .arg(rect.width()).arg(rect.height());
+        };
+        auto addRectangle = [&](const QRect &bounds, int level, int source) {
+            Map map(Map::LevelIsometric, combined.mSourceCellSize,
+                    combined.mSourceCellSize, 64, 32);
+            ObjectGroup *group = new ObjectGroup(QStringLiteral("RoomDefs"),
+                                                 0, 0, map.width(), map.height());
+            group->setLevel(level);
+            map.addLayer(group);
+            group->addObject(new MapObject(QStringLiteral("room#1"),
+                                           QStringLiteral("room"), QPointF(), bounds.size()));
+            return worker.processObjectGroup(combined, group, 0,
+                        bounds.topLeft() - sourceOrigin, document.world()->cellAt(source, 0));
+        };
+        bool ok = reverse
+                ? addRectangle(right, -15, separateSources ? 1 : 0)
+                  && addRectangle(left, leftLevel, 0)
+                : addRectangle(left, leftLevel, 0)
+                  && addRectangle(right, -15, separateSources ? 1 : 0);
+        if (separateSources) {
+            expected += rectangleKey(output == 0 ? leftLevel : -15,
+                                      (output == 0 ? left : right).translated(-outputOrigin));
+        } else if (output == 0) {
+            expected += rectangleKey(leftLevel, left.translated(-outputOrigin));
+            expected += rectangleKey(-15, right.translated(-outputOrigin));
+        }
+        const int expectedRooms = separateSources ? 1
+                : output == 0 ? (separateLevels ? 2 : 1) : 0;
+        const int expectedBuildings = expectedRooms > 0 ? 1 : 0;
+        ok = ok && worker.groupRoomDefinitions(combined)
+                && worker.roomList.size() == expectedRooms
+                && worker.buildingList.size() == expectedBuildings
+                && worker.generateHeaderAux(combined.mCell256X, combined.mCell256Y);
+        if (ok) {
+            QFile file(directory.filePath(QStringLiteral("%1_%2.lotheader")
+                                         .arg(combined.mCell256X).arg(combined.mCell256Y)));
+            ok = file.open(QIODevice::ReadOnly) && file.read(4) == QByteArray("LOTH");
+            QDataStream in(&file);
+            in.setByteOrder(QDataStream::LittleEndian);
+            qint32 version, tiles, width, height, minLevel, maxLevel, count;
+            in >> version >> tiles >> width >> height >> minLevel >> maxLevel >> count;
+            ok = ok && version == 1 && tiles == 0 && width == 8 && height == 8
+                    && minLevel == -15 && maxLevel == 0 && count == expectedRooms;
+            QStringList actual;
+            for (int i = 0; ok && i < count; ++i) {
+                ok = file.readLine() == QByteArray("room\n");
+                qint32 level, rectangles, objects;
+                in >> level >> rectangles;
+                ok = ok && rectangles > 0 && rectangles <= 2;
+                for (int j = 0; ok && j < rectangles; ++j) {
+                    qint32 x, y, w, h;
+                    in >> x >> y >> w >> h;
+                    actual += rectangleKey(level, QRect(x, y, w, h));
+                }
+                in >> objects;
+                ok = ok && objects == 0;
+            }
+            qint32 buildings;
+            in >> buildings;
+            ok = ok && buildings == expectedBuildings;
+            if (ok && buildings > 0) {
+                qint32 rooms;
+                in >> rooms;
+                ok = rooms == expectedRooms;
+                QSet<int> ids;
+                for (int i = 0; ok && i < rooms; ++i) {
+                    qint32 id;
+                    in >> id;
+                    ok = id >= 0 && id < rooms && !ids.contains(id);
+                    ids.insert(id);
+                }
+            }
+            actual.sort();
+            expected.sort();
+            ok = ok && actual == expected && in.status() == QDataStream::Ok
+                    && file.bytesAvailable() == 1024;
+        }
+        worker.clearRemovedBuildingsList();
+        qDeleteAll(worker.mRoomRects);
+        qDeleteAll(worker.roomList);
+        qDeleteAll(worker.buildingList);
+        if (!ok && error) {
+            *error = QStringLiteral("LOT room ownership failed for %1, separate sources %2, "
+                                    "separate levels %3, reversed input %4, output %5.")
+                    .arg(worldGridFormatName(format)).arg(separateSources)
+                    .arg(separateLevels).arg(reverse).arg(output);
+        }
+        ++checked;
+        return ok;
+    };
+    bool ok = true;
+    for (WorldGridFormat format : {WorldGridFormat::Legacy300, WorldGridFormat::Native256}) {
+        for (bool separateSources : {false, true}) {
+            for (bool separateLevels : {false, true}) {
+                for (bool reverse : {false, true}) {
+                    for (int output : {0, 1}) {
+                        if (ok)
+                            ok = runCase(format, separateSources, separateLevels, reverse, output);
+                    }
+                }
+            }
+        }
+    }
+    qDeleteAll(manager.mJumboZoneList);
+    manager.mJumboZoneList.clear();
+    if (ok)
+        qInfo() << "LOT room ownership validation passed:" << checked << "header round trips";
+    return ok;
+}
+
 bool LotFilesManager256::validateNative256Geometry(QString *error)
 {
     if (error)

@@ -1110,6 +1110,7 @@ void TileMetaInfoMgr::loadTilesets(const QList<Tileset *> &tilesets, bool proces
         if (!ts->isLoaded() && !ts->isMissing())
             TilesetManager::instance()->loadTileset(ts, ts->imageSource());
     }
+    TilesetManager::instance()->waitForTilesets(_tilesets);
 }
 void TileMetaInfoMgr::tilesetChanged(Tileset *ts)
 {

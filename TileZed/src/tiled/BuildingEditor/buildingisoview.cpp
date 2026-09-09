@@ -16,6 +16,7 @@
  */
 
 #include "buildingisoview.h"
+#include "buildingroomregions.h"
 
 #include "building.h"
 #include "buildingdocument.h"
@@ -378,6 +379,7 @@ BuildingIsoScene::BuildingIsoScene(QObject *parent) :
     mShowUserTiles(true),
     mCurrentLevel(0),
     mHighlightRoomLock(false),
+    mRoomRegions(nullptr),
     mDeferredCurrentFloorChange(false),
     mDeferredStructuralMapRebuild(false)
 {
@@ -458,6 +460,8 @@ void BuildingIsoScene::setDocument(BuildingDocument *doc)
     delete mRoomSelectionItem;
     mRoomSelectionItem = nullptr;
 
+    delete mRoomRegions;
+    mRoomRegions = doc ? new BuildingRoomRegions(doc, this) : nullptr;
     mDocument = doc;
     mDeferredCurrentFloorChange = false;
     mDeferredStructuralMapRebuild = false;
@@ -928,19 +932,13 @@ void BuildingIsoScene::setCursorPosition(const QPoint &pos)
     Room *room = prefs()->highlightRoom() ? currentFloor()->GetRoomAt(pos) : 0;
     if (room) {
         QRegion roomRegion;
-#if 1
-        BuildingRoomDefecator rd(currentFloor(), room);
-        rd.defecate();
         QVector<QRect> rects;
-        foreach (QRegion rgn, rd.mRegions) {
+        for (const QRegion &rgn : mRoomRegions->regions(currentFloor(), room)) {
             if (rgn.contains(pos)) {
                 rects += QVector<QRect>(rgn.begin(), rgn.end());
                 break;
             }
         }
-#else
-        QVector<QRect> rects = currentFloor()->roomRegion(room);
-#endif
         foreach (QRect r, adjacentRects(rects, pos))
             roomRegion |= r;
         mBuildingMap->suppressTiles(currentFloor(), QRegion(currentFloor()->bounds(1, 1)) - roomRegion);
@@ -1230,6 +1228,8 @@ void BuildingIsoScene::currentFloorChanged()
     if (!mNonEmptyLayer.isEmpty()) {
         mNonEmptyLayerGroupItem->layerGroup()->setLayerNonEmpty(mNonEmptyLayer, false);
         mNonEmptyLayerGroupItem->layerGroup()->setHighlightLayer(QString());
+        mNonEmptyLayerGroupItem->synchWithTileLayers();
+        mNonEmptyLayerGroupItem->updateBounds();
         mNonEmptyLayerGroupItem->update();
         mNonEmptyLayer.clear();
         mNonEmptyLayerGroupItem = 0;
@@ -1258,6 +1258,10 @@ void BuildingIsoScene::currentLayerChanged()
         if (!mNonEmptyLayer.isEmpty()) {
             mNonEmptyLayerGroupItem->layerGroup()->setLayerNonEmpty(mNonEmptyLayer, false);
             mNonEmptyLayerGroupItem->layerGroup()->setHighlightLayer(QString());
+            if (mNonEmptyLayerGroupItem != item) {
+                mNonEmptyLayerGroupItem->synchWithTileLayers();
+                mNonEmptyLayerGroupItem->updateBounds();
+            }
         }
         QString layerName = currentLayerName();
         if (!layerName.isEmpty())
@@ -1268,7 +1272,7 @@ void BuildingIsoScene::currentLayerChanged()
         item->layerGroup()->setHighlightLayer(tr("%1_%2").arg(currentLevel()).arg(mNonEmptyLayer));
         item->update();
 
-        if (bounds.isEmpty()) {
+        if (item->layerGroup()->needsSynch() || bounds.isEmpty()) {
             item->synchWithTileLayers();
             item->updateBounds();
         }

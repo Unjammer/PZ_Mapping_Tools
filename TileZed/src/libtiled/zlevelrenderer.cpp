@@ -24,6 +24,7 @@
  */
 
 #include "zlevelrenderer.h"
+#include "../../../shared/rastertilecache.h"
 
 #include "customtilesize.h"
 #include "map.h"
@@ -377,7 +378,8 @@ void ZLevelRenderer::drawTileLayer(QPainter *painter,
                     const QTransform transform(m11, m12, m21, m22, dx, dy);
                     painter->setTransform(transform * baseTransform);
 
-                    painter->drawImage(0, 0, img);
+                    if (!PZTools::drawCachedRasterTile(painter, img))
+                        painter->drawImage(0, 0, img);
 
                     if (bJUMBO && !tilesetName.contains(QStringLiteral("JUMBOXL")) && !tilesetName.contains(QStringLiteral("JUMBOXXL"))) {
                         drawJumboTreeTile_Leaves(cell.tile, painter, baseTransform, x, y, m11, m12, m21, m22);
@@ -575,7 +577,8 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
 
                         painter->setOpacity(opacities[i] * opacity);
 
-                        painter->drawImage(0, 0, img);
+                        if (!PZTools::drawCachedRasterTile(painter, img))
+                            painter->drawImage(0, 0, img);
                         if (countRenderedTiles)
                             addRenderedTileCount();
 
@@ -846,7 +849,8 @@ void ZLevelRenderer::drawJumboTreeTile_Trunk(Tile *tile, QPainter *painter, cons
             dx -= tileWidth / 2;
             QTransform transform(m11, m12, m21, m22, dx, dy);
             painter->setTransform(transform * baseTransform);
-            painter->drawImage(0, 0, img);
+            if (!PZTools::drawCachedRasterTile(painter, img))
+                painter->drawImage(0, 0, img);
             break;
         }
     }
@@ -879,7 +883,8 @@ void ZLevelRenderer::drawJumboTreeTile_Leaves(Tile *tile, QPainter *painter, con
             dx -= tileWidth / 2;
             QTransform transform(m11, m12, m21, m22, dx, dy);
             painter->setTransform(transform * baseTransform);
-            painter->drawImage(0, 0, img);
+            if (!PZTools::drawCachedRasterTile(painter, img))
+                painter->drawImage(0, 0, img);
             break;
         }
     }

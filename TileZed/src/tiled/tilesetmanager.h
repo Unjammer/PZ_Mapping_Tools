@@ -33,6 +33,8 @@
 #include <QTimer>
 
 class QImage;
+class TilesetImageLoader;
+class PROGRESS;
 
 namespace Tiled {
 
@@ -162,7 +164,8 @@ public:
     TilesetImageCache *imageCache() const { return mTilesetImageCache; }
 
     void loadTileset(Tileset *tileset, const QString &imageSource);
-    void waitForTilesets(const QList<Tileset *> &tilesets = QList<Tileset*>());
+    void waitForTilesets(const QList<Tileset *> &tilesets = QList<Tileset*>(),
+                        PROGRESS *progress = nullptr);
 
     void cachePZProperties(Tileset *cached);
     void copyPZProperties(Tileset *src, Tileset *dst);
@@ -185,7 +188,7 @@ private slots:
     void fileChangedTimeout();
 
 #ifdef ZOMBOID
-    void imageLoaded(QImage *image, Tiled::Tileset *tileset);
+    void imageLoaded(Tiled::Tileset *image, Tiled::Tileset *tileset);
     void tilePropertiesChanged();
 #endif
 
@@ -206,6 +209,9 @@ private:
 
 #ifdef ZOMBOID
     TilesetImageCache *mTilesetImageCache;
+    TilesetImageLoader *mImageLoader;
+    QSet<Tileset *> mPendingImages;
+    void queueImage(Tileset *tileset);
 
     Tileset *mInvisibleTileset;
     Tile *mInvisibleTile;

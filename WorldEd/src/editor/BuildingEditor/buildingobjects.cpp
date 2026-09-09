@@ -303,7 +303,7 @@ void FurnitureObject::rotate(bool right)
     } else {
         int x = mX;
         mX = mY;
-        mY = oldWidth - x - newTile->resolved()->size().height();
+        mY = oldWidth - x - oldTile->resolved()->size().width();
     }
 
 #if 0
@@ -338,7 +338,7 @@ void FurnitureObject::flip(bool horizontal)
         mFurnitureTile = mFurnitureTile->owner()->tile(map[mFurnitureTile->orient()]);
         mX = mFloor->width() - mX - qMax(oldWidth, mFurnitureTile->resolved()->size().width());
     } else {
-        int oldHeight = mFurnitureTile->size().height();
+        int oldHeight = mFurnitureTile->resolved()->size().height();
         map[FurnitureTile::FurnitureW] = FurnitureTile::FurnitureW;
         map[FurnitureTile::FurnitureN] = FurnitureTile::FurnitureS;
         map[FurnitureTile::FurnitureE] = FurnitureTile::FurnitureE;

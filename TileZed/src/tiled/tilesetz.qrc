@@ -1,0 +1,23 @@
+<RCC>
+    <qresource prefix="/tilesetz">
+        <file alias="mask_left.png">images/tilesetz/mask_left.png</file>
+        <file alias="mask_right.png">images/tilesetz/mask_right.png</file>
+        <file alias="mask_corner.png">images/tilesetz/mask_corner.png</file>
+        <file alias="mask_trim.png">images/tilesetz/mask_trim.png</file>
+        <file alias="mask_floor.png">images/tilesetz/mask_floor.png</file>
+        <file alias="mask_street_curbs_blend.png">images/tilesetz/mask_street_curbs_blend.png</file>
+        <file alias="mask_left_roof.png">images/tilesetz/mask_left_roof.png</file>
+        <file alias="mask_right_roof.png">images/tilesetz/mask_right_roof.png</file>
+        <file alias="mask_trim_roof.png">images/tilesetz/mask_trim_roof.png</file>
+        <file alias="mask_roof_left_bottom.png">images/tilesetz/mask_roof_left_bottom.png</file>
+        <file alias="mask_roof_left_middle.png">images/tilesetz/mask_roof_left_middle.png</file>
+        <file alias="mask_roof_left_top.png">images/tilesetz/mask_roof_left_top.png</file>
+        <file alias="mask_roof_right_bottom.png">images/tilesetz/mask_roof_right_bottom.png</file>
+        <file alias="mask_roof_right_middle.png">images/tilesetz/mask_roof_right_middle.png</file>
+        <file alias="mask_roof_right_top.png">images/tilesetz/mask_roof_right_top.png</file>
+        <file alias="mask_custom_left.png">images/tilesetz/mask_custom_left.png</file>
+        <file alias="mask_custom_right.png">images/tilesetz/mask_custom_right.png</file>
+        <file alias="mask_custom_corner.png">images/tilesetz/mask_custom_corner.png</file>
+        <file alias="mask_custom_trim.png">images/tilesetz/mask_custom_trim.png</file>
+    </qresource>
+</RCC>

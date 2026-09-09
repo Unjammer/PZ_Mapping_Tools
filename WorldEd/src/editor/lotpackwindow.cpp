@@ -33,8 +33,12 @@
 
 #include <qmath.h>
 #include <QDebug>
+#include <QDir>
 #include <QFileDialog>
+#include <QImageWriter>
+#include <QMessageBox>
 #include <QSettings>
+#include <QStandardPaths>
 
 using namespace Tiled;
 
@@ -637,6 +641,8 @@ LotPackWindow::LotPackWindow(QWidget *parent) :
 
     connect(ui->actionOpen_World, &QAction::triggered, this, qOverload<>(&LotPackWindow::open));
     connect(ui->actionClose, &QAction::triggered, this, &QWidget::close);
+    connect(ui->actionSaveScreenshot, &QAction::triggered,
+            this, &LotPackWindow::saveScreenshot);
 
     connect(ui->actionZoomIn, &QAction::triggered, this, &LotPackWindow::zoomIn);
     connect(ui->actionZoomOut, &QAction::triggered, this, &LotPackWindow::zoomOut);
@@ -761,12 +767,14 @@ void LotPackWindow::open(const QString &directory)
         delete mWorld;
     mWorld = world;
 
+    ui->actionSaveScreenshot->setEnabled(true);
     addRecentDirectory(directory);
     setRecentMenu();
 }
 
 void LotPackWindow::closeWorld()
 {
+    ui->actionSaveScreenshot->setEnabled(false);
     qDeleteAll(IsoLot::InfoHeaders);
     IsoLot::InfoHeaders.clear();
     IsoLot::CellCoordToLotHeader.clear();
@@ -778,6 +786,32 @@ void LotPackWindow::closeWorld()
         delete mWorld;
         mWorld = 0;
     }
+}
+
+void LotPackWindow::saveScreenshot()
+{
+    if (!mWorld)
+        return;
+    const QImage image = mView->viewport()->grab().toImage();
+    QSettings settings;
+    const QString directory = settings.value(
+                QStringLiteral("LotPackWindow/ScreenshotDirectory"),
+                QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
+    QString fileName = QFileDialog::getSaveFileName(
+                this, tr("Save Screenshot"),
+                QDir(directory).filePath(QStringLiteral("screenshot.png")),
+                tr("PNG images (*.png)"));
+    if (fileName.isEmpty())
+        return;
+    if (QFileInfo(fileName).suffix().isEmpty())
+        fileName += QStringLiteral(".png");
+    QImageWriter writer(fileName, "png");
+    if (!writer.write(image)) {
+        QMessageBox::warning(this, tr("Save Screenshot"), writer.errorString());
+        return;
+    }
+    settings.setValue(QStringLiteral("LotPackWindow/ScreenshotDirectory"),
+                      QFileInfo(fileName).absolutePath());
 }
 
 void LotPackWindow::zoomIn()

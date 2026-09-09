@@ -5,8 +5,14 @@
 
 Use Tile Mode to draw tiles by hand like you would in TileZed.&nbsp; In
 general, you should always try to use the tools in Ortho Mode or Iso
-Mode to create your buildings.&nbsp; Any tiles you paint in Tile Mode
-will be erased if you rotate or flip a building.<br>
+Mode to create your buildings.&nbsp; Rotations and mirrors preserve manually
+painted tile positions and square attributes, with Undo and Redo. Sprite IDs
+stay unchanged, so directional artwork may need adjustment.<br>
+A painted tile on the extra outer row or column that would leave the
+supported coordinates is identified before any change. Move it inward or
+enlarge the building before transforming it.<br>
+Selections are retained between modes. Iso, Tile and Properties share their
+camera position and zoom. Ortho retains its separate camera.<br>
 
 <h3>Available Tile Layers</h3>
 BuildingEd always creates certain tile layers that are needed by rooms

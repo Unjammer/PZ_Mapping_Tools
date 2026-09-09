@@ -16,6 +16,7 @@
  */
 
 #include "embeddedmainwindow.h"
+#include "../../../../shared/settingsvalue.h"
 
 #include <QAction>
 #include <QDockWidget>
@@ -63,10 +64,10 @@ void EmbeddedMainWindow::readSettings(QSettings &settings)
 
 void EmbeddedMainWindow::writeSettings(QSettings &settings)
 {
-    settings.setValue(objectName() + QLatin1String(".state"), saveState(STATE_VERSION));
+    PZTools::setValueIfChanged(settings, objectName() + QLatin1String(".state"), saveState(STATE_VERSION));
 
     foreach (QDockWidget *dockWidget, dockWidgets()) {
-        settings.setValue(dockWidget->objectName(), dockWidget->property(KEY_DOCKWIDGET_ACTIVE_STATE));
+        PZTools::setValueIfChanged(settings, dockWidget->objectName(), dockWidget->property(KEY_DOCKWIDGET_ACTIVE_STATE));
     }
 }
 

@@ -64,7 +64,7 @@ bool MapLevel::levelForLayer(const QString &layerName, int *levelPtr)
     QStringList sl = layerName.trimmed().split(QLatin1Char('_'));
     if (sl.count() > 1 && !sl[1].isEmpty()) {
         bool conversionOK;
-        uint level = sl[0].toUInt(&conversionOK);
+        const int level = sl[0].toInt(&conversionOK);
         if (levelPtr) (*levelPtr) = level;
         return conversionOK;
     }

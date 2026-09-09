@@ -678,6 +678,8 @@ BuildingTilesDialog::BuildingTilesDialog(QWidget *parent) :
             this, &BuildingTilesDialog::categoryChanged);
     connect(ui->categoryList, &QListWidget::itemChanged,
             this, &BuildingTilesDialog::categoryNameEdited);
+    connect(FurnitureGroups::instance(), &FurnitureGroups::furnitureCatalogLoaded,
+            this, &BuildingTilesDialog::setCategoryList);
 //    mCategory = BuildingTiles::instance()->categories().at(ui->categoryList->currentRow());
 
     ui->filterEdit->setClearButtonEnabled(true);
@@ -941,14 +943,18 @@ bool BuildingTilesDialog::changes()
 
 void BuildingTilesDialog::selectCategory(BuildingTileCategory *category)
 {
+    setCategoryList();
     int index = BuildingTilesMgr::instance()->indexOf(category);
-    ui->categoryList->setCurrentRow(mRowOfFirstCategory + index);
+    if (index >= 0)
+        ui->categoryList->setCurrentRow(mRowOfFirstCategory + index);
 }
 
 void BuildingTilesDialog::selectCategory(FurnitureGroup *furnitureGroup)
 {
+    setCategoryList();
     int index = FurnitureGroups::instance()->indexOf(furnitureGroup);
-    ui->categoryList->setCurrentRow(mRowOfFirstFurnitureGroup + index);
+    if (index >= 0)
+        ui->categoryList->setCurrentRow(mRowOfFirstFurnitureGroup + index);
 }
 
 void BuildingTilesDialog::reparent(QWidget *parent)

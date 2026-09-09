@@ -113,8 +113,10 @@ bool ClipboardManager::copySelection(const MapDocument *mapDocument,
         Map copyMap(map->orientation(),
                     bounds.width(), bounds.height(),
                     map->tileWidth(), map->tileHeight());
+        const bool singleLayer = !scope || (scope->layerMode() == TileSelectionScope::CurrentLayer
+                && scope->levelMode() == TileSelectionScope::CurrentLevel);
         copyMap.setProperty(QStringLiteral("pz.selection.kind"),
-                            QStringLiteral("multi-layer"));
+                            singleLayer ? QStringLiteral("single-layer") : QStringLiteral("multi-layer"));
         copyMap.setProperty(QStringLiteral("pz.selection.anchorLevel"),
                             QString::number(tileLayer->level()));
 

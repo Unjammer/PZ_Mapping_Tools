@@ -8,12 +8,7 @@ isEmpty(INSTALL_ONLY_BUILD) {
     target.path = $${LIBDIR}
     INSTALLS += target
 }
-macx {
-    DESTDIR = ../../bin/TileZed.app/Contents/Frameworks
-    QMAKE_LFLAGS_SONAME = -Wl,-install_name,@rpath/../Frameworks/
-} else {
-    DESTDIR = ../../lib
-}
+DESTDIR = ../../lib
 DLLDESTDIR = ../..
 
 DEFINES += QT_NO_CAST_FROM_ASCII \
@@ -45,6 +40,7 @@ SOURCES += compression.cpp \
     ztilelayergroup.cpp \
     tile.cpp
 HEADERS += compression.h \
+    ../../../shared/rastertilecache.h \
     customtilesize.h \
     imagelayer.h \
     isometricrenderer.h \
@@ -68,7 +64,3 @@ HEADERS += compression.h \
     gidmapper.h \
     zlevelrenderer.h \
     ztilelayergroup.h
-macx {
-    contains(QT_CONFIG, ppc):CONFIG += x86 \
-        ppc
-}

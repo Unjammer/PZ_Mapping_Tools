@@ -59,6 +59,7 @@ class FloorTileGrid;
 class Room;
 
 class BuildingIsoScene;
+class BuildingRoomRegions;
 
 class CompositeLayerGroupItem : public QGraphicsItem
 {
@@ -330,6 +331,7 @@ private:
     int mCurrentLevel;
     QPoint mHighlightRoomPos;
     bool mHighlightRoomLock;
+    BuildingRoomRegions *mRoomRegions;
     bool mDeferredCurrentFloorChange;
     bool mDeferredStructuralMapRebuild;
     QSet<BuildingFloor*> mDeferredWholeFloorTileUpdates;

@@ -38,6 +38,7 @@
 #include <QScreen>
 #include <QScrollArea>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
 #include <QSplitter>
@@ -47,6 +48,7 @@
 #include <QTabWidget>
 #include <QTemporaryDir>
 #include <QToolButton>
+#include <QTimer>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -58,6 +60,28 @@ constexpr float VerticalGeometryPixelsPerUnit = 96.0f;
 constexpr float VerticalGeometryScale = 0.8164966667f;
 constexpr float VerticalPixelsPerUnit =
         VerticalGeometryPixelsPerUnit * VerticalGeometryScale;
+
+QColor depthColor(int depth)
+{
+    return QColor::fromHsv(240 - qRound(depth * 240.0 / 255.0), 220, 255);
+}
+
+bool geometryEqual(const QVector<DepthPrimitive> &left,
+                   const QVector<DepthPrimitive> &right)
+{
+    if (left.size() != right.size())
+        return false;
+    for (int i = 0; i < left.size(); ++i) {
+        const DepthPrimitive &a = left.at(i);
+        const DepthPrimitive &b = right.at(i);
+        if (a.type != b.type || a.translate != b.translate || a.rotate != b.rotate
+                || a.minimum != b.minimum || a.maximum != b.maximum
+                || a.radius1 != b.radius1 || a.radius2 != b.radius2
+                || a.height != b.height || a.plane != b.plane || a.points != b.points)
+            return false;
+    }
+    return true;
+}
 
 QImage normalisedDepthTile(const QImage &image)
 {
@@ -205,6 +229,7 @@ DepthMapCanvas::DepthMapCanvas(QWidget *parent)
 }
 void DepthMapCanvas::setImages(const QImage &source, const QImage &depth)
 {
+    mPreview = QImage();
     mSource = source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     if (mSource.size() != QSize(128, 256)) {
         QImage fitted(128, 256, QImage::Format_ARGB32_Premultiplied);
@@ -218,6 +243,12 @@ void DepthMapCanvas::setImages(const QImage &source, const QImage &depth)
 void DepthMapCanvas::setDepthImage(const QImage &depth)
 {
     mDepth = normalisedDepthTile(depth);
+    rebuildOverlay();
+    update();
+}
+void DepthMapCanvas::setPreviewImage(const QImage &image)
+{
+    mPreview = image;
     rebuildOverlay();
     update();
 }
@@ -249,11 +280,17 @@ void DepthMapCanvas::paintEvent(QPaintEvent *)
                              ? checkerA : checkerB);
         }
     }
-    painter.setOpacity(0.82);
-    painter.drawImage(rect(), mSource);
-    painter.setOpacity(1.0);
-    painter.drawImage(rect(), mOverlay);
-    for (int index = 0; index < mGeometry.size(); ++index) {
+    if (mDisplayMode == 2) {
+        painter.drawImage(rect(), mPreview.isNull() ? mDepth : mPreview);
+    } else {
+        painter.drawImage(rect(), mSource);
+        if (mDisplayMode == 0) {
+            painter.setOpacity(mOverlayOpacity);
+            painter.drawImage(rect(), mOverlay);
+            painter.setOpacity(1.0);
+        }
+    }
+    for (int index = 0; mGeometryEditing && index < mGeometry.size(); ++index) {
         const bool selected = index == mSelectedGeometry;
         QPen pen(selected ? QColor(255, 196, 32)
                           : QColor(30, 220, 255, 210),
@@ -317,6 +354,13 @@ void DepthMapCanvas::paintEvent(QPaintEvent *)
         }
     }
     painter.setBrush(Qt::NoBrush);
+    if (!mGeometryEditing && mSource.rect().contains(mCursorPoint)) {
+        const QPointF center = (QPointF(mCursorPoint) + QPointF(0.5, 0.5)) * mZoom;
+        painter.setPen(QPen(Qt::black, 3));
+        painter.drawEllipse(center, qreal(mBrushRadius * mZoom), qreal(mBrushRadius * mZoom));
+        painter.setPen(QPen(mTool == EraseTool ? Qt::white : depthColor(mBrushDepth), 1));
+        painter.drawEllipse(center, qreal(mBrushRadius * mZoom), qreal(mBrushRadius * mZoom));
+    }
     if (mZoom >= 4) {
         painter.setPen(QColor(255, 255, 255, 28));
         for (int x = 0; x <= 128; ++x)
@@ -339,6 +383,7 @@ void DepthMapCanvas::mousePressEvent(QMouseEvent *event)
             mLastGeometryPoint = point;
             mLastResizeDistance =
                     QLineF(bounds.center(), point).length();
+            emit geometryEditStarted();
             return;
         }
         const int picked = pickGeometry(point);
@@ -348,10 +393,13 @@ void DepthMapCanvas::mousePressEvent(QMouseEvent *event)
             mGeometryResizing = false;
             mLastGeometryPoint = point;
             emit geometryPicked(picked);
+            emit geometryEditStarted();
             update();
         }
         return;
     }
+    if (mGeometryEditing)
+        return;
     if (event->button() != Qt::LeftButton &&
             event->button() != Qt::RightButton) {
         QWidget::mousePressEvent(event);
@@ -375,8 +423,12 @@ void DepthMapCanvas::mouseMoveEvent(QMouseEvent *event)
             }
             mLastResizeDistance = distance;
         } else if (mGeometryDragging && mSelectedGeometry >= 0) {
-            const QVector3D delta =
-                    geometryDragDelta(mLastGeometryPoint, point);
+            QVector3D delta = geometryDragDelta(mLastGeometryPoint, point);
+            if (event->modifiers() & Qt::ShiftModifier) {
+                const qreal vertical = DepthGeometryRasterizer::project(QVector3D(0, 1, 0)).y()
+                        - DepthGeometryRasterizer::project(QVector3D()).y();
+                delta = QVector3D(0, float((point.y() - mLastGeometryPoint.y()) / vertical), 0);
+            }
             if (!delta.isNull())
                 emit geometryTranslated(mSelectedGeometry, delta);
             mLastGeometryPoint = point;
@@ -392,8 +444,11 @@ void DepthMapCanvas::mouseReleaseEvent(QMouseEvent *event)
 {
     if (mGeometryEditing) {
         if (event->button() == Qt::LeftButton) {
+            const bool edited = mGeometryDragging || mGeometryResizing;
             mGeometryDragging = false;
             mGeometryResizing = false;
+            if (edited)
+                emit geometryEditFinished();
         }
         return;
     }
@@ -520,6 +575,8 @@ QVector3D DepthMapCanvas::geometryDragDelta(
 }
 void DepthMapCanvas::leaveEvent(QEvent *event)
 {
+    mCursorPoint = QPoint(-1, -1);
+    update();
     emit cursorPixelChanged(-1, -1, 0, false);
     QWidget::leaveEvent(event);
 }
@@ -530,7 +587,7 @@ QPoint DepthMapCanvas::imagePoint(const QPoint &widgetPoint) const
 void DepthMapCanvas::beginStroke(const QPoint &point,
                                  Qt::MouseButton button)
 {
-    if (!QRect(0, 0, 128, 256).contains(point))
+    if (mDepth.isNull() || !QRect(0, 0, 128, 256).contains(point))
         return;
     if (mTool == PickTool && button == Qt::LeftButton) {
         const QRgb pixel = mDepth.pixel(point);
@@ -545,6 +602,8 @@ void DepthMapCanvas::beginStroke(const QPoint &point,
     mLastPoint = point;
     emit editStarted(mDepth);
     applyBrush(point);
+    rebuildOverlay();
+    update();
 }
 void DepthMapCanvas::continueStroke(const QPoint &point)
 {
@@ -557,6 +616,8 @@ void DepthMapCanvas::continueStroke(const QPoint &point)
     const int steps = qMax(qAbs(dx), qAbs(dy));
     if (steps == 0) {
         applyBrush(bounded);
+        rebuildOverlay();
+        update();
         return;
     }
     for (int i = 1; i <= steps; ++i) {
@@ -566,6 +627,8 @@ void DepthMapCanvas::continueStroke(const QPoint &point)
         applyBrush(interpolated);
     }
     mLastPoint = bounded;
+    rebuildOverlay();
+    update();
 }
 void DepthMapCanvas::applyBrush(const QPoint &point)
 {
@@ -585,6 +648,8 @@ void DepthMapCanvas::applyBrush(const QPoint &point)
             const int ddy = y - point.y();
             if (ddx * ddx + ddy * ddy >= radiusSquared)
                 continue;
+            if (!erase && mLockSourceAlpha && qAlpha(mSource.pixel(x, y)) == 0)
+                continue;
             const QRgb replacement = erase
                     ? qRgba(0, 0, 0, 0)
                     : qRgba(mBrushDepth, mBrushDepth,
@@ -597,8 +662,6 @@ void DepthMapCanvas::applyBrush(const QPoint &point)
     }
     if (changed) {
         mStrokeChanged = true;
-        rebuildOverlay();
-        update();
     }
     reportCursor(point);
 }
@@ -606,26 +669,26 @@ void DepthMapCanvas::rebuildOverlay()
 {
     mOverlay = QImage(128, 256, QImage::Format_ARGB32_Premultiplied);
     mOverlay.fill(Qt::transparent);
-    for (int y = 0; y < mDepth.height(); ++y) {
-        for (int x = 0; x < mDepth.width(); ++x) {
-            const QRgb pixel = mDepth.pixel(x, y);
+    const QImage &displayed = mPreview.isNull() ? mDepth : mPreview;
+    for (int y = 0; y < displayed.height(); ++y) {
+        for (int x = 0; x < displayed.width(); ++x) {
+            const QRgb pixel = displayed.pixel(x, y);
             if (qAlpha(pixel) == 0)
                 continue;
             const int depth = qBlue(pixel);
-            QColor heat = QColor::fromHsv(
-                        240 - qRound(depth * 240.0 / 255.0),
-                        220, 255, 178);
-            mOverlay.setPixelColor(x, y, heat);
+            mOverlay.setPixelColor(x, y, depthColor(depth));
         }
     }
 }
 void DepthMapCanvas::reportCursor(const QPoint &point)
 {
+    mCursorPoint = point;
+    update();
     if (!QRect(0, 0, 128, 256).contains(point)) {
         emit cursorPixelChanged(-1, -1, 0, false);
         return;
     }
-    const QRgb pixel = mDepth.pixel(point);
+    const QRgb pixel = (mPreview.isNull() ? mDepth : mPreview).pixel(point);
     emit cursorPixelChanged(point.x(), point.y(), qBlue(pixel),
                             qAlpha(pixel) != 0);
 }
@@ -634,6 +697,10 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
 {
     setAttribute(Qt::WA_DeleteOnClose, false);
     setWindowTitle(tr("Depth Map Editor"));
+    mPreviewTimer = new QTimer(this);
+    mPreviewTimer->setSingleShot(true);
+    mPreviewTimer->setInterval(32);
+    connect(mPreviewTimer, &QTimer::timeout, this, &DepthMapEditor::refreshGeometryPreview);
     const QRect available = QApplication::primaryScreen()
             ? QApplication::primaryScreen()->availableGeometry()
             : QRect(0, 0, 1920, 1080);
@@ -755,27 +822,27 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
             new QPushButton(tr("Remove"), geometryListPanel);
     addGeometryLayout->addWidget(addXYButton, 0, 0);
     addGeometryLayout->addWidget(addXZButton, 0, 1);
-    addGeometryLayout->addWidget(addYZButton, 0, 2);
-    addGeometryLayout->addWidget(addBoxButton, 1, 0);
-    addGeometryLayout->addWidget(addCylinderButton, 1, 1);
-    addGeometryLayout->addWidget(duplicateGeometryButton, 2, 0);
-    addGeometryLayout->addWidget(removeGeometryButton, 2, 1);
+    addGeometryLayout->addWidget(addYZButton, 1, 0);
+    addGeometryLayout->addWidget(addBoxButton, 2, 0);
+    addGeometryLayout->addWidget(addCylinderButton, 2, 1);
+    addGeometryLayout->addWidget(duplicateGeometryButton, 3, 0);
+    addGeometryLayout->addWidget(removeGeometryButton, 3, 1);
     geometryListLayout->addLayout(addGeometryLayout);
     QGroupBox *presetGroup = new QGroupBox(
                 tr("Reusable primitive presets"), geometryListPanel);
     QVBoxLayout *presetLayout = new QVBoxLayout(presetGroup);
     mPresetCombo = new QComboBox(presetGroup);
     presetLayout->addWidget(mPresetCombo);
-    QHBoxLayout *presetButtons = new QHBoxLayout;
+    QGridLayout *presetButtons = new QGridLayout;
     QPushButton *savePresetButton =
             new QPushButton(tr("Save Selected..."), presetGroup);
     mInsertPresetButton =
             new QPushButton(tr("Insert Preset"), presetGroup);
     mDeletePresetButton =
             new QPushButton(tr("Delete"), presetGroup);
-    presetButtons->addWidget(savePresetButton);
-    presetButtons->addWidget(mInsertPresetButton);
-    presetButtons->addWidget(mDeletePresetButton);
+    presetButtons->addWidget(savePresetButton, 0, 0, 1, 2);
+    presetButtons->addWidget(mInsertPresetButton, 1, 0);
+    presetButtons->addWidget(mDeletePresetButton, 1, 1);
     presetLayout->addLayout(presetButtons);
     presetGroup->setToolTip(tr(
         "Presets are stored in portable settings and can be inserted "
@@ -866,6 +933,8 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
     cylinderLayout->addWidget(mRadiusSpins[0], 0, 1);
     cylinderLayout->addWidget(new QLabel(tr("Top radius")), 1, 0);
     cylinderLayout->addWidget(mRadiusSpins[1], 1, 1);
+    mRadiusSpins[1]->setEnabled(false);
+    mRadiusSpins[1]->setToolTip(tr("Preserved for file compatibility. Build 42 renders cylinders using the base radius."));
     cylinderLayout->addWidget(new QLabel(tr("Height")), 2, 0);
     cylinderLayout->addWidget(mHeightSpin, 2, 1);
     mShapeStack->addWidget(cylinderPage);
@@ -934,9 +1003,9 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
     geometryPropertiesLayout->addWidget(mRespectAlphaCheck);
     QHBoxLayout *generateLayout = new QHBoxLayout;
     QPushButton *generateSelectedButton =
-            new QPushButton(tr("Primitive to Pixels"), geometryProperties);
+            new QPushButton(tr("Merge Selected"), geometryProperties);
     QPushButton *generateAllButton =
-            new QPushButton(tr("Rebuild Tile from Geometry"), geometryProperties);
+            new QPushButton(tr("Generate All"), geometryProperties);
     generateSelectedButton->setToolTip(
         tr("Add the selected primitive to the current depth pixels."));
     generateAllButton->setToolTip(
@@ -944,13 +1013,22 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
     generateLayout->addWidget(generateSelectedButton);
     generateLayout->addWidget(generateAllButton);
     geometryPropertiesLayout->addLayout(generateLayout);
+    mLivePreviewCheck = new QCheckBox(tr("Live depth preview"), geometryProperties);
+    mLivePreviewCheck->setChecked(true);
+    geometryPropertiesLayout->addWidget(mLivePreviewCheck);
+    QPushButton *fitBoxButton = new QPushButton(tr("Fit Box to Sprite"), geometryListPanel);
+    fitBoxButton->setToolTip(tr("Approximate the opaque silhouette with a box. Adjust its dimensions to match the object."));
+    geometryListLayout->addWidget(fitBoxButton);
+    connect(fitBoxButton, &QPushButton::clicked, this, &DepthMapEditor::fitSelectedGeometry);
+    connect(mLivePreviewCheck, &QCheckBox::toggled, this, &DepthMapEditor::refreshGeometryPreview);
+    connect(mRespectAlphaCheck, &QCheckBox::toggled, this, &DepthMapEditor::refreshGeometryPreview);
     geometryPropertiesLayout->addStretch();
     geometryPropertiesScroll->setWidget(geometryProperties);
     mGeometrySplitter->addWidget(geometryListPanel);
     mGeometrySplitter->addWidget(geometryPropertiesScroll);
     mGeometrySplitter->setStretchFactor(0, 1);
     mGeometrySplitter->setStretchFactor(1, 2);
-    mGeometrySplitter->setSizes({ 240, 390 });
+    mGeometrySplitter->setSizes({ 190, 440 });
     geometryTabLayout->addWidget(mGeometrySplitter);
     mModeTabs->addTab(geometryTab, tr("3D Geometry"));
     QWidget *pixelTab = new QWidget(mModeTabs);
@@ -986,6 +1064,10 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
     mDepthSlider->setRange(0, 255);
     mDepthSlider->setValue(128);
     mDepthSlider->setMinimumWidth(180);
+    mDepthSlider->setStyleSheet(QStringLiteral(
+        "QSlider::groove:horizontal { height: 12px; background: qlineargradient("
+        "x1:0, y1:0, x2:1, y2:0, stop:0 #2323ff, stop:0.25 #23ffff, "
+        "stop:0.5 #23ff23, stop:0.75 #ffff23, stop:1 #ff2323); }"));
     mDepthSpin = new QSpinBox;
     mDepthSpin->setRange(0, 255);
     mDepthSpin->setValue(128);
@@ -1005,13 +1087,38 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
     toolControlsLayout->addWidget(mZoomCombo, 2, 1);
     toolControlsLayout->setColumnStretch(1, 1);
     pixelTabLayout->addLayout(toolControlsLayout);
+    QHBoxLayout *paletteLayout = new QHBoxLayout;
+    for (int index = 0; index <= 8; ++index) {
+        const int value = qRound(index * 255.0 / 8.0);
+        QToolButton *swatch = new QToolButton(pixelTab);
+        swatch->setText(QString::number(value));
+        swatch->setToolTip(tr("Paint depth %1 (%2)").arg(value).arg(
+            value == 0 ? tr("near") : value == 255 ? tr("far") : tr("intermediate")));
+        swatch->setStyleSheet(QStringLiteral("background-color: %1; color: %2; padding: 4px;")
+            .arg(depthColor(value).name(), value < 32 ? QStringLiteral("white") : QStringLiteral("black")));
+        connect(swatch, &QToolButton::clicked, this, [this, value, paintButton]() {
+            mDepthSpin->setValue(value);
+            paintButton->click();
+        });
+        paletteLayout->addWidget(swatch);
+    }
+    pixelTabLayout->addLayout(paletteLayout);
+    QCheckBox *lockAlpha = new QCheckBox(tr("Paint only inside the sprite"), pixelTab);
+    lockAlpha->setChecked(true);
+    pixelTabLayout->addWidget(lockAlpha);
+    mEstimateMode = new QComboBox(pixelTab);
+    mEstimateMode->addItem(tr("Vertical object: estimate from column bases"),
+                          int(DepthGeometryRasterizer::VerticalObject));
+    mEstimateMode->addItem(tr("Ground surface: lower pixels are nearer"),
+                          int(DepthGeometryRasterizer::GroundSurface));
+    pixelTabLayout->addWidget(mEstimateMode);
     QHBoxLayout *operationLayout = new QHBoxLayout;
     QPushButton *clearButton = new QPushButton(tr("Clear Tile"));
     QPushButton *fillButton = new QPushButton(tr("Fill Source Mask"));
-    QPushButton *seedButton = new QPushButton(tr("Seed Vertical Depth"));
+    QPushButton *seedButton = new QPushButton(tr("Estimate from Pixels"));
     seedButton->setToolTip(
-        tr("Create an editable Y-gradient inside the source alpha mask. "
-           "This is a starting aid, not geometry-derived game depth."));
+        tr("Estimate depth using the game's projection and the chosen surface model. "
+           "A silhouette cannot identify hidden geometry. Retouch the result or use fitted volumes."));
     QPushButton *copyButton = new QPushButton(tr("Copy"));
     mPasteButton = new QPushButton(tr("Paste"));
     operationLayout->addWidget(clearButton);
@@ -1022,9 +1129,13 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
     operationLayout->addWidget(mPasteButton);
     operationLayout->addStretch();
     pixelTabLayout->addLayout(operationLayout);
+    QPushButton *invertButton = new QPushButton(tr("Invert Defined Depths"), pixelTab);
+    pixelTabLayout->addWidget(invertButton);
+    connect(invertButton, &QPushButton::clicked, this, &DepthMapEditor::invertDepth);
     QLabel *pixelExplanation = new QLabel(
-        tr("Pixel tools are for inspection and retouching after the "
-           "geometry-derived depth has been generated."), pixelTab);
+        tr("Choose a color to paint depth. Blue is near (0), red is far (255). "
+           "The PNG stores grayscale values. On the ground, lower pixels are nearer. "
+           "On a vertical face, higher points are also nearer to the camera."), pixelTab);
     pixelExplanation->setWordWrap(true);
     pixelTabLayout->addWidget(pixelExplanation);
     pixelTabLayout->addStretch(1);
@@ -1035,6 +1146,19 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
     mTileLabel->setFont(tileLabelFont);
     editorLayout->addWidget(mTileLabel);
     mCanvas = new DepthMapCanvas;
+    connect(lockAlpha, &QCheckBox::toggled, mCanvas, &DepthMapCanvas::setLockSourceAlpha);
+    QHBoxLayout *previewControls = new QHBoxLayout;
+    QComboBox *displayMode = new QComboBox(editorPanel);
+    displayMode->addItems({ tr("Color depth overlay"), tr("Source sprite"), tr("Grayscale depth") });
+    previewControls->addWidget(displayMode);
+    QSlider *opacitySlider = new QSlider(Qt::Horizontal, editorPanel);
+    opacitySlider->setRange(0, 100);
+    opacitySlider->setValue(70);
+    opacitySlider->setToolTip(tr("Depth overlay opacity"));
+    previewControls->addWidget(opacitySlider);
+    editorLayout->addLayout(previewControls);
+    connect(displayMode, qOverload<int>(&QComboBox::currentIndexChanged), mCanvas, &DepthMapCanvas::setDisplayMode);
+    connect(opacitySlider, &QSlider::valueChanged, mCanvas, &DepthMapCanvas::setOverlayOpacity);
     mCanvasScrollArea = new QScrollArea(editorPanel);
     mCanvasScrollArea->setBackgroundRole(QPalette::Dark);
     mCanvasScrollArea->setAlignment(Qt::AlignCenter);
@@ -1042,8 +1166,9 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
     mCanvasScrollArea->setWidgetResizable(false);
     editorLayout->addWidget(mCanvasScrollArea, 1);
     QLabel *legend = new QLabel(
-        tr("Overlay: blue = near/low depth, red = far/high depth; "
-           "transparent = undefined. Right-drag temporarily erases."),
+        tr("Blue = near (0), red = far (255), transparent = undefined. "
+           "Volumes show a live preview. Generate All applies it to the depth tile. "
+           "In Paint mode, right-drag erases."),
         editorPanel);
     legend->setWordWrap(true);
     editorLayout->addWidget(legend);
@@ -1133,6 +1258,11 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
             this, &DepthMapEditor::canvasGeometryTranslated);
     connect(mCanvas, &DepthMapCanvas::geometryScaled,
             this, &DepthMapEditor::canvasGeometryScaled);
+    connect(mCanvas, &DepthMapCanvas::geometryEditStarted, this, [this]() {
+        mGeometryBeforeDrag = currentGeometryValue();
+        mGeometryDragActive = true;
+    });
+    connect(mCanvas, &DepthMapCanvas::geometryEditFinished, this, &DepthMapEditor::finishGeometryEdit);
     connect(mCanvas, &DepthMapCanvas::cursorPixelChanged,
             this, [this](int x, int y, int depth, bool defined) {
         if (x < 0) {
@@ -1200,11 +1330,11 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
     connect(mModeTabs, &QTabWidget::currentChanged,
             this, [this](int index) {
         mCanvas->setGeometryEditing(index == 0);
+        refreshGeometryPreview();
         if (index == 0)
             statusBar()->showMessage(
-                tr("Geometry mode: click a wireframe to select it; "
-                   "drag it to move on X/Z, or drag a gold corner "
-                   "handle to resize it."), 5000);
+                tr("Drag a volume across the ground. Shift-drag changes height. "
+                   "Gold handles resize the volume. Generate All applies the preview."), 5000);
     });
     connect(resetLayoutAction, &QAction::triggered,
             this, [this]() {
@@ -1216,13 +1346,14 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
         resize(target);
         move(screenArea.center() - rect().center());
         mMainSplitter->setSizes({ 380, 620, 650 });
-        mGeometrySplitter->setSizes({ 240, 390 });
+        mGeometrySplitter->setSizes({ 190, 440 });
         QSettings settings;
         settings.remove(QStringLiteral("DepthMapEditor/WindowGeometry"));
         settings.remove(QStringLiteral("DepthMapEditor/MainSplitter"));
         settings.remove(QStringLiteral("DepthMapEditor/GeometrySplitter"));
         settings.sync();
     });
+    mModeTabs->setCurrentIndex(1);
     QSettings layoutSettings;
     if (layoutSettings.contains(
                 QStringLiteral("DepthMapEditor/WindowGeometry"))) {
@@ -1305,6 +1436,7 @@ bool DepthMapEditor::runFormatSelfTest(QString *error)
             *error = QStringLiteral("Cannot initialise the editor");
         return false;
     }
+    editor.mModeTabs->setCurrentIndex(0);
     editor.resize(1760, 940);
     editor.show();
     QApplication::processEvents();
@@ -1890,15 +2022,20 @@ void DepthMapEditor::seedVerticalDepth()
 {
     if (currentTileId() < 0)
         return;
-    const QImage source = mCanvas->sourceImage();
-    QImage result(DepthTileWidth, DepthTileHeight, QImage::Format_ARGB32);
-    result.fill(Qt::transparent);
+    commitCurrentOperation(DepthGeometryRasterizer::estimatePixels(mCanvas->sourceImage(),
+        static_cast<DepthGeometryRasterizer::PixelEstimate>(mEstimateMode->currentData().toInt())));
+}
+void DepthMapEditor::invertDepth()
+{
+    if (currentTileId() < 0)
+        return;
+    QImage result = depthTileImage(currentTileId());
     for (int y = 0; y < result.height(); ++y) {
-        const int depth = 1 + qRound(254.0 * y /
-                                     qMax(1, result.height() - 1));
         for (int x = 0; x < result.width(); ++x) {
-            if (qAlpha(source.pixel(x, y)) != 0)
-                result.setPixel(x, y, qRgba(depth, depth, depth, 255));
+            if (qAlpha(result.pixel(x, y))) {
+                const int value = 255 - qBlue(result.pixel(x, y));
+                result.setPixel(x, y, qRgba(value, value, value, 255));
+            }
         }
     }
     commitCurrentOperation(result);
@@ -1924,7 +2061,14 @@ void DepthMapEditor::undo()
         return;
     const Edit &edit = mEdits.at(mEditIndex - 1);
     --mEditIndex;
-    applyEditImage(edit.tileId, edit.before);
+    if (edit.geometryEdit) {
+        mGeometryDocument.tiles()[edit.tileId].primitives = edit.beforeGeometry;
+        mGeometryDirty = true;
+        if (edit.tileId == currentTileId())
+            updateGeometryList();
+    } else {
+        applyEditImage(edit.tileId, edit.before);
+    }
     setDirtyRevision(edit.beforeRevision);
 }
 void DepthMapEditor::redo()
@@ -1933,7 +2077,14 @@ void DepthMapEditor::redo()
         return;
     const Edit &edit = mEdits.at(mEditIndex);
     ++mEditIndex;
-    applyEditImage(edit.tileId, edit.after);
+    if (edit.geometryEdit) {
+        mGeometryDocument.tiles()[edit.tileId].primitives = edit.afterGeometry;
+        mGeometryDirty = true;
+        if (edit.tileId == currentTileId())
+            updateGeometryList();
+    } else {
+        applyEditImage(edit.tileId, edit.after);
+    }
     setDirtyRevision(edit.afterRevision);
 }
 void DepthMapEditor::addPolygonXY()
@@ -1950,11 +2101,30 @@ void DepthMapEditor::addPolygonYZ()
 }
 void DepthMapEditor::addBox()
 {
-    addGeometry(DepthPrimitive::makeBox());
+    addGeometry(DepthGeometryRasterizer::fittedBox(mCanvas->sourceImage()));
+}
+void DepthMapEditor::fitSelectedGeometry()
+{
+    if (currentTileId() < 0)
+        return;
+    const int index = selectedGeometryIndex();
+    if (index < 0 || currentGeometry().at(index).type != DepthPrimitiveType::Box) {
+        addBox();
+        return;
+    }
+    currentGeometry()[index] = DepthGeometryRasterizer::fittedBox(mCanvas->sourceImage());
+    setGeometryDirty();
+    updateGeometryControls();
+    updateCanvasGeometry();
 }
 void DepthMapEditor::addCylinder()
 {
-    addGeometry(DepthPrimitive::makeCylinder());
+    const DepthPrimitive box = DepthGeometryRasterizer::fittedBox(mCanvas->sourceImage());
+    DepthPrimitive cylinder = DepthPrimitive::makeCylinder();
+    cylinder.radius1 = cylinder.radius2 = (box.maximum.x() - box.minimum.x()) * 0.5f;
+    cylinder.height = box.maximum.y() - box.minimum.y();
+    cylinder.translate = box.translate + QVector3D(0, cylinder.height * 0.5f, 0);
+    addGeometry(cylinder);
 }
 void DepthMapEditor::duplicateGeometry()
 {
@@ -2014,8 +2184,12 @@ void DepthMapEditor::geometryValuesChanged()
         primitive.radius2 = float(mRadiusSpins[1]->value());
         primitive.height = float(mHeightSpin->value());
     } else {
-        primitive.plane = static_cast<DepthPolygonPlane>(
-                    mPlaneCombo->currentIndex());
+        const DepthPolygonPlane plane = static_cast<DepthPolygonPlane>(mPlaneCombo->currentIndex());
+        if (primitive.plane != plane) {
+            primitive.rotate += DepthPrimitive::makePolygon(plane).rotate
+                    - DepthPrimitive::makePolygon(primitive.plane).rotate;
+            primitive.plane = plane;
+        }
         QVector<QPointF> points;
         const QStringList pairs = mPointsEdit->toPlainText().split(
                     QRegularExpression(QStringLiteral("[;\\r\\n]+")),
@@ -2618,6 +2792,7 @@ void DepthMapEditor::updateCurrentTile()
 }
 void DepthMapEditor::updateGeometryList(int selectedIndex)
 {
+    const QSignalBlocker blocker(mGeometryList);
     if (!mGeometryList)
         return;
     if (selectedIndex < 0)
@@ -2636,6 +2811,7 @@ void DepthMapEditor::updateGeometryList(int selectedIndex)
 }
 void DepthMapEditor::updateGeometryControls()
 {
+    mUpdatingGeometryUi = true;
     const int index = selectedGeometryIndex();
     const QVector<DepthPrimitive> geometry = currentGeometryValue();
     const bool valid = index >= 0 && index < geometry.size();
@@ -2658,6 +2834,7 @@ void DepthMapEditor::updateGeometryControls()
                         .arg(dimension + 1));
         mProjectedSizeLabel->setText(
                     tr("Projected outline: no primitive selected"));
+        mUpdatingGeometryUi = false;
         return;
     }
     const DepthPrimitive &primitive = geometry.at(index);
@@ -2712,9 +2889,35 @@ void DepthMapEditor::updateGeometryControls()
 }
 void DepthMapEditor::updateCanvasGeometry()
 {
-    if (mCanvas)
+    mDisplayedGeometry = currentGeometryValue();
+    if (mCanvas) {
         mCanvas->setGeometry(
-            currentGeometryValue(), selectedGeometryIndex());
+            mDisplayedGeometry, selectedGeometryIndex());
+        if (!mPreviewTimer->isActive())
+            mPreviewTimer->start();
+    }
+}
+void DepthMapEditor::refreshGeometryPreview()
+{
+    mPreviewTimer->stop();
+    if (!mCanvas)
+        return;
+    if (mModeTabs->currentIndex() != 0 || !mLivePreviewCheck->isChecked()
+            || currentGeometryValue().isEmpty()) {
+        mCanvas->setPreviewImage(QImage());
+        return;
+    }
+    mCanvas->setPreviewImage(DepthGeometryRasterizer::rasterize(
+        currentGeometryValue(), mCanvas->sourceImage(), mRespectAlphaCheck->isChecked()));
+}
+void DepthMapEditor::finishGeometryEdit()
+{
+    if (!mGeometryDragActive)
+        return;
+    mGeometryDragActive = false;
+    mDisplayedGeometry = mGeometryBeforeDrag;
+    setGeometryDirty();
+    updateCanvasGeometry();
 }
 void DepthMapEditor::updatePrimitivePresetUi()
 {
@@ -2777,7 +2980,7 @@ QVector3D DepthMapEditor::primitivePixelSize(
     }
     if (primitive.type == DepthPrimitiveType::Cylinder) {
         return QVector3D(
-            qMax(primitive.radius1, primitive.radius2) *
+            primitive.radius1 *
                 2.0f * TilePlanePixelsPerUnit,
             primitive.height * VerticalGeometryPixelsPerUnit, 0.0f);
     }
@@ -2812,8 +3015,7 @@ void DepthMapEditor::setPrimitivePixelSize(
     }
     if (primitive.type == DepthPrimitiveType::Cylinder) {
         if (dimension == 0) {
-            const float currentRadius =
-                    qMax(primitive.radius1, primitive.radius2);
+            const float currentRadius = primitive.radius1;
             const float targetRadius = float(
                         pixels / (2.0 * TilePlanePixelsPerUnit));
             if (currentRadius > 0.000001f) {
@@ -3098,6 +3300,26 @@ void DepthMapEditor::addGeometry(const DepthPrimitive &primitive)
 void DepthMapEditor::setGeometryDirty()
 {
     mGeometryDirty = true;
+    const QVector<DepthPrimitive> after = currentGeometryValue();
+    if (!mGeometryDragActive && !geometryEqual(mDisplayedGeometry, after)) {
+        while (mEdits.size() > mEditIndex)
+            mEdits.removeLast();
+        Edit edit;
+        edit.tileId = currentTileId();
+        edit.geometryEdit = true;
+        edit.beforeGeometry = mDisplayedGeometry;
+        edit.afterGeometry = after;
+        edit.beforeRevision = mRevision;
+        edit.afterRevision = mNextRevision++;
+        mEdits.append(edit);
+        ++mEditIndex;
+        mRevision = edit.afterRevision;
+        if (mEdits.size() > 100) {
+            mEdits.removeFirst();
+            --mEditIndex;
+        }
+        mDisplayedGeometry = after;
+    }
     updateWindowState();
 }
 void DepthMapEditor::updateWindowState()

@@ -16,6 +16,7 @@
  */
 
 #include "scenetools.h"
+#include "pztoolspaths.h"
 
 #include "basegraphicsview.h"
 #include "biomemapimageprocessor.h"
@@ -118,12 +119,11 @@ QString editorNameForPath(const QString &mapPath)
 bool openInMapEditor(const QString &mapPath, QWidget *parent)
 {
     const QString editorName = editorNameForPath(mapPath);
-    const QString editorPath = QDir(QApplication::applicationDirPath())
-            .absoluteFilePath(editorName + QLatin1String(".exe"));
+    const QString editorPath = PZToolsPaths::editorExecutable(editorName);
     if (!QFileInfo::exists(editorPath)) {
         QMessageBox::warning(parent,
                              QObject::tr("%1 not found").arg(editorName),
-                             QObject::tr("%1.exe was not found next to PZWorldEd.exe:\n%2")
+                             QObject::tr("%1 was not found beside PZWorldEd:\n%2")
                              .arg(editorName, editorPath));
         return false;
     }

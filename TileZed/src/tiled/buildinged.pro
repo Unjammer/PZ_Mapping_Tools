@@ -1,5 +1,5 @@
+PZTOOLS_EDITOR_TARGET = BuildingEd
 include(tiled.pro)
 
-TARGET = BuildingEd
-RC_FILE = buildinged.rc
+win32:RC_FILE = buildinged.rc
 QMAKE_POST_LINK =

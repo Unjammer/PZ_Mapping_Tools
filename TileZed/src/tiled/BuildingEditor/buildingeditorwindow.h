@@ -124,6 +124,7 @@ public:
     void toAttribute();
 
     void rememberTool();
+    void rememberView();
     void restoreTool();
 
     void viewAddedForDocument(BuildingIsoView *view);
@@ -163,7 +164,6 @@ private:
     bool mMissingTilesetsReported;
     bool mInitialPositionSet = false;
 
-    // Hack to keep iso/tile view position and scale synched.
     QPointF mIsoViewsCenter;
     qreal mIsoViewsZoom = qreal(1.0);
     BuildingIsoView *mIsoView;
@@ -320,6 +320,7 @@ private slots:
     void flipHorizontal();
     void flipVertical();
     void rotateRight();
+    void transformBuilding(bool rotation, bool positive);
     void rotateLeft();
 
     void setBasementAccessNone();

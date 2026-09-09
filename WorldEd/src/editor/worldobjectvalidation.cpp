@@ -95,6 +95,21 @@ QString WorldObjectValidation::resolvedValue(WorldCellObject *object,
     return property ? property->mValue.trimmed() : QString();
 }
 
+QStringList WorldObjectValidation::spawnProfessions(WorldCellObject *object)
+{
+    const QStringList values = resolvedValue(object, QLatin1String("Professions"))
+            .split(QLatin1Char(','), Qt::SkipEmptyParts);
+    QStringList professions;
+    for (const QString &value : values) {
+        QString profession = value.trimmed();
+        if (profession.compare(QLatin1String("all"), Qt::CaseInsensitive) == 0)
+            profession = QStringLiteral("unemployed");
+        if (!profession.isEmpty() && !professions.contains(profession))
+            professions += profession;
+    }
+    return professions;
+}
+
 QStringList WorldObjectValidation::expectedObjectTypes()
 {
     return QStringList() << QLatin1String("SpawnPoint")
@@ -309,10 +324,10 @@ bool WorldObjectValidation::validateSpawnPoint(WorldCellObject *object,
             *reason = translated("the record is not a valid SpawnPoint object");
         return false;
     }
-    if (!object->isRectangle() || object->width() != 1
-            || object->height() != 1) {
+    if (!object->isRectangle() || object->width() <= 0
+            || object->height() <= 0) {
         if (reason)
-            *reason = translated("SpawnPoint must be a 1 x 1 rectangle");
+            *reason = translated("SpawnPoint must be a non-empty rectangle");
         return false;
     }
     if (!hasIntegralPosition(object)) {
@@ -321,29 +336,7 @@ bool WorldObjectValidation::validateSpawnPoint(WorldCellObject *object,
         return false;
     }
 
-    const QString professions = resolvedValue(
-                object, QLatin1String("Professions"));
-    if (professions.isEmpty()) {
-        if (reason)
-            *reason = translated("SpawnPoint must define at least one profession");
-        return false;
-    }
-    const QStringList values = professions.split(
-                QLatin1Char(','), Qt::SkipEmptyParts);
-    bool hasProfession = false;
-    for (const QString &value : values) {
-        const QString profession = value.trimmed();
-        if (profession.isEmpty())
-            continue;
-        hasProfession = true;
-        if (profession.compare(
-                    QLatin1String("all"), Qt::CaseInsensitive) == 0) {
-            if (reason)
-                *reason = translated("SpawnPoint profession 'all' is not supported. Select one or more explicit professions");
-            return false;
-        }
-    }
-    if (!hasProfession) {
+    if (spawnProfessions(object).isEmpty()) {
         if (reason)
             *reason = translated("SpawnPoint must define at least one profession");
         return false;
@@ -403,10 +396,10 @@ bool WorldObjectValidation::validateExportObject(WorldCellObject *object,
             return false;
         }
     } else if (type == QLatin1String("RoomTone")) {
-        if (!object->isRectangle() || object->width() != 1
-                || object->height() != 1) {
+        if (!object->isRectangle() || object->width() <= 0
+                || object->height() <= 0) {
             if (reason)
-                *reason = translated("RoomTone must be a 1 x 1 rectangle");
+                *reason = translated("RoomTone must be a non-empty rectangle");
             return false;
         }
         if (!hasIntegralPosition(object)) {
@@ -414,12 +407,17 @@ bool WorldObjectValidation::validateExportObject(WorldCellObject *object,
                 *reason = translated("RoomTone position must use whole map-square coordinates");
             return false;
         }
+        PropertyDef *entireBuildingDefinition =
+                object->cell()->world()->propertyDefinition(
+                    QLatin1String("EntireBuilding"));
+        Property *entireBuilding = entireBuildingDefinition
+                ? resolvedProperties(object).find(entireBuildingDefinition)
+                : nullptr;
         if (resolvedValue(object, QLatin1String("RoomTone")).isEmpty()
-                || !isBoolean(resolvedValue(
-                                  object,
-                                  QLatin1String("EntireBuilding")))) {
+                || (entireBuilding
+                    && !isBoolean(entireBuilding->mValue.trimmed()))) {
             if (reason)
-                *reason = translated("RoomTone must define RoomTone and a boolean EntireBuilding property");
+                *reason = translated("RoomTone must define a RoomTone value. EntireBuilding must be boolean when present");
             return false;
         }
     } else if (type == QLatin1String("SpawnOrigin")) {

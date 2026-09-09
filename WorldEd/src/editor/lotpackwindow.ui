@@ -68,6 +68,7 @@
      <string>File</string>
     </property>
     <addaction name="actionOpen_World"/>
+    <addaction name="actionSaveScreenshot"/>
     <addaction name="separator"/>
     <addaction name="actionRecent"/>
     <addaction name="separator"/>
@@ -105,6 +106,17 @@
   <action name="actionClose">
    <property name="text">
     <string>Close</string>
+   </property>
+  </action>
+  <action name="actionSaveScreenshot">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Save Screenshot...</string>
+   </property>
+   <property name="shortcut">
+    <string>F12</string>
    </property>
   </action>
   <action name="actionZoomIn">

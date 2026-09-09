@@ -51,7 +51,11 @@
      </widget>
     </item>
     <item>
-     <widget class="QListWidget" name="listWidget"/>
+     <widget class="QListView" name="listView">
+      <property name="uniformItemSizes">
+       <bool>true</bool>
+      </property>
+     </widget>
     </item>
    </layout>
   </widget>

@@ -16,6 +16,7 @@
  */
 
 #include "categorydock.h"
+#include "../../../../shared/settingsvalue.h"
 
 #include "building.h"
 #include "buildingdocument.h"
@@ -1189,9 +1190,9 @@ void CategoryDock::readSettings(QSettings &settings)
 void CategoryDock::writeSettings(QSettings &settings)
 {
     settings.beginGroup(QLatin1String("CategoryDock"));
-    settings.setValue(QLatin1String("SelectedCategory"),
+    PZTools::setValueIfChanged(settings, QLatin1String("SelectedCategory"),
                       mCategory ? mCategory->name() : QString());
-    settings.setValue(QLatin1String("SelectedFurnitureGroup"),
+    PZTools::setValueIfChanged(settings, QLatin1String("SelectedFurnitureGroup"),
                       mFurnitureGroup ? mFurnitureGroup->mLabel : QString());
     BuildingEditorWindow::instance()->saveSplitterSizes(ui->categorySplitter);
     settings.endGroup();
@@ -1342,7 +1343,6 @@ void CategoryDock::currentRoomChanged()
 {
     selectCurrentCategoryTile();
 }
-
 void CategoryDock::tilesDialogEdited()
 {
     int row = ui->categoryList->currentRow();
@@ -1355,4 +1355,3 @@ void CategoryDock::currentToolChanged()
 {
     selectCurrentCategoryTile();
 }
-

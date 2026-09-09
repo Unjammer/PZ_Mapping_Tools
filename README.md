@@ -15,6 +15,61 @@ TMX maps and tile layers are limited to 300 x 300 tiles, including Native256
 workflows that reuse legacy-size maps or building layouts. TileZed asks for
 confirmation before a map resize crops existing content.
 
+Raster drawing reuses filtered tiles at supported 25% and 50% zooms.
+All three applications start at a centered 1920 x 1080 window size, reduced
+when needed to fit the available desktop, including the window frame.
+Their shared loading window shows the current phase and completed tileset
+count. Dock layouts remain saved separately for each application.
+Tilesheet loading decodes and prepares images in parallel using up to eight
+workers, adjusted to the available processor threads. All discovered sheets
+and declared map tilesets remain ready before rendering. Shared image caches
+and editor updates are applied on the application thread.
+WorldEd retains object geometry during camera zoom and avoids rebuilding
+unchanged search results. BuildingEd reuses room highlight regions, and
+TileZed and BuildingEd avoid rewriting unchanged window settings.
+Volume depth generation prepares primitive transforms once per render.
+TileZed generates and removes RoomDefs on all map levels, including basements.
+WorldEd retains source-cell ownership when grouping rooms and buildings for LOT
+export, including underground complexes spanning neighboring cells.
+
+TileSetZ is available directly in TileZed's Tools menu and a tile's context
+menu. It creates and edits PNG tilesheets and precuts textures at the wall-face
+size into consecutive isometric tiles, with an assembly check and TMX export,
+and generates walls, floors, street curbs and roofs with the original TileSetZ
+masks. Drawing and texture generation have separate tabs. The pixel editor
+includes pencil, eraser, eyedropper, fill, lines, rectangles, ellipses, opacity,
+alpha locking and Undo. Images and masks have zoom controls and tile inspection.
+Existing tile IDs retain their positions when
+new tiles are appended. See the [TileSetZ guide](docs/TileSetZ.md).
+
+The Depth Map Editor provides a color depth palette, alpha-masked painting,
+ground and vertical-object estimates, and live previews of movable volumes.
+Blue means near (0) and red means far (255). Ground pixels become nearer
+downwards, while elevation also brings vertical surfaces nearer. Pixel
+estimation provides a starting point and cannot reconstruct hidden geometry.
+Boxes can be fitted to the sprite, moved along the ground, or raised with
+Shift-drag. Generate All applies the volume preview to the depth image.
+
+TileZed's selection scope controls pasting. Current layer on the current
+level pastes onto the selected destination layer. Selections covering multiple
+layers or levels retain their layer names and relative levels, including
+scopes with only one populated layer. Palette context menus in TileZed and
+BuildingEd include a saved Show Tile Numbers toggle.
+
+BuildingEd rotations and mirrors retain painted tile positions, square
+attributes and selections, with Undo and Redo. Painted sprite IDs remain
+unchanged, so directional artwork may need adjustment. A painted border tile
+that would leave the supported coordinates is identified before any change.
+Mode changes retain selections and share the camera between isometric views.
+Materials refresh on the first mode or floor change, custom furniture groups
+appear when opened, and edited keyboard shortcuts are saved immediately.
+Building Tiles removes exact duplicate material definitions when loading or
+saving a catalogue. Different orientations, offsets and categories are kept.
+Building tiles on exterior squares without a floor replace matching map
+layers while retaining other layers such as vegetation. Building floors
+continue to cover underlying map tiles. WorldEd thumbnails show the part of
+a basement building that remains above ground.
+
 Tim Baker created the original WorldEd and TileZed foundation. The current
 unofficial Qt 5 continuation, maintenance, new features, and fixes are developed
 by **Alree / Unjammer**, except where a change has another explicitly recorded
@@ -35,6 +90,11 @@ Project Zomboid game assets are not included.
 
 ## Included applications
 
+Tile-property patches are merged once and reused until a property file or its
+configured order changes. Building calculations and catalogue loading reuse
+the merged properties. Editing or removing a patch refreshes the affected
+values from the original files.
+
 Each main application window includes a lower-right message indicator modeled
 after Project Zomboid's error counter. A red box counts errors and an orange
 box counts warnings. A new message slides the indicator above the application
@@ -52,7 +112,11 @@ files, and warning dialogs that require a response are not hidden.
 
 The title of each main application window displays the current centralized
 build identifier so screenshots and reports can identify the exact binary in
-use.
+use. Startup logs include the same identifier.
+
+Initial Setup applies the chosen shared configuration and Tiles directories
+before the running application loads its catalogues. No restart is needed
+after completing this setup, including when the Tiles path was initially empty.
 
 The Windows release includes the Qt libraries, platform and image plugins,
 OpenSSL libraries, and one coherent app-local Microsoft Visual C++ x64
@@ -240,7 +304,8 @@ Important additions include:
 ### BuildingEd
 
 BuildingEd creates and edits TBX buildings, rooms, floors, walls, roofs,
-objects, furniture, basements, and negative levels.
+objects, furniture and basement access. Its local levels start at 0.
+WorldEd can place those floors below ground when placing the building lot.
 
 TBX is an optional authoring and reuse format. A valid TMX can contain its
 buildings and all placed tiles directly without retaining separate TBX files.
@@ -443,10 +508,27 @@ WaterFlow objects default to a 1 x 1 rectangle with `WaterDirection = 0` and
 objects default to a 1 x 1 rectangle with `RoomTone = Generic` and
 `EntireBuilding = false`.
 
+Existing SpawnPoints using `Professions = all` export under `unemployed`.
+Other explicitly selected professions remain included, without duplicate
+points per profession. This conversion does not alter the saved project.
+Existing non-empty rectangular SpawnPoints retain their geometry and export
+their original position, including negative levels.
+
+Existing rectangular RoomTone objects retain their original position and
+dimensions when exported. The game uses their origin to locate the room,
+regardless of the rectangle's size. `EntireBuilding` may be omitted for room
+scope or explicitly set to `true` to apply the tone to the building.
+
 Lua export omits an invalid SpawnPoint, WaterFlow, WaterZone, or RoomTone
 record and lists the exact reason. The object remains in the PZW for repair,
 the project remains saved, and LOT generation remains available. Correct the
 reported geometry or properties and save or export again to include it.
+
+## LotPack screenshots
+
+The LotPack Viewer supports **File > Save Screenshot** and **F12** to save
+the current viewport as a PNG, with a choice of destination. The capture
+includes the current zoom, visible levels and RoomDefs overlay.
 
 ## Partial chunk LOT export
 
@@ -539,8 +621,12 @@ pixels inside that chunk.
 In **Preferences > Window Setup**, **Use 1920 x 1080** immediately resizes and
 centers only the current application. **Apply to Current Application** does the
 same with the entered custom dimensions. **Apply to All Three Applications**
-also starts the other two tools with that size. These actions are temporary and
-the previous saved layouts return on the next normal start.
+also starts the other two tools with that size. These actions are temporary.
+The next normal start uses 1920 x 1080 fitted to the available desktop, while
+each application's saved dock layout is retained.
+Custom sizes respect the minimum size of the visible panels. Windows are
+centered using their actual size and maximize when the desktop is too small
+for that minimum.
 
 ## World-map XML overlays
 
@@ -716,7 +802,16 @@ can be shared, and a screenshot for visual problems.
 The [build guide](BUILDING.md) describes the source layout and compilation for
 Windows, Linux, and macOS. Windows x64 with Qt 5.14.2 and MSVC is the current
 release target. Other platforms must be compiled with compatible Qt and native
-toolchains.
+toolchains and tested before distribution. The macOS qmake configuration uses
+separate application identities for TileZed and BuildingEd, includes the
+configuration catalogues, documentation, and Lua resources in each bundle,
+and resolves editor launches through adjacent application bundles. Native
+macOS builds still require validation on the target system.
+
+The [macOS setup script](tools/Setup-macOS.command) prepares Xcode usage,
+Homebrew, Qt 5.15, source checkout, and compilation from one Terminal command.
+It preserves existing local work and records setup and build errors in a log.
+See the [guided setup instructions](BUILDING.md#guided-setup).
 
 ## Credits and special thanks
 

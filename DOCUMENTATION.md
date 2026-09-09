@@ -31,6 +31,7 @@ and BuildingEd.
 | Subject | Reference |
 |---|---|
 | Automapper rules and interactive mode | [Automapper](docs/TileZed/Automapper.html) |
+| Tile drawing, zoomable masks and wall texture precutting | [TileSetZ](docs/TileSetZ.md) |
 | Procedural loot | [Procedural loot editor](docs/PZ-B42.20-Procedural-Loot-Editor.md) |
 | Texture packs and extraction | [Pack comparator and extractor](docs/PZ-Pack-Comparator-and-Extractor.md) |
 | TileDefs, snow, burnt tiles, and replacements | [TileDef tools](docs/PZ-TileDef-Comparator-and-Snow-Editor.md) |
@@ -47,11 +48,11 @@ The complete Automapper example is under `TileZed/examples/sewer_automap`.
 The BuildingEd manual is installed under `docs/BuildingEd` in the portable
 release.
 
-- [BuildingEd manual](docs/BuildingEd/index.html)
-- [Lua scripting](docs/BuildingEd/LuaScripting.html)
-- [Tools](docs/BuildingEd/Tools.html)
-- [Tile mode](docs/BuildingEd/TileEditingMode.html)
-- [Tiles dialog](docs/BuildingEd/TilesDialog.html)
+- [BuildingEd manual](TileZed/src/tiled/BuildingEditor/manual/index.html)
+- [Lua scripting](TileZed/src/tiled/BuildingEditor/manual/LuaScripting.html)
+- [Tools](TileZed/src/tiled/BuildingEditor/manual/Tools.html)
+- [Tile mode](TileZed/src/tiled/BuildingEditor/manual/TileEditingMode.html)
+- [Tiles dialog](TileZed/src/tiled/BuildingEditor/manual/TilesDialog.html)
 
 ## Terminology
 

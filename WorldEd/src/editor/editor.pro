@@ -13,7 +13,7 @@ greaterThan(QT_MAJOR_VERSION, 5) {
 }
 
 # For 'breeze' style using SVG icons
-win32 {
+win32|macx {
     QT += svg
 }
 
@@ -39,14 +39,20 @@ DEFINES += QT_NO_CAST_FROM_ASCII \
 DEFINES += PZTOOLS_APP_ISSUE_NOTIFIER
 
 INCLUDEPATH += ../../../shared
+HEADERS += ../../../shared/pztoolspaths.h
+HEADERS += ../../../shared/tilesetimageloader.h
+HEADERS += ../../../shared/loadingdialog.h
+HEADERS += ../../../shared/startupwindowgeometry.h
+HEADERS += ../../../shared/tilesetimageloadervalidation.h
 
 # Release with debug info
 msvc:QMAKE_CXXFLAGS_RELEASE += /Zi
 msvc:QMAKE_LFLAGS_RELEASE += /DEBUG /OPT:REF /OPT:ICF
 
 macx {
-    QMAKE_LIBDIR_FLAGS += -L$$OUT_PWD/../../bin/PZWorldEd.app/Contents/Frameworks
     LIBS += -framework Foundation
+    ICON = images/tiled-icon-mac.icns
+    include(../../../shared/macosbundle.pri)
 } else:win32 {
     LIBS += -L$$OUT_PWD/../../lib
 } else {
@@ -222,6 +228,7 @@ HEADERS  += mainwindow.h \
     ../sharedmainwindowgeometrywidget.h \
     ../../../shared/appissuenotifier.h \
     ../../../shared/pztoolsbuild.h \
+    ../../../shared/tiledefwatchervalidation.h \
     biomemapgeneratordialog.h \
     chunkdataoverride.h \
     chunkdataoverridedialog.h \

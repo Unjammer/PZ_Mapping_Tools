@@ -25,9 +25,11 @@
  */
 
 #include "mainwindow.h"
+#include "../../../shared/settingsvalue.h"
 #include "ui_mainwindow.h"
 #include "appissuenotifier.h"
 #include "pztoolsbuild.h"
+#include "pztoolspaths.h"
 
 #include "pztoolsabout.h"
 #include "addremovemapobject.h"
@@ -102,6 +104,10 @@
 #include "convertorientationdialog.h"
 #include "createpackdialog.h"
 #include "depthmapeditor.h"
+#include "tilesetzeditor.h"
+#include "tilesetz.h"
+#include <QTemporaryDir>
+#include <QThread>
 #include "luatiletool.h"
 #include "luatooldialog.h"
 #include "mapcomposite.h"
@@ -203,7 +209,7 @@ static void saveSplitterStates(QWidget *root, QSettings &settings)
         for (int size : splitter->sizes())
             totalSize += size;
         if (!key.isEmpty() && splitter->isVisible() && totalSize > 0)
-            settings.setValue(key, splitter->saveState());
+            PZTools::setValueIfChanged(settings, key, splitter->saveState());
     }
     settings.endGroup();
 }
@@ -706,6 +712,8 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     addAction(mBMPBrushSizePlus);
 
     mDepthMapEditorAction = new QAction(tr("Depth Map Editor..."), this);
+    mTileSetZAction = new QAction(tr("TileSetZ - Create and Edit Tiles..."), this);
+    mTileSetZAction->setToolTip(tr("Paint tiles, cut textures and generate tilesheets from masks"));
     mDepthMapEditorAction->setToolTip(
                 tr("Edit Build 42 tileGeometry.txt primitives and "
                    "DEPTH_<tileset>.png atlases"));
@@ -906,6 +914,8 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     connect(mUi->actionSnowEditor, &QAction::triggered, this, &MainWindow::snowEditor);
     mUi->menuTools->insertAction(mUi->actionWorldEd,
                                  mDepthMapEditorAction);
+    mUi->menuTools->insertAction(mDepthMapEditorAction, mTileSetZAction);
+    connect(mTileSetZAction, &QAction::triggered, this, [this] { editInTileSetZ(); });
     connect(mDepthMapEditorAction, &QAction::triggered,
             this, &MainWindow::depthMapEditor);
     connect(mUi->actionWorldEd, &QAction::triggered,
@@ -913,6 +923,7 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
 #endif
 
     updateActions();
+    updateWindowTitle();
 #ifdef ZOMBOID
     // Something broke when I replaced the statusBar with a QFrame.
     // The dock widget geometry (specifically the width of the right-side dock
@@ -965,7 +976,11 @@ void MainWindow::commitData(QSessionManager &manager)
     // Play nice with session management and cancel shutdown process when user
     // requests this
     if (manager.allowsInteraction())
+#ifdef ZOMBOID
+        if ((mTileSetZEditor && !mTileSetZEditor->close()) || !confirmAllSave())
+#else
         if (!confirmAllSave())
+#endif
             manager.cancel();
 }
 
@@ -973,7 +988,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 {
 #ifdef ZOMBOID
     writeSettings();
-    if (confirmAllSave() &&
+    if ((!mTileSetZEditor || mTileSetZEditor->close()) && confirmAllSave() &&
             TileDefDialog::closeYerself() &&
             (!mContainerOverlayDialog || mContainerOverlayDialog->close())) {
 
@@ -1065,14 +1080,7 @@ bool MainWindow::openFile(const QString &fileName,
 
 #ifdef ZOMBOID
     if (fileName.endsWith(QLatin1String(".tbx"))) {
-        const QString program = QDir(QCoreApplication::applicationDirPath())
-                .filePath(
-#ifdef Q_OS_WIN
-                    QLatin1String("BuildingEd.exe")
-#else
-                    QLatin1String("BuildingEd")
-#endif
-                    );
+        const QString program = PZToolsPaths::editorExecutable(QStringLiteral("BuildingEd"));
         if (!QFileInfo::exists(program)) {
             QMessageBox::warning(this, tr("BuildingEd Not Found"),
                                  tr("BuildingEd could not be found beside TileZed:\n%1")
@@ -2213,14 +2221,7 @@ void MainWindow::tilePicked(Tile *tile)
 
 void MainWindow::showBuildingEditor()
 {
-    const QString program = QDir(QCoreApplication::applicationDirPath())
-            .filePath(
-#ifdef Q_OS_WIN
-                QLatin1String("BuildingEd.exe")
-#else
-                QLatin1String("BuildingEd")
-#endif
-                );
+    const QString program = PZToolsPaths::editorExecutable(QStringLiteral("BuildingEd"));
     if (!QFileInfo::exists(program)) {
         QMessageBox::warning(this, tr("BuildingEd Not Found"),
                              tr("BuildingEd could not be found beside TileZed:\n%1")
@@ -2474,6 +2475,105 @@ void MainWindow::proceduralLootEditor()
                 this, QString(), containerType, suggestedProjectRoot);
     dialog.exec();
 }
+void MainWindow::editInTileSetZ(Tile *tile)
+{
+    if (!mTileSetZEditor) {
+        mTileSetZEditor = new TileSetZEditor(this);
+        connect(mTileSetZEditor, &TileSetZEditor::imageSaved, this, [](const QString &path) {
+            const QString root = TileMetaInfoMgr::instance()->tilesDirectory();
+            if (root.isEmpty())
+                return;
+            const QString relative = QDir(root).relativeFilePath(QFileInfo(path).absoluteFilePath());
+            if (relative == QStringLiteral("..") || relative.startsWith(QStringLiteral("../")) || QDir::isAbsolutePath(relative))
+                return;
+            TilesetManager *manager = TilesetManager::instance();
+            QMetaObject::invokeMethod(manager, "directoryChanged", Qt::QueuedConnection,
+                                      Q_ARG(QString, QFileInfo(path).absolutePath()));
+            QMetaObject::invokeMethod(manager, "fileChanged", Qt::QueuedConnection,
+                                      Q_ARG(QString, QFileInfo(path).absoluteFilePath()));
+        });
+    }
+    if (tile && !mTileSetZEditor->openTileset(tile->tileset(), tile->id()))
+        return;
+    mTileSetZEditor->show();
+    mTileSetZEditor->raise();
+    mTileSetZEditor->activateWindow();
+}
+
+bool MainWindow::validateTileSetZCatalog(QString *error)
+{
+    QTemporaryDir temporary(QDir(Preferences::instance()->tiles2xDirectory())
+                             .filePath(QStringLiteral("tilesetz-XXXXXX")));
+    if (!temporary.isValid()) {
+        *error = tr("The configured 2x Tiles directory must be writable.");
+        return false;
+    }
+    const QString name = QFileInfo(temporary.path()).fileName().replace(QLatin1Char('-'), QLatin1Char('_'));
+    const QString path = temporary.filePath(name + QStringLiteral(".png"));
+    QImage sheet = TileSetZ::blank(QSize(1024, 256));
+    sheet.fill(Qt::blue);
+    if (!TileSetZ::saveImage(sheet, path, error))
+        return false;
+    mTileSetZAction->trigger();
+    if (!mTileSetZEditor) {
+        *error = tr("The TileSetZ menu action did not open its editor.");
+        return false;
+    }
+    mTileSetZEditor->hide();
+    mTileSetZEditor->imageSaved(path);
+    auto waitFor = [](const std::function<bool()> &condition) {
+        QElapsedTimer timer;
+        timer.start();
+        while (!condition() && timer.elapsed() < 10000) {
+            QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 20);
+            QThread::msleep(5);
+        }
+        return condition();
+    };
+    TileMetaInfoMgr *catalog = TileMetaInfoMgr::instance();
+    if (!waitFor([&] { return catalog->tileset(name) && catalog->tileset(name)->isLoaded(); })) {
+        *error = tr("The saved sheet was not discovered in the catalogue.");
+        return false;
+    }
+    Tileset *tileset = catalog->tileset(name);
+    if (tileset->tileCount() != 8 || !mTileSetZEditor->openTileset(tileset, 5)) {
+        *error = tr("The discovered sheet could not be opened for editing.");
+        return false;
+    }
+    const QImage before = tileset->tileAt(5)->image();
+    QWidget *canvas = mTileSetZEditor->findChild<QWidget *>(QStringLiteral("TileSetZCanvas"));
+    if (!canvas) {
+        *error = tr("The pixel editor is unavailable.");
+        return false;
+    }
+    QMouseEvent press(QEvent::MouseButtonPress, QPointF(4, 4), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(4, 4), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(canvas, &press);
+    QCoreApplication::sendEvent(canvas, &release);
+    QAction *saveAction = nullptr;
+    for (QAction *action : mTileSetZEditor->menuBar()->actions().first()->menu()->actions())
+        if (action->shortcut() == QKeySequence(QKeySequence::Save))
+            saveAction = action;
+    if (!saveAction) {
+        *error = tr("The tilesheet Save action is unavailable.");
+        return false;
+    }
+    saveAction->trigger();
+    if (!waitFor([&] { return tileset->tileAt(5)->image() != before; })) {
+        *error = tr("Saving did not refresh the edited tile in the catalogue.");
+        return false;
+    }
+    const QImage saved(path);
+    if (saved.pixel(5 * 128 + 2, 2) != qRgb(255, 255, 255)
+            || saved.copy(0, 0, 128, 256) != sheet.copy(0, 0, 128, 256)) {
+        *error = tr("Saving changed a different tile from the selected ID.");
+        return false;
+    }
+    mTileSetZEditor->close();
+    qInfo() << "TileSetZ catalogue validation: menu, discovery, selected ID, save and reload passed";
+    return true;
+}
+
 void MainWindow::depthMapEditor()
 {
     Tile *tile = mTilesetDock->currentTile();
@@ -2500,7 +2600,7 @@ void MainWindow::launchWorldEd()
     if (!QFileInfo(path).exists())
         path = QApplication::applicationDirPath() + QLatin1String("/../WorldEd/PZWorldEd.exe");
 #elif defined(Q_OS_MACOS)
-    path += QLatin1String("/../WorldEd/PZWorldEd"); // FIXME: .app ?
+    path = PZToolsPaths::editorExecutable(QStringLiteral("PZWorldEd"));
 #else
     path += QLatin1String("/../../WorldEd/PZWorldEd.sh");
 #endif
@@ -2619,6 +2719,9 @@ void MainWindow::initActionManager()
     actionManager->registerAction(mDepthMapEditorAction, CONTEXT_MENU,
                                   CATEGORY_MENU_TOOLS,
                                   QStringLiteral("Menu.Tools.DepthMapEditor"));
+    actionManager->registerAction(mTileSetZAction, CONTEXT_MENU,
+                                  CATEGORY_MENU_TOOLS,
+                                  QStringLiteral("Menu.Tools.TileSetZ"));
     actionManager->registerAction(mUi->actionWorldEd, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.WorldEd"));
     actionManager->registerAction(mUi->actionLuaScript, CONTEXT_MENU, CATEGORY_MENU_TOOLS, QStringLiteral("Menu.Tools.LuaConsole"));
 
@@ -2899,7 +3002,8 @@ void MainWindow::RoomDefGo()
 
     bool beginMacro = false;
 
-    for (int level = 0; level <= mMapDocument->mapComposite()->maxLevel(); level++) {
+    for (int level = mMapDocument->mapComposite()->minLevel();
+         level <= mMapDocument->mapComposite()->maxLevel(); ++level) {
         RoomDefecator rd(map, level, bounds);
         rd.defecate();
         if (rd.mRegions.isEmpty())
@@ -2934,7 +3038,8 @@ void MainWindow::RoomDefGo()
                 index = map->layers().indexOf(bottomLayerOfSameTypeInGreaterLevel);
             else if (topLayerOfSameTypeInLesserLevel)
                 index = map->layers().indexOf(topLayerOfSameTypeInLesserLevel) + 1;
-            og = new ObjectGroup(layerName, 0, 0, map->width(), map->height());
+            og = new ObjectGroup(QStringLiteral("RoomDefs"), 0, 0, map->width(), map->height());
+            og->setLevel(level);
             og->setColor(Qt::blue);
             mMapDocument->undoStack()->push(new AddLayer(mMapDocument, index, og));
         } else {
@@ -3029,7 +3134,8 @@ void MainWindow::RoomDefRemove()
 
     QList<MapObject*> remove;
 
-    for (int level = 0; level <= mMapDocument->mapComposite()->maxLevel(); level++) {
+    for (int level = mMapDocument->mapComposite()->minLevel();
+         level <= mMapDocument->mapComposite()->maxLevel(); ++level) {
         QString layerName = QString::fromLatin1("%1_RoomDefs").arg(level);
         int index = mMapDocument->map()->indexOfLayer(layerName, Layer::ObjectGroupType);
         if (index >= 0) {
@@ -3902,7 +4008,7 @@ void MainWindow::writeSettings()
 
     mSettings.beginGroup(QLatin1String("recentFiles"));
     if (MapDocument *document = mDocumentManager->currentDocument())
-        mSettings.setValue(QLatin1String("lastActive"), document->fileName());
+        PZTools::setValueIfChanged(mSettings, QLatin1String("lastActive"), document->fileName());
 
     QStringList fileList;
     QStringList mapScales;
@@ -3929,11 +4035,11 @@ void MainWindow::writeSettings()
 #endif
         selectedLayer.append(QString::number(currentLayerIndex));
     }
-    mSettings.setValue(QLatin1String("lastOpenFiles"), fileList);
-    mSettings.setValue(QLatin1String("mapScale"), mapScales);
-    mSettings.setValue(QLatin1String("scrollX"), scrollX);
-    mSettings.setValue(QLatin1String("scrollY"), scrollY);
-    mSettings.setValue(QLatin1String("selectedLayer"), selectedLayer);
+    PZTools::setValueIfChanged(mSettings, QLatin1String("lastOpenFiles"), fileList);
+    PZTools::setValueIfChanged(mSettings, QLatin1String("mapScale"), mapScales);
+    PZTools::setValueIfChanged(mSettings, QLatin1String("scrollX"), scrollX);
+    PZTools::setValueIfChanged(mSettings, QLatin1String("scrollY"), scrollY);
+    PZTools::setValueIfChanged(mSettings, QLatin1String("selectedLayer"), selectedLayer);
     mSettings.endGroup();
     mTilesetDock->writeSettings(mSettings);
     mSettings.sync();
@@ -4029,22 +4135,22 @@ void MainWindow::writeWindowSettings()
         return;
     }
     mSettings.beginGroup(QLatin1String("MainWindow"));
-    mSettings.setValue(QLatin1String("geometry"), saveGeometry());
-    mSettings.setValue(QLatin1String("state"), saveState());
+    PZTools::setValueIfChanged(mSettings, QLatin1String("geometry"), saveGeometry());
+    PZTools::setValueIfChanged(mSettings, QLatin1String("state"), saveState());
     QVariantList v;
     foreach (int size, mMainSplitter->sizes())
         v += size;
-    mSettings.setValue(tr("%1/sizes").arg(mMainSplitter->objectName()), v);
-    mSettings.setValue(QLatin1String("mainSplitter/state"),
+    PZTools::setValueIfChanged(mSettings, tr("%1/sizes").arg(mMainSplitter->objectName()), v);
+    PZTools::setValueIfChanged(mSettings, QLatin1String("mainSplitter/state"),
                        mMainSplitter->saveState());
-    mSettings.setValue(QLatin1String("TileLayersPanel/scale"),
+    PZTools::setValueIfChanged(mSettings, QLatin1String("TileLayersPanel/scale"),
                        mTileLayersPanel->scale());
     QDockWidget *topDock = visibleDockInTabGroup(this, mLayerDock);
     QDockWidget *bottomDock = visibleDockInTabGroup(this, mTilesetDock);
-    mSettings.setValue(QLatin1String("rightDockWidth"),
+    PZTools::setValueIfChanged(mSettings, QLatin1String("rightDockWidth"),
                        qMax(topDock->width(), bottomDock->width()));
-    mSettings.setValue(QLatin1String("rightTopDockHeight"), topDock->height());
-    mSettings.setValue(QLatin1String("rightBottomDockHeight"), bottomDock->height());
+    PZTools::setValueIfChanged(mSettings, QLatin1String("rightTopDockHeight"), topDock->height());
+    PZTools::setValueIfChanged(mSettings, QLatin1String("rightBottomDockHeight"), bottomDock->height());
     mSettings.endGroup();
     saveSplitterStates(this, mSettings);
     mSettings.sync();
@@ -4058,8 +4164,6 @@ void MainWindow::readSettings()
         const bool restored = restoreGeometry(geom);
         qInfo() << "Main-window geometry restored:" << restored;
     }
-    else
-        resize(800, 600);
     const QByteArray state = mSettings.value(QLatin1String("state"),
                                              QByteArray()).toByteArray();
     if (!state.isEmpty())
@@ -4086,7 +4190,7 @@ void MainWindow::readSettings()
     const int rightTopDockHeight = mSettings.value(QLatin1String("rightTopDockHeight"), 0).toInt();
     const int rightBottomDockHeight = mSettings.value(QLatin1String("rightBottomDockHeight"), 0).toInt();
     mSettings.endGroup();
-    PortableSettings::applyOneShotMainWindowGeometry(this);
+    PortableSettings::applyStartupMainWindowGeometry(this);
     mTilesetDock->readSettings(mSettings);
     restoreSplitterStates(this, mSettings);
     QTimer::singleShot(0, this, [this, rightDockWidth,

@@ -56,6 +56,16 @@ updateqm.name = LRELEASE ${QMAKE_FILE_IN}
 updateqm.CONFIG += no_link
 QMAKE_EXTRA_COMPILERS += updateqm
 
+macx {
+    buildingqm.input = TRANSLATIONS
+    buildingqm.output = $$OUT_PWD/../bin/BuildingEd.app/Contents/Translations/${QMAKE_FILE_BASE}.qm
+    buildingqm.variable_out = PRE_TARGETDEPS
+    buildingqm.commands = $$LRELEASE ${QMAKE_FILE_IN} -qm ${QMAKE_FILE_OUT}
+    buildingqm.name = LRELEASE ${QMAKE_FILE_IN}
+    buildingqm.CONFIG += no_link
+    QMAKE_EXTRA_COMPILERS += buildingqm
+}
+
 # Install rule for translations
 isEmpty(INSTALL_ONLY_BUILD) {
     include(../tiled.pri)

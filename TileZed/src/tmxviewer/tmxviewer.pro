@@ -19,11 +19,9 @@ win32 {
     DESTDIR = ../../bin
 }
 
-macx {
-    QMAKE_LIBDIR_FLAGS += -L$$OUT_PWD/../../bin/TileZed.app/Contents/Frameworks
-} else:win32 {
+win32 {
     LIBS += -L$$OUT_PWD/../../lib
-} else {
+} else:!macx {
     QMAKE_LIBDIR_FLAGS += -L$$OUT_PWD/../../lib
 }
 

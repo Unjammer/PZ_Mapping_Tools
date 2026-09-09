@@ -10,7 +10,7 @@ message, and correct the path, input, or configuration before trying again.
 
 ## First checks for all three applications
 
-### `VCRUNTIME140_1.dll` is missing or the application does not start through Wine
+### `VCRUNTIME140_1.dll` is missing
 
 **What it means:** the application directory is incomplete or contains a
 mixture of compiler-runtime versions from different releases.
@@ -24,6 +24,37 @@ or Wine `vcrun` component is not required.
 of copying individual executables and DLLs. On macOS, Wine or CrossOver runs
 the Windows build. It is not a native macOS application bundle.
 
+### Wine reports an unimplemented `Qt5Widgets.dll` `dpiScaled` function
+
+**What it means:** the WindowsVista style plugin expects a Qt function that
+the loaded Qt Widgets library does not provide. Mixing Qt library and plugin
+versions can cause this error.
+
+**What to do:** extract the complete current release into a new directory.
+Keep its `bin/styles` and `bin/platforms` directories with the supplied Qt
+DLLs. Do not merge older Qt files into it. As a diagnostic, launch the affected
+executable with `-style Fusion` to avoid using the WindowsVista style.
+
+### Wine reports `EnableNonClientDpiScaling() failed` with error 120
+
+**What it means:** Qt requested Windows window-frame DPI scaling, but the Wine
+implementation returned "not implemented". Qt logs this as a critical message
+even though the application can continue. The errors-only notification option
+therefore does not hide it.
+
+**What to do:** if the editor continues to work, this message alone does not
+indicate damaged map data. A diagnostic launch option is
+`-platform windows:dpiawareness=1`, for example:
+
+```text
+BuildingEd.exe -platform windows:dpiawareness=1
+```
+
+This requests system-wide DPI scaling instead of per-monitor scaling. It can
+change display sharpness when moving between screens with different scaling.
+Remove the argument to restore the default behavior. This is an optional
+diagnostic setting, not a guarantee of Wine or macOS compatibility.
+
 ### Where are the logs?
 
 Each application creates a new log in `settings/logs` inside the portable
@@ -33,8 +64,8 @@ for the file names and the information to include in a report.
 
 ### Which directories must be configured?
 
-- **Configuration directory** contains files such as `Tilesets.txt`,
-  `BuildingTMX.txt`, `BuildingTiles.txt`, `FurnitureGroups.txt`, and
+- **Configuration directory** contains `Tilesets.txt`,
+  `TMXConfig.txt`, `BuildingTiles.txt`, `BuildingFurniture.txt`, and
   `BuildingTemplates.txt`.
 - **Tiles directory** contains the extracted mapping PNG sheets, either
   directly or in supported `1x`, `2x`, and custom subdirectories.
@@ -42,8 +73,9 @@ for the file names and the information to include in a report.
   TileDefs, packs, WorldGen data, and procedural loot. It does not replace the
   extracted mapping Tiles directory.
 
-Set these paths in Preferences, then restart the application after changing a
-core configuration or Tiles path.
+Initial Setup applies the configuration and Tiles paths immediately before
+loading the catalogues. No restart is required after completing the assistant.
+For later changes in Preferences, follow any restart prompt shown by the editor.
 
 ### What do red question-mark tiles mean?
 
@@ -833,7 +865,8 @@ renderer issue, and mention both Raster and OpenGL results in a report.
 cannot render a TBX safely.
 
 **What to do:** configure the shared Tiles directory from an editor's
-Preferences or Initial Setup, then restart BuildingEd.
+Preferences or Initial Setup. Initial Setup applies the path immediately.
+If the path was changed in another running editor, restart BuildingEd to read it.
 
 **How to avoid it:** complete initial setup before opening TBX files directly
 from Explorer or TileZed.

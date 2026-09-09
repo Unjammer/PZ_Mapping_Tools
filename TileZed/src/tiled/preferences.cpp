@@ -286,6 +286,7 @@ Preferences::Preferences()
     mShowLotFloorsOnly = mSettings->value(QLatin1String("ShowLotFloorsOnly"), false).toBool();
     mShowMiniMap = mSettings->value(QLatin1String("ShowMiniMap"), true).toBool();
     mMiniMapWidth = mSettings->value(QLatin1String("MiniMapWidth"), 256).toInt();
+    mShowTileIds = mSettings->value(QLatin1String("ShowTileIds"), true).toBool();
     mShowTileLayersPanel = mSettings->value(QLatin1String("ShowTileLayersPanel"), true).toBool();
     mShowTileSelection = mSettings->value(QLatin1String("ShowTileSelection"), true).toBool();
     mShowInvisibleTiles = mSettings->value(QLatin1String("ShowInvisibleTiles"), true).toBool();
@@ -483,6 +484,14 @@ void Preferences::setShowTilesetGrid(bool showTilesetGrid)
                         mShowTilesetGrid);
     emit showTilesetGridChanged(mShowTilesetGrid);
 }
+void Preferences::setShowTileIds(bool show)
+{
+    if (mShowTileIds == show)
+        return;
+    mShowTileIds = show;
+    mSettings->setValue(QLatin1String("Interface/ShowTileIds"), show);
+    emit showTileIdsChanged(show);
+}
 
 MapWriter::LayerDataFormat Preferences::layerDataFormat() const
 {
@@ -652,6 +661,63 @@ QString Preferences::userPath(const QString &fileName) const
 QString Preferences::configPath() const
 {
     return mConfigDirectory;
+}
+
+void Preferences::reloadSharedPaths()
+{
+    const QString configuration = PortableSettings::sharedConfigurationPath();
+    const QString tiles = PortableSettings::sharedTilesPath();
+    const bool configurationChanged = mConfigDirectory != configuration;
+    const bool tilesChanged = mTilesDirectory != tiles;
+    mConfigDirectory = configuration;
+    mTilesDirectory = tiles;
+    if (configurationChanged || tilesChanged) {
+        qInfo().noquote() << "Synchronized shared paths:"
+                         << QDir::toNativeSeparators(mConfigDirectory)
+                         << QDir::toNativeSeparators(mTilesDirectory);
+    }
+    if (tilesChanged)
+        emit tilesDirectoryChanged();
+}
+
+bool Preferences::validateSharedPaths(QString *errorString)
+{
+    Preferences *preferences = instance();
+    const QString configuration = PortableSettings::sharedConfigurationPath();
+    const QString tiles = PortableSettings::sharedTilesPath();
+    if (!PortableSettings::isConfigurationPath(configuration)
+            || !PortableSettings::isTilesPath(tiles)) {
+        *errorString = QStringLiteral("Configure valid shared directories first.");
+        return false;
+    }
+    const QString originalConfiguration = preferences->mConfigDirectory;
+    const QString originalTiles = preferences->mTilesDirectory;
+    preferences->mConfigDirectory.clear();
+    preferences->mTilesDirectory.clear();
+    int notifications = 0;
+    bool coherentNotification = true;
+    const QMetaObject::Connection connection = QObject::connect(
+                preferences, &Preferences::tilesDirectoryChanged,
+                preferences, [&]() {
+        ++notifications;
+        coherentNotification = coherentNotification
+                && preferences->configPath() == configuration
+                && preferences->tilesDirectory() == tiles;
+    });
+    preferences->reloadSharedPaths();
+    const bool refreshed = preferences->configPath() == configuration
+            && preferences->tilesDirectory() == tiles
+            && notifications == 1 && coherentNotification;
+    preferences->reloadSharedPaths();
+    const bool unchanged = notifications == 1;
+    QObject::disconnect(connection);
+    preferences->mConfigDirectory = originalConfiguration;
+    preferences->mTilesDirectory = originalTiles;
+    if (!refreshed || !unchanged) {
+        *errorString = QStringLiteral("Shared path refresh or no-op notification failed.");
+        return false;
+    }
+    return true;
 }
 
 QString Preferences::configPath(const QString &fileName) const

@@ -24,6 +24,7 @@ class QSplitter;
 class QStackedWidget;
 class QTableWidget;
 class QTabWidget;
+class QTimer;
 namespace Tiled {
 class Tile;
 class Tileset;
@@ -49,6 +50,10 @@ public:
     void setGeometry(const QVector<DepthPrimitive> &geometry,
                      int selectedIndex);
     void setGeometryEditing(bool enabled) { mGeometryEditing = enabled; }
+    void setPreviewImage(const QImage &image);
+    void setDisplayMode(int mode) { mDisplayMode = mode; update(); }
+    void setOverlayOpacity(int opacity) { mOverlayOpacity = opacity / 100.0; update(); }
+    void setLockSourceAlpha(bool enabled) { mLockSourceAlpha = enabled; }
 signals:
     void editStarted(const QImage &before);
     void editFinished(const QImage &after);
@@ -57,6 +62,8 @@ signals:
     void geometryPicked(int index);
     void geometryTranslated(int index, const QVector3D &delta);
     void geometryScaled(int index, float factor);
+    void geometryEditStarted();
+    void geometryEditFinished();
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
@@ -78,6 +85,11 @@ private:
     QImage mSource;
     QImage mDepth;
     QImage mOverlay;
+    QImage mPreview;
+    int mDisplayMode = 0;
+    qreal mOverlayOpacity = 0.7;
+    bool mLockSourceAlpha = true;
+    QPoint mCursorPoint = QPoint(-1, -1);
     QVector<DepthPrimitive> mGeometry;
     int mSelectedGeometry = -1;
     Tool mTool = PaintTool;
@@ -121,6 +133,10 @@ private slots:
     void clearCurrentTile();
     void fillSourceMask();
     void seedVerticalDepth();
+    void invertDepth();
+    void fitSelectedGeometry();
+    void refreshGeometryPreview();
+    void finishGeometryEdit();
     void copyCurrentDepth();
     void pasteDepth();
     void undo();
@@ -151,6 +167,9 @@ private:
         QImage after;
         int beforeRevision = 0;
         int afterRevision = 0;
+        bool geometryEdit = false;
+        QVector<DepthPrimitive> beforeGeometry;
+        QVector<DepthPrimitive> afterGeometry;
     };
     struct PrimitivePreset {
         QString name;
@@ -229,6 +248,9 @@ private:
     QSpinBox *mDepthSpin = nullptr;
     QSpinBox *mBrushSpin = nullptr;
     QComboBox *mZoomCombo = nullptr;
+    QComboBox *mEstimateMode = nullptr;
+    QCheckBox *mLivePreviewCheck = nullptr;
+    QTimer *mPreviewTimer = nullptr;
     QTabWidget *mModeTabs = nullptr;
     QButtonGroup *mToolGroup = nullptr;
     QPushButton *mPasteButton = nullptr;
@@ -264,5 +286,8 @@ private:
     int mSavedRevision = 0;
     int mNextRevision = 1;
     bool mUpdatingGeometryUi = false;
+    QVector<DepthPrimitive> mDisplayedGeometry;
+    QVector<DepthPrimitive> mGeometryBeforeDrag;
+    bool mGeometryDragActive = false;
 };
 #endif

@@ -24,6 +24,9 @@
 #include <QAction>
 #include <QHBoxLayout>
 #include <QSettings>
+#include <QCloseEvent>
+#include <QMessageBox>
+#include <QStatusBar>
 
 KeyboardShortcutWindow::KeyboardShortcutWindow(ActionManager *actionManager, QSettings *settings, const QString &settingsKey, QWidget *parent) :
     QMainWindow(parent),
@@ -37,6 +40,13 @@ KeyboardShortcutWindow::KeyboardShortcutWindow(ActionManager *actionManager, QSe
     QHBoxLayout *hBoxLayout = new QHBoxLayout;
     mEditorWidget = new ShortcutEditorWidget(mActionManager);
     connect(mEditorWidget, &ShortcutEditorWidget::shortcutEdited, actionManager, &ActionManager::shortcutEdited);
+    connect(mEditorWidget, &ShortcutEditorWidget::shortcutEdited, this, [this]() {
+        QString error;
+        if (!mActionManager->save(error))
+            statusBar()->showMessage(tr("Cannot save keyboard shortcuts: %1").arg(error));
+        else
+            statusBar()->clearMessage();
+    });
     hBoxLayout->addWidget(mEditorWidget);
 
     QWidget *centralWidget = new QWidget;
@@ -59,7 +69,9 @@ void KeyboardShortcutWindow::closeEvent(QCloseEvent *event)
 {
     QString error;
     if (!mActionManager->save(error)) {
-
+        QMessageBox::critical(this, tr("Cannot Save Keyboard Shortcuts"), error);
+        event->ignore();
+        return;
     }
     saveSettings();
     QMainWindow::closeEvent(event);

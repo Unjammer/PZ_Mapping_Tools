@@ -1752,11 +1752,17 @@ TileDefWatcherFile::TileDefWatcherFile(const QString &filePath) :
 
 }
 
+TileDefWatcherFile::~TileDefWatcherFile()
+{
+    delete mTileDefFile;
+}
+
 void TileDefWatcherFile::check(Tiled::Internal::FileSystemWatcher &watcher)
 {
     if (tileDefFileChecked) {
         return;
     }
+    qDeleteAll(mTileDefFile->takeTilesets());
     QFileInfo fileInfo(mFilePath);
     if (fileInfo.exists()) {
         qDebug() << "TileDefWatcher read " << fileInfo.absoluteFilePath();
@@ -1790,9 +1796,18 @@ TileDefWatcher::TileDefWatcher() :
 }
 
 
+TileDefWatcher::~TileDefWatcher()
+{
+    qDeleteAll(mFiles);
+}
+
 void TileDefWatcher::check()
 {
+    if (!mNeedsCheck)
+        return;
+
     for (TileDefWatcherFile *watcherFile : qAsConst(mFiles)) {
+        watcherFile->tileDefFileChecked = false;
         watcherFile->check(*mWatcher);
     }
     for (int i = 0; i < mFiles.size(); ++i) {
@@ -1804,6 +1819,7 @@ void TileDefWatcher::check()
             mFiles.at(j)->mTileDefFile->mergePropertiesFrom(
                         *patch->mTileDefFile);
     }
+    mNeedsCheck = false;
 }
 
 TileDefTileset *TileDefWatcher::tileset(const QString &tilesetName)
@@ -1851,12 +1867,27 @@ TileDefWatcherFile *TileDefWatcher::fileByName(const QString &filePath, const QL
 
 void TileDefWatcher::preferencesChanged(const QStringList &tilePropertiesFiles)
 {
-    // Files may be added, removed or reordered
+    QStringList normalizedPaths;
+    for (const QString &path : tilePropertiesFiles) {
+        if (path.isEmpty())
+            continue;
+        const QFileInfo info(path);
+        const QString canonical = info.canonicalFilePath();
+        const QString normalized = canonical.isEmpty()
+                ? info.absoluteFilePath() : canonical;
+        if (!normalizedPaths.contains(normalized))
+            normalizedPaths.append(normalized);
+    }
+    QStringList currentPaths;
+    for (TileDefWatcherFile *file : qAsConst(mFiles))
+        currentPaths.append(file->mFilePath);
+    if (normalizedPaths == currentPaths)
+        return;
+
+    mNeedsCheck = true;
     QList<TileDefWatcherFile*> files = mFiles;
     mFiles.clear();
-    for (const QString &tilePropertiesFilePath : tilePropertiesFiles) {
-        QFileInfo fileInfo(tilePropertiesFilePath);
-        QString canonicalPath = fileInfo.canonicalFilePath();
+    for (const QString &canonicalPath : normalizedPaths) {
         TileDefWatcherFile *watcherFile = fileByName(canonicalPath, files);
         if (watcherFile != nullptr) {
             if (!mFiles.contains(watcherFile)) {
@@ -1870,6 +1901,8 @@ void TileDefWatcher::preferencesChanged(const QStringList &tilePropertiesFiles)
     }
     for (TileDefWatcherFile *file : qAsConst(files)) {
         if (!mFiles.contains(file)) {
+            if (!file->watching.isEmpty())
+                mWatcher->removePath(file->watching);
             delete file;
         }
     }
@@ -1879,6 +1912,7 @@ void TileDefWatcher::fileChanged(const QString &path)
 {
     qDebug() << "TileDefWatcher.fileChanged() " << path;
     if (TileDefWatcherFile *watcherFile = fileByName(path)) {
+        mNeedsCheck = true;
         watcherFile->tileDefFileChecked = false;
 //      removePath(path);
 //      addPath(path);

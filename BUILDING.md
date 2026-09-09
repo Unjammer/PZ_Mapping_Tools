@@ -11,7 +11,7 @@ before they are published as supported releases.
 
 ## Required source layout
 
-Keep the complete `WorldEd` and `TileZed` trees from the same source revision.
+Keep the complete `WorldEd`, `TileZed`, and `shared` trees from the same source revision.
 BuildingEd is part of the TileZed tree and is not a separate repository.
 
 The source, compiler output, and packaged application must be separate:
@@ -29,6 +29,7 @@ PZ_Mapping_Tools/
 │   │   ├── tiled.pri
 │   │   ├── initvars.pro
 │   │   └── src/
+│   ├── shared/
 │   ├── docs/
 │   ├── licenses/
 │   ├── README.md
@@ -178,6 +179,51 @@ them.
 
 ## macOS
 
+### Guided setup
+
+Run the [macOS setup script](tools/Setup-macOS.command) from Terminal:
+
+```sh
+/bin/bash tools/Setup-macOS.command
+```
+
+The script selects the native Apple Silicon or Intel architecture, checks
+Xcode and its SDK, installs Homebrew and Qt 5.15 when missing, obtains the
+source, checks the compiler with a small Qt program, and builds all three
+applications. Xcode installation and license acceptance use Apple's normal
+interface. Homebrew retains its own installation confirmations.
+
+When the script is inside a complete source tree, it uses that copy without
+changing it. A standalone copy downloads the `main` branch of the public
+repository into `~/Developer/PZTools/source`. Sources that lack the macOS
+build configuration are rejected with instructions to select a newer source
+copy. A branch or tag can be selected with `--ref` when creating a clone.
+
+Useful options:
+
+```sh
+/bin/bash tools/Setup-macOS.command --dependencies-only
+/bin/bash tools/Setup-macOS.command --no-build
+/bin/bash tools/Setup-macOS.command --source-dir "$HOME/PZ_Mapping_Tools/source"
+/bin/bash tools/Setup-macOS.command --directory "$HOME/Developer/PZTools" --jobs 4
+/bin/bash tools/Setup-macOS.command --update
+```
+
+Rerunning the script preserves existing sources and compiler outputs. Only
+`--update` updates the downloaded clone, using a fast-forward merge after
+checking its origin, branch, and local changes. A source selected with
+`--source-dir` is never updated. Changing the compiler, Qt, SDK path, source
+directory, or architecture selects a separate build directory. The script
+does not delete earlier builds or alter shell startup files.
+
+Builds are under `~/Developer/PZTools/build`, with a directory for the selected
+toolchain. Each run keeps its complete log below `~/Developer/PZTools/logs`.
+The script stops on errors and reports the failed step and log location.
+After compilation, it checks that all three expected executables exist and
+contain the selected architecture. These are development applications that
+use the local Qt installation and their build libraries. Packaging, signing,
+and native graphical validation are separate from this setup command.
+
 ### Prerequisites
 
 Use a real macOS build host with:
@@ -187,6 +233,25 @@ Use a real macOS build host with:
   OpenGL support
 - an Apple Silicon Qt kit for an arm64 build
 - an Intel Qt kit for an x86_64 build
+
+On macOS Tahoe, Homebrew provides Qt 5.15 with Apple Silicon packages. Install
+Xcode with the macOS SDK, select it, then install Qt 5:
+
+```sh
+sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -runFirstLaunch
+brew install qt@5
+export PZ_QT="$(brew --prefix qt@5)"
+export PATH="$PZ_QT/bin:$PATH"
+"$PZ_QT/bin/qmake" -v
+xcrun --sdk macosx --show-sdk-path
+```
+
+Install Homebrew using its [installation instructions](https://docs.brew.sh/Installation)
+if `brew` is unavailable. Use a native terminal and Qt kit matching the Mac's
+architecture. The [Qt 5 formula](https://formulae.brew.sh/formula/qt@5) lists
+available binary packages and its deprecation status. A source installation
+of Qt requires the full Xcode application.
 
 The current maintained Windows release uses Qt 5.14.2. A public Apple Silicon
 release should complete and validate the remaining Qt and OpenGL compatibility
@@ -198,19 +263,20 @@ release solely because qmake generated the project.
 From Terminal, with `QMAKE` set to the selected Qt qmake:
 
 ```sh
-export QMAKE="$HOME/Qt/5.15.2/clang_64/bin/qmake"
+export QMAKE="$(brew --prefix qt@5)/bin/qmake"
+export PZ_ARCH="$(uname -m)"
 
 mkdir -p "$HOME/PZ_Mapping_Tools/build/worlded"
 mkdir -p "$HOME/PZ_Mapping_Tools/build/tilezed"
 
 cd "$HOME/PZ_Mapping_Tools/build/worlded"
 "$QMAKE" "$HOME/PZ_Mapping_Tools/source/WorldEd/PZWorldEd.pro" \
-  CONFIG+=release
+  -spec macx-clang CONFIG+=release "QMAKE_APPLE_DEVICE_ARCHS=$PZ_ARCH"
 make -j"$(sysctl -n hw.ncpu)"
 
 cd "$HOME/PZ_Mapping_Tools/build/tilezed"
 "$QMAKE" "$HOME/PZ_Mapping_Tools/source/TileZed/tiled.pro" \
-  CONFIG+=release
+  -spec macx-clang CONFIG+=release "QMAKE_APPLE_DEVICE_ARCHS=$PZ_ARCH"
 make -j"$(sysctl -n hw.ncpu)"
 ```
 
@@ -225,6 +291,22 @@ the selected Qt kit:
 The expected application bundles are `PZWorldEd.app`, `TileZed.app`, and
 `BuildingEd.app`. Inspect the generated build tree if a selected Qt version
 places a helper executable or bundle in a different subdirectory.
+
+The macOS projects enable C++17 and place their application bundles under
+each build root's `bin` directory. The corresponding `lib` directory holds
+the bundled build libraries. Relative runtime search paths cover this build
+layout and the `Contents/Frameworks` directory used by deployed bundles.
+
+Qmake copies the shared configuration catalogues, documentation, BuildingEd
+manual, and Lua scripts into each application's `Contents/Config`,
+`Contents/Docs`, and `Contents/Lua` directories. TileZed and BuildingEd have
+separate executable identities, document associations, and translations.
+
+For editor-to-editor commands, place the three deployed application bundles
+beside each other. Copy the TileZed format plugins to BuildingEd's
+`Contents/PlugIns` directory as well. Retain the matching libraries from each
+build when deploying the bundles. The former Qt 4 distribution scripts are
+not part of the current build workflow.
 
 Use `macdeployqt` separately on every application bundle. Then verify bundled
 framework and plugin paths with `otool -L`. A public macOS package also needs
@@ -280,6 +362,10 @@ runtime files imported by the current applications, Qt libraries, and
 plugins. Every selected runtime file is verified as Microsoft-signed and must
 be at least as new as the newest linker version found in the deployed
 binaries.
+
+The BuildingEd manual is maintained in
+`TileZed/src/tiled/BuildingEditor/manual`. The deployment script installs it
+under `docs/BuildingEd`, where the release documentation links resolve.
 
 By default, the script selects the newest x64 Visual C++ minimum-runtime MSI
 from the build machine's package cache or a suitable Visual Studio

@@ -288,27 +288,16 @@ bool CompositeLayerGroup::orderedCellsAt(const QPoint &pos,
             // Floor tile suppress all other tiles, except AboveLot tiles.
             cellsToKeep.clear();
         }
-        if (shouldSuppressExistingTilesOnLevel(mLevel) && !cellsToKeep.isEmpty()) {
-#if 1
-            // Discard all tiles in non-Floor layers.  This keeps exterior building walls that don't have floors.
-            // Keep only the floor layers in a contiguous range starting at the lowest level (no non-floor layers between floor layers).
-            for (int i = 0; i < cellsToKeep.size(); i++) {
-                const OrderedCell &oc = cellsToKeep.at(i);
-                if (!oc.layer->name().startsWith(sFloor)) {
-                    cellsToKeep.resize(i);
-                    break;
+        if (shouldSuppressExistingTilesOnLevel(mLevel)) {
+            for (int i = cellsToKeep.size() - 1; i >= 0; --i) {
+                const QString &name = cellsToKeep.at(i).layer->name();
+                for (const OrderedCell &replacement : qAsConst(orderedCells)) {
+                    if (name == replacement.layer->name()) {
+                        cellsToKeep.remove(i);
+                        break;
+                    }
                 }
             }
-#else
-            // Discard all tiles in non-Floor layers.  This keeps exterior building walls that don't have floors.
-            // These keeps all floor layers.
-            for (int i = cellsToKeep.size() - 1; i >= 0; i--) {
-                const OrderedCell &oc = cellsToKeep.at(i);
-                if (!oc.layer->name().startsWith(sFloor)) {
-                    cellsToKeep.remove(i);
-                }
-            }
-#endif
         }
         cellsToKeep.append(orderedCells);
     }
@@ -534,27 +523,16 @@ bool CompositeLayerGroup::orderedCellsAt2(const QPoint &pos, OrderedCellsTempora
             // Floor tile suppress all other tiles, except AboveLot tiles.
             cellsToKeep.clear();
         }
-        if (shouldSuppressExistingTilesOnLevel(mLevel) && !cellsToKeep.isEmpty()) {
-#if 1
-            // Discard all tiles in non-Floor layers.  This keeps exterior building walls that don't have floors.
-            // Keep only the floor layers in a contiguous range starting at the lowest level (no non-floor layers between floor layers).
-            for (int i = 0; i < cellsToKeep.size(); i++) {
-                const OrderedCell &oc = cellsToKeep.at(i);
-                if (!oc.layer->name().startsWith(sFloor)) {
-                    cellsToKeep.resize(i);
-                    break;
+        if (shouldSuppressExistingTilesOnLevel(mLevel)) {
+            for (int i = cellsToKeep.size() - 1; i >= 0; --i) {
+                const QString &name = cellsToKeep.at(i).layer->name();
+                for (const OrderedCell &replacement : qAsConst(orderedCells)) {
+                    if (name == replacement.layer->name()) {
+                        cellsToKeep.remove(i);
+                        break;
+                    }
                 }
             }
-#else
-            // Discard all tiles in non-Floor layers.  This keeps exterior building walls that don't have floors.
-            // These keeps all floor layers.
-            for (int i = cellsToKeep.size() - 1; i >= 0; i--) {
-                const OrderedCell &oc = cellsToKeep.at(i);
-                if (!oc.layer->name().startsWith(sFloor)) {
-                    cellsToKeep.remove(i);
-                }
-            }
-#endif
         }
         cellsToKeep.append(orderedCells);
     }
@@ -772,17 +750,14 @@ bool CompositeLayerGroup::orderedCellsAt3(const QPoint &pos, OrderedCellsTempora
                 cell.mHideIfVisible = subMapLayer.mSubMap;
             }
         }
-        if (shouldSuppressExistingTilesOnLevel(mLevel) && !buildingCells.isEmpty()) {
-            // Discard all tiles in non-Floor layers.  This keeps exterior building walls that don't have floors.
-            // Keep only the floor layers in a contiguous range starting at the lowest level (no non-floor layers between floor layers).
-            bool suppress = false;
-            for (int i = 0; i < buildingCells.size(); i++) {
-                TilePlusLayer& cell = buildingCells[i];
-                int p = cell.mLayerName.indexOf(QLatin1Char('_')) + 1; // strip N_ level prefix
-                QStringRef layerNameWithoutPrefix = cell.mLayerName.midRef(p);
-                if (suppress || !layerNameWithoutPrefix.startsWith(sFloor)) {
-                    cell.mHideIfVisible = subMapLayer.mSubMap;
-                    suppress = true;
+        if (shouldSuppressExistingTilesOnLevel(mLevel)) {
+            for (TilePlusLayer &cell : buildingCells) {
+                const QString name = MapComposite::layerNameWithoutPrefix(cell.mLayerName);
+                for (const OrderedCell &replacement : qAsConst(orderedCells)) {
+                    if (name == replacement.layer->name()) {
+                        cell.mHideIfVisible = subMapLayer.mSubMap;
+                        break;
+                    }
                 }
             }
         }
@@ -793,25 +768,12 @@ bool CompositeLayerGroup::orderedCellsAt3(const QPoint &pos, OrderedCellsTempora
         }
     }
 
-    // Overwrite cell-map tiles with building tiles at this location
-    if ((buildingCells.isEmpty() == false) && (cellMapCells.isEmpty() == false)) {
-        if (shouldSuppressExistingTilesOnLevel(mLevel) && buildingCells.first().mLayerName == QStringLiteral("0_Floor")) {
-            // Floor tile suppress all other tiles, except AboveLot tiles.
+    if (shouldSuppressExistingTilesOnLevel(mLevel)) {
+        for (const TilePlusLayer &replacement : qAsConst(buildingCells)) {
+            const QString name = MapComposite::layerNameWithoutPrefix(replacement.mLayerName);
             for (TilePlusLayer &cell : cellMapCells) {
-                cell.mHideIfVisible = buildingCells.first().mSubMap;
-            }
-        }
-        else if (shouldSuppressExistingTilesOnLevel(mLevel)) {
-            // Discard all tiles in non-Floor layers.  This keeps exterior building walls that don't have floors.
-            // Keep only the floor layers in a contiguous range starting at the lowest level (no non-floor layers between floor layers).
-            bool bKeepFloors = true;
-            for (TilePlusLayer &cell : cellMapCells) {
-                int p = cell.mLayerName.indexOf(QLatin1Char('_')) + 1; // strip N_ level prefix
-                QStringRef layerNameWithoutPrefix = cell.mLayerName.midRef(p);
-                if (!bKeepFloors || !layerNameWithoutPrefix.startsWith(sFloor)) {
-                    cell.mHideIfVisible = buildingCells.first().mSubMap;
-                    bKeepFloors = false;
-                }
+                if (name == sFloor || name == MapComposite::layerNameWithoutPrefix(cell.mLayerName))
+                    cell.mHideIfVisible = replacement.mSubMap;
             }
         }
     }
@@ -1620,7 +1582,7 @@ bool MapComposite::levelForLayer(const QString &layerName, int *levelPtr)
     QStringList sl = layerName.trimmed().split(QLatin1Char('_'));
     if (sl.count() > 1 && !sl[1].isEmpty()) {
         bool conversionOK;
-        uint level = sl[0].toUInt(&conversionOK);
+        const int level = sl[0].toInt(&conversionOK);
         if (levelPtr) (*levelPtr) = level;
         return conversionOK;
     }

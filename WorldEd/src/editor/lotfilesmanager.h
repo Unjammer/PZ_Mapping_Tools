@@ -226,6 +226,7 @@ public:
     int floor;
     QString name;
     Room *room;
+    const WorldCell *sourceCell = nullptr;
 };
 
 class Room
@@ -276,6 +277,7 @@ public:
     QList<RoomRect*> rects;
     QList<RoomObject> objects;
     QRect mBounds;
+    const WorldCell *sourceCell = nullptr;
 };
 
 class Building

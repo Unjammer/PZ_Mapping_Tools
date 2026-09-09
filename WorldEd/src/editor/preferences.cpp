@@ -585,6 +585,63 @@ QString Preferences::configPath() const
     return mConfigDirectory;
 }
 
+void Preferences::reloadSharedPaths()
+{
+    const QString configuration = PortableSettings::sharedConfigurationPath();
+    const QString tiles = PortableSettings::sharedTilesPath();
+    const bool configurationChanged = mConfigDirectory != configuration;
+    const bool tilesChanged = mTilesDirectory != tiles;
+    mConfigDirectory = configuration;
+    mTilesDirectory = tiles;
+    if (configurationChanged || tilesChanged) {
+        qInfo().noquote() << "Synchronized shared paths:"
+                         << QDir::toNativeSeparators(mConfigDirectory)
+                         << QDir::toNativeSeparators(mTilesDirectory);
+    }
+    if (tilesChanged)
+        emit tilesDirectoryChanged();
+}
+
+bool Preferences::validateSharedPaths(QString *errorString)
+{
+    Preferences *preferences = instance();
+    const QString configuration = PortableSettings::sharedConfigurationPath();
+    const QString tiles = PortableSettings::sharedTilesPath();
+    if (!PortableSettings::isConfigurationPath(configuration)
+            || !PortableSettings::isTilesPath(tiles)) {
+        *errorString = QStringLiteral("Configure valid shared directories first.");
+        return false;
+    }
+    const QString originalConfiguration = preferences->mConfigDirectory;
+    const QString originalTiles = preferences->mTilesDirectory;
+    preferences->mConfigDirectory.clear();
+    preferences->mTilesDirectory.clear();
+    int notifications = 0;
+    bool coherentNotification = true;
+    const QMetaObject::Connection connection = QObject::connect(
+                preferences, &Preferences::tilesDirectoryChanged,
+                preferences, [&]() {
+        ++notifications;
+        coherentNotification = coherentNotification
+                && preferences->configPath() == configuration
+                && preferences->tilesDirectory() == tiles;
+    });
+    preferences->reloadSharedPaths();
+    const bool refreshed = preferences->configPath() == configuration
+            && preferences->tilesDirectory() == tiles
+            && notifications == 1 && coherentNotification;
+    preferences->reloadSharedPaths();
+    const bool unchanged = notifications == 1;
+    QObject::disconnect(connection);
+    preferences->mConfigDirectory = originalConfiguration;
+    preferences->mTilesDirectory = originalTiles;
+    if (!refreshed || !unchanged) {
+        *errorString = QStringLiteral("Shared path refresh or no-op notification failed.");
+        return false;
+    }
+    return true;
+}
+
 QString Preferences::configPath(const QString &fileName) const
 {
     return configPath() + QLatin1Char('/') + fileName;

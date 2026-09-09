@@ -1670,29 +1670,13 @@ void BaseCellItem::paintThumbnails(QPainter *painter, bool force)
     if (force || Preferences::instance()->showWorldThumbnails()) {
         if (mLotImagesRenderOrder.size() != mLotImages.size())
             sortLotImages();
-        int firstAboveGroundIndex = mLotImagesRenderOrder.size();
-        for (int i = 0; i < mLotImagesRenderOrder.size(); ++i) {
-            const LotImage &lotImage =
-                    mLotImages.at(mLotImagesRenderOrder.at(i));
-            if (lotImage.level >= 0) {
-                firstAboveGroundIndex = i;
-                break;
-            }
-            if (!lotImage.mMapImage || !lotImage.mMapImage->isLoaded())
-                continue;
-            const QRectF target =
-                    lotImage.mBounds.translated(mDrawOffset);
-            const QRectF source(
-                    QPointF(0, 0), lotImage.mMapImage->image().size());
-            painter->drawImage(target, lotImage.mMapImage->image(), source);
-        }
         if (mMapImage && mMapImage->isLoaded()) {
             QRectF target = mMapImageBounds.translated(mDrawOffset);
             QRectF source = QRect(QPoint(0, 0), mMapImage->image().size());
             painter->drawImage(target, mMapImage->image(), source);
         }
 
-        for (int i = firstAboveGroundIndex;
+        for (int i = 0;
              i < mLotImagesRenderOrder.size(); ++i) {
             const LotImage &lotImage =
                     mLotImages.at(mLotImagesRenderOrder.at(i));
@@ -1735,7 +1719,8 @@ void BaseCellItem::insertLotImage(int index)
     WorldCellLot *lot = lots().at(index);
     MapImage *mapImage = mWantsImages
             ? MapImageManager::instance()->getMapImage(
-                lot->mapName(), QString(), mScene->worldDocument())
+                lot->mapName(), QString(), mScene->worldDocument(),
+                lot->level() < 0 ? -lot->level() : std::numeric_limits<int>::min())
             : nullptr;
     if (mapImage) {
         mLotImages.insert(index, LotImage(QRectF(), mapImage, lot->level()));
@@ -2009,6 +1994,12 @@ void WorldCellItem::lotMoved(WorldCellLot *lot)
 {
     int index = mCell->lots().indexOf(lot);
     LotImage *lotImage = &mLotImages[index];
+    if (lotImage->level != lot->level() && mWantsImages) {
+        lotImage->mMapImage = MapImageManager::instance()->getMapImage(
+            lot->mapName(), QString(), mScene->worldDocument(),
+            lot->level() < 0 ? -lot->level() : std::numeric_limits<int>::min());
+        calcLotImageBounds(index);
+    }
     lotImage->level = lot->level();
     mLotImagesRenderOrder.clear();
     lotImage->mBounds.moveTopLeft(calcLotImagePosition(lot, lotImage->mBounds.width(),

@@ -16,6 +16,7 @@
  */
 
 #include "buildingeditorwindow.h"
+#include "../../../../shared/settingsvalue.h"
 #include "ui_buildingeditorwindow.h"
 #include "appissuenotifier.h"
 #include "pztoolsbuild.h"
@@ -35,6 +36,7 @@
 #include "buildingpropertiesdialog.h"
 #include "buildingreader.h"
 #include "buildingundoredo.h"
+#include "buildingtransform.h"
 #include "tileselectionscope.h"
 #include "buildingisoview.h"
 #include "buildingorthoview.h"
@@ -130,7 +132,7 @@ static void saveSplitterStates(QWidget *root, QSettings &settings)
         for (int size : splitter->sizes())
             totalSize += size;
         if (!key.isEmpty() && splitter->isVisible() && totalSize > 0)
-            settings.setValue(key, splitter->saveState());
+            PZTools::setValueIfChanged(settings, key, splitter->saveState());
     }
     settings.endGroup();
 }
@@ -159,6 +161,7 @@ EditorWindowPerDocumentStuff::EditorWindowPerDocumentStuff(BuildingDocument *doc
     mMainWindow(BuildingEditorWindow::instance()),
     mDocument(doc),
     mEditMode(IsoObjectMode),
+    mPrevObjectMode(IsoObjectMode),
     mPrevObjectTool(PencilTool::instance()),
     mPrevTileTool(DrawTileTool::instance()),
     mPrevAttributeTool(SelectTileTool::instance()),
@@ -206,36 +209,28 @@ void EditorWindowPerDocumentStuff::deactivate()
     document()->disconnect(mMainWindow);
 }
 
+void EditorWindowPerDocumentStuff::rememberView()
+{
+    BuildingIsoView *view = isIsoObject() ? mIsoView : isTile() ? mTileView
+                                                               : isAttribute() ? mAttributeView : nullptr;
+    if (view) {
+        mIsoViewsCenter = view->viewportTransform().inverted().map(
+                    QPointF(view->viewport()->width() / 2.0, view->viewport()->height() / 2.0));
+        mIsoViewsZoom = view->zoomable()->scale();
+    }
+}
+
 void EditorWindowPerDocumentStuff::toOrthoObject()
 {
-    if (mEditMode == EditMode::IsoObjectMode) {
-        mIsoViewsCenter = mIsoView->mapToScene(mTileView->viewport()->rect().center());
-        mIsoViewsZoom = mIsoView->zoomable()->scale();
-    }
-    if (mEditMode == EditMode::TileMode) {
-        mIsoViewsCenter = mTileView->mapToScene(mTileView->viewport()->rect().center());
-        mIsoViewsZoom = mTileView->zoomable()->scale();
-    }
-    if (mEditMode == EditMode::AttributeMode) {
-        mIsoViewsCenter = mAttributeView->mapToScene(mAttributeView->viewport()->rect().center());
-        mIsoViewsZoom = mAttributeView->zoomable()->scale();
-    }
     mEditMode = EditMode::OrthoObjectMode;
     mPrevObjectMode = EditMode::OrthoObjectMode;
 }
 
 void EditorWindowPerDocumentStuff::toIsoObject()
 {
-    if (mEditMode == EditMode::TileMode) {
-        mIsoViewsCenter = mTileView->mapToScene(mTileView->viewport()->rect().center());
-        mIsoViewsZoom = mTileView->zoomable()->scale();
-    }
-    if (mEditMode == EditMode::AttributeMode) {
-        mIsoViewsCenter = mAttributeView->mapToScene(mAttributeView->viewport()->rect().center());
-        mIsoViewsZoom = mAttributeView->zoomable()->scale();
-    }
-    mIsoView->centerOn(mIsoViewsCenter);
+    if (isIsoObject()) return;
     mIsoView->zoomable()->setScale(mIsoViewsZoom);
+    mIsoView->centerOn(mIsoViewsCenter);
     mEditMode = EditMode::IsoObjectMode;
     mPrevObjectMode = EditMode::IsoObjectMode;
 }
@@ -250,31 +245,17 @@ void EditorWindowPerDocumentStuff::toObject()
 
 void EditorWindowPerDocumentStuff::toTile()
 {
-    if (mEditMode == EditMode::IsoObjectMode) {
-        mIsoViewsCenter = mIsoView->mapToScene(mIsoView->viewport()->rect().center());
-        mIsoViewsZoom = mIsoView->zoomable()->scale();
-    }
-    if (mEditMode == EditMode::AttributeMode) {
-        mIsoViewsCenter = mAttributeView->mapToScene(mAttributeView->viewport()->rect().center());
-        mIsoViewsZoom = mAttributeView->zoomable()->scale();
-    }
-    mTileView->centerOn(mIsoViewsCenter);
+    if (isTile()) return;
     mTileView->zoomable()->setScale(mIsoViewsZoom);
+    mTileView->centerOn(mIsoViewsCenter);
     mEditMode = EditMode::TileMode;
 }
 
 void EditorWindowPerDocumentStuff::toAttribute()
 {
-    if (mEditMode == EditMode::IsoObjectMode) {
-        mIsoViewsCenter = mIsoView->mapToScene(mIsoView->viewport()->rect().center());
-        mIsoViewsZoom = mIsoView->zoomable()->scale();
-    }
-    if (mEditMode == EditMode::TileMode) {
-        mIsoViewsCenter = mTileView->mapToScene(mTileView->viewport()->rect().center());
-        mIsoViewsZoom = mTileView->zoomable()->scale();
-    }
-    mAttributeView->centerOn(mIsoViewsCenter);
+    if (isAttribute()) return;
     mAttributeView->zoomable()->setScale(mIsoViewsZoom);
+    mAttributeView->centerOn(mIsoViewsCenter);
     mEditMode = EditMode::AttributeMode;
 }
 
@@ -957,8 +938,6 @@ void BuildingEditorWindow::readSettings()
         const bool restored = restoreGeometry(geom);
         qInfo() << "BuildingEd geometry restored:" << restored;
     }
-    else
-        resize(800, 600);
     const QByteArray state = mSettings.value(QLatin1String("state"),
                                              QByteArray()).toByteArray();
     if (!state.isEmpty())
@@ -974,7 +953,7 @@ void BuildingEditorWindow::readSettings()
         toggleOrthoIso();
 #endif
     mSettings.endGroup();
-    PortableSettings::applyOneShotMainWindowGeometry(this);
+    PortableSettings::applyStartupMainWindowGeometry(this);
     restoreSplitterStates(this, mSettings);
 
     mOrthoObjectEditMode->readSettings(mSettings);
@@ -1012,12 +991,12 @@ void BuildingEditorWindow::writeWindowSettings()
         return;
     }
     mSettings.beginGroup(QLatin1String("MainWindow"));
-    mSettings.setValue(QLatin1String("geometry"), saveGeometry());
-    mSettings.setValue(QLatin1String("state"), saveState());
+    PZTools::setValueIfChanged(mSettings, QLatin1String("geometry"), saveGeometry());
+    PZTools::setValueIfChanged(mSettings, QLatin1String("state"), saveState());
 #if 0
-    mSettings.setValue(QLatin1String("EditorScale"), mOrthoView->zoomable()->scale());
-    mSettings.setValue(QLatin1String("IsoEditorScale"), mIsoView->zoomable()->scale());
-    mSettings.setValue(QLatin1String("Orientation"),
+    PZTools::setValueIfChanged(mSettings, QLatin1String("EditorScale"), mOrthoView->zoomable()->scale());
+    PZTools::setValueIfChanged(mSettings, QLatin1String("IsoEditorScale"), mIsoView->zoomable()->scale());
+    PZTools::setValueIfChanged(mSettings, QLatin1String("Orientation"),
                        (mOrient == OrientOrtho) ? QLatin1String("orthogonal")
                                                 : QLatin1String("isometric"));
 #endif
@@ -1036,7 +1015,7 @@ void BuildingEditorWindow::saveSplitterSizes(QSplitter *splitter)
     }
     if (!splitter->isVisible() || totalSize <= 0)
         return;
-    mSettings.setValue(tr("%1.sizes").arg(splitter->objectName()), v);
+    PZTools::setValueIfChanged(mSettings, tr("%1.sizes").arg(splitter->objectName()), v);
 //    mSettings.endGroup();
 }
 
@@ -2751,102 +2730,38 @@ void BuildingEditorWindow::resizeBuilding()
 
 void BuildingEditorWindow::flipHorizontal()
 {
-    if (!mCurrentDocument)
-        return;
-
-    QUndoStack *undoStack = mCurrentDocument->undoStack();
-    undoStack->beginMacro(tr("Flip Horizontal"));
-    undoStack->push(new EmitRotateBuilding(mCurrentDocument, true));
-    QMap<QString,FloorTileGrid*> emptyGrime;
-    bool lostTiles = false;
-    foreach (BuildingFloor *floor, currentBuilding()->floors()) {
-        if (!floor->hasUserTiles()) continue;
-        lostTiles = true;
-        undoStack->push(new SwapFloorGrime(mCurrentDocument, floor, emptyGrime,
-                                           "Remove All Tiles", false));
-    }
-    undoStack->push(new FlipBuilding(mCurrentDocument, true));
-    undoStack->push(new EmitRotateBuilding(mCurrentDocument, false));
-    undoStack->endMacro();
-
-    if (lostTiles)
-        QMessageBox::information(this, tr("Flip Building"),
-                                 tr("User-drawn tiles were removed during flipping."));
+    transformBuilding(false, true);
 }
 
 void BuildingEditorWindow::flipVertical()
 {
-    if (!mCurrentDocument)
-        return;
-
-    QUndoStack *undoStack = mCurrentDocument->undoStack();
-    mCurrentDocument->undoStack()->beginMacro(tr("Flip Vertical"));
-    undoStack->push(new EmitRotateBuilding(mCurrentDocument, true));
-    QMap<QString,FloorTileGrid*> emptyGrime;
-    bool lostTiles = false;
-    foreach (BuildingFloor *floor, currentBuilding()->floors()) {
-        if (!floor->hasUserTiles()) continue;
-        lostTiles = true;
-        undoStack->push(new SwapFloorGrime(mCurrentDocument, floor, emptyGrime,
-                                           "Remove All Tiles", false));
-    }
-    undoStack->push(new FlipBuilding(mCurrentDocument, false));
-    undoStack->push(new EmitRotateBuilding(mCurrentDocument, false));
-    undoStack->endMacro();
-
-    if (lostTiles)
-        QMessageBox::information(this, tr("Flip Building"),
-                                 tr("User-drawn tiles were removed during flipping."));
+    transformBuilding(false, false);
 }
 
 void BuildingEditorWindow::rotateRight()
 {
-    if (!mCurrentDocument)
-        return;
-
-    QUndoStack *undoStack = mCurrentDocument->undoStack();
-    undoStack->beginMacro(tr("Rotate Right"));
-    undoStack->push(new EmitRotateBuilding(mCurrentDocument, true));
-    QMap<QString,FloorTileGrid*> emptyGrime;
-    bool lostTiles = false;
-    foreach (BuildingFloor *floor, currentBuilding()->floors()) {
-        if (!floor->hasUserTiles()) continue;
-        lostTiles = true;
-        undoStack->push(new SwapFloorGrime(mCurrentDocument, floor, emptyGrime,
-                                           "Remove All Tiles", false));
-    }
-    undoStack->push(new RotateBuilding(mCurrentDocument, true));
-    undoStack->push(new EmitRotateBuilding(mCurrentDocument, false));
-    undoStack->endMacro();
-
-    if (lostTiles)
-        QMessageBox::information(this, tr("Rotate Building"),
-                                 tr("User-drawn tiles were removed during rotating."));
+    transformBuilding(true, true);
 }
 
 void BuildingEditorWindow::rotateLeft()
 {
+    transformBuilding(true, false);
+}
+
+void BuildingEditorWindow::transformBuilding(bool rotation, bool positive)
+{
     if (!mCurrentDocument)
         return;
-
-    QUndoStack *undoStack = mCurrentDocument->undoStack();
-    undoStack->beginMacro(tr("Rotate Left"));
-    undoStack->push(new EmitRotateBuilding(mCurrentDocument, true));
-    QMap<QString,FloorTileGrid*> emptyGrime;
-    bool lostTiles = false;
-    foreach (BuildingFloor *floor, currentBuilding()->floors()) {
-        if (!floor->hasUserTiles()) continue;
-        lostTiles = true;
-        undoStack->push(new SwapFloorGrime(mCurrentDocument, floor, emptyGrime,
-                                           "Remove All Tiles", false));
+    std::unique_ptr<TransformBuildingContents> command(
+                new TransformBuildingContents(mCurrentDocument, rotation, positive));
+    QString error;
+    if (!command->prepare(error)) {
+        QMessageBox::warning(this, tr("Transform Building"), error);
+        return;
     }
-    undoStack->push(new RotateBuilding(mCurrentDocument, false));
-    undoStack->push(new EmitRotateBuilding(mCurrentDocument, false));
-    undoStack->endMacro();
-
-    if (lostTiles)
-        QMessageBox::information(this, tr("Rotate Building"),
-                                 tr("User-drawn tiles were removed during rotating."));
+    mCurrentDocumentStuff->beginAtomicEdit();
+    mCurrentDocument->undoStack()->push(command.release());
+    mCurrentDocumentStuff->endAtomicEdit();
 }
 
 void BuildingEditorWindow::setBasementAccessNone()
@@ -2978,7 +2893,7 @@ void BuildingEditorWindow::initActionManager()
     actionManager->registerAction(ui->actionDeleteInAllLayers, CONTEXT_MENU, CATEGORY_MENU_EDIT, QStringLiteral("Menu.Edit.DeleteInAllLayers"));
     actionManager->registerAction(ui->actionSelectAll, CONTEXT_MENU, CATEGORY_MENU_EDIT, QStringLiteral("Menu.Edit.SelectAll"));
     actionManager->registerAction(ui->actionSelectNone, CONTEXT_MENU, CATEGORY_MENU_EDIT, QStringLiteral("Menu.Edit.SelectNone"));
-    actionManager->registerAction(ui->actionPreferences, CONTEXT_MENU, CATEGORY_MENU_EDIT, QStringLiteral("Menu.Edit.KeyboardShortcuts"));
+    actionManager->registerAction(ui->actionPreferences, CONTEXT_MENU, CATEGORY_MENU_EDIT, QStringLiteral("Menu.Edit.Preferences"));
     actionManager->registerAction(ui->actionKeyboardShortcuts, CONTEXT_MENU, CATEGORY_MENU_EDIT, QStringLiteral("Menu.Edit.KeyboardShortcuts"));
 
     actionManager->registerAction(ui->actionShowGrid, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowGrid"));
@@ -3022,18 +2937,18 @@ void BuildingEditorWindow::initActionManager()
     const QString CATEGORY_TOOL_TILE = QStringLiteral("Tile");
 
     actionManager->registerAction(ui->actionPencil, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.Pencil"));
-    actionManager->registerAction(ui->actionWall, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object."));
+    actionManager->registerAction(ui->actionWall, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.Wall"));
     actionManager->registerAction(ui->actionSelectRooms, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.SelectRoom"));
-    actionManager->registerAction(ui->actionDoor, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object."));
-    actionManager->registerAction(ui->actionWindow, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object."));
-    actionManager->registerAction(ui->actionStairs, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object."));
-    actionManager->registerAction(ui->actionRoof, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object."));
-    actionManager->registerAction(ui->actionRoofShallow, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object."));
-    actionManager->registerAction(ui->actionRoof30Degree, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object."));
-    actionManager->registerAction(ui->actionRoofCorner, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object."));
-    actionManager->registerAction(ui->actionRoofCorner30Degree, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object."));
-    actionManager->registerAction(ui->actionFurniture, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object."));
-    actionManager->registerAction(ui->actionSelectObject, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object."));
+    actionManager->registerAction(ui->actionDoor, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.Door"));
+    actionManager->registerAction(ui->actionWindow, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.Window"));
+    actionManager->registerAction(ui->actionStairs, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.Stairs"));
+    actionManager->registerAction(ui->actionRoof, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.Roof"));
+    actionManager->registerAction(ui->actionRoofShallow, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.RoofShallow"));
+    actionManager->registerAction(ui->actionRoof30Degree, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.Roof30Degree"));
+    actionManager->registerAction(ui->actionRoofCorner, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.RoofCorner"));
+    actionManager->registerAction(ui->actionRoofCorner30Degree, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.RoofCorner30Degree"));
+    actionManager->registerAction(ui->actionFurniture, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.Furniture"));
+    actionManager->registerAction(ui->actionSelectObject, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.SelectObject"));
     actionManager->registerAction(ui->actionBasementAccessTool, CONTEXT_TOOLS, CATEGORY_TOOL_OBJECT, QStringLiteral("Tools.Object.BasementAccess"));
 
     actionManager->registerAction(ui->actionDrawTiles, CONTEXT_TOOLS, CATEGORY_TOOL_TILE, QStringLiteral("Tools.Tile.Draw"));
@@ -3051,9 +2966,6 @@ void BuildingEditorWindow::initActionManager()
 
 void BuildingEditorWindow::keyboardShortcuts()
 {
-    QString error;
-    mActionManager->load(error);
-    mActionManager->emitShortcutEditedForAllActions();
     if (mKeyboardShortcutWindow == nullptr) {
         mKeyboardShortcutWindow = new KeyboardShortcutWindow(mActionManager, &mSettings, QStringLiteral("KeyboardShortcutsWindow"), this);
         mKeyboardShortcutWindow->setAttribute(Qt::WA_DeleteOnClose, false);
@@ -3285,8 +3197,10 @@ void BuildingEditorWindow::currentModeAboutToChange(IMode *mode)
     if (!mCurrentDocument)
         return;
 
-    if (!mDocumentChanging && !mWelcomeMode->isActive())
+    if (!mDocumentChanging && !mWelcomeMode->isActive()) {
+        mCurrentDocumentStuff->rememberView();
         mCurrentDocumentStuff->rememberTool();
+    }
 }
 
 void BuildingEditorWindow::currentModeChanged()
@@ -3295,11 +3209,6 @@ void BuildingEditorWindow::currentModeChanged()
         return;
 
     IMode *mode = ModeManager::instance().currentMode();
-
-    if (mCurrentDocumentStuff->isTile())
-        mCurrentDocument->setTileSelection(QRegion());
-    else if (mode == mTileEditMode)
-        mCurrentDocument->setRoomSelection(QRegion());
 
     if (mode == mOrthoObjectEditMode)
         mCurrentDocumentStuff->toOrthoObject();

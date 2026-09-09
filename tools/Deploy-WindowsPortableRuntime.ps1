@@ -324,6 +324,7 @@ try {
         [pscustomobject]@{ Source = 'SOURCE-OFFER.txt'; Destination = 'SOURCE-OFFER.txt' },
         [pscustomobject]@{ Source = 'THIRD_PARTY_NOTICES.txt'; Destination = 'THIRD_PARTY_NOTICES.txt' },
         [pscustomobject]@{ Source = 'UPSTREAM-HISTORY.md'; Destination = 'UPSTREAM-HISTORY.md' }
+        [pscustomobject]@{ Source = 'tools\Setup-macOS.command'; Destination = 'tools\Setup-macOS.command' }
     )
     foreach ($document in $documentFiles) {
         if (Copy-FileWhenChanged (Join-Path $sourceRoot $document.Source) (Join-Path $destination $document.Destination)) {
@@ -331,6 +332,7 @@ try {
         }
     }
     $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'docs') (Join-Path $destination 'docs')
+    $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'TileZed\src\tiled\BuildingEditor\manual') (Join-Path $destination 'docs\BuildingEd')
     $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'licenses') (Join-Path $destination 'licenses')
 
     $requiredPaths = @(
@@ -348,6 +350,7 @@ try {
         'brushes',
         'config',
         'docs',
+        'docs\BuildingEd\index.html',
         'licenses',
         'lua',
         'plugins\tiled',

@@ -46,6 +46,7 @@ class MainWindow;
 class ActionManager;
 class ContainerOverlayDialog;
 class DepthMapEditor;
+class TileSetZEditor;
 class KeyboardShortcutWindow;
 class SnowEditor;
 class TileOverlayDialog;
@@ -54,6 +55,7 @@ class TileOverlayDialog;
 
 namespace Tiled {
 
+class Tile;
 class TileLayer;
 class MapReaderInterface;
 
@@ -107,6 +109,8 @@ public:
 #ifdef ZOMBOID
     static MainWindow *mInstance;
     static MainWindow *instance() { return mInstance; }
+    void editInTileSetZ(Tiled::Tile *tile = nullptr);
+    bool validateTileSetZCatalog(QString *error);
 #endif
 
     MainWindow(QWidget *parent = nullptr, Qt::WindowFlags flags = Qt::WindowFlags());
@@ -389,6 +393,7 @@ private:
     TileOverlayDialog *mTileOverlayDialog = nullptr;
     SnowEditor *mSnowEditor = nullptr;
     DepthMapEditor *mDepthMapEditor = nullptr;
+    TileSetZEditor *mTileSetZEditor = nullptr;
     ActionManager *mActionManager = nullptr;
     KeyboardShortcutWindow *mKeyboardShortcutWindow = nullptr;
     QAction *mUndoAction = nullptr;
@@ -396,6 +401,7 @@ private:
     QAction *mBMPBrushSizeMinus = nullptr;
     QAction *mBMPBrushSizePlus = nullptr;
     QAction *mDepthMapEditorAction = nullptr;
+    QAction *mTileSetZAction = nullptr;
     QMenu *mPartialChunksMenu = nullptr;
     QToolBar *mPartialChunksToolBar = nullptr;
     QAction *mPartialChunksAction = nullptr;

@@ -51,6 +51,7 @@ public:
 
     bool highlightCurrentLayer() const { return mHighlightCurrentLayer; }
     bool showTilesetGrid() const { return mShowTilesetGrid; }
+    bool showTileIds() const { return mShowTileIds; }
 
     MapWriter::LayerDataFormat layerDataFormat() const;
     void setLayerDataFormat(MapWriter::LayerDataFormat layerDataFormat);
@@ -88,6 +89,8 @@ public:
 
     QString configPath() const;
     QString configPath(const QString &fileName) const;
+    void reloadSharedPaths();
+    static bool validateSharedPaths(QString *errorString);
 
     QString appConfigPath() const;
     QString appConfigPath(const QString &fileName) const;
@@ -189,6 +192,7 @@ public slots:
     void setGridColor(QColor gridColor);
     void setHighlightCurrentLayer(bool highlight);
     void setShowTilesetGrid(bool showTilesetGrid);
+    void setShowTileIds(bool show);
 #ifdef ZOMBOID
     void setTilesDirectory(const QString &path);
     void setTilesetScale(qreal scale);
@@ -229,6 +233,7 @@ signals:
     void tilesDirectoryChanged();
     void projectZomboidDirectoryChanged();
     void tilesetScaleChanged(qreal scale);
+    void showTileIdsChanged(bool show);
     void sortTilesetsChanged(bool sort);
     void showLotFloorsOnlyChanged(bool show);
     void showMiniMapChanged(bool show);
@@ -260,6 +265,7 @@ private:
     QColor mGridColor;
     bool mHighlightCurrentLayer;
     bool mShowTilesetGrid;
+    bool mShowTileIds = true;
 
     MapWriter::LayerDataFormat mLayerDataFormat;
     bool mDtdEnabled;

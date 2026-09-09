@@ -16,6 +16,7 @@
  */
 
 #include "buildingtilesetdock.h"
+#include "../../../../shared/settingsvalue.h"
 #include "ui_buildingtilesetdock.h"
 
 #include "buildingdocument.h"
@@ -244,7 +245,7 @@ void BuildingTilesetDock::writeSettings(QSettings &settings)
         totalSize += size;
     }
     if (mSplitter->isVisible() && totalSize > 0)
-        settings.setValue(tr("%1/sizes").arg(mSplitter->objectName()), v);
+        PZTools::setValueIfChanged(settings, tr("%1/sizes").arg(mSplitter->objectName()), v);
     settings.endGroup();
 #endif
 }

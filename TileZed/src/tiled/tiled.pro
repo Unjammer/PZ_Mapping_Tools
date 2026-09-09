@@ -12,7 +12,8 @@ msvc {
 }
 
 TEMPLATE = app
-TARGET = TileZed
+isEmpty(PZTOOLS_EDITOR_TARGET):PZTOOLS_EDITOR_TARGET = TileZed
+TARGET = $$PZTOOLS_EDITOR_TARGET
 
 isEmpty(INSTALL_ONLY_BUILD) {
     target.path = $${PREFIX}/bin
@@ -37,6 +38,11 @@ greaterThan(QT_MAJOR_VERSION, 5) {
 QT += svg
 
 INCLUDEPATH += $$top_srcdir/../shared
+HEADERS += ../../../shared/pztoolspaths.h
+HEADERS += ../../../shared/tilesetimageloader.h
+HEADERS += ../../../shared/loadingdialog.h
+HEADERS += ../../../shared/startupwindowgeometry.h
+HEADERS += ../../../shared/tilesetimageloadervalidation.h
 
 DEFINES += QT_NO_CAST_FROM_ASCII \
     QT_NO_CAST_TO_ASCII
@@ -44,7 +50,6 @@ DEFINES += ZOMBOID
 DEFINES += PZTOOLS_APP_ISSUE_NOTIFIER
 
 macx {
-    QMAKE_LIBDIR_FLAGS += -L$$OUT_PWD/../../bin/TileZed.app/Contents/Frameworks
     LIBS += -framework Foundation
 } else:win32 {
     LIBS += -L$$OUT_PWD/../../lib
@@ -67,6 +72,8 @@ macx {
 #OBJECTS_DIR = .obj
 
 SOURCES += ../../../shared/appissuenotifier.cpp \
+    tilesetz.cpp \
+    tilesetzeditor.cpp \
     ../../../shared/partialchunkselection.cpp \
     aboutdialog.cpp \
     BuildingEditor/attributeeditmode.cpp \
@@ -310,12 +317,20 @@ SOURCES += ../../../shared/appissuenotifier.cpp \
     rearrangetiles.cpp \
     BuildingEditor/roofhiding.cpp
 
-HEADERS += aboutdialog.h \
+HEADERS += ../../../shared/settingsvalue.h \
+    tilesetz.h \
+    tilesetzeditor.h \
+    BuildingEditor/buildingroomregions.h \
+    BuildingEditor/roomhighlightvalidation.h \
+    BuildingEditor/buildingcatalogvalidation.h \
+    BuildingEditor/buildingtransform.h \
+    aboutdialog.h \
     ../firstlaunchdialog.h \
     ../portablesettings.h \
     ../sharedmainwindowgeometrywidget.h \
     ../../../shared/appissuenotifier.h \
     ../../../shared/pztoolsbuild.h \
+    ../../../shared/tiledefwatchervalidation.h \
     BuildingEditor/attributeeditmode.h \
     BuildingEditor/attributeeditmode_p.h \
     BuildingEditor/buildingattributesdock.h \
@@ -331,6 +346,7 @@ HEADERS += aboutdialog.h \
     abstracttiletool.h \
     abstracttool.h \
     tiletoolpreviewcache.h \
+    tileworkflowvalidation.h \
     addremovelayer.h \
     addremovemapobject.h \
     addremovetileset.h \
@@ -629,15 +645,17 @@ FORMS += aboutdialog.ui \
     rearrangetiles.ui
 
 RESOURCES += tiled.qrc \
+    tilesetz.qrc \
     BuildingEditor/buildingeditor.qrc \
     qdarkstyle/dark/darkstyle.qrc \
     qdarkstyle/light/lightstyle.qrc \
     breeze/breeze.qrc
 
 macx {
-    TARGET = TileZed
     QMAKE_INFO_PLIST = Info.plist
+    equals(TARGET, BuildingEd):QMAKE_INFO_PLIST = BuildingEd-Info.plist
     ICON = images/tiled-icon-mac.icns
+    include(../../../shared/macosbundle.pri)
 }
 win32 {
     RC_FILE = tiled.rc
@@ -664,27 +682,27 @@ include(../tolua/src/bin/tolua.pri)
 isEmpty(INSTALL_ONLY_BUILD) {
     win32:CONFIG_PREFIX = $${target.path}
     unix:CONFIG_PREFIX = $${target.path}/../share/tilezed/config
-    macx:CONFIG_PREFIX = $${target.path}/TileZed.app/Contents/Config
+    macx:CONFIG_PREFIX = $${target.path}/$${TARGET}.app/Contents/Config
 
     win32:DOCS_PREFIX = $${target.path}/docs
     unix:DOCS_PREFIX = $${target.path}/../share/tilezed/docs
-    macx:DOCS_PREFIX = $${target.path}/TileZed.app/Contents/Docs
+    macx:DOCS_PREFIX = $${target.path}/$${TARGET}.app/Contents/Docs
 
     win32:LUA_PREFIX = $${target.path}/lua
     unix:LUA_PREFIX = $${target.path}/../share/tilezed/lua
-    macx:LUA_PREFIX = $${target.path}/TileZed.app/Contents/Lua
+    macx:LUA_PREFIX = $${target.path}/$${TARGET}.app/Contents/Lua
 } else {
     win32:CONFIG_PREFIX = $${top_builddir}
     unix:CONFIG_PREFIX = $${top_builddir}/share/tilezed/config
-    macx:CONFIG_PREFIX = $${top_builddir}/bin/TileZed.app/Contents/Config
+    macx:CONFIG_PREFIX = $${top_builddir}/bin/$${TARGET}.app/Contents/Config
 
     win32:DOCS_PREFIX = $${top_builddir}/docs
     unix:DOCS_PREFIX = $${top_builddir}/share/tilezed/docs
-    macx:DOCS_PREFIX = $${top_builddir}/TileZed.app/Contents/Docs
+    macx:DOCS_PREFIX = $${top_builddir}/bin/$${TARGET}.app/Contents/Docs
 
     win32:LUA_PREFIX = $${top_builddir}/lua
     unix:LUA_PREFIX = $${top_builddir}/share/tilezed/lua
-    macx:LUA_PREFIX = $${top_builddir}/TileZed.app/Contents/Lua
+    macx:LUA_PREFIX = $${top_builddir}/bin/$${TARGET}.app/Contents/Lua
 }
 
 configTxtFiles.path = $${CONFIG_PREFIX}

@@ -1187,22 +1187,14 @@ void TileMetaInfoMgr::loadTilesets(const QList<Tileset *> &tilesets,
     if (_tilesets.isEmpty())
         _tilesets = this->tilesets();
     resolveTilesets(_tilesets);
-    int total = 0;
-    for (Tileset *ts : std::as_const(_tilesets)) {
-        if (!ts->isLoaded() && !ts->isMissing())
-            ++total;
-    }
-    int current = 0;
+    if (progress)
+        progress->update(tr("Preparing the complete tileset catalogue..."));
     foreach (Tileset *ts, _tilesets) {
         if (!ts->isLoaded() && !ts->isMissing()) {
-            ++current;
-            if (progress) {
-                progress->update(tr("Loading tileset %1 of %2: %3")
-                                 .arg(current).arg(total).arg(ts->name()));
-            }
             TilesetManager::instance()->loadTileset(ts, ts->imageSource());
         }
     }
+    TilesetManager::instance()->waitForTilesets(_tilesets, progress);
 }
 
 void TileMetaInfoMgr::replaceEnums(QMap<QString, int> &enums, QStringList &names)

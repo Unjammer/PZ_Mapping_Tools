@@ -106,6 +106,7 @@ class CurbTool : public AbstractTileTool, public Singleton<CurbTool>
 {
 public:
     CurbTool(QObject *parent = 0);
+    static void restoreBlendTiles(MapDocument *document, TileLayer *layer, const QRegion &region);
 
     void activate(MapScene *scene);
     void deactivate(MapScene *scene);

@@ -196,6 +196,7 @@ private slots:
     void openRecent();
     void open(const QString &directory);
     void closeWorld();
+    void saveScreenshot();
     void zoomIn();
     void zoomOut();
     void zoomNormal();

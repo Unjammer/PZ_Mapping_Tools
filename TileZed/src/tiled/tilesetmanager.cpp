@@ -25,12 +25,14 @@
 #include "tiledeffile.h"
 #include "tileset.h"
 #include "tilesetimagelock.h"
+#include "tilesetimageloader.h"
 
 #include <QImage>
 #ifdef ZOMBOID
 #include "preferences.h"
 #include "tile.h"
 #include "tilemetainfomgr.h"
+#include "zprogress.h"
 #include "BuildingEditor/buildingfloor.h"
 #include <QDebug>
 #include <QDir>
@@ -49,6 +51,7 @@ TilesetManager *TilesetManager::mInstance = 0;
 TilesetManager::TilesetManager():
 #ifdef ZOMBOID
     mTilesetImageCache(new TilesetImageCache),
+    mImageLoader(new TilesetImageLoader(this)),
 #endif
     mWatcher(new FileSystemWatcher(this)),
     mReloadTilesetsOnChange(false)
@@ -104,6 +107,8 @@ TilesetManager::TilesetManager():
     mChangedFilesTimer.setInterval(500);
     mChangedFilesTimer.setSingleShot(true);
 
+    qInfo() << "Tileset image loading:" << mImageLoader->workerCount() << "workers";
+
     connect(&mChangedFilesTimer, &QTimer::timeout,
             this, &TilesetManager::fileChangedTimeout);
 }
@@ -111,6 +116,7 @@ TilesetManager::TilesetManager():
 TilesetManager::~TilesetManager()
 {
 #ifdef ZOMBOID
+    delete mImageLoader;
     removeReference(mInvisibleTileset);
     removeReference(mMissingTileset);
     removeReference(mNoBlendTileset);
@@ -346,6 +352,7 @@ void TilesetManager::directoryChanged(const QString &path)
 void TilesetManager::fileChangedTimeout()
 {
 #ifdef ZOMBOID
+    mImageLoader->waitForDone();
     if (!mChangedDirectories.isEmpty()) {
         qInfo() << "Tiles directory changed:" << mChangedDirectories;
         if (!TileMetaInfoMgr::instance()->addNewTilesets()) {
@@ -433,14 +440,26 @@ void TilesetManager::fileChangedTimeout()
 }
 
 #ifdef ZOMBOID
-void TilesetManager::imageLoaded(QImage *image, Tileset *tileset)
+void TilesetManager::queueImage(Tileset *tileset)
 {
+    if (mPendingImages.contains(tileset))
+        return;
+    mPendingImages.insert(tileset);
+    mImageLoader->enqueue(tileset, [this, tileset](const TilesetImageLoader::Image &image) {
+        mPendingImages.remove(tileset);
+        imageLoaded(image.get(), tileset);
+    });
+}
+
+void TilesetManager::imageLoaded(Tileset *image, Tileset *tileset)
+{
+    QList<Tileset *> changed;
     QWriteLocker imageWriteLock(&tilesetImageLock());
     Q_ASSERT(mTilesetImageCache->mTilesets.contains(tileset));
     const bool replacingLoadedImage = tileset->isLoaded();
 
     // This updates a tileset in the cache.
-    if (!tileset->loadFromImage(*image, tileset->imageSource())) {
+    if (!image->isLoaded() || !tileset->loadFromCache(image)) {
         const QString source = tileset->imageSource2x().isEmpty()
                 ? tileset->imageSource() : tileset->imageSource2x();
         qWarning() << "Unable to decode tileset image:" << source;
@@ -461,13 +480,18 @@ void TilesetManager::imageLoaded(QImage *image, Tileset *tileset)
                 for (int i = 0; i < candidate->tileCount(); ++i)
                     candidate->tileAt(i)->setImage(mMissingTile);
             }
-            emit tilesetChanged(candidate);
+            changed.append(candidate);
         }
         if (replacingLoadedImage)
             mTilesetImageCache->rebuildTileImagePool();
-        delete image;
+        imageWriteLock.unlock();
+        for (Tileset *candidate : changed) {
+            if (mTilesets.contains(candidate))
+                emit tilesetChanged(candidate);
+        }
         return;
     }
+    tileset->setMissing(false);
     if (replacingLoadedImage)
         mTilesetImageCache->rebuildTileImagePool();
     else
@@ -489,10 +513,14 @@ void TilesetManager::imageLoaded(QImage *image, Tileset *tileset)
             candidate->loadFromCache(tileset);
             candidate->setMissing(false);
             copyPZProperties(tileset, candidate);
-            emit tilesetChanged(candidate);
+            changed.append(candidate);
         }
     }
-    delete image;
+    imageWriteLock.unlock();
+    for (Tileset *candidate : changed) {
+        if (mTilesets.contains(candidate))
+            emit tilesetChanged(candidate);
+    }
 }
 
 void TilesetManager::tilePropertiesChanged()
@@ -536,22 +564,20 @@ void TilesetManager::loadTileset(Tileset *tileset, const QString &imageSource_)
             copyPZProperties(cached, tileset);
             emit tilesetChanged(tileset);
         } else {
-            const QString source = cached->imageSource2x().isEmpty()
-                    ? cached->imageSource() : cached->imageSource2x();
-            imageLoaded(new QImage(source), cached);
+            queueImage(cached);
         }
     } else if (QImageReader(imageSource2x).size().isValid()) {
         changeTilesetSource(tileset, imageSource, false);
         tileset->setImageSource2x(imageSource2x);
         cached = mTilesetImageCache->addTileset(tileset);
         cachePZProperties(cached);
-        imageLoaded(new QImage(imageSource2x), cached);
+        queueImage(cached);
     } else if (QImageReader(imageSource).size().isValid()) {
         changeTilesetSource(tileset, imageSource, false);
         tileset->setImageSource2x(QString());
         cached = mTilesetImageCache->addTileset(tileset);
         cachePZProperties(cached);
-        imageLoaded(new QImage(imageSource), cached);
+        queueImage(cached);
     } else {
         {
             QWriteLocker imageWriteLock(&tilesetImageLock());
@@ -566,11 +592,18 @@ void TilesetManager::loadTileset(Tileset *tileset, const QString &imageSource_)
     }
 }
 
-void TilesetManager::waitForTilesets(const QList<Tileset *> &tilesets)
+void TilesetManager::waitForTilesets(const QList<Tileset *> &tilesets,
+                                   PROGRESS *progress)
 {
     QList<Tileset *> requested = tilesets;
     if (requested.isEmpty())
         requested = TileMetaInfoMgr::instance()->tilesets();
+    const auto updateProgress = [progress, total = requested.size()]
+            (int completed, int pendingTotal) {
+        if (progress && pendingTotal > 0)
+            progress->updateTilesets(qMax(0, total - pendingTotal + completed), total);
+    };
+    mImageLoader->waitForDone(updateProgress);
     int loadAttempts = 0;
     for (Tileset *tileset : requested) {
         if (!tileset->isLoaded() && !tileset->isMissing()) {
@@ -578,6 +611,8 @@ void TilesetManager::waitForTilesets(const QList<Tileset *> &tilesets)
             loadTileset(tileset, tileset->imageSource());
         }
     }
+
+    mImageLoader->waitForDone(updateProgress);
 
     int loaded = 0;
     int missing = 0;

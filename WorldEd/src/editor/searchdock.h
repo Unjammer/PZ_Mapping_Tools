@@ -2,12 +2,16 @@
 #define SEARCHDOCK_H
 
 #include <QDockWidget>
-#include <QListWidget>
+#include <QMap>
+#include <QModelIndex>
+#include <QPointer>
+#include <QTimer>
 
 class Document;
 class CellDocument;
 class WorldCell;
 class WorldDocument;
+class SearchResultsModel;
 
 namespace Ui {
 class SearchDock;
@@ -26,6 +30,7 @@ public:
     SearchResults()
         : searchBy(SearchBy::ObjectType)
         , selectedCell(-1, -1)
+        , pending(false)
     {
 
     }
@@ -33,6 +38,7 @@ public:
     void reset() {
         cells.clear();
         selectedCell = QPoint(-1, -1);
+        pending = false;
     }
 
     SearchBy searchBy;
@@ -42,6 +48,7 @@ public:
     QString searchStringPropertyValue;
     QList<QPoint> cells;
     QPoint selectedCell;
+    bool pending;
 };
 
 class SearchDock : public QDockWidget
@@ -49,6 +56,7 @@ class SearchDock : public QDockWidget
     Q_OBJECT
 public:
     explicit SearchDock(QWidget *parent = 0);
+    ~SearchDock() override;
 
     void changeEvent(QEvent *e);
     void retranslateUi();
@@ -61,6 +69,7 @@ private slots:
     void comboActivated1(int index);
     void comboActivated2(int index);
     void textChanged();
+    void runTextSearch();
     void searchObjectType();
     void searchLotFileName();
     void searchPropertyDef();
@@ -76,9 +85,11 @@ private:
 
 private:
     Ui::SearchDock* ui;
-    CellDocument* mCellDoc;
-    WorldDocument* mWorldDoc;
+    QPointer<CellDocument> mCellDoc;
+    QPointer<WorldDocument> mWorldDoc;
     QMap<Document*,SearchResults*> mResults;
+    SearchResultsModel *mModel;
+    QTimer mSearchDelay;
     bool mSynching;
 };
 

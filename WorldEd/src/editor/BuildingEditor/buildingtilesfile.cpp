@@ -21,9 +21,20 @@
 #include "simplefile.h"
 
 #include <QDir>
+#include <QDataStream>
 #include <QMessageBox>
+#include <QSet>
 
 using namespace BuildingEditor;
+
+static QByteArray entryIdentity(const BuildingTileEntry *entry)
+{
+    QByteArray result;
+    QDataStream stream(&result, QIODevice::WriteOnly);
+    for (int i = 0; i < entry->category()->enumCount(); ++i)
+        stream << entry->tile(i)->name() << entry->offset(i);
+    return result;
+}
 
 BuildingTilesFile::BuildingTilesFile()
 {
@@ -111,6 +122,10 @@ bool BuildingTilesFile::read(const QString &fileName)
         simple.values = newFile.values;
     }
 
+    QHash<BuildingTileCategory *, QSet<QByteArray>> identities;
+    for (BuildingTileCategory *category : std::as_const(mCategories))
+        for (BuildingTileEntry *entry : category->entries())
+            identities[category].insert(entryIdentity(entry));
     for (const SimpleFileBlock &block : std::as_const(simple.blocks)) {
         if (block.name == QStringLiteral("category")) {
             QString categoryName = block.value("name");
@@ -122,6 +137,12 @@ bool BuildingTilesFile::read(const QString &fileName)
             for (const SimpleFileBlock &block2 : block.blocks) {
                 if (block2.name == QStringLiteral("entry")) {
                     if (BuildingTileEntry *entry = readTileEntry(category, block2, mError)) {
+                        const QByteArray identity = entryIdentity(entry);
+                        if (identities[category].contains(identity)) {
+                            delete entry;
+                            continue;
+                        }
+                        identities[category].insert(identity);
                         category->insertEntry(category->entryCount(), entry);
                     } else {
                         return false;
@@ -154,7 +175,12 @@ bool BuildingTilesFile::write(const QString &fileName, const int revision, const
         categoryBlock.name = QStringLiteral("category");
         categoryBlock.values += SimpleFileKeyValue(QStringLiteral("label"), category->label());
         categoryBlock.values += SimpleFileKeyValue(QStringLiteral("name"), category->name());
+        QSet<QByteArray> identities;
         for (BuildingTileEntry *entry : category->entries()) {
+            const QByteArray identity = entryIdentity(entry);
+            if (identities.contains(identity))
+                continue;
+            identities.insert(identity);
             writeTileEntry(categoryBlock, entry);
         }
         simpleFile.blocks += categoryBlock;

@@ -33,6 +33,7 @@
 #include <QTimer>
 
 class QImage;
+class TilesetImageLoader;
 
 namespace Tiled {
 
@@ -195,7 +196,7 @@ private slots:
     void fileChangedTimeout();
 
 #ifdef ZOMBOID
-    void imageLoaded(QImage *image, Tiled::Tileset *tileset);
+    void imageLoaded(Tiled::Tileset *image, Tiled::Tileset *tileset);
     void tilePropertiesChanged();
 #endif
 
@@ -216,6 +217,9 @@ private:
 
 #ifdef ZOMBOID
     TilesetImageCache *mTilesetImageCache;
+    TilesetImageLoader *mImageLoader;
+    QSet<Tileset *> mPendingImages;
+    void queueImage(Tileset *tileset);
 
     Tileset *mInvisibleTileset;
     Tile *mInvisibleTile;

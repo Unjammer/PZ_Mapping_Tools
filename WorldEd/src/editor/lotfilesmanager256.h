@@ -65,6 +65,7 @@ public:
     DelayedMapLoader mLoader;
     MapComposite* mMapComposite = nullptr;
     QList<MapComposite*> mCellMaps;
+    QHash<MapComposite*, const WorldCell*> mSourceCells;
     bool mLoggedPendingSubMaps = false;
     bool mLoggedVerticalPlacements = false;
     QString mError;
@@ -88,6 +89,7 @@ public:
     LotFilesWorker256(LotFilesManager256 *manager, InterruptibleThread *thread);
     void work() override;
     bool generateHeader(CombinedCellMaps &combinedMaps, MapComposite *mapComposite);
+    bool groupRoomDefinitions(CombinedCellMaps &combinedMaps);
     bool generateHeaderAux(int cell256X, int cell256Y);
     bool generateChunk(QDataStream &out, int chunkX, int chunkY);
     void generateBuildingObjects(int mapWidth, int mapHeight);
@@ -98,8 +100,8 @@ public:
     bool handleTileset(const Tiled::Tileset *tileset, uint &firstGid);
     int getRoomID(int x, int y, int z);
     uint cellToGid(const Tiled::Cell *cell);
-    bool processObjectGroups(CombinedCellMaps &combinedMaps, MapComposite *mapComposite);
-    bool processObjectGroup(CombinedCellMaps &combinedMaps, Tiled::ObjectGroup *objectGroup, int levelOffset, const QPoint &offset);
+    bool processObjectGroups(CombinedCellMaps &combinedMaps, MapComposite *mapComposite, const WorldCell *sourceCell = nullptr);
+    bool processObjectGroup(CombinedCellMaps &combinedMaps, Tiled::ObjectGroup *objectGroup, int levelOffset, const QPoint &offset, const WorldCell *sourceCell);
     void resolveProperties(PropertyHolder *ph, PropertyList &result);
     QString missingTilesetsString(Tiled::Map *map);
     void checkHolesOnLevelZero();
@@ -190,6 +192,7 @@ public:
     void writeZombieIntensity(QDataStream &out, int cell256X, int cell256Y);
 
     static bool validateNative256Geometry(QString *error);
+    static bool validateRoomOwnership(QString *error);
     static bool validateReferencedRoomDefs(const QString &tmxPath,
                                            QString *summary,
                                            QString *error);

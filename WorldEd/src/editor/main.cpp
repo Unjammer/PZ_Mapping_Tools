@@ -31,6 +31,9 @@
 #include "mainwindow.h"
 #include "../firstlaunchdialog.h"
 #include "../portablesettings.h"
+#include "pztoolsbuild.h"
+#include "tiledefwatchervalidation.h"
+#include "tilesetimageloadervalidation.h"
 
 #ifdef ZOMBOID
 #include "documentmanager.h"
@@ -89,6 +92,7 @@ int main(int argc, char *argv[])
     a.setApplicationName(QLatin1String("PZWorldEd"));
     PortableSettings::configure();
     PortableSettings::installLogging();
+    qInfo().noquote() << "Application" << PZToolsBuild::label();
     PortableSettings::prepareVersionedSettings();
 #ifdef BUILD_INFO_VERSION
     a.setApplicationVersion(QLatin1String(AS_STRING(BUILD_INFO_VERSION)));
@@ -101,6 +105,37 @@ int main(int argc, char *argv[])
 #endif
 
     const QStringList commandLineArguments = a.arguments().mid(1);
+    if (commandLineArguments.contains(QStringLiteral("--validate-basement-thumbnails"))) {
+        QString error;
+        const bool valid = MapImageRenderWorker::validateBasementThumbnails(&error);
+        qInfo().noquote() << "Basement thumbnail validation:"
+                         << (valid ? QStringLiteral("PASS") : error);
+        return valid ? 0 : 1;
+    }
+    if (commandLineArguments.contains(QStringLiteral("--validate-shared-paths"))) {
+        QString error;
+        const bool valid = Preferences::validateSharedPaths(&error);
+        qInfo().noquote() << "Shared paths validation:"
+                         << (valid ? QStringLiteral("PASS") : error);
+        return valid ? 0 : 1;
+    }
+    if (commandLineArguments.contains(QStringLiteral("--validate-tileset-image-loader"))) {
+        QString summary;
+        QString error;
+        const bool valid = TilesetImageLoaderValidation::run(&summary, &error);
+        qInfo().noquote() << "Tileset image loader validation:"
+                         << (valid ? QStringLiteral("PASS: ") + summary : error);
+        return valid ? 0 : 1;
+    }
+
+    if (commandLineArguments.contains(QStringLiteral("--validate-tile-properties-cache"))) {
+        QString summary;
+        QString error;
+        const bool valid = TileDefWatcherValidation::run(&summary, &error);
+        qInfo().noquote() << "Tile-property cache validation:"
+                         << (valid ? QStringLiteral("PASS: ") + summary : error);
+        return valid ? 0 : 1;
+    }
     QString validateBmpGenerationProject;
     QString validateWorldGenPrefabImport;
     QString renderWorldGenPreviewRoot;
@@ -198,11 +233,15 @@ int main(int argc, char *argv[])
                     << "SpawnPoint export validation passed:" << summary;
             return 0;
         }
-        if (argument == QLatin1String(
-                    "--validate-zone-export")) {
+        const QString zoneExportPrefix =
+                QLatin1String("--validate-zone-export=");
+        if (argument == QLatin1String("--validate-zone-export")
+                || argument.startsWith(zoneExportPrefix)) {
             QString summary;
             QString error;
-            if (!LuaWriter::validateZoneExport(&summary, &error)) {
+            const QString projectPath = argument.startsWith(zoneExportPrefix)
+                    ? argument.mid(zoneExportPrefix.length()) : QString();
+            if (!LuaWriter::validateZoneExport(&summary, &error, projectPath)) {
                 qCritical().noquote()
                         << "Zone export validation failed:" << error;
                 return 56;
@@ -412,6 +451,15 @@ int main(int argc, char *argv[])
                     << summary
                     << "| SSL runtime:"
                     << QSslSocket::sslLibraryVersionString();
+            return 0;
+        }
+        if (argument == QLatin1String(
+                    "--validate-lot-room-ownership")) {
+            QString error;
+            if (!LotFilesManager256::validateRoomOwnership(&error)) {
+                qCritical().noquote() << "LOT room ownership validation failed:" << error;
+                return 18;
+            }
             return 0;
         }
         if (argument == QLatin1String(
@@ -850,6 +898,7 @@ int main(int argc, char *argv[])
     }
     if (!FirstLaunchDialog::ensureSharedPaths())
         return 0;
+    Preferences::instance()->reloadSharedPaths();
     for (const QString &argument : commandLineArguments) {
         if (argument == QLatin1String("--renderer=opengl"))
             Preferences::instance()->setUseOpenGL(true);

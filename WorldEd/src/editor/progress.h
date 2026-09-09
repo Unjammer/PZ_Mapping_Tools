@@ -19,9 +19,9 @@
 #define PROGRESS_H
 
 #include <QString>
+#include <QPointer>
 
-class QDialog;
-class QLabel;
+namespace PZTools { class LoadingDialog; }
 class QWidget;
 
 class Progress
@@ -32,6 +32,7 @@ public:
 
     void begin(const QString &text);
     void update(const QString &text);
+    void updateTilesets(int completed, int total);
     void end();
 
     QWidget *mainWindow() const
@@ -47,8 +48,7 @@ public:
 
 private:
     QWidget *mMainWindow;
-    QDialog *mDialog;
-    QLabel *mLabel;
+    QPointer<PZTools::LoadingDialog> mDialog;
     int mDepth;
 
     Progress();
@@ -84,6 +84,11 @@ public:
         if (mMainWindow != nullptr) {
             Progress::instance()->setMainWindow(mMainWindow);
         }
+    }
+
+    void updateTilesets(int completed, int total)
+    {
+        Progress::instance()->updateTilesets(completed, total);
     }
 
     ~PROGRESS()

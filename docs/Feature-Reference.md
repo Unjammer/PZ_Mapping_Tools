@@ -10,7 +10,7 @@ PZWorldEd, TileZed, and BuildingEd release.
 | Initial setup | First startup | Selects shared Tiles and configuration paths |
 | Project Zomboid installation | Preferences | Supplies read-only game TileDefs, packs, WorldGen, and loot data |
 | Basement access resources | Portable `pzby_tbx` beside `bin` | Reads editable sources from `basement_access` and compiled PZBY files from `binmap` |
-| Window setup | Preferences | Applies 1920 x 1080 or custom dimensions once to the current application, or opens all three once at that centered size, without rewriting another application's INI |
+| Window setup | Preferences | All three tools start at a centered 1920 x 1080 size fitted to the desktop. Temporary custom dimensions can be applied to the current application or used to open all three, without rewriting another application's INI |
 | Reset interface | Preferences | Restores the current application's default window and dock layout |
 | Complete tileset discovery | All applications | Resolves every valid PNG recursively with 2x priority and 1x or custom fallback |
 | New Folder | File browsers | Creates a directory from a compact button or the browser context menu |
@@ -59,22 +59,24 @@ Detailed references:
 | Function | Menu or location | Main result |
 |---|---|---|
 | TMX editing | Main editor | Tile, object, layer, and RoomDef changes with Undo |
-| Tileset palette | Tilesets dock | Complete catalogue with source and scale tags |
+| Tileset palette | Tilesets dock | Complete catalogue with source and scale tags, optional tile numbers in the context menu |
 | Tile Definitions | Tools | Binary and text TileDef property editing |
 | TileDef comparison | Tools | Structural comparison and controlled property merge |
 | Snow and replacements | Tools | SnowTile, BurntTile, and custom replacement properties |
 | Pack extraction | Tools | Individual tiles, tilesets, pages, or assembled objects |
 | Pack comparison | Tools | Pixel, metadata, and file comparison |
-| Depth Map Editor | Tools | Resizable geometry and depth-atlas editing with local and projected dimensions |
+| Depth Map Editor | Tools | Color depth painting, ground and vertical estimates, fitted volumes with live previews and Undo |
+| TileSetZ | Tools or tile context menu | Pixel drawing and shapes, zoomable tilesheets and masks, automatic wall texture precutting with assembly check and TMX export, trim colors and Undo |
 | Automapper | Automapping dock | Full or interactive rules applied through Undo |
 | BMP Tools | Dockable BMP window | Terrain brush, fill, select, blending, and layer conversion |
-| Select Tiles | Main tools | Layer-aware and floor-aware copy and cut, followed by a movable Ctrl+V placement preview |
+| Select Tiles | Main tools | Current-layer selections paste onto the destination layer, broader scopes preserve layer names and relative levels |
 | Procedural loot | Tools | Project loot manifest and generated post-merge Lua |
 | Lua mapping | Tools and console | Transactional map, object, and RoomDef changes |
 
 Detailed references:
 
 - [Automapper](TileZed/Automapper.html)
+- [TileSetZ](TileSetZ.md)
 - [Procedural loot](PZ-B42.20-Procedural-Loot-Editor.md)
 - [Pack tools](PZ-Pack-Comparator-and-Extractor.md)
 - [TileDef tools](PZ-TileDef-Comparator-and-Snow-Editor.md)
@@ -90,12 +92,13 @@ Detailed references:
 | Select Tiles | Main tools | Layer-aware and floor-aware copy and cut, followed by a movable paste preview |
 | Object palettes | Ortho and Iso modes | Category-driven walls, furniture, and objects |
 | Templates | Building dialogs | Reusable building defaults and furniture groups |
-| Basements | Floor controls | Negative floors retained in supported formats |
+| Basement placement | WorldEd lot placement | Places the building's local floors below ground |
+| Building transforms | Building menu | Reversible rotations and mirrors retain painted tile positions and attributes |
 | Procedural loot | Building menu | Room-aware project loot overrides |
 | Lua automation | Building menu and console | Transactional building changes with Undo |
 | Autosave | Automatic | Recoverable copy of modified building data |
 
-The [BuildingEd manual](BuildingEd/index.html) documents its editing
+The [BuildingEd manual](../TileZed/src/tiled/BuildingEditor/manual/index.html) documents its editing
 modes and tools.
 
 ## File ownership

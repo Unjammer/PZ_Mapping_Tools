@@ -163,6 +163,8 @@ bool BuildingDocument::write(const QString &fileName, QString &error)
 
 void BuildingDocument::setCurrentFloor(BuildingFloor *floor)
 {
+    if (!floor || mCurrentFloor == floor || !mBuilding->floors().contains(floor))
+        return;
     mCurrentFloor = floor;
     emit currentFloorChanged();
 }

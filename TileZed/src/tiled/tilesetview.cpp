@@ -143,7 +143,7 @@ void TileDelegate::paint(QPainter *painter,
         painter->setOpacity(opacity);
     }
 #ifdef ZOMBOID
-    if (tile) {
+    if (tile && Preferences::instance()->showTileIds()) {
         const QString idText = QLatin1Char('_') + QString::number(tile->id());
         const QFontMetrics fm = painter->fontMetrics();
         const int textWidth = qMin(option.rect.width(), fm.horizontalAdvance(idText) + 4);
@@ -218,6 +218,7 @@ TilesetView::TilesetView(QWidget *parent)
     setLayoutDirection(Qt::LeftToRight);
 
     Preferences *prefs = Preferences::instance();
+    connect(prefs, &Preferences::showTileIdsChanged, this, [this]() { viewport()->update(); });
     mDrawGrid = prefs->showTilesetGrid();
 
     connect(mZoomable, &Zoomable::scaleChanged, this, &TilesetView::adjustScale);
@@ -271,6 +272,7 @@ TilesetView::TilesetView(MapDocument *mapDocument, Zoomable *zoomable, QWidget *
 
     Preferences *prefs = Preferences::instance();
     mDrawGrid = prefs->showTilesetGrid();
+    connect(prefs, &Preferences::showTileIdsChanged, this, [this]() { viewport()->update(); });
 
     connect(mZoomable, &Zoomable::scaleChanged, this, &TilesetView::adjustScale);
     connect(prefs, &Preferences::showTilesetGridChanged,
@@ -373,6 +375,11 @@ void TilesetView::contextMenuEvent(QContextMenuEvent *event)
     const bool isExternal = m->tileset()->isExternal();
 #endif
     QMenu menu;
+    QAction *showIds = menu.addAction(tr("Show Tile Numbers"));
+    showIds->setCheckable(true);
+    showIds->setChecked(Preferences::instance()->showTileIds());
+    connect(showIds, &QAction::toggled, Preferences::instance(), &Preferences::setShowTileIds);
+    menu.addSeparator();
 
     QIcon propIcon(QLatin1String(":images/16x16/document-properties.png"));
 
@@ -391,6 +398,10 @@ void TilesetView::contextMenuEvent(QContextMenuEvent *event)
         actionProperties = menu.addAction(
                     propIcon, tr("Edit Project Zomboid Tile &Definition..."));
         Utils::setThemeIcon(actionProperties, "document-properties");
+        QAction *editImage = menu.addAction(tr("Edit in TileSetZ..."));
+        connect(editImage, &QAction::triggered, this, [tile] {
+            MainWindow::instance()->editInTileSetZ(tile);
+        });
         actionExportSelection = menu.addAction(
                     QIcon(QLatin1String(":images/16x16/document-export.png")),
                     tr("Export Selection as PNG..."));

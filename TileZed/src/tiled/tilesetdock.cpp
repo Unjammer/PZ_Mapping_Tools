@@ -23,6 +23,7 @@
 #ifndef ZOMBOID
 
 #include "tilesetdock.h"
+#include "../../../shared/settingsvalue.h"
 
 #include "addremovemapobject.h"
 #include "addremovetileset.h"
@@ -693,6 +694,7 @@ void TilesetDock::refreshTilesetMenu()
 #else // ZOMBOID
 
 #include "tilesetdock.h"
+#include "../../../shared/settingsvalue.h"
 
 #include "addremovemapobject.h"
 #include "addremovetileset.h"
@@ -1239,9 +1241,9 @@ void TilesetDock::writeSettings(QSettings &settings)
         totalSize += size;
     }
     if (mSplitter->isVisible() && totalSize > 0) {
-        settings.setValue(QLatin1String("splitter1/state"),
+        PZTools::setValueIfChanged(settings, QLatin1String("splitter1/state"),
                           mSplitter->saveState());
-        settings.setValue(tr("%1/sizes").arg(mSplitter->objectName()), v);
+        PZTools::setValueIfChanged(settings, tr("%1/sizes").arg(mSplitter->objectName()), v);
     }
     settings.endGroup();
 #endif

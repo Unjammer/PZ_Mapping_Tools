@@ -33,6 +33,7 @@
 #include "progress.h"
 #include "staggeredrenderer.h"
 #include "tilelayer.h"
+#include "tileset.h"
 #include "tilesetmanager.h"
 #include "tilesetimagelock.h"
 #include "zlevelrenderer.h"
@@ -252,7 +253,7 @@ void MapImageManager::removeMapImage(MapImage *mapImage)
 
 MapImage *MapImageManager::getMapImage(const QString &mapName,
                                        const QString &relativeTo,
-                                       QObject *owner)
+                                       QObject *owner, int firstLevel)
 {
     // Do not emit mapImageChanged as a result of worker threads finishing
     // loading any images while we are creating a new thumbnail image.
@@ -293,13 +294,15 @@ MapImage *MapImageManager::getMapImage(const QString &mapName,
     if (mapFilePath.isEmpty())
         return 0;
 
-    if (mMapImages.contains(mapFilePath)) {
-        MapImage *mapImage = mMapImages[mapFilePath];
+    const QString imageKey = firstLevel == std::numeric_limits<int>::min()
+            ? mapFilePath : mapFilePath + QStringLiteral("|from-level=%1").arg(firstLevel);
+    if (mMapImages.contains(imageKey)) {
+        MapImage *mapImage = mMapImages[imageKey];
         retainMapImage(mapImage, owner);
         return mapImage;
     }
 
-    ImageData data = generateMapImage(mapFilePath);
+    ImageData data = generateMapImage(mapFilePath, false, firstLevel);
     if (!data.valid)
         return 0;
 
@@ -307,12 +310,13 @@ MapImage *MapImageManager::getMapImage(const QString &mapName,
     if (data.threadLoad || data.threadRender)
         paintDummyImage(data, mapInfo);
     MapImage *mapImage = new MapImage(data.image, data.scale, data.levelZeroBounds, data.mapSize, data.tileSize, mapInfo);
+    mapImage->mFirstLevel = firstLevel;
     mapImage->mMissingTilesets = data.missingTilesets;
     mapImage->mLoaded = !(data.threadLoad || data.threadRender);
 
     if (data.threadLoad || data.threadRender) {
         if (data.threadLoad) {
-            QString imageFileName = imageFileInfo(mapFilePath).canonicalFilePath();
+            QString imageFileName = imageFileInfo(mapFilePath, firstLevel).canonicalFilePath();
             QMetaObject::invokeMethod(mImageReaderWorkers[mNextThreadForJob],
                                       "addJob", Qt::QueuedConnection,
                                       Q_ARG(QString,imageFileName),
@@ -336,7 +340,7 @@ MapImage *MapImageManager::getMapImage(const QString &mapName,
     }
     mapImage->setSources(sources);
 
-    mMapImages.insert(mapFilePath, mapImage);
+    mMapImages.insert(imageKey, mapImage);
     retainMapImage(mapImage, owner);
     return mapImage;
 }
@@ -353,6 +357,16 @@ bool MapImageManager::recreateMapImage(const QString &mapName,
         return false;
     }
 
+    const QList<MapImage*> cachedImages = mMapImages.values();
+    for (MapImage *cached : cachedImages) {
+        if (cached->firstLevel() == std::numeric_limits<int>::min()
+                || cached->mapInfo()->path() != mapFilePath)
+            continue;
+        if (cached->isLoaded())
+            scheduleMapImageRebuild(cached);
+        else
+            mForceRebuildAfterLoad.insert(cached);
+    }
     MapImage *mapImage = mMapImages.value(mapFilePath, nullptr);
     if (!mapImage) {
         ImageData data = generateMapImage(mapFilePath, true);
@@ -391,7 +405,7 @@ bool MapImageManager::scheduleMapImageRebuild(MapImage *mapImage)
 {
     if (!mapImage || !mapImage->mapInfo())
         return false;
-    ImageData data = generateMapImage(mapImage->mapInfo()->path(), true);
+    ImageData data = generateMapImage(mapImage->mapInfo()->path(), true, mapImage->firstLevel());
     if (!data.valid || !data.threadRender) {
         mError = tr("Unable to prepare the thumbnail renderer for %1")
                 .arg(mapImage->mapInfo()->path());
@@ -420,7 +434,7 @@ void MapImageManager::queueRenderJob(MapImage *mapImage)
     mNextRenderWorker =
             (mNextRenderWorker + 1) % mImageRenderWorkers.size();
     const QString imageFileName =
-            imageFileInfo(mapImage->mapInfo()->path()).absoluteFilePath();
+            imageFileInfo(mapImage->mapInfo()->path(), mapImage->firstLevel()).absoluteFilePath();
     QMetaObject::invokeMethod(worker, "addJob", Qt::QueuedConnection,
                               Q_ARG(MapImage*, mapImage),
                               Q_ARG(QString, imageFileName));
@@ -477,7 +491,7 @@ bool MapImageManager::reloadImageFile(const QString &imageName)
     return true;
 }
 
-MapImageManager::ImageData MapImageManager::generateMapImage(const QString &mapFilePath, bool force)
+MapImageManager::ImageData MapImageManager::generateMapImage(const QString &mapFilePath, bool force, int firstLevel)
 {
 #if 0
     if (mapFilePath == QLatin1String("<fail>")) {
@@ -491,7 +505,7 @@ MapImageManager::ImageData MapImageManager::generateMapImage(const QString &mapF
 #endif
 
     QFileInfo fileInfo(mapFilePath);
-    QFileInfo imageInfo = imageFileInfo(mapFilePath);
+    QFileInfo imageInfo = imageFileInfo(mapFilePath, firstLevel);
     QFileInfo imageDataInfo = imageDataFileInfo(imageInfo);
     if (!force && imageInfo.exists() && imageDataInfo.exists() && (fileInfo.lastModified() < imageInfo.lastModified())) {
         QImageReader reader(imageInfo.absoluteFilePath());
@@ -842,7 +856,7 @@ void MapImageManager::mapChanged(MapInfo *mapInfo)
                                       Q_ARG(MapImage*, it.value().mapImage),
                                       Q_ARG(QString,
                                             imageFileInfo(it.value().mapImage
-                                                          ->mapInfo()->path())
+                                                          ->mapInfo()->path(), it.value().mapImage->firstLevel())
                                             .absoluteFilePath()));
                 break;
             }
@@ -1126,8 +1140,15 @@ void MapImageManager::mapFailedToLoad(MapInfo *mapInfo)
     }
 }
 
-QFileInfo MapImageManager::imageFileInfo(const QString &mapFilePath)
+QFileInfo MapImageManager::imageFileInfo(const QString &mapFilePath, int firstLevel)
 {
+    if (firstLevel != std::numeric_limits<int>::min()) {
+        const QFileInfo base = imageFileInfo(mapFilePath);
+        if (base.filePath().isEmpty())
+            return base;
+        return QFileInfo(base.absolutePath() + QLatin1Char('/') + base.completeBaseName()
+                         + QStringLiteral("_from_level_%1.png").arg(firstLevel));
+    }
     QString thumbnailsDirectory = Preferences::instance()->thumbnailsDirectory();
     if (thumbnailsDirectory.isEmpty() || !QFileInfo::exists(thumbnailsDirectory)) {
         QFileInfo mapFileInfo(mapFilePath);
@@ -1389,7 +1410,7 @@ void MapImageRenderWorker::work()
 #ifndef QT_NO_DEBUG
 //        Sleep::msleep(1000);
 #endif
-        MapImageData data = generateMapImage(job.mapComposite);
+        MapImageData data = generateMapImage(job.mapComposite, job.mapImage->firstLevel());
         qInfo() << "Thumbnail render"
                 << (aborted() ? "aborted" : "finished")
                 << job.mapImage->mapInfo()->path();
@@ -1456,7 +1477,61 @@ void MapImageRenderWorker::resume(MapImage *mapImage,
     scheduleWork();
 }
 
-MapImageData MapImageRenderWorker::generateMapImage(MapComposite *mapComposite)
+bool MapImageRenderWorker::validateBasementThumbnails(QString *error)
+{
+    Tileset tiles(QStringLiteral("thumbnail_colors"), 64, 128);
+    QImage atlas(192, 128, QImage::Format_ARGB32);
+    QPainter painter(&atlas);
+    painter.fillRect(QRect(0, 0, 64, 128), Qt::red);
+    painter.fillRect(QRect(64, 0, 64, 128), Qt::green);
+    painter.fillRect(QRect(128, 0, 64, 128), Qt::blue);
+    painter.end();
+    if (!tiles.loadFromImage(atlas, QString())) {
+        *error = QStringLiteral("Cannot create thumbnail tiles");
+        return false;
+    }
+    Map map(Map::LevelIsometric, 8, 8, 64, 32);
+    map.addTileset(&tiles);
+    for (int level = -1; level <= 1; ++level) {
+        auto *layer = new TileLayer(QStringLiteral("Furniture"), 0, 0, 8, 8);
+        layer->setLevel(level);
+        layer->setCell(1 + (level + 1) * 2, 2, Cell(tiles.tileAt(level + 1)));
+        map.addLayer(layer);
+    }
+    MapInfo info(&map);
+    info.setFilePath(QStringLiteral("<LotFilesManagerMap>"));
+    MapComposite composite(&info);
+    InterruptibleThread thread;
+    MapImageRenderWorker worker(&thread);
+    for (int firstLevel : {-1, 0, 1, 2}) {
+        const MapImageData data = worker.generateMapImage(&composite, firstLevel);
+        QSet<int> colors;
+        const QImage image = data.image.convertToFormat(QImage::Format_ARGB32);
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                const QRgb pixel = image.pixel(x, y);
+                if (qAlpha(pixel) < 128)
+                    continue;
+                if (qRed(pixel) > 200 && qGreen(pixel) < 30 && qBlue(pixel) < 30)
+                    colors.insert(-1);
+                if (qGreen(pixel) > 200 && qRed(pixel) < 30 && qBlue(pixel) < 30)
+                    colors.insert(0);
+                if (qBlue(pixel) > 200 && qRed(pixel) < 30 && qGreen(pixel) < 30)
+                    colors.insert(1);
+            }
+        }
+        QSet<int> expected;
+        for (int level = firstLevel; level <= 1; ++level)
+            expected.insert(level);
+        if (colors != expected || (firstLevel <= 1 && !data.valid())) {
+            *error = QStringLiteral("Thumbnail floor filter %1 differs from visible floors").arg(firstLevel);
+            return false;
+        }
+    }
+    return true;
+}
+
+MapImageData MapImageRenderWorker::generateMapImage(MapComposite *mapComposite, int firstLevel)
 {
     QReadLocker imageReadLock(&tilesetImageLock());
     Map *map = mapComposite->map();
@@ -1492,7 +1567,7 @@ MapImageData MapImageRenderWorker::generateMapImage(MapComposite *mapComposite)
             maxLevel = layerGroup->level();
         }
     }
-    renderer->setMinLevel(minLevel);
+    renderer->setMinLevel(qMax(minLevel, firstLevel));
     renderer->setMaxLevel(maxLevel);
 
     foreach (MapComposite *mc, mapComposite->maps())
@@ -1501,8 +1576,10 @@ MapImageData MapImageRenderWorker::generateMapImage(MapComposite *mapComposite)
 
     QRectF sceneRect = mapComposite->boundingRect(renderer);
     QSize mapSize = sceneRect.size().toSize();
-    if (mapSize.isEmpty())
+    if (mapSize.isEmpty()) {
+        delete renderer;
         return MapImageData();
+    }
 
     qreal scale = thumbnailImageWidth() / qreal(mapSize.width());
     mapSize *= scale;
@@ -1516,6 +1593,9 @@ MapImageData MapImageRenderWorker::generateMapImage(MapComposite *mapComposite)
     painter.setTransform(QTransform::fromScale(scale, scale).translate(-sceneRect.left(), -sceneRect.top()));
 
     foreach (MapComposite::ZOrderItem zo, mapComposite->zOrder()) {
+        const int level = zo.group ? zo.group->level() : zo.layer->level();
+        if (level < firstLevel)
+            continue;
         if (zo.group) {
             renderer->drawTileLayerGroup(&painter, zo.group);
         } else if (TileLayer *tl = zo.layer->asTileLayer()) {

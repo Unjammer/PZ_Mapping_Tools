@@ -5,13 +5,13 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>TileZed</string>
+	<string>${EXECUTABLE_NAME}</string>
 	<key>CFBundleGetInfoString</key>
 	<string>Tiled 0.8.1, Copyright 2008-2011 Thorbjørn Lindeijer, GNU General Public License</string>
 	<key>CFBundleIconFile</key>
 	<string>tiled-icon-mac</string>
 	<key>CFBundleIdentifier</key>
-	<string>org.mapeditor.Tiled</string>
+	<string>${PRODUCT_BUNDLE_IDENTIFIER}</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundlePackageType</key>

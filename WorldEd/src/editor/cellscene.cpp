@@ -76,6 +76,7 @@
 #include <QQueue>
 #include <QSaveFile>
 #include <QScopedValueRollback>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QStyleOptionGraphicsItem>
 #include <QUrl>
@@ -4146,7 +4147,7 @@ void ObjectItem::synchWithObject()
     }
     mResizeHandle->synch();
 
-    mLabel->synch();
+    const auto updateLabel = qScopeGuard([this]() { mLabel->synch(); });
 
     mPolygon.clear();
     mPolylineOutline.clear();
@@ -5706,13 +5707,6 @@ void CellScene::setTool(AbstractTool *tool)
     // Restack ObjectItems and SubMapItems based on the current tool.
     // This is to ensure the mouse-over highlight works as expected.
     setGraphicsSceneZOrder();
-}
-
-void CellScene::viewTransformChanged(BaseGraphicsView *view)
-{
-    Q_UNUSED(view)
-    foreach (ObjectItem *item, mObjectItems)
-        item->synchWithObject(); // actually just need to update the label
 }
 
 void CellScene::setDocument(CellDocument *doc)

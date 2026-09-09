@@ -40,7 +40,8 @@ public:
     QStringList warnings() const;
 
     static bool validateSpawnPointExport(QString *summary, QString *error);
-    static bool validateZoneExport(QString *summary, QString *error);
+    static bool validateZoneExport(QString *summary, QString *error,
+                                   const QString &projectPath = QString());
 
 private:
     void writeWorld(World *world, QIODevice *device, const QString &absDirPath);

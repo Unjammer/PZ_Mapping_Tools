@@ -28,8 +28,8 @@ public:
         QLabel *description = new QLabel(QObject::tr(
             "Open TileZed, BuildingEd and WorldEd once at the same centered "
             "size. This does not propagate or save a geometry preference. "
-            "Their next normal start restores each application's previous "
-            "saved position and size."), this);
+            "Their next normal start uses the standard 1920 x 1080 size, "
+            "fitted to the available screen."), this);
         description->setWordWrap(true);
         layout->addWidget(description);
         QFormLayout *dimensions = new QFormLayout;
@@ -131,8 +131,8 @@ public:
                     "The current application now uses the centered %1 x %2 "
                     "setup. Started: %3.\n\nNo shared or per-application "
                     "geometry preference was written. Each application "
-                    "returns to its previous saved geometry on its next "
-                    "normal start.%4")
+                    "returns to the standard 1920 x 1080 startup size on its "
+                    "next normal start.%4")
                 .arg(requested.width()).arg(requested.height())
                 .arg(started.isEmpty()
                      ? QObject::tr("none") : started.join(QLatin1String(", ")))
@@ -156,9 +156,9 @@ private:
                 this, QObject::tr("One-Time Window Setup"),
                 QObject::tr(
                     "The current application now uses the centered %1 x %2 "
-                    "setup. This temporary size was not saved. The size and "
-                    "position active before this action are restored on the "
-                    "next normal start.")
+                    "setup. This temporary size was not saved. The next "
+                    "normal start uses the standard 1920 x 1080 size, "
+                    "fitted to the available screen.")
                 .arg(applied.isValid() ? applied.width() : requested.width())
                 .arg(applied.isValid() ? applied.height() : requested.height()));
         }

@@ -1,5 +1,6 @@
 #ifndef PORTABLESETTINGS_H
 #define PORTABLESETTINGS_H
+#include "../../shared/startupwindowgeometry.h"
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDebug>
@@ -196,11 +197,6 @@ inline QSize applyOneShotMainWindowGeometry(
     QScreen *screen = QGuiApplication::primaryScreen();
     if (!screen || !screen->availableGeometry().isValid())
         return QSize();
-    const QRect available = screen->availableGeometry();
-    const QSize applied(qMin(requested.width(), available.width()),
-                        qMin(requested.height(), available.height()));
-    QRect geometry(QPoint(), applied);
-    geometry.moveCenter(available.center());
     if (!window->property("PZToolsOneShotWindowGeometry").toBool()) {
         QSettings settings;
         settings.beginGroup(QLatin1String("MainWindow"));
@@ -208,15 +204,23 @@ inline QSize applyOneShotMainWindowGeometry(
         settings.endGroup();
         settings.sync();
     }
-    if (window->isMaximized() || window->isFullScreen())
-        window->showNormal();
     window->setProperty("PZToolsOneShotWindowGeometry", true);
-    window->setGeometry(geometry);
+    const QSize applied = PZTools::fitMainWindowToScreen(window, requested, screen);
     qInfo() << "One-shot main-window geometry applied:"
             << requested << "requested," << applied << "available-screen fit,"
             << "centered on" << screen->name()
             << "without persistent geometry propagation";
     return applied;
+}
+inline void applyStartupMainWindowGeometry(QWidget *window)
+{
+    if (oneShotMainWindowSizeFromEnvironment().isValid()) {
+        applyOneShotMainWindowGeometry(window);
+        return;
+    }
+    const QSize applied = PZTools::applyStartupMainWindowGeometry(window);
+    qInfo() << "Startup main-window size:" << QSize(1920, 1080)
+            << "requested," << applied << "available-screen fit";
 }
 inline bool shouldPersistMainWindowGeometry(const QWidget *window)
 {

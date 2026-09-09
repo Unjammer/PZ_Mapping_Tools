@@ -243,6 +243,8 @@ void TileDelegate::paint(QPainter *painter,
         style->drawPrimitive(QStyle::PE_FrameFocusRect, &o, painter, widget);
     }
 
+    if (!Preferences::instance()->showTileIds())
+        return;
     const QString idText = QLatin1Char('_') + QString::number(tile->id());
     const QFontMetrics idMetrics = painter->fontMetrics();
     const int idWidth = qMin(option.rect.width(), idMetrics.horizontalAdvance(idText) + 4);
@@ -429,8 +431,15 @@ void MixedTilesetView::setZoomable(Zoomable *zoomable)
 
 void MixedTilesetView::contextMenuEvent(QContextMenuEvent *event)
 {
-    if (mContextMenu)
-        mContextMenu->exec(event->globalPos());
+    QMenu fallback(this);
+    QMenu *menu = mContextMenu ? mContextMenu : &fallback;
+    QAction *showIds = menu->addAction(tr("Show Tile Numbers"));
+    showIds->setCheckable(true);
+    showIds->setChecked(Preferences::instance()->showTileIds());
+    connect(showIds, &QAction::toggled, Preferences::instance(), &Preferences::setShowTileIds);
+    menu->exec(event->globalPos());
+    menu->removeAction(showIds);
+    delete showIds;
 }
 
 void MixedTilesetView::clear()
@@ -531,6 +540,7 @@ void MixedTilesetView::init()
     mMousePressed = false;
 
     tilesetBackgroundColorChanged(Preferences::instance()->tilesetBackgroundColor());
+    connect(Preferences::instance(), &Preferences::showTileIdsChanged, this, [this]() { viewport()->update(); });
     connect(Preferences::instance(), &Preferences::tilesetBackgroundColorChanged, this, &MixedTilesetView::tilesetBackgroundColorChanged);
     connect(Preferences::instance(), &Preferences::themeChanged,
             this, &MixedTilesetView::themeChanged);

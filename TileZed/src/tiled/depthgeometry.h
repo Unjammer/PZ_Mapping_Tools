@@ -56,6 +56,9 @@ private:
 class DepthGeometryRasterizer
 {
 public:
+    enum PixelEstimate { VerticalObject, GroundSurface };
+    static QImage estimatePixels(const QImage &sourceTile, PixelEstimate mode);
+    static DepthPrimitive fittedBox(const QImage &sourceTile);
     static float depthAt(const DepthPrimitive &primitive,
                          float pixelX, float pixelY);
     static QImage rasterize(const QVector<DepthPrimitive> &primitives,

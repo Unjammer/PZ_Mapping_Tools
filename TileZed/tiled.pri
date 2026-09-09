@@ -3,8 +3,7 @@ isEmpty(PREFIX):PREFIX = /usr/local
 isEmpty(LIBDIR):LIBDIR = $${PREFIX}/lib
 
 macx {
-    # Do a universal build when possible
-    contains(QT_CONFIG, ppc):CONFIG += x86 ppc
+    include(../shared/macos.pri)
 }
 
 # Only "make install" newer files when copying files from the source

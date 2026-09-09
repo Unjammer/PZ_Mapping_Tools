@@ -25,21 +25,143 @@
 #include "mapdocument.h"
 #include "mapscene.h"
 #include "painttilelayer.h"
+#include "preferences.h"
 
 #include "BuildingEditor/buildingtiles.h"
 
 #include "maprenderer.h"
 #include "tilelayer.h"
 #include "tileset.h"
+#include "tile.h"
 
 #include <qmath.h>
 #include <QDebug>
+#include <QFileInfo>
 #include <QUndoStack>
 
 using namespace Tiled;
 using namespace Tiled::Internal;
 
 SINGLETON_IMPL(CurbTool)
+
+static const QHash<QString, QVector<QPoint>> &curbBlendOffsets()
+{
+    static QString loadedSignature;
+    static QHash<QString, QVector<QPoint>> offsetsByName;
+    const QStringList paths = { Preferences::instance()->configPath(QStringLiteral("Curbs.txt")),
+        Preferences::instance()->appConfigPath(QStringLiteral("Curbs.txt")) };
+    QString signature;
+    for (const QString &path : paths) {
+        const QFileInfo info(path);
+        signature += path + QStringLiteral(":%1:%2\n").arg(info.size()).arg(info.lastModified().toMSecsSinceEpoch());
+    }
+    if (signature == loadedSignature)
+        return offsetsByName;
+    loadedSignature = signature;
+    offsetsByName.clear();
+    QList<Curb*> curbs;
+    for (const QString &path : paths) {
+        CurbFile file;
+        if (QFileInfo::exists(path) && file.read(path))
+            curbs += file.takeCurbs();
+    }
+    for (const Curb *curb : qAsConst(curbs)) {
+        for (int shape = 0; shape < curb->mTileNames.size(); ++shape) {
+            const QString &name = curb->mTileNames.at(shape);
+            if (name.isEmpty())
+                continue;
+            QVector<QPoint> offsets;
+            if (shape < Curb::FirstNear || (shape >= Curb::FarSunkenW && shape <= Curb::FarSunkenJoinS))
+                offsets.append(QPoint());
+            else if (shape == Curb::NearE || shape == Curb::NearSunkenE)
+                offsets.append(QPoint(1, 0));
+            else if (shape == Curb::NearS || shape == Curb::NearSunkenS)
+                offsets.append(QPoint(0, 1));
+            else if (shape != Curb::NearJoinSE)
+                offsets = { QPoint(1, 0), QPoint(0, 1) };
+            for (const QPoint &offset : offsets) {
+                if (!offsetsByName[name].contains(offset))
+                    offsetsByName[name].append(offset);
+            }
+        }
+    }
+    qDeleteAll(curbs);
+    return offsetsByName;
+}
+
+void CurbTool::restoreBlendTiles(MapDocument *document, TileLayer *layer, const QRegion &region)
+{
+    if (!document || !layer || layer->level() != 0)
+        return;
+    const QHash<QString, QVector<QPoint>> &offsetsByName = curbBlendOffsets();
+    QHash<Tile*, QVector<QPoint>> resolvedOffsets;
+    const auto offsetsFor = [&offsetsByName, &resolvedOffsets](Tile *tile) {
+        if (!tile)
+            return QVector<QPoint>();
+        if (!resolvedOffsets.contains(tile))
+            resolvedOffsets.insert(tile, offsetsByName.value(tile->tileset()->name()
+                + QLatin1Char('_') + QString::number(tile->id())));
+        return resolvedOffsets.value(tile);
+    };
+    QRegion affected;
+    for (const QRect &rect : region.intersected(layer->bounds())) {
+        for (int y = rect.top(); y <= rect.bottom(); ++y) {
+            for (int x = rect.left(); x <= rect.right(); ++x) {
+                const QPoint pos(x, y);
+                const Cell &cell = layer->cellAt(pos - layer->position());
+                for (const QPoint &offset : offsetsFor(cell.tile))
+                    affected += QRect(pos + offset, QSize(1, 1));
+            }
+        }
+    }
+    if (affected.isEmpty())
+        return;
+    const QList<TileLayer*> layers = document->map()->tileLayers();
+    QRegion restore;
+    for (const QRect &rect : affected.intersected(QRect(QPoint(), document->map()->size()))) {
+        for (int y = rect.top(); y <= rect.bottom(); ++y) {
+            for (int x = rect.left(); x <= rect.right(); ++x) {
+                const QPoint target(x, y);
+                bool required = false;
+                for (TileLayer *candidateLayer : layers) {
+                    if (candidateLayer->level() != 0)
+                        continue;
+                    for (const QPoint &offset : { QPoint(), QPoint(1, 0), QPoint(0, 1) }) {
+                        const QPoint candidate = target - offset;
+                        if (!candidateLayer->bounds().contains(candidate)
+                                || (candidateLayer == layer && region.contains(candidate)))
+                            continue;
+                        Tile *tile = candidateLayer->cellAt(candidate - candidateLayer->position()).tile;
+                        if (offsetsFor(tile).contains(offset)) {
+                            required = true;
+                            break;
+                        }
+                    }
+                    if (required)
+                        break;
+                }
+                if (!required)
+                    restore += QRect(target, QSize(1, 1));
+            }
+        }
+    }
+    for (MapNoBlend *noBlend : document->map()->noBlends()) {
+        QRegion changed;
+        for (const QRect &rect : restore) {
+            for (int y = rect.top(); y <= rect.bottom(); ++y) {
+                for (int x = rect.left(); x <= rect.right(); ++x) {
+                    if (noBlend->get(x, y))
+                        changed += QRect(x, y, 1, 1);
+                }
+            }
+        }
+        if (changed.isEmpty())
+            continue;
+        const QRect bounds = changed.boundingRect();
+        MapNoBlend clear(QString(), bounds.width(), bounds.height());
+        document->undoStack()->push(new PaintNoBlend(document, noBlend, clear, changed));
+    }
+}
 
 CurbTool::CurbTool(QObject *parent) :
     AbstractTileTool(tr("Draw Curb"),

@@ -16,13 +16,11 @@
  */
 
 #include "progress.h"
+#include "loadingdialog.h"
 
 #include "mainwindow.h"
 
 #include <QApplication>
-#include <QDialog>
-#include <QLabel>
-#include <QVBoxLayout>
 
 Progress *Progress::mInstance = 0;
 
@@ -43,25 +41,21 @@ Progress::Progress()
 
 void Progress::setMainWindow(QWidget *mainWindow)
 {
-    if (mMainWindow) {
-        mDialog->setParent(mMainWindow = mainWindow);
-        mDialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::Dialog);
+    if (mDialog && mMainWindow == mainWindow)
+        return;
+    mMainWindow = mainWindow;
+    if (mDialog) {
+        mDialog->setParent(mainWindow, PZTools::LoadingDialog::flags());
+        if (mDepth > 0)
+            mDialog->show();
         return;
     }
-    mMainWindow = mainWindow;
-    mDialog = new QDialog(mainWindow);
-    QVBoxLayout *layout = new QVBoxLayout();
-    mLabel = new QLabel();
-    mLabel->setMinimumSize(300, 20);
-    layout->addWidget(mLabel);
-    mDialog->setWindowModality(Qt::WindowModal);
-    mDialog->setLayout(layout);
-    mDialog->setWindowFlags(Qt::CustomizeWindowHint | Qt::Dialog);
+    mDialog = new PZTools::LoadingDialog(mainWindow);
 }
 
 bool Progress::isVisible()
 {
-    return mDialog->isVisible();
+    return mDialog && mDialog->isVisible();
 }
 
 void Progress::hide()
@@ -76,23 +70,33 @@ void Progress::show()
 
 void Progress::begin(const QString &text)
 {
-    mLabel->setText(text);
-    if (mDepth++ == 0)
+    if (!mDialog)
+        setMainWindow(mMainWindow);
+    mDialog->setEnabled(true);
+    mDialog->setStatus(text);
+    if (mDepth++ == 0) {
+        mDialog->adjustSize();
         mDialog->show();
+    }
     qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
 }
 
 void Progress::update(const QString &text)
 {
     Q_ASSERT(mDepth > 0);
-    mLabel->setText(text);
+    mDialog->setStatus(text);
     qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
+}
+
+void Progress::updateTilesets(int completed, int total)
+{
+    Q_ASSERT(mDepth > 0);
+    mDialog->setTilesetProgress(completed, total);
 }
 
 void Progress::end()
 {
     Q_ASSERT(mDepth > 0);
-//    mDialog->setValue(mDialog->maximum()); // hides dialog!
     qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
     if (--mDepth == 0)
         mDialog->hide();
