@@ -179,7 +179,6 @@ bool Tile::isColumnTransparent(const QImage &image, int col)
 void Tile::createImageBlack()
 {
     mImageBlack = mImage;
-#if 1
     for (int y = 0; y < mImageBlack.height(); y++) {
         for (int x = 0; x < mImageBlack.width(); x++) {
             QRgb pixel = mImageBlack.pixel(x, y);
@@ -190,10 +189,4 @@ void Tile::createImageBlack()
             mImageBlack.setPixel(x, y, pixel);
         }
     }
-#else
-    QPainter painter(&mImageBlack);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    painter.fillRect(mImageBlack.rect(), QColor(0, 0, 0, 255));
-    painter.end();
-#endif
 }

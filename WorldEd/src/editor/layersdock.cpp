@@ -139,13 +139,6 @@ void LayersDock::restoreExpandedLevels(CellDocument *doc)
         mView->setExpanded(mView->model()->index(mapLevel), true);
     }
     mExpandedLevels[doc].clear();
-#if 0
-    // Also restore the selection
-    foreach (MapObject *o, mapDoc->selectedObjects()) {
-        QModelIndex index = mView->model()->index(o);
-        mView->selectionModel()->select(index, QItemSelectionModel::Select |  QItemSelectionModel::Rows);
-    }
-#endif
 }
 
 void LayersDock::documentAboutToClose(int index, Document *doc)
@@ -167,27 +160,17 @@ void LayersDock::cellMapFileAboutToChange(WorldCell *cell)
 void LayersDock::opacitySliderValueChanged(int value)
 {
     if (mCellDocument) {
-#if 1
         if (TileLayer *tl = mCellDocument->currentTileLayer()) {
             mCellDocument->scene()->setLayerOpacity(mCellDocument->currentLevel(), tl, qreal(value) / 100.0);
         }
 
-#else
-        mCellDocument->scene()->setLevelOpacity(
-                    mCellDocument->currentLevel(),
-                    qreal(value) / 100.0);
-#endif
     }
 }
 
 void LayersDock::updateOpacitySlider()
 {
     if (mCellDocument) {
-#if 1
         qreal opacity = mCellDocument->scene()->layerOpacity(mCellDocument->currentLevel(), mCellDocument->currentTileLayer());
-#else
-        qreal opacity = mCellDocument->scene()->levelOpacity(mCellDocument->currentLevel());
-#endif
         mOpacitySlider->setValue(opacity * 100);
         mOpacitySlider->setEnabled(true);
     } else {

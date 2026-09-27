@@ -778,9 +778,7 @@ void WorldScene::loadOtherWorlds()
     if (ownerIdentity.isEmpty())
         ownerIdentity = QFileInfo(worldDocument()->fileName())
                 .absoluteFilePath();
-#ifdef Q_OS_WIN
     ownerIdentity = ownerIdentity.toLower();
-#endif
     ownerIdentity = QDir::cleanPath(ownerIdentity);
     QSet<QString> loadedPaths;
     for (const QString &configuredPath : world()->otherWorlds()) {
@@ -790,9 +788,7 @@ void WorldScene::loadOtherWorlds()
         QString identity = QFileInfo(path).canonicalFilePath();
         if (identity.isEmpty())
             identity = QFileInfo(path).absoluteFilePath();
-#ifdef Q_OS_WIN
         identity = identity.toLower();
-#endif
         identity = QDir::cleanPath(identity);
         if (identity == ownerIdentity || loadedPaths.contains(identity)) {
             qWarning() << "Linked world skipped because it is the current "
@@ -1789,28 +1785,12 @@ void BaseCellItem::mapImageChanged(MapImage *mapImage)
         calcMapImageBounds();
         changed = true;
     }
-#if 0
-    // Perhaps the image now exists and didn't before.
-    if (!mMapImage) {
-        updateCellImage();
-        if (mMapImage)
-            changed = true;
-    }
-#endif
     int index = 0;
     foreach (LotImage lotImage, mLotImages) {
         if (mapImage == lotImage.mMapImage) {
             calcLotImageBounds(index);
             changed = true;
         }
-#if 0
-        // Perhaps the image now exists and didn't before.
-        if (!lotImage.mMapImage) {
-            insertLotImage(index);
-            if (mLotImages[index].mMapImage)
-                changed = true;
-        }
-#endif
         ++index;
     }
 
@@ -2558,7 +2538,6 @@ void WorldBMPItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *,
                          QWidget *)
 {
     if (mMapImage) {
-#if 1
         int columns = mMapImage->subImageColumns();
         int rows = mMapImage->subImageRows();
         qreal scale = mMapImageBounds.width() / qreal(mMapImage->imageWidth());
@@ -2573,11 +2552,6 @@ void WorldBMPItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *,
                 painter->drawImage(target, img, source);
             }
         }
-#else
-        QRectF target = mMapImageBounds;
-        QRectF source = QRect(QPoint(0, 0), mMapImage->image().size());
-        painter->drawImage(target, mMapImage->image(), source);
-#endif
     } else {
         QPolygonF polygon = this->polygon();
 

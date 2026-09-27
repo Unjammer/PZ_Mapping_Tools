@@ -98,7 +98,7 @@ Detailed references:
 | Lua automation | Building menu and console | Transactional building changes with Undo |
 | Autosave | Automatic | Recoverable copy of modified building data |
 
-The [BuildingEd manual](../TileZed/src/tiled/BuildingEditor/manual/index.html) documents its editing
+The BuildingEd manual documents its editing
 modes and tools.
 
 ## File ownership

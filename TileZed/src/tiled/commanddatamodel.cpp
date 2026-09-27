@@ -41,29 +41,6 @@ CommandDataModel::CommandDataModel()
     foreach (const QVariant &commandVariant, commands)
         mCommands.append(Command::fromQVariant(commandVariant));
 
-    // Add default commands the first time the app has booted up.
-    // This is useful on it's own and helps demonstrate how to use the commands.
-
-    const QString addPrefStr = QLatin1String("addedDefaultCommands");
-    const bool addedCommands = mSettings.value(addPrefStr, false).toBool();
-    if (!addedCommands) {
-
-        // Disable default commands by default so user gets an informative
-        // warning when clicking the command button for the first time
-        Command command(false);
-#ifdef Q_WS_X11
-        command.command = QLatin1String("gedit %mapfile");
-#elif defined(Q_WS_MAC)
-        command.command = QLatin1String("open -t %mapfile");
-#endif
-        if (!command.command.isEmpty()) {
-            command.name = tr("Open in text editor");
-            mCommands.push_back(command);
-        }
-
-        commit();
-        mSettings.setValue(addPrefStr, true);
-    }
 }
 
 void CommandDataModel::commit()
@@ -310,16 +287,6 @@ QMenu *CommandDataModel::contextMenu(QWidget *parent, const QModelIndex &index)
                     this, &CommandDataModel::execute);
         }
 
-#if defined(Q_WS_X11) || defined(Q_WS_MAC)
-        {
-            QAction *action = menu->addAction(tr("Execute in Terminal"));
-            QSignalMapper *mapper = new QSignalMapper(action);
-            mapper->setMapping(action, row);
-            connect(action, &QAction::triggered, mapper, qOverload<>(&QSignalMapper::map));
-            connect(mapper, QOverload<int>::of(&QSignalMapper::mapped),
-                    this, &CommandDataModel::executeInTerminal);
-        }
-#endif
 
         menu->addSeparator();
 
@@ -475,11 +442,6 @@ void CommandDataModel::moveUp(int commandIndex)
 void CommandDataModel::execute(int commandIndex) const
 {
     mCommands.at(commandIndex).execute();
-}
-
-void CommandDataModel::executeInTerminal(int commandIndex) const
-{
-    mCommands.at(commandIndex).execute(true);
 }
 
 void CommandDataModel::remove(int commandIndex)

@@ -324,7 +324,6 @@ try {
         [pscustomobject]@{ Source = 'SOURCE-OFFER.txt'; Destination = 'SOURCE-OFFER.txt' },
         [pscustomobject]@{ Source = 'THIRD_PARTY_NOTICES.txt'; Destination = 'THIRD_PARTY_NOTICES.txt' },
         [pscustomobject]@{ Source = 'UPSTREAM-HISTORY.md'; Destination = 'UPSTREAM-HISTORY.md' }
-        [pscustomobject]@{ Source = 'tools\Setup-macOS.command'; Destination = 'tools\Setup-macOS.command' }
     )
     foreach ($document in $documentFiles) {
         if (Copy-FileWhenChanged (Join-Path $sourceRoot $document.Source) (Join-Path $destination $document.Destination)) {

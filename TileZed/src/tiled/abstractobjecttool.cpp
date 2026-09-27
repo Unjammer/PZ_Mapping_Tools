@@ -166,8 +166,6 @@ void AbstractObjectTool::showContextMenu(MapObjectItem *clickedObjectItem,
     // TODO: Implement editing of properties for multiple objects
     propertiesAction->setEnabled(selectedObjects.size() == 1);
 
-    Utils::setThemeIcon(removeAction, "edit-delete");
-    Utils::setThemeIcon(propertiesAction, "document-properties");
 
 #ifdef ZOMBOID
     QAction *openAction = 0;

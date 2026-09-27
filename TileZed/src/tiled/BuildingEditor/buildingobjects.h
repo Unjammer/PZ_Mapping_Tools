@@ -634,26 +634,7 @@ public:
     QRect northEdge();
     QRect eastEdge();
     QRect southEdge();
-#if 0
-    QRect northCapRise();
-    QRect northCapFall();
-    QRect southCapRise();
-    QRect southCapFall();
-
-    QRect westGap(RoofDepth depth);
-    QRect northGap(RoofDepth depth);
-    QRect eastGap(RoofDepth depth);
-    QRect southGap(RoofDepth depth);
-#endif
     QRect flatTop();
-#if 0
-    QRect shallowWestEdge();
-    QRect shallowEastEdge();
-    QRect shallowNorthEdge();
-    QRect shallowSouthEdge();
-
-    QRect tileRect(RoofTile tile, bool alt);
-#endif
     QVector<RoofTile> slopeTiles(QRect &b);
 
     QVector<RoofTile> westCapTiles(QRect &b);
@@ -662,10 +643,6 @@ public:
     QVector<RoofTile> southCapTiles(QRect &b);
 
     QVector<RoofTile> cornerTiles(QRect &b);
-#if 0
-    QRect cornerInner(bool &slopeE, bool &slopeS);
-    QRect cornerOuter();
-#endif
     QString typeToString() const
     { return typeToString(mType); }
 

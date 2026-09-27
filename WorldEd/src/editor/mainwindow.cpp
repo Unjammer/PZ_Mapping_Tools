@@ -19,6 +19,7 @@
 #include "ui_mainwindow.h"
 #include "appissuenotifier.h"
 #include "pztoolsbuild.h"
+#include "wrappinglayout.h"
 
 #include "fromtodialog.h"
 #include "bmptotmx.h"
@@ -145,6 +146,7 @@
 #include <QPixmap>
 #include <QRandomGenerator>
 #include <QScrollBar>
+#include <QScrollArea>
 #include <QSet>
 #include <QShortcut>
 #include <QSignalBlocker>
@@ -1264,6 +1266,30 @@ MainWindow::MainWindow(QWidget *parent)
         previewInsertIndex + 1, mSnowPreviewButton);
     ui->horizontalLayout->insertWidget(
         previewInsertIndex + 2, mJumboPreviewButton);
+    QList<QWidget *> viewControls;
+    while (QLayoutItem *item = ui->horizontalLayout->takeAt(0)) {
+        if (item->widget())
+            viewControls.append(item->widget());
+        delete item;
+    }
+    delete ui->horizontalLayout;
+    ui->horizontalLayout = nullptr;
+    auto *viewControlsLayout = new WrappingLayout(ui->viewTools);
+    for (QWidget *control : qAsConst(viewControls))
+        viewControlsLayout->addWidget(control);
+
+    const QList<QDockWidget *> scrollableDocks = {
+        mStreetNamesDock, mRegionsDock, mInGameMapDock
+    };
+    for (QDockWidget *dock : scrollableDocks) {
+        QWidget *contents = dock->widget();
+        auto *scrollArea = new QScrollArea(dock);
+        scrollArea->setObjectName(dock->objectName() + QStringLiteral("ScrollArea"));
+        scrollArea->setFrameShape(QFrame::NoFrame);
+        scrollArea->setWidgetResizable(true);
+        scrollArea->setWidget(contents);
+        dock->setWidget(scrollArea);
+    }
 #ifdef ROAD_UI
     ui->menuView->addAction(mRoadsDock->toggleViewAction());
 #endif
@@ -1557,16 +1583,10 @@ MainWindow::MainWindow(QWidget *parent)
     toolManager->registerTool(SubMapTool::instance(), mActionManager, CONTEXT_TOOL, CATEGORY_TOOL_CELL, QStringLiteral(""));
     toolManager->registerTool(SelectMoveObjectTool::instance(), mActionManager, CONTEXT_TOOL, CATEGORY_TOOL_OBJECT, QStringLiteral(""));
     toolManager->registerTool(CreateObjectTool::instance(), mActionManager, CONTEXT_TOOL, CATEGORY_TOOL_OBJECT, QStringLiteral(""));
-#if 0
-    new CreatePointObjectTool;
-    toolManager->registerTool(CreatePointObjectTool::instancePtr());
-#endif
     new CreatePolygonObjectTool;
     toolManager->registerTool(CreatePolygonObjectTool::instancePtr(), mActionManager, CONTEXT_TOOL, CATEGORY_TOOL_OBJECT, QStringLiteral(""));
-#if 1
     new CreatePolylineObjectTool;
     toolManager->registerTool(CreatePolylineObjectTool::instancePtr(), mActionManager, CONTEXT_TOOL, CATEGORY_TOOL_OBJECT, QStringLiteral(""));
-#endif
     new EditPolygonObjectTool;
     toolManager->registerTool(EditPolygonObjectTool::instancePtr(), mActionManager, CONTEXT_TOOL, CATEGORY_TOOL_OBJECT, QStringLiteral(""));
     new SpawnPointTool;
@@ -1871,21 +1891,11 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-#if 1
     // MapComposite's destructor calls MapManager::removeReferenceToMap().
     // But the MapComposite's aren't deleted till the base constructor has
     // run, which causes MapManager to be *recreated* and recreate its threads.
     // I think this leads to the application not terminating promptly.
     ToolManager::instance()->toolBar()->setParent(0);
-#else
-    DocumentManager::deleteInstance();
-    ToolManager::deleteInstance();
-    Preferences::deleteInstance();
-    MapImageManager::deleteInstance();
-    MapManager::deleteInstance();
-    TileMetaInfoMgr::deleteInstance();
-    TilesetManager::deleteInstance();
-#endif
     delete ui;
 }
 
@@ -4376,9 +4386,6 @@ static void generateLots8x8(MainWindow *mainWin, Document *doc,
         QMessageBox::information(mainWin, mainWin->tr("Mod Export Complete"),
                                  mainWin->tr("The LOT files and mod structure were generated successfully."));
     }
-#if 0
-    TileMetaInfoMgr::deleteInstance();
-#endif
 }
 
 void MainWindow::generateLotsAll8x8()
@@ -4452,9 +4459,6 @@ static void _BMPToTMX(MainWindow *mainWin, Document *doc,
         QMessageBox::warning(mainWin, mainWin->tr("BMP To TMX Failed!"),
                              BMPToTMX::instance()->errorString());
     }
-#if 0
-    TileMetaInfoMgr::deleteInstance();
-#endif
 }
 
 void MainWindow::BMPToTMXAll()
@@ -4564,9 +4568,6 @@ void MainWindow::initActionManager()
     actionManager->registerAction(ui->actionShowCellBorder, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowCellBorder"));
     actionManager->registerAction(ui->actionShowCoordinates, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowCoordinates"));
     actionManager->registerAction(ui->actionShowGrid, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowGrid"));
-#if 0
-    actionManager->registerAction(ui->actionSnapToGrid, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.SnapToGrid"));
-#endif
     actionManager->registerAction(ui->actionShowInvisibleTiles, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowInvisibleTiles"));
     actionManager->registerAction(ui->actionShowLotFloorsOnly, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowLotFloorsOnly"));
     actionManager->registerAction(ui->actionShowMiniMap, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowMiniMap"));

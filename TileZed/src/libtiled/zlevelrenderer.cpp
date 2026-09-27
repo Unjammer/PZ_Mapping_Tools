@@ -149,7 +149,6 @@ QPainterPath ZLevelRenderer::shape(const MapObject *object) const
 {
     Layer *layer = object->objectGroup();
     int level = layer ? layer->level() : 0;
-#if 1
     /*
 AddRemoveMapObject::removeObject
     mObjectGroup->removeObject(mMapObject) <<--------- why layer==0
@@ -164,9 +163,6 @@ AddRemoveMapObject::removeObject
     */
     if (layer == 0)
         return QPainterPath();
-#else
-    Q_ASSERT(layer);
-#endif
 
     QPainterPath path;
     if (object->tile()) {
@@ -651,11 +647,9 @@ void ZLevelRenderer::drawMapObject(QPainter *painter,
         painter->drawRect(QRectF(paintOrigin, img.size()));
     } else {
         QColor brushColor = color;
-#if 1
         if (color.alpha() != 255)
             brushColor.setAlpha(color.alpha());
         else
-#endif
         brushColor.setAlpha(50);
         QBrush brush(brushColor);
 

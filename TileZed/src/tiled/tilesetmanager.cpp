@@ -671,16 +671,10 @@ void TilesetManager::cachePZProperties(Tileset *cached)
             TileDefTile *tdt = tdts->tileAt(i);
             if (tdt == nullptr)
                  break;
-#if 1
             cached->tileAt(i)->setProperties({});
             if (tdt->mProperties.contains(INVISIBLE)) {
                 cached->tileAt(i)->setProperty(INVISIBLE, QString());
             }
-#else
-            Properties properties;
-            properties.insert(tdt->mProperties);
-            cached->setProperties(properties);
-#endif
         }
     }
 }

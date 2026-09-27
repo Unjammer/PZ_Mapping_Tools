@@ -224,7 +224,6 @@ void RoomDefecator::addTile(int x, int y)
     // Ignore the region if cells touching an edge of the map/bounds have no walls.
     // This will strip away any "outer" region.
     for (QRect r : fill.mRegion) {
-#if 1
         for (int y = r.top(); y <= r.bottom(); y++) {
             for (int x = r.left(); x <= r.right(); x++) {
                 if (!isInRoom(x, y)) {
@@ -233,40 +232,6 @@ void RoomDefecator::addTile(int x, int y)
                 }
             }
         }
-#else
-        if (r.left() == 0 || r.left() == mBounds.left()) {
-            for (int y = r.top(); y <= r.bottom(); y++) {
-                if (!isWestWall(r.left(), y)) {
-                    mIgnoreRegions += fill.mRegion;
-                    return;
-                }
-            }
-        }
-        if (r.right() + 1 == mMap->width() || r.right() == mBounds.right()) {
-            for (int y = r.top(); y <= r.bottom(); y++) {
-                if (!isWestWall(r.right() + 1, y)) {
-                    mIgnoreRegions += fill.mRegion;
-                    return;
-                }
-            }
-        }
-        if (r.top() == 0 || r.top() == mBounds.top()) {
-            for (int x = r.left(); x <= r.right(); x++) {
-                if (!isNorthWall(x, r.top())) {
-                    mIgnoreRegions += fill.mRegion;
-                    return;
-                }
-            }
-        }
-        if (r.bottom() + 1 == mMap->height() || r.bottom() == mBounds.bottom()) {
-            for (int x = r.left(); x <= r.right(); x++) {
-                if (!isNorthWall(x, r.bottom() + 1)) {
-                    mIgnoreRegions += fill.mRegion;
-                    return;
-                }
-            }
-        }
-#endif
     }
 
     if (!fill.mRegion.isEmpty())

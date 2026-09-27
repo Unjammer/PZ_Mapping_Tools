@@ -303,10 +303,6 @@ bool PNGBuildingDialog::processObjectGroup(WorldCell *cell, ObjectGroup *objectG
     level += levelOffset;
 
     foreach (const MapObject *mapObject, objectGroup->objects()) {
-#if 0
-        if (mapObject->name().isEmpty() || mapObject->type().isEmpty())
-            continue;
-#endif
         if (!mapObject->width() || !mapObject->height())
             continue;
 

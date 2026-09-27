@@ -36,10 +36,12 @@
 #include "languagemanager.h"
 #include "preferences.h"
 #include "pztoolsbuild.h"
+#include "displayscaling.h"
+#include "displayscalingvalidation.h"
 #include "tiledefwatchervalidation.h"
 #include "tilesetimageloadervalidation.h"
 #include "stampbrush.h"
-#include "tiledapplication.h"
+#include <QtSingleApplication>
 #include "tiledefcompare.h"
 #include "tilesetdock.h"
 #include "tmxmapreader.h"
@@ -70,6 +72,7 @@
 #include "BuildingEditor/objecteditmode.h"
 #include "BuildingEditor/tileeditmode.h"
 #include "BuildingEditor/attributeeditmode.h"
+#include "BuildingEditor/imode.h"
 #include "tileselectionscope.h"
 #include "BuildingEditor/buildingwriter.h"
 #include "BuildingEditor/categorydock.h"
@@ -921,13 +924,40 @@ static bool validateBuildingCutScope(
     bool valid = triggerBuildingSelectionScope(
                 window, QStringLiteral("Current Layer"));
     const int currentLayerUndoIndex = document->undoStack()->index();
+    valid = valid && QMetaObject::invokeMethod(window, "editCopy", Qt::DirectConnection);
+    const auto roomsBeforePaste = floor->grid();
+    const int roomCountBeforePaste = document->building()->rooms().size();
+    const QPoint target = source + QPoint(source.x() + 1 < floor->width() ? 1 : -1, 0);
+    const QString targetFloor = floor->grimeAt(currentLayerName, target.x(), target.y());
+    document->setCurrentLayer(otherLayerName);
+    valid = valid && !document->clipboardPreservesPlanes() &&
+            document->clipboardRoomLayers().isEmpty();
+    const QPointF targetScene = BuildingEditor::ToolManager::instance()->currentEditor()->tileToSceneF(
+                QPointF(target) + QPointF(0.5, 0.5), document->currentLevel());
+    QGraphicsSceneMouseEvent press(QEvent::GraphicsSceneMousePress);
+    press.setButton(Qt::LeftButton);
+    press.setButtons(Qt::LeftButton);
+    press.setScenePos(targetScene);
+    DrawTileTool::instance()->mousePressEvent(&press);
+    QGraphicsSceneMouseEvent release(QEvent::GraphicsSceneMouseRelease);
+    release.setButton(Qt::LeftButton);
+    release.setScenePos(targetScene);
+    DrawTileTool::instance()->mouseReleaseEvent(&release);
+    valid = valid && floor->grid() == roomsBeforePaste &&
+            document->building()->rooms().size() == roomCountBeforePaste &&
+            floor->grimeAt(otherLayerName, target.x(), target.y()) == currentMarker &&
+            floor->grimeAt(currentLayerName, target.x(), target.y()) == targetFloor;
+    while (document->undoStack()->index() > currentLayerUndoIndex)
+        document->undoStack()->undo();
+    document->setCurrentLayer(currentLayerName);
     valid = valid && QMetaObject::invokeMethod(
                 window, "editCut", Qt::DirectConnection);
     valid = valid
             && floor->GetRoomAt(source) == sourceRoom
             && floor->grimeAt(currentLayerName, source.x(), source.y()).isEmpty()
             && floor->grimeAt(otherLayerName, source.x(), source.y()) == otherMarker
-            && !document->clipboardRoomLayers().isEmpty();
+            && document->clipboardRoomLayers().isEmpty()
+            && document->clipboardRooms().isEmpty();
     while (document->undoStack()->index() > currentLayerUndoIndex)
         document->undoStack()->undo();
     valid = valid
@@ -1124,6 +1154,24 @@ static bool validateBuildingClipboardFixture(
             if (!valid)
                 break;
             valid = valid && window->pasteClipboardAt(target);
+            if (cycle == 0 && target == targets.last()) {
+                auto *catalogueChange = new Tiled::Tileset(QStringLiteral("catalogue-change"), 64, 128);
+                TilesetManager::instance()->addReference(catalogueChange, false);
+                const auto scenes = window->findChildren<BuildingIsoScene *>();
+                for (BuildingIsoScene *scene : scenes) {
+                    if (scene->document() == document)
+                        valid = QMetaObject::invokeMethod(scene, "tilesetAdded", Qt::DirectConnection,
+                                    Q_ARG(Tiled::Tileset *, catalogueChange)) && valid;
+                }
+                QCoreApplication::processEvents();
+                for (BuildingIsoScene *scene : scenes) {
+                    if (scene->document() == document)
+                        valid = QMetaObject::invokeMethod(scene, "tilesetAboutToBeRemoved", Qt::DirectConnection,
+                                    Q_ARG(Tiled::Tileset *, catalogueChange)) && valid;
+                }
+                QCoreApplication::processEvents();
+                TilesetManager::instance()->removeReference(catalogueChange);
+            }
             QSet<Room *> validRooms(document->building()->rooms().cbegin(),
                                     document->building()->rooms().cend());
             int invalidRoomCells = 0;
@@ -2137,20 +2185,12 @@ static void __cdecl invalid_parameter_handler(
 
 int main(int argc, char *argv[])
 {
+    PZTools::configureDisplayScaling();
 #if !defined(QT_NO_DEBUG) && defined(ZOMBOID) && defined(_MSC_VER)
     _set_invalid_parameter_handler(invalid_parameter_handler);
 #endif
 
-    /*
-     * On X11, Tiled uses the 'raster' graphics system by default, because the
-     * X11 native graphics system has performance problems with drawing the
-     * tile grid.
-     */
-#ifdef Q_WS_X11
-    QApplication::setGraphicsSystem(QLatin1String("raster"));
-#endif
-
-    TiledApplication a(argc, argv);
+    QtSingleApplication a(argc, argv);
 
 #ifdef ZOMBOID
     Q_INIT_RESOURCE(buildingeditor);
@@ -2158,8 +2198,11 @@ int main(int argc, char *argv[])
 
     a.setOrganizationName(QLatin1String("TheIndieStone"));
 #ifdef ZOMBOID
-    const bool buildingEditorMode = QFileInfo(QCoreApplication::applicationFilePath())
-            .completeBaseName().compare(QLatin1String("BuildingEd"), Qt::CaseInsensitive) == 0;
+#ifdef PZTOOLS_BUILDING_EDITOR_APP
+    constexpr bool buildingEditorMode = true;
+#else
+    constexpr bool buildingEditorMode = false;
+#endif
     a.setApplicationName(buildingEditorMode
                          ? QLatin1String("BuildingEd")
                          : QLatin1String("TileZed"));
@@ -2181,9 +2224,6 @@ int main(int argc, char *argv[])
     a.setApplicationVersion(QLatin1String("0.8.1"));
 #endif
 
-#ifdef Q_WS_MAC
-    a.setAttribute(Qt::AA_DontShowIconsInMenus);
-#endif
 
     LanguageManager *languageManager = LanguageManager::instance();
     languageManager->installTranslators();
@@ -2215,7 +2255,10 @@ int main(int argc, char *argv[])
     }
 
     CommandLineHandler commandLine;
-    if (!commandLine.parse(QCoreApplication::arguments()))
+    QStringList parserArguments = QCoreApplication::arguments();
+    const bool validateDisplay = parserArguments.removeAll(
+                QStringLiteral("--validate-display-scaling")) > 0;
+    if (!commandLine.parse(parserArguments))
         return 0;
     if (commandLine.quit)
         return 0;
@@ -2382,7 +2425,7 @@ int main(int argc, char *argv[])
         return valid ? 0 : 1;
     }
     const bool buildingEditorValidation =
-            commandLine.validateBuildingCategories
+            validateDisplay || commandLine.validateBuildingCategories
             || commandLine.validateRoomHighlight
             || commandLine.validateBuildingClipboard
             || commandLine.validateTilesetCatalog;
@@ -2432,6 +2475,7 @@ int main(int argc, char *argv[])
         buildingEditor.readSettings();
         QTimer::singleShot(0, &buildingEditor,
                            [&buildingEditor, &commandLine,
+                            validateDisplay,
                             &pendingBuildingFiles,
                             &buildingStartupComplete]() {
             buildingEditor.setEnabled(false);
@@ -2455,6 +2499,32 @@ int main(int argc, char *argv[])
                         << (valid ? QStringLiteral("PASS")
                                   : QStringLiteral("FAIL: %1").arg(error));
                 QCoreApplication::exit(valid ? 0 : 3);
+                return;
+            }
+            if (validateDisplay) {
+                buildingEditor.readSettings();
+                QString error;
+                bool valid = PZTools::validateDisplayScaling(
+                            &buildingEditor, QStringLiteral("BuildingEd"), &error)
+                        && validateNewBuildingDialogLayout(&buildingEditor, &error);
+                BuildingEditor::BuildingTemplates *templates =
+                        BuildingEditor::BuildingTemplates::instance();
+                auto *building = new BuildingEditor::Building(17, 23,
+                        templates->templateCount() ? templates->templateAt(0) : nullptr);
+                building->insertFloor(0, new BuildingEditor::BuildingFloor(building, 0));
+                auto *document = new BuildingEditor::BuildingDocument(building, QString());
+                BuildingEditor::BuildingDocumentMgr::instance()->addDocument(document);
+                for (BuildingEditor::IMode *mode : buildingEditor.findChildren<BuildingEditor::IMode *>()) {
+                    if (!valid || !mode->isEnabled())
+                        continue;
+                    BuildingEditor::ModeManager::instance().setCurrentMode(mode);
+                    valid = PZTools::validateDisplayScaling(&buildingEditor,
+                              QStringLiteral("BuildingEd-") + mode->displayName(), &error);
+                }
+                BuildingEditor::BuildingDocumentMgr::instance()->closeAllDocuments();
+                qInfo().noquote() << "Display scaling validation:"
+                                 << (valid ? QStringLiteral("PASS") : error);
+                QCoreApplication::exit(valid ? 0 : 1);
                 return;
             }
             if (commandLine.validateBuildingClipboard) {
@@ -2714,6 +2784,15 @@ int main(int argc, char *argv[])
 
     if (!w.InitConfigFiles())
         return 0;
+    if (validateDisplay) {
+        w.readSettings();
+        QString error;
+        const bool valid = PZTools::validateDisplayScaling(
+                    &w, QStringLiteral("TileZed"), &error);
+        qInfo().noquote() << "Display scaling validation:"
+                         << (valid ? QStringLiteral("PASS") : error);
+        return valid ? 0 : 1;
+    }
     if (commandLine.validateBrushPerformance) {
         QString error;
         QString summary;
@@ -2795,9 +2874,6 @@ int main(int argc, char *argv[])
         }
     }
 #endif
-    QObject::connect(&a, &TiledApplication::fileOpenRequest,
-                     &w, qOverload<const QString&>(&MainWindow::openFile));
-
     if (!commandLine.filesToOpen().isEmpty()) {
 #ifdef ZOMBOID
         gStartupBlockRendering = false;

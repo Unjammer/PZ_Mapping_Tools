@@ -951,11 +951,9 @@ void MapDocument::emitRegionEdited(const QRegion &region, Layer *layer)
 #ifdef ZOMBOID
 void MapDocument::emitRegionAltered(const QRegion &region, Layer *layer)
 {
-#if 1
     if (mMapComposite->bmpBlender()->tileLayerNames().contains(layer->name())) {
         mMapComposite->bmpBlender()->markDirty(region);
     }
-#endif
     emit regionAltered(region, layer);
 }
 

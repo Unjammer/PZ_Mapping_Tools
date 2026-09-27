@@ -100,10 +100,6 @@ MapDocumentActionHandler::MapDocumentActionHandler(QObject *parent)
     mActionLayerProperties->setIcon(
             QIcon(QLatin1String(":images/16x16/document-properties.png")));
 
-    Utils::setThemeIcon(mActionRemoveLayer, "edit-delete");
-    Utils::setThemeIcon(mActionMoveLayerUp, "go-up");
-    Utils::setThemeIcon(mActionMoveLayerDown, "go-down");
-    Utils::setThemeIcon(mActionLayerProperties, "document-properties");
 
     connect(mActionSelectAll, &QAction::triggered, this, &MapDocumentActionHandler::selectAll);
     connect(mActionSelectNone, &QAction::triggered, this, &MapDocumentActionHandler::selectNone);

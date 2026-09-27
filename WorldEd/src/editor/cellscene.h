@@ -858,6 +858,8 @@ public:
     void setTool(AbstractTool *tool);
 
 
+    bool inGameMapFeaturesVisible() const;
+
     Tiled::Map *map() const { return mMap; }
 
     MapComposite *mapComposite() const { return mMapComposite; }
@@ -972,6 +974,8 @@ public:
                                      QStringList *backupPaths,
                                      QString *error);
     static bool validateBasementPlacement(QString *error);
+    static bool validateInGameMapReload(QString *error);
+    static bool validateScaledRendering(QString *error);
 
     bool hasHoleInFloor() const
     { return !mHoleInFloor.isEmpty(); }
@@ -989,6 +993,7 @@ protected:
 
     typedef Tiled::Tileset Tileset;
 signals:
+    void mapReloaded();
     void mapContentsChanged();
     void partialChunkSelectionChanged();
     void partialChunkSaveFailed(const QString &message);

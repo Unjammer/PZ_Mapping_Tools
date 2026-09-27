@@ -217,16 +217,6 @@ MapImage *MapImageManager::getMapImage(const QString &mapName, const QString &re
 
 MapImageManager::ImageData MapImageManager::generateMapImage(const QString &mapFilePath, bool force)
 {
-#if 0
-    if (mapFilePath == QLatin1String("<fail>")) {
-        QImage image(IMAGE_WIDTH, 256, QImage::Format_ARGB32);
-        image.fill(Qt::transparent);
-        QPainter painter(&image);
-        painter.setFont(QFont(QLatin1String("Helvetica"), 48, 1, true));
-        painter.drawText(0, 0, image.width(), image.height(), Qt::AlignCenter, QLatin1String("FAIL"));
-        return image;
-    }
-#endif
 
     QFileInfo fileInfo(mapFilePath);
     QFileInfo imageInfo = imageFileInfo(mapFilePath);
@@ -372,7 +362,6 @@ MapImageManager::ImageData MapImageManager::generateBMPImage(const QString &bmpF
     if (!images)
         return ImageData();
 
-#if 1
     QImage bmpRecolored = images->mBmp.convertToFormat(QImage::Format_ARGB32);
     images->mBmp = QImage();
     QRgb ruleColor = qRgb(255, 0, 0);
@@ -388,15 +377,6 @@ MapImageManager::ImageData MapImageManager::generateBMPImage(const QString &bmpF
             }
         }
     }
-#else
-    QImage bmpRecolored(images->mBmp);
-    for (int x = 0; x < images->mBmp.width(); x++) {
-        for (int y = 0; y < images->mBmp.height(); y++) {
-            if (images->mBmpVeg.pixel(x, y) == qRgb(255, 0, 0))
-                bmpRecolored.setPixel(x, y, qRgb(47, 76, 64));
-        }
-    }
-#endif
 
     delete images; // ***** ***** *****
 
@@ -720,18 +700,10 @@ void MapImageManager::mapLoaded(MapInfo *mapInfo)
 #endif
     // Wait for TilesetManager's threads to finish loading the tilesets.
     // FIXME: this shouldn't block the gui.
-#if 1
     QList<Tileset*> usedTilesets = mRenderMapComposite->usedTilesets();
     usedTilesets.removeAll(TilesetManager::instance()->invisibleTileset());
     usedTilesets.removeAll(TilesetManager::instance()->missingTileset());
     TilesetManager::instance()->waitForTilesets(usedTilesets);
-#else
-    QSet<Tileset*> usedTilesets;
-    foreach (MapComposite *mc, mRenderMapComposite->maps())
-        usedTilesets += mc->map()->usedTilesets();
-    usedTilesets.remove(TilesetManager::instance()->missingTileset());
-    TilesetManager::instance()->waitForTilesets(usedTilesets.toList());
-#endif
 
     // BmpBlender sends a signal to the MapComposite when it has finished
     // blending.  That needs to happen in the render thread.

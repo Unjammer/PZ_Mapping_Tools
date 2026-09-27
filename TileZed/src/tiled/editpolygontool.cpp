@@ -594,7 +594,6 @@ void EditPolygonTool::showHandleContextMenu(PointHandle *clickedHandle,
     QAction *joinNodesAction = menu.addAction(tr("Join Nodes"));
     QAction *splitSegmentsAction = menu.addAction(tr("Split Segments"));
 
-    Utils::setThemeIcon(deleteNodesAction, "edit-delete");
 
     joinNodesAction->setEnabled(n > 1);
     splitSegmentsAction->setEnabled(n > 1);

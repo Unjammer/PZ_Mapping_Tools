@@ -160,7 +160,6 @@ void ZLotManager::worldCellLotChanged(WorldCellLot *lot)
 
 void ZLotManager::handleMapObject(MapObject *mapObject)
 {
-#if 1
     const QString& name = mapObject->name();
     const QString& type = mapObject->type();
 
@@ -186,63 +185,6 @@ void ZLotManager::handleMapObject(MapObject *mapObject)
             mMapsLoading += MapLoading(newInfo, mapObject);
     } else if (!newInfo || !newInfo->isLoading())
         setMapInfo(mapObject, newInfo);
-#else
-    const QString& name = mapObject->name();
-    const QString& type = mapObject->type();
-
-    MapComposite *currLot = 0, *newLot = 0;
-
-    if (mMapObjectToLot.contains(mapObject))
-        currLot = mMapObjectToLot[mapObject];
-
-    if (name == QLatin1String("lot") && !type.isEmpty()) {
-
-        QString mapName = type/* + QLatin1String(".tmx")*/;
-        if (!mMapDocument->fileName().isEmpty()) {
-            QDir mapDir = QFileInfo(mMapDocument->fileName()).absoluteDir();
-            if (QDir::isRelativePath(mapName))
-                mapName = mapDir.filePath(mapName);
-        }
-        MapInfo *newMapInfo = 0;
-        if (QDir::isAbsolutePath(mapName))
-            newMapInfo = MapManager::instance()->mapInfo(mapName);
-
-        if (newMapInfo) {
-            if (!currLot || (currLot->map() != newMapInfo->map())) {
-                int level;
-                (void) MapComposite::levelForLayer(mapObject->objectGroup(), &level);
-                newLot = mMapDocument->mapComposite()->addMap(newMapInfo,
-                                                              mapObject->position().toPoint(),
-                                                              level);
-            } else
-                newLot = currLot;
-        } else {
-            if (currLot && QFileInfo(currLot->mapInfo()->path()) == QFileInfo(mapName))
-                newLot = currLot;
-        }
-    }
-
-    if (currLot != newLot) {
-        if (currLot) {
-            QMap<MapObject*,MapComposite*>::iterator it = mMapObjectToLot.find(mapObject);
-            mMapDocument->mapComposite()->removeMap((*it)); // deletes currLot!
-            mMapObjectToLot.erase(it);
-            emit lotRemoved(currLot, mapObject); // remove from scene
-        }
-        if (newLot) {
-            mMapObjectToLot[mapObject] = newLot;
-            newLot->setGroupVisible(mapObject->objectGroup()->isVisible());
-            emit lotAdded(newLot, mapObject); // add to scene
-        }
-    } else if (currLot) {
-        if (currLot->origin() != mapObject->position().toPoint())
-            mMapDocument->mapComposite()->moveSubMap(currLot, mapObject->position().toPoint());
-        else if (currLot->isVisible() != mapObject->isVisible()) {
-            currLot->setVisible(mapObject->isVisible());
-        }
-        emit lotUpdated(currLot, mapObject); // position change, etc
-    }
-#endif
 }
 
 void ZLotManager::setMapInfo(MapObject *mapObject, MapInfo *mapInfo)

@@ -139,6 +139,7 @@ public:
     QString tileDefFolder;
     QPoint worldOrigin;
     int numberOfThreads = 1;
+    bool preservePlacedTrees = false;
 
     bool operator == (const GenerateLotsSettings &other)
     {
@@ -147,7 +148,8 @@ public:
                 biomeMap == other.biomeMap &&
                 tileDefFolder == other.tileDefFolder &&
                 worldOrigin == other.worldOrigin &&
-                numberOfThreads == other.numberOfThreads;
+                numberOfThreads == other.numberOfThreads &&
+                preservePlacedTrees == other.preservePlacedTrees;
     }
 
     bool operator != (const GenerateLotsSettings &other)

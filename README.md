@@ -3,6 +3,10 @@
 PZTools Unofficial is a maintained Qt edition of the Project Zomboid mapping
 tools. It includes **PZWorldEd**, **TileZed**, and **BuildingEd**.
 
+The maintained build targets Windows x64. TileZed and BuildingEd select their
+application identity at compile time, independently of the executable filename.
+Shared map, building, scripting and tileset functionality remains available.
+
 The project continues the work in Tim Baker's
 [pzworlded](https://github.com/timbaker/pzworlded) and
 [tiled](https://github.com/timbaker/tiled) repositories. It preserves basement
@@ -16,10 +20,19 @@ workflows that reuse legacy-size maps or building layouts. TileZed asks for
 confirmation before a map resize crops existing content.
 
 Raster drawing reuses filtered tiles at supported 25% and 50% zooms.
+WorldEd draws cell tiles using the active drawing surface rather than the saved
+OpenGL preference, retaining visible tiles when switching rendering backends.
+OpenGL tile blending preserves alpha correctly to avoid bright fringes on
+semi-transparent tile edges.
 All three applications start at a centered 1920 x 1080 window size, reduced
 when needed to fit the available desktop, including the window frame.
 Their shared loading window shows the current phase and completed tileset
 count. Dock layouts remain saved separately for each application.
+Windows display scaling uses fractional factors such as 120%, 125% and 150%
+without rounding to a whole-number scale. Generate Lots scrolls its options
+when needed and keeps its confirmation buttons visible.
+WorldEd's lower view controls wrap onto additional rows on narrow windows.
+The Street Names, Regions and InGameMap panels scroll when space is limited.
 Tilesheet loading decodes and prepares images in parallel using up to eight
 workers, adjusted to the available processor threads. All discovered sheets
 and declared map tilesets remain ready before rendering. Shared image caches
@@ -31,6 +44,13 @@ Volume depth generation prepares primitive transforms once per render.
 TileZed generates and removes RoomDefs on all map levels, including basements.
 WorldEd retains source-cell ownership when grouping rooms and buildings for LOT
 export, including underground complexes spanning neighboring cells.
+Generate Lots offers **Bypass jumbo rules (preserve placed trees)** for both
+300x300 and 256x256 projects. It preserves placed tree tiles, including XL and
+XXL trees, instead of converting them to jumbo placeholders or removing neighboring
+trees. The option is off by default and saved in the PZW project. When unchecked,
+jumbo rules apply in both formats, including native 256x256 export. Enable it
+to retain authored trees in either format. Source maps and in-game tree behavior
+are unchanged. Applying export settings also retains the biome map.
 
 TileSetZ is available directly in TileZed's Tools menu and a tile's context
 menu. It creates and edits PNG tilesheets and precuts textures at the wall-face
@@ -65,9 +85,19 @@ Materials refresh on the first mode or floor change, custom furniture groups
 appear when opened, and edited keyboard shortcuts are saved immediately.
 Building Tiles removes exact duplicate material definitions when loading or
 saving a catalogue. Different orientations, offsets and categories are kept.
-Building tiles on exterior squares without a floor replace matching map
-layers while retaining other layers such as vegetation. Building floors
-continue to cover underlying map tiles. WorldEd thumbnails show the part of
+BuildingEd copies room layouts only with All Layers selected. Copying tiles
+from the current layer and level pastes onto the destination layer without
+creating or replacing rooms. Extended window shapes retain wall grime.
+Walls, trims, doors, windows and frames on floorless building squares retain
+underlying vegetation. Furniture and other nonstructural layers clear the
+Vegetation layers beneath them. Matching layers are replaced, building floors
+cover underlying map tiles, and AboveLot layers remain above buildings.
+WorldEd recreates InGameMap scene items after map reloads and retains their
+tool-dependent visibility. Road-outline simplification preserves real corners.
+Empty InGameMap geometry can be selected and redrawn safely. BuildingEd
+defers catalogue-driven updates to hidden views until their structural maps
+are rebuilt, including after a building resize.
+WorldEd thumbnails show the part of
 a basement building that remains above ground.
 
 Tim Baker created the original WorldEd and TileZed foundation. The current
@@ -736,9 +766,7 @@ CrossOver environment on macOS without installing the Microsoft runtime into
 that Wine prefix. Keep the extracted directory writable and together. Wine
 and macOS use remains experimental and unsupported until a release is tested
 on the target systems. This is Windows application compatibility through
-Wine, not a native macOS release. A native macOS release still requires a
-separately compiled, deployed, signed, notarized, and tested application
-bundle.
+Wine, not a native macOS release. Native macOS builds are not provided.
 
 WorldEd reloads the tileset catalogue only when the effective Tiles directory
 changes. Confirming other Preferences does not rebuild open maps or lots.
@@ -799,19 +827,11 @@ can be shared, and a screenshot for visual problems.
 
 ## Building from source
 
-The [build guide](BUILDING.md) describes the source layout and compilation for
-Windows, Linux, and macOS. Windows x64 with Qt 5.14.2 and MSVC is the current
-release target. Other platforms must be compiled with compatible Qt and native
-toolchains and tested before distribution. The macOS qmake configuration uses
-separate application identities for TileZed and BuildingEd, includes the
-configuration catalogues, documentation, and Lua resources in each bundle,
-and resolves editor launches through adjacent application bundles. Native
-macOS builds still require validation on the target system.
-
-The [macOS setup script](tools/Setup-macOS.command) prepares Xcode usage,
-Homebrew, Qt 5.15, source checkout, and compilation from one Terminal command.
-It preserves existing local work and records setup and build errors in a log.
-See the [guided setup instructions](BUILDING.md#guided-setup).
+The [build guide](BUILDING.md) describes the Windows x64 source layout,
+Qt 5.14.2 and MSVC toolchain, qmake projects, and portable deployment.
+Native Linux and macOS build and packaging paths are no longer maintained.
+Bundled third-party libraries retain their upstream platform support and
+license notices.
 
 ## Credits and special thanks
 

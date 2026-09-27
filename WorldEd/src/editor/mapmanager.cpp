@@ -174,24 +174,6 @@ QString MapManager::pathForMap(const QString &mapName, const QString &relativeTo
 
     return QString();
 }
-#if 0
-class EditorMapReader : public MapReader
-{
-protected:
-    /**
-     * Overridden to make sure the resolved reference is canonical.
-     */
-    QString resolveReference(const QString &reference, const QString &mapPath)
-    {
-        QString resolved = MapReader::resolveReference(reference, mapPath);
-        QString canonical = QFileInfo(resolved).canonicalFilePath();
-
-        // Make sure that we're not returning an empty string when the file is
-        // not found.
-        return canonical.isEmpty() ? resolved : canonical;
-    }
-};
-#endif
 MapInfo *MapManager::loadMap(const QString &mapName, const QString &relativeTo,
                              bool asynch, LoadPriority priority)
 {
@@ -345,12 +327,8 @@ public:
         mError.clear();
         mMapInfo = NULL;
 
-#if 1
         QByteArray data = device->read(1024);
         xml.addData(data);
-#else
-        xml.setDevice(device);
-#endif
 
         if (xml.readNextStartElement() && xml.name() == QLatin1String("map")) {
             mMapInfo = readMap();
@@ -396,12 +374,8 @@ public:
         mError.clear();
         mMapInfo = NULL;
 
-#if 1
         QByteArray data = device->read(1024);
         xml.addData(data);
-#else
-        xml.setDevice(device);
-#endif
 
         if (xml.readNextStartElement() && xml.name() == QLatin1String("building")) {
             mMapInfo = readBuilding();
@@ -426,18 +400,11 @@ public:
 
         const Map::Orientation orient = static_cast<Map::Orientation>(BuildingEditor::BuildingMap::defaultOrientation());
 
-#if 1
         // FIXME: If Map::Isometric orientation is used then we must know the number
         // of floors to determine the correct map size.  That would require parsing
         // the whole .tbx file.
         Q_ASSERT(orient == Map::LevelIsometric);
         int extra = 1;
-#else
-        int maxLevel = building->floorCount() - 1;
-        int extraForWalls = 1;
-        int extra = (orient == Map::LevelIsometric)
-                ? extraForWalls : maxLevel * 3 + extraForWalls;
-#endif
 
         mMapInfo = new MapInfo(orient, mapWidth + extra, mapHeight + extra,
                                tileWidth, tileHeight);
@@ -723,9 +690,6 @@ void MapManager::fileChanged(const QString &path)
 
 void MapManager::fileChangedTimeout()
 {
-#if 0
-    PROGRESS progress(tr("Examining changed maps..."));
-#endif
 
     foreach (const QString &path, mChangedFiles) {
         if (mMapInfo.contains(path)) {

@@ -46,7 +46,6 @@ BuildingFloorsDialog::BuildingFloorsDialog(BuildingDocument *doc, QWidget *paren
 
     QToolButton *button = new QToolButton(this);
     button->setIcon(undoIcon);
-    Utils::setThemeIcon(button, "edit-undo");
     button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     button->setText(tr("Undo"));
 //    button->setEnabled(mUndoGroup->canUndo());
@@ -58,7 +57,6 @@ BuildingFloorsDialog::BuildingFloorsDialog(BuildingDocument *doc, QWidget *paren
     button = new QToolButton(this);
     button->setIcon(redoIcon);
     button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    Utils::setThemeIcon(button, "edit-redo");
     button->setText(tr("Redo"));
 //    button->setEnabled(mUndoGroup->canRedo());
     button->setShortcut(QKeySequence::Redo);
@@ -77,13 +75,7 @@ BuildingFloorsDialog::BuildingFloorsDialog(BuildingDocument *doc, QWidget *paren
     toolBar->addAction(ui->actionAdd);
     toolBar->addAction(ui->actionDuplicate);
     toolBar->addAction(ui->actionRemove);
-#if 1
     toolBar->addSeparator();
-#else
-    QWidget *spacerWidget = new QWidget(this);
-    spacerWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
-    toolBar->addWidget(spacerWidget);
-#endif
     toolBar->addAction(ui->actionMoveUp);
     toolBar->addAction(ui->actionMoveDown);
     ui->toolbarLayout->addWidget(toolBar);

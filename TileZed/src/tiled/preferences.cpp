@@ -727,15 +727,7 @@ QString Preferences::configPath(const QString &fileName) const
 
 QString Preferences::appConfigPath() const
 {
-#ifdef Q_OS_WIN
     return PortableSettings::applicationConfigPath();
-#elif defined(Q_OS_MACOS)
-    return QCoreApplication::applicationDirPath() + QLatin1String("/../Config");
-#elif defined(Q_OS_UNIX)
-    return QCoreApplication::applicationDirPath() + QLatin1String("/../share/tilezed/config");
-#else
-#error "Unsupported platform: implement the TileZed configuration path."
-#endif
 }
 
 QString Preferences::appConfigPath(const QString &fileName) const
@@ -748,15 +740,7 @@ QString Preferences::appConfigPath(const QString &fileName) const
 
 QString Preferences::docsPath() const
 {
-#ifdef Q_OS_WIN
     return PortableSettings::installPath(QLatin1String("docs"));
-#elif defined(Q_OS_MACOS)
-    return QCoreApplication::applicationDirPath() + QLatin1String("/../Docs");
-#elif defined(Q_OS_UNIX)
-    return QCoreApplication::applicationDirPath() + QLatin1String("/../share/tilezed/docs");
-#else
-#error "Unsupported platform: implement the TileZed documentation path."
-#endif
 }
 
 QString Preferences::docsPath(const QString &fileName) const
@@ -766,15 +750,7 @@ QString Preferences::docsPath(const QString &fileName) const
 
 QString Preferences::luaPath() const
 {
-#ifdef Q_OS_WIN
     return PortableSettings::installPath(QLatin1String("lua"));
-#elif defined(Q_OS_MACOS)
-    return QCoreApplication::applicationDirPath() + QLatin1String("/../Lua");
-#elif defined(Q_OS_UNIX)
-    return QCoreApplication::applicationDirPath() + QLatin1String("/../share/tilezed/lua");
-#else
-#error "Unsupported platform: implement the TileZed Lua path."
-#endif
 }
 
 QString Preferences::luaPath(const QString &fileName) const
@@ -793,11 +769,6 @@ void Preferences::setMapsDirectory(const QString &path)
         return;
     mMapsDirectory = path;
     mSettings->setValue(QLatin1String("MapsDirectory/Current"), path);
-#if 0
-    // Put this up, otherwise the progress dialog shows and hides for each lot.
-    // Since each open document has its own ZLotManager, this shows and hides for each document as well.
-    PROGRESS progress(tr("Checking lots..."));
-#endif
     emit mapsDirectoryChanged();
 }
 

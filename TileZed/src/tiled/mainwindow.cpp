@@ -145,9 +145,6 @@
 #include <QSplitter>
 #endif
 
-#ifdef Q_WS_MAC
-#include "macsupport.h"
-#endif
 
 #include <QCloseEvent>
 #include <QBoxLayout>
@@ -380,9 +377,6 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
 
     PluginManager::instance()->loadPlugins();
 
-#ifdef Q_WS_MAC
-    MacSupport::addFullscreen(this);
-#endif
 
     Preferences *preferences = Preferences::instance();
 
@@ -650,27 +644,6 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     }
     mUi->menuRecentFiles->insertSeparator(mUi->actionClearRecentFiles);
 
-    setThemeIcon(mUi->actionNew, "document-new");
-    setThemeIcon(mUi->actionOpen, "document-open");
-    setThemeIcon(mUi->menuRecentFiles, "document-open-recent");
-    setThemeIcon(mUi->actionClearRecentFiles, "edit-clear");
-    setThemeIcon(mUi->actionSave, "document-save");
-    setThemeIcon(mUi->actionSaveAs, "document-save-as");
-    setThemeIcon(mUi->actionClose, "window-close");
-    setThemeIcon(mUi->actionQuit, "application-exit");
-    setThemeIcon(mUi->actionCut, "edit-cut");
-    setThemeIcon(mUi->actionCopy, "edit-copy");
-    setThemeIcon(mUi->actionPaste, "edit-paste");
-    setThemeIcon(mUi->actionDelete, "edit-delete");
-    setThemeIcon(mRedoAction, "edit-redo");
-    setThemeIcon(mUndoAction, "edit-undo");
-    setThemeIcon(mUi->actionZoomIn, "zoom-in");
-    setThemeIcon(mUi->actionZoomOut, "zoom-out");
-    setThemeIcon(mUi->actionZoomNormal, "zoom-original");
-    setThemeIcon(mUi->actionNewTileset, "document-new");
-    setThemeIcon(mUi->actionResizeMap, "document-page-setup");
-    setThemeIcon(mUi->actionMapProperties, "document-properties");
-    setThemeIcon(mUi->actionAbout, "help-about");
 
     mStampBrush = new StampBrush(this);
     mBucketFillTool = new BucketFillTool(this);
@@ -735,11 +708,6 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     toolManager->registerTool(new TileSelectionTool(this), mActionManager, CONTEXT_TOOL, CATEGORY_TOOL_TILE, QStringLiteral("Tool.Tile.Selection"));
 #ifdef ZOMBOID
     toolManager->registerTool(new PickTileTool(this), mActionManager, CONTEXT_TOOL, CATEGORY_TOOL_TILE, QStringLiteral("Tool.Tile.Pick"));
-#if 0
-    toolManager->registerTool(new EdgeTool(this));
-    toolManager->registerTool(new CurbTool(this));
-    toolManager->registerTool(new FenceTool(this));
-#endif
     toolManager->addSeparator();
     initLuaTileTools();
 #endif
@@ -950,12 +918,10 @@ MainWindow::~MainWindow()
     QuickStampManager::deleteInstance();
     ToolManager::deleteInstance();
 #ifdef ZOMBOID
-#if 1
     BuildingTemplates::deleteInstance();
     BuildingTilesMgr::deleteInstance(); // Ensure all the tilesets are released
     BuildingTMX::deleteInstance();
     BuildingPreferences::deleteInstance();
-#endif
     MapImageManager::deleteInstance();
     MapManager::deleteInstance();
     TileMetaInfoMgr::deleteInstance();
@@ -2595,15 +2561,9 @@ void MainWindow::depthMapEditor()
 void MainWindow::launchWorldEd()
 {
     QString path = QApplication::applicationDirPath();
-#ifdef Q_OS_WIN
     path += QLatin1String("/PZWorldEd.exe");
     if (!QFileInfo(path).exists())
         path = QApplication::applicationDirPath() + QLatin1String("/../WorldEd/PZWorldEd.exe");
-#elif defined(Q_OS_MACOS)
-    path = PZToolsPaths::editorExecutable(QStringLiteral("PZWorldEd"));
-#else
-    path += QLatin1String("/../../WorldEd/PZWorldEd.sh");
-#endif
     path = QDir::cleanPath(path);
     path = QDir::toNativeSeparators(path);
     if (QFileInfo(path).exists()) {
@@ -3456,120 +3416,7 @@ bool MainWindow::LuaScript(MapDocument *doc, const QString &filePath)
         return false;
     }
 
-#if 1
     ApplyScriptChanges(doc, tr("Lua Script"), &scripter.mMap);
-#else
-    QUndoStack *us = doc->undoStack();
-    us->beginMacro(tr("Lua Script"));
-
-    // Map resizing.
-
-    // Handle deleted layers
-    foreach (Lua::LuaLayer *ll, scripter.mMap.mRemovedLayers) {
-        if (ll->mOrig) {
-            int index = doc->map()->layers().indexOf(ll->mOrig);
-            Q_ASSERT(index != -1);
-            qDebug() << "remove layer" << ll->mOrig->name() << " at " << index;
-            us->push(new RemoveLayer(doc, index));
-        }
-    }
-
-    // Layers may have been added, moved, deleted, and/or edited.
-    foreach (Lua::LuaLayer *ll, scripter.mMap.mLayers) {
-        if (Layer *layer = ll->mOrig) {
-            // This layer exists (somewhere) in the original map.
-            int oldIndex = doc->map()->layers().indexOf(layer);
-            int newIndex = scripter.mMap.mLayers.indexOf(ll);
-            if (oldIndex != newIndex) {
-                qDebug() << "move layer" << layer->name() << "from " << oldIndex << " to " << newIndex;
-                us->push(new ReorderLayer(doc, newIndex, layer));
-            }
-        } else {
-            // This is a new layer.
-            Q_ASSERT(ll->mClone);
-            Layer *newLayer = ll->mClone->clone();
-            int index = scripter.mMap.mLayers.indexOf(ll);
-            qDebug() << "add layer" << newLayer->name() << "at" << index;
-            us->push(new AddLayer(doc, index, newLayer));
-        }
-    }
-
-    // Clear the tile selection so it doesn't inhibit what the script changed.
-    if (!doc->tileSelection().isEmpty())
-        us->push(new ChangeTileSelection(doc, QRegion()));
-
-    foreach (Lua::LuaLayer *ll, scripter.mMap.mLayers) {
-        // Apply changes to tile layers.
-        if (Lua::LuaTileLayer *tl = ll->asTileLayer()) {
-            if (tl->mOrig == 0)
-                continue; // Ignore new layers.
-            if (!tl->mCloneTileLayer || tl->mAltered.isEmpty())
-                continue; // No changes.
-            TileLayer *source = tl->mCloneTileLayer->copy(tl->mAltered);
-            QRect r = tl->mAltered.boundingRect();
-            us->push(new PaintTileLayer(doc, tl->mOrig->asTileLayer(),
-                                        r.x(), r.y(), source, tl->mAltered, true));
-            delete source;
-        }
-        // Add/Remove/Delete objects
-        if (Lua::LuaObjectGroup *og = ll->asObjectGroup()) {
-            foreach (Lua::LuaMapObject *o, og->objects()) {
-                if (og->mOrig) {
-
-                } else {
-                    us->push(new AddMapObject(doc,
-                                              doc->map()->layerAt(scripter.mMap.mLayers.indexOf(ll))->asObjectGroup(),
-                                              o->mClone->clone()));
-                }
-            }
-        }
-    }
-
-    // Apply changes to rules
-    if (scripter.mMap.mRulesChanged) {
-        BmpToolDialog::changeBmpRules(doc,
-                                      scripter.mMap.mClone->rbmpSettings()->rulesFile(),
-                                      scripter.mMap.mClone->rbmpSettings()->aliasesCopy(),
-                                      scripter.mMap.mClone->rbmpSettings()->rulesCopy());
-    }
-
-    // Apply changes to blends
-    if (scripter.mMap.mBlendsChanged) {
-        BmpToolDialog::changeBmpBlends(doc,
-                                       scripter.mMap.mClone->rbmpSettings()->blendsFile(),
-                                       scripter.mMap.mClone->rbmpSettings()->blendsCopy());
-    }
-
-    // Apply changes to BMP images
-    Lua::LuaMapBmp &bmpMain = scripter.mMap.mBmpMain;
-    if (!bmpMain.mAltered.isEmpty()) {
-        QRect r = bmpMain.mAltered.boundingRect();
-        us->push(new PaintBMP(doc, 0, r.x(), r.y(),
-                              bmpMain.mBmp.image().copy(r),
-                              bmpMain.mAltered));
-    }
-    Lua::LuaMapBmp &bmpVeg = scripter.mMap.mBmpVeg;
-    if (!bmpVeg.mAltered.isEmpty()) {
-        QRect r = bmpVeg.mAltered.boundingRect();
-        us->push(new PaintBMP(doc, 1, r.x(), r.y(),
-                              bmpVeg.mBmp.image().copy(r),
-                              bmpVeg.mAltered));
-    }
-
-    // Apply changes to MapNoBlends
-    foreach (Lua::LuaMapNoBlend *nb, scripter.mMap.mNoBlends) {
-        if (!nb->mAltered.isEmpty()) {
-            us->push(new PaintNoBlend(doc, doc->map()->noBlend(nb->mClone->layerName()),
-                                      nb->mClone->copy(nb->mAltered), nb->mAltered));
-        }
-    }
-
-    // Handle the script changing the tile selection.
-    if (doc->tileSelection() != scripter.mMap.mSelection)
-        us->push(new ChangeTileSelection(doc, scripter.mMap.mSelection));
-
-    us->endMacro();
-#endif
 
     for (const QString &action : scripter.requestedActions()) {
         if (action == QLatin1String("save"))
@@ -4298,9 +4145,7 @@ void MainWindow::initLuaTileTools()
         QString identity = info.canonicalFilePath();
         if (identity.isEmpty())
             identity = QDir::cleanPath(info.absoluteFilePath());
-#ifdef Q_OS_WIN
         identity = identity.toLower();
-#endif
         if (loadedFiles.contains(identity)) {
             qInfo() << "Skipping duplicate Lua tool catalog" << fileName;
             continue;

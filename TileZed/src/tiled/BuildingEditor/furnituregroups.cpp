@@ -121,37 +121,6 @@ bool FurnitureGroups::readTxt()
     mGroups = file.takeGroups();
     emit furnitureCatalogLoaded();
     return true;
-#if 0
-    FurnitureTiles *tiles = new FurnitureTiles;
-
-    FurnitureTile *tile = new FurnitureTile(FurnitureTile::FurnitureW);
-    tile->mTiles[0] = new BuildingTile(QLatin1String("furniture_seating_indoor_01"), 3);
-    tile->mTiles[2] = new BuildingTile(QLatin1String("furniture_seating_indoor_01"), 2);
-    tiles->mTiles[0] = tile;
-
-    tile = new FurnitureTile(FurnitureTile::FurnitureN);
-    tile->mTiles[0] = new BuildingTile(QLatin1String("furniture_seating_indoor_01"), 0);
-    tile->mTiles[1] = new BuildingTile(QLatin1String("furniture_seating_indoor_01"), 1);
-    tiles->mTiles[1] = tile;
-
-    tile = new FurnitureTile(FurnitureTile::FurnitureE);
-    tile->mTiles[0] = new BuildingTile(QLatin1String("furniture_seating_indoor_01"), 5);
-    tile->mTiles[2] = new BuildingTile(QLatin1String("furniture_seating_indoor_01"), 4);
-    tiles->mTiles[2] = tile;
-
-    tile = new FurnitureTile(FurnitureTile::FurnitureS);
-    tile->mTiles[0] = new BuildingTile(QLatin1String("furniture_seating_indoor_01"), 6);
-    tile->mTiles[1] = new BuildingTile(QLatin1String("furniture_seating_indoor_01"), 7);
-    tiles->mTiles[3] = tile;
-
-    FurnitureGroup *group = new FurnitureGroup;
-    group->mLabel = QLatin1String("Indoor Seating");
-    group->mTiles += tiles;
-
-    mGroups += group;
-
-    return true;
-#endif
 }
 
 bool FurnitureGroups::writeTxt()

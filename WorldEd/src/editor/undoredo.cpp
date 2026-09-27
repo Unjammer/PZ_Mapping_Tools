@@ -1070,14 +1070,6 @@ ResizeWorld::ResizeWorld(WorldDocument *doc, const QSize &newSize) :
 
 ResizeWorld::~ResizeWorld()
 {
-#if 0 // FIXME: not sure with multiple undo/redo which cells we can delete
-    QRect bounds(0, 0, mWorldSize.width(), mWorldSize.height());
-    for (int y = 0; y < mSize.height(); y++)
-        for (int x = 0; x < mSize.width(); x++) {
-            if (!bounds.contains(x, y))
-                delete mCells[x + y * mSize.width()];
-        }
-#endif
 }
 
 void ResizeWorld::swap()

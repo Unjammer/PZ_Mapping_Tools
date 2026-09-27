@@ -493,16 +493,6 @@ bool MapImageManager::reloadImageFile(const QString &imageName)
 
 MapImageManager::ImageData MapImageManager::generateMapImage(const QString &mapFilePath, bool force, int firstLevel)
 {
-#if 0
-    if (mapFilePath == QLatin1String("<fail>")) {
-        QImage image(thumbnailImageWidth(), 256, QImage::Format_ARGB32);
-        image.fill(Qt::transparent);
-        QPainter painter(&image);
-        painter.setFont(QFont(QLatin1String("Helvetica"), 48, 1, true));
-        painter.drawText(0, 0, image.width(), image.height(), Qt::AlignCenter, QLatin1String("FAIL"));
-        return image;
-    }
-#endif
 
     QFileInfo fileInfo(mapFilePath);
     QFileInfo imageInfo = imageFileInfo(mapFilePath, firstLevel);
@@ -648,7 +638,6 @@ MapImageManager::ImageData MapImageManager::generateBMPImage(const QString &bmpF
     if (!images)
         return ImageData();
 
-#if 1
     QImage bmpRecolored = images->mBmp.convertToFormat(QImage::Format_ARGB32);
     images->mBmp = QImage();
     QRgb ruleColor = qRgb(255, 0, 0);
@@ -661,15 +650,6 @@ MapImageManager::ImageData MapImageManager::generateBMPImage(const QString &bmpF
                 bmpRecolored.setPixel(x, y, treeColor);
         }
     }
-#else
-    QImage bmpRecolored(images->mBmp);
-    for (int x = 0; x < images->mBmp.width(); x++) {
-        for (int y = 0; y < images->mBmp.height(); y++) {
-            if (images->mBmpVeg.pixel(x, y) == qRgb(255, 0, 0))
-                bmpRecolored.setPixel(x, y, qRgb(47, 76, 64));
-        }
-    }
-#endif
 
     const int cellSize = images->mCellSize;
     delete images; // ***** ***** *****

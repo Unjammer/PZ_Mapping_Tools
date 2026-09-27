@@ -385,7 +385,6 @@ TileDefDialog::TileDefDialog(QWidget *parent) :
 
     QToolButton *button = new QToolButton(this);
     button->setIcon(undoIcon);
-    Utils::setThemeIcon(button, "edit-undo");
     button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     button->setText(undoAction->text());
     button->setEnabled(mUndoGroup->canUndo());
@@ -398,7 +397,6 @@ TileDefDialog::TileDefDialog(QWidget *parent) :
     button = new QToolButton(this);
     button->setIcon(redoIcon);
     button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    Utils::setThemeIcon(button, "edit-redo");
     button->setText(redoAction->text());
     button->setEnabled(mUndoGroup->canRedo());
     redoAction->setShortcut(QKeySequence::Redo);
@@ -604,13 +602,6 @@ TileDefDialog::TileDefDialog(QWidget *parent) :
         }
     }
 
-#if 0
-    // Hack - force the tileset-names-list font to be updated now, because
-    // setTilesetList() uses its font metrics to determine the maximum item
-    // width.
-    ui->tilesets->setFont(QFont());
-    setTilesetList();
-#endif
 
     QLabel label;
     mLabelFont = label.font();
@@ -630,11 +621,6 @@ TileDefDialog::TileDefDialog(QWidget *parent) :
     restoreSplitterSizes(ui->splitter);
 
     ui->propertySheet->setEnabled(false);
-#if 0
-    fileOpen(QLatin1String("C:\\Users\\Tim\\Desktop\\ProjectZomboid\\maptools\\tiledefinitions.tiles"));
-    initStringComboBoxValues();
-    updateTilesetListLater();
-#endif
     updateUI();
 }
 
@@ -2251,24 +2237,6 @@ Tileset *TileDefDialog::loadTileset(const QString &source)
     return nullptr;
 }
 
-#if 0
-bool TileDefDialog::loadTilesetImage(Tileset *ts, const QString &source)
-{
-    TilesetImageCache *cache = TilesetManager::instance()->imageCache();
-    Tileset *cached = cache->findMatch(ts, source);
-    if (!cached || !ts->loadFromCache(cached)) {
-        const QImage tilesetImage = QImage(source);
-        if (ts->loadFromImage(tilesetImage, source))
-            cache->addTileset(ts);
-        else {
-            mError = tr("Error loading tileset image:\n'%1'").arg(source);
-            return 0;
-        }
-    }
-
-    return ts;
-}
-#endif
 
 struct ResizedTileset {
     ResizedTileset(const QString &name, const QSize &oldSize, const QSize &newSize) :

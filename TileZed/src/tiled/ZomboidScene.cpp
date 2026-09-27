@@ -136,15 +136,7 @@ ZomboidScene::ZomboidScene(QObject *parent)
     pen.setJoinStyle(Qt::MiterJoin);
     mMapBordersItem->setPen(pen);
     mMapBordersItem->setZValue(20000 - 1); // ZVALUE_GRID - 1
-#if 1
     mMapBordersItem2->setVisible(false);
-#else
-    pen = QPen();
-    pen.setWidth(2);
-    pen.setCosmetic(true);
-    mMapBordersItem2->setPen(pen);
-    addItem(mMapBordersItem2);
-#endif
 }
 
 ZomboidScene::~ZomboidScene()
@@ -450,18 +442,6 @@ void ZomboidScene::layerChanged(int index)
         if (synch)
             updateLayerGroupsLater(Synch | Bounds);
     }
-#if 0
-    const Layer *layer = mMapDocument->map()->layerAt(index);
-    QGraphicsItem *layerItem = mLayerItems.at(index);
-
-    layerItem->setVisible(layer->isVisible());
-
-    qreal multiplier = 1;
-    if (mHighlightCurrentLayer && mMapDocument->currentLayerIndex() < index)
-        multiplier = opacityFactor;
-
-    layerItem->setOpacity(layer->opacity() * multiplier);
-#endif
 }
 
 void ZomboidScene::layerGroupAdded(int level)
@@ -571,17 +551,8 @@ void ZomboidScene::layerLevelChanged(int index, int oldLevel)
 
 void ZomboidScene::doLater(PendingFlags flags)
 {
-#if 1
     mPendingFlags |= flags;
     handlePendingUpdates();
-#else
-    mPendingFlags |= flags;
-    if (mPendingActive)
-        return;
-    QMetaObject::invokeMethod(this, "handlePendingUpdates",
-                              Qt::QueuedConnection);
-    mPendingActive = true;
-#endif
 }
 
 // Determine sane Z-order for layers in and out of TileLayerGroups
@@ -842,17 +813,6 @@ void ZomboidScene::handlePendingUpdates()
         polygon << QPointF(mapDocument()->renderer()->tileToPixelCoords(rect.bottomLeft()));
         mMapBordersItem->setPolygon(polygon);
         mMapBordersItem->setVisible(Preferences::instance()->showCellBorder() && (mapDocument()->map()->size() == QSize(300, 300)));
-#if 0
-        rect = QRect(0, 0,
-                     mapDocument()->map()->width(),
-                     mapDocument()->map()->height());
-        polygon.clear();
-        polygon << QPointF(mapDocument()->renderer()->tileToPixelCoords(rect.topLeft()));
-        polygon << QPointF(mapDocument()->renderer()->tileToPixelCoords(rect.topRight()));
-        polygon << QPointF(mapDocument()->renderer()->tileToPixelCoords(rect.bottomRight()));
-        polygon << QPointF(mapDocument()->renderer()->tileToPixelCoords(rect.bottomLeft()));
-        mMapBordersItem2->setPolygon(polygon);
-#endif
     }
     if (mPendingFlags & ZOrder)
         setGraphicsSceneZOrder();

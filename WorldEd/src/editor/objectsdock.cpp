@@ -1078,20 +1078,8 @@ void ObjectsModel::setModelData()
         return;
     }
 
-#if 1
     int minLevel = MIN_WORLD_LEVEL;
     int maxLevel = MAX_WORLD_LEVEL;
-#else
-    int minLevel = 0;
-    int maxLevel = 0;
-    if (mCellDoc) {
-        maxLevel = mCellDoc->scene()->mapComposite()->maxLevel();
-    } else {
-        maxLevel = 0; // Could use MapInfo to get maxLevel
-        foreach (WorldCellObject *obj, mCell->objects())
-            maxLevel = qMax(obj->level(), maxLevel);
-    }
-#endif
     mRootItem = new Item();
 
     for (int level = minLevel; level <= maxLevel; level++)

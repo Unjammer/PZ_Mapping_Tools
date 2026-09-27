@@ -165,9 +165,6 @@ void Zoomable::connectToComboBox(QComboBox *comboBox)
         connect(mComboBox, &QComboBox::activated,
                 this, &Zoomable::comboActivated);
 #endif
-#if 0 // this breaks QDarkStyleSheet
-        mComboBox->setEditable(true);
-#endif
         mComboBox->setInsertPolicy(QComboBox::NoInsert);
         if (mComboBox->isEditable()) {
             connect(mComboBox->lineEdit(), &QLineEdit::editingFinished,

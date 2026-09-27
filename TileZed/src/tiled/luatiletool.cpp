@@ -753,41 +753,7 @@ bool LuaTileTool::parseToolOption(QString &err)
 #include "mainwindow.h"
 void LuaTileTool::applyChanges(const char *undoText)
 {
-#if 1
     MainWindow::instance()->ApplyScriptChanges(mapDocument(), QLatin1String(undoText), mMap);
-#else
-    QUndoStack *us = mapDocument()->undoStack();
-    QList<QUndoCommand*> cmds;
-
-    foreach (Lua::LuaLayer *ll, mMap->mLayers) {
-        // Apply changes to tile layers.
-        if (Lua::LuaTileLayer *tl = ll->asTileLayer()) {
-            if (tl->mOrig == 0)
-                continue; // Ignore new layers.
-            if (!tl->mCloneTileLayer || tl->mAltered.isEmpty())
-                continue; // No changes.
-            TileLayer *source = tl->mCloneTileLayer->copy(tl->mAltered);
-            QRect r = tl->mAltered.boundingRect();
-            cmds += new PaintTileLayer(mapDocument(), tl->mOrig->asTileLayer(),
-                                                   r.x(), r.y(), source, tl->mAltered, true);
-            delete source;
-        }
-    }
-
-    foreach (LuaMapNoBlend *nb, mMap->mNoBlends) {
-        if (!nb->mAltered.isEmpty()) {
-            cmds += new PaintNoBlend(mapDocument(), mapDocument()->map()->noBlend(nb->mClone->layerName()),
-                                     nb->mClone->copy(nb->mAltered), nb->mAltered);
-        }
-    }
-
-    if (cmds.size()) {
-        us->beginMacro(QLatin1String(undoText));
-        foreach (QUndoCommand *cmd, cmds)
-            us->push(cmd);
-        us->endMacro();
-    }
-#endif
 
     mMapChanged = true;
 }
@@ -1041,11 +1007,7 @@ bool LuaToolFile::read(const QString &fileName)
     // In the latter case, we expect Preferences::luaPath() to contain the tool files.
     QDir luaDir = dir.filePath(QLatin1String("lua"));
     if (!luaDir.exists())
-#if defined(Q_OS_MACOS)
-        luaDir = dir.filePath(QLatin1String("../Lua"));
-#else
         luaDir = dir.filePath(QLatin1String("../lua"));
-#endif
 
     foreach (SimpleFileBlock block, simple.blocks) {
         if (block.name == QLatin1String("tool")) {

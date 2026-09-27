@@ -155,7 +155,6 @@ QPainterPath ZLevelRenderer::shape(const MapObject *object) const
 {
     Layer *layer = object->objectGroup();
     int level = layer ? layer->level() : 0;
-#if 1
     /*
 AddRemoveMapObject::removeObject
     mObjectGroup->removeObject(mMapObject) <<--------- why layer==0
@@ -170,9 +169,6 @@ AddRemoveMapObject::removeObject
     */
     if (layer == 0)
         return QPainterPath();
-#else
-    Q_ASSERT(layer);
-#endif
 
     QPainterPath path;
     if (object->tile()) {
@@ -574,15 +570,8 @@ void ZLevelRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *laye
 
     QTransform baseTransform = painter->transform();
 
-#if 0
-    QThreadStorage<QVector<const Cell*> > cellStorage;
-    QThreadStorage<QVector<qreal> > opacityStorage;
-    QVector<const Cell*> &cells = cellStorage.localData();
-    QVector<qreal> &opacities = opacityStorage.localData();
-#else
     /*static*/ QVector<const Cell*> cells(40); // or QVarLengthArray
     /*static*/ QVector<qreal> opacities(40); // or QVarLengthArray
-#endif
 
     layerGroup->prepareDrawing(this, rect);
 
@@ -779,11 +768,9 @@ void ZLevelRenderer::drawMapObject(QPainter *painter,
         painter->drawRect(QRectF(paintOrigin, img.size()));
     } else {
         QColor brushColor = color;
-#if 1
         if (color.alpha() != 255)
             brushColor.setAlpha(color.alpha());
         else
-#endif
         brushColor.setAlpha(50);
         QBrush brush(brushColor);
 

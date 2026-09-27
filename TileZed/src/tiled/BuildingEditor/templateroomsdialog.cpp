@@ -70,13 +70,7 @@ TemplateRoomsDialog::TemplateRoomsDialog(TemplateDocument *doc, Room *initialRoo
     toolBar->addAction(ui->actionAdd);
     toolBar->addAction(ui->actionDuplicate);
     toolBar->addAction(ui->actionRemove);
-#if 1
     toolBar->addSeparator();
-#else
-    QWidget *spacerWidget = new QWidget(this);
-    spacerWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
-    toolBar->addWidget(spacerWidget);
-#endif
     toolBar->addAction(ui->actionMoveUp);
     toolBar->addAction(ui->actionMoveDown);
     ui->toolBarLayout->addWidget(toolBar);
@@ -110,7 +104,6 @@ TemplateRoomsDialog::TemplateRoomsDialog(TemplateDocument *doc, Room *initialRoo
         QIcon undoIcon(QLatin1String(":images/16x16/edit-undo.png"));
         undoIcon.addFile(QLatin1String(":images/24x24/edit-undo.png"));
         mUndoButton->setIcon(undoIcon);
-        Tiled::Utils::setThemeIcon(mUndoButton, "edit-undo");
         mUndoButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         mUndoButton->setEnabled(mUndoGroup->canUndo());
         mUndoButton->setShortcut(QKeySequence::Undo);
@@ -124,7 +117,6 @@ TemplateRoomsDialog::TemplateRoomsDialog(TemplateDocument *doc, Room *initialRoo
         redoIcon.addFile(QLatin1String(":images/24x24/edit-redo.png"));
         mRedoButton->setIcon(redoIcon);
         mRedoButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        Tiled::Utils::setThemeIcon(mRedoButton, "edit-redo");
         mRedoButton->setEnabled(mUndoGroup->canRedo());
         mRedoButton->setShortcut(QKeySequence::Redo);
         ui->undoRedoLayout->insertWidget(1, mRedoButton);

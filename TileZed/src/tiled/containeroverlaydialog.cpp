@@ -871,9 +871,6 @@ void AbstractOverlayDialog::tilesetAdded(Tileset *tileset)
     setTilesetList();
     int row = TileMetaInfoMgr::instance()->indexOf(tileset);
     ui->tilesetList->setCurrentRow(row);
-#if 0
-    categoryChanged(ui->categoryList->currentRow());
-#endif
 }
 
 void AbstractOverlayDialog::tilesetAboutToBeRemoved(Tileset *tileset)
@@ -885,9 +882,6 @@ void AbstractOverlayDialog::tilesetAboutToBeRemoved(Tileset *tileset)
 void AbstractOverlayDialog::tilesetRemoved(Tileset *tileset)
 {
     Q_UNUSED(tileset)
-#if 0
-    categoryChanged(ui->categoryList->currentRow());
-#endif
 }
 
 // Called when a tileset image changes or a missing tileset was found.

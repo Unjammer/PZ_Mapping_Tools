@@ -708,42 +708,6 @@ void MapReaderPrivate::decodeCSVLayerData(TileLayer *tileLayer, const QString &t
         }
         tileLayer->setCell(x, y, cellForGid(gid));
     }
-#elif 0
-    QString trimText = text.trimmed();
-    static QVector<int> tiles;
-    tiles.reserve(300*300*2);
-    tiles.clear();
-    QString_split(QLatin1Char(','), QString::KeepEmptyParts, Qt::CaseSensitive, trimText, tiles);
-
-    if (tiles.count() / 2 != tileLayer->width() * tileLayer->height()) {
-        xml.raiseError(tr("Corrupt layer data for layer '%1'")
-                       .arg(tileLayer->name()));
-        return;
-    }
-
-    QString tile;
-
-    for (int y = 0; y < tileLayer->height(); y++) {
-        for (int x = 0; x < tileLayer->width(); x++) {
-            bool conversionOk;
-            int k = (y * tileLayer->width() + x) * 2;
-            tile = trimText.mid(tiles[k], tiles[k + 1]);
-            const uint gid = tile.toUInt(&conversionOk);
-            if (!conversionOk) {
-                xml.raiseError(
-                        tr("Unable to parse tile at (%1,%2) on layer '%3'")
-                               .arg(x + 1).arg(y + 1).arg(tileLayer->name()));
-                return;
-            }
-            tileLayer->setCell(x, y, cellForGid(gid));
-        }
-#if 1
-        // Hack to keep the app responsive.
-        // TODO: Move map reading to a worker thread. Only issue is tileset images
-        // cannot be accessed outside the GUI thread.
-        qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
-#endif
-    }
 #else
     QString trimText = text.trimmed();
     QStringList tiles = trimText.split(QLatin1Char(','));
@@ -1058,9 +1022,6 @@ void MapReaderPrivate::readBmpSettings()
     Q_ASSERT(xml.isStartElement() && xml.name() == QLatin1String("bmp-settings"));
 
     const QXmlStreamAttributes atts = xml.attributes();
-#if 0
-    int version = atts.value(QLatin1String("version")).toString().toInt();
-#endif
     while (xml.readNextStartElement()) {
         if (xml.name() == QLatin1String("rules-file")) {
             const QXmlStreamAttributes atts = xml.attributes();

@@ -165,7 +165,6 @@ public:
     {
         bool isDouble;
         value.toDouble(&isDouble);
-#if 1
         QByteArray key = _key;
         bool unquoted = key.length() && !isdigit(key[0]);
         for (int i = 0; i < key.length(); i++) {
@@ -175,7 +174,6 @@ public:
         }
         if (!unquoted)
             key = QString::fromUtf8("[\"%1\"]").arg(QString::fromUtf8(_key)).toUtf8();
-#endif
         if (value == QLatin1String("true")
                 || value == QLatin1String("false")
                 || isDouble)
@@ -480,7 +478,6 @@ public:
         for (int y = 0; y < mWorld->height(); y++) {
             for (int x = 0; x < mWorld->width(); x++) {
                 WorldCell *cell = mWorld->cellAt(x, y);
-#if 1
                 DelayedMapLoader mapLoader;
                 WorldCellLotList lots;
                 for (WorldCellLot *lot : cell->lots()) {
@@ -496,7 +493,6 @@ public:
                 while (mapLoader.isLoading()) {
                     qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
                 }
-#endif
                 for (WorldCellLot *lot : lots) {
                     MapInfo *info = MapManager::instance()->mapInfo(lot->mapName());
                     if (info == nullptr)

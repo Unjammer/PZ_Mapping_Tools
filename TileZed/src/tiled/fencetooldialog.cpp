@@ -119,17 +119,6 @@ void FenceToolDialog::currentRowChanged(int row)
 {
     Fence *fence = (row >= 0) ? mFences.at(row) : 0;
     FenceTool::instance().setFence(fence);
-#if 0
-    if (!fence || fence->mLayer.isEmpty()) return;
-    MapDocument *doc = DocumentManager::instance()->currentDocument();
-    if (!doc) return;
-    int index = doc->map()->indexOfLayer(fence->mLayer);
-    if (index >= 0) {
-        Layer *layer = doc->map()->layerAt(index);
-        if (layer->asTileLayer())
-            doc->setCurrentLayerIndex(index);
-    }
-#endif
 }
 
 void FenceToolDialog::setVisibleNow()

@@ -103,10 +103,6 @@ void TileDelegate::paint(QPainter *painter,
 
     Tile *tile;
     if (!(tile = m->tileAt(index))) {
-#if 0
-        painter->drawLine(option.rect.topLeft(), option.rect.bottomRight());
-        painter->drawLine(option.rect.topRight(), option.rect.bottomLeft());
-#endif
         return;
     }
     if (m->showTransparentTiles() && tile->image().isNull()) {
@@ -1106,11 +1102,6 @@ void MixedTilesetModel::setToolTip(int tileIndex, const QString &text)
 {
     if (Item *item = toItem(tileIndex)) {
         item->mToolTip = text;
-#if 0
-        int itemIndex = indexOf(item);
-        QModelIndex index = createIndex(itemIndex / columnCount(), itemIndex % columnCount(), item);
-        emit toolTipChanged(index);
-#endif
     }
 }
 

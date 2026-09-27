@@ -13,9 +13,7 @@ greaterThan(QT_MAJOR_VERSION, 5) {
 }
 
 # For 'breeze' style using SVG icons
-win32|macx {
     QT += svg
-}
 
 # MSVC
 msvc {
@@ -28,11 +26,7 @@ TARGET = PZWorldEd
 TEMPLATE = app
 #target.path = $${PREFIX}/bin
 #INSTALLS += target
-win32 {
     DESTDIR = ../..
-} else {
-    DESTDIR = ../../bin
-}
 
 DEFINES += QT_NO_CAST_FROM_ASCII \
     QT_NO_CAST_TO_ASCII
@@ -43,30 +37,18 @@ HEADERS += ../../../shared/pztoolspaths.h
 HEADERS += ../../../shared/tilesetimageloader.h
 HEADERS += ../../../shared/loadingdialog.h
 HEADERS += ../../../shared/startupwindowgeometry.h
+HEADERS += ../../../shared/displayscaling.h
+HEADERS += ../../../shared/displayscalingvalidation.h
+HEADERS += wrappinglayout.h
 HEADERS += ../../../shared/tilesetimageloadervalidation.h
 
 # Release with debug info
 msvc:QMAKE_CXXFLAGS_RELEASE += /Zi
 msvc:QMAKE_LFLAGS_RELEASE += /DEBUG /OPT:REF /OPT:ICF
 
-macx {
-    LIBS += -framework Foundation
-    ICON = images/tiled-icon-mac.icns
-    include(../../../shared/macosbundle.pri)
-} else:win32 {
     LIBS += -L$$OUT_PWD/../../lib
-} else {
-    QMAKE_LIBDIR_FLAGS += -L$$OUT_PWD/../../lib
-}
 
 # Make sure the Tiled executable can find libtiled
-!win32:!macx {
-    QMAKE_RPATHDIR += \$\$ORIGIN/../lib
-
-    # It is not possible to use ORIGIN in QMAKE_RPATHDIR, so a bit manually
-    QMAKE_LFLAGS += -Wl,-z,origin \'-Wl,-rpath,$$join(QMAKE_RPATHDIR, ":")\'
-    QMAKE_RPATHDIR =
-}
 
 MOC_DIR = .moc
 UI_DIR = .uic
@@ -419,20 +401,14 @@ RESOURCES += \
     qdarkstyle/light/lightstyle.qrc \
     breeze/breeze.qrc
 
-win32 {
     RC_FILE = worlded.rc
-}
 
-win32:INCLUDEPATH += .
+INCLUDEPATH += .
 
 isEmpty(INSTALL_ONLY_BUILD) {
-    win32:CONFIG_PREFIX = $${target.path}
-    unix:CONFIG_PREFIX = $${target.path}/../share/tilezed/config
-    macx:CONFIG_PREFIX = $${target.path}/PZWorldEd.app/Contents/Config
+    CONFIG_PREFIX = $${target.path}
 } else {
-    win32:CONFIG_PREFIX = $${top_builddir}
-    unix:CONFIG_PREFIX = $${top_builddir}/share/tilezed/config
-    macx:CONFIG_PREFIX = $${top_builddir}/bin/PZWorldEd.app/Contents/Config
+    CONFIG_PREFIX = $${top_builddir}
 }
 
 configTxtFiles.path = $${CONFIG_PREFIX}

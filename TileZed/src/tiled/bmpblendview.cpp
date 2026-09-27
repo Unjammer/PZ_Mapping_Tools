@@ -106,25 +106,6 @@ void BmpBlendDelegate::paint(QPainter *painter,
     if (blends.isEmpty()) return;
 
     const int extra = 2;
-#if 0
-    // Overlay with highlight color when selected
-    if ((option.state & QStyle::State_Selected) && (option.state & QStyle::State_Active)) {
-        const qreal opacity = painter->opacity();
-        painter->setOpacity(0.5);
-        QPalette::ColorGroup cg = option.state & QStyle::State_Enabled
-                                  ? QPalette::Normal : QPalette::Disabled;
-        if (cg == QPalette::Normal && !(option.state & QStyle::State_Active))
-            cg = QPalette::Inactive;
-        painter->fillRect(option.rect/*.adjusted(extra, extra, -extra, -extra)*/,
-                          option.palette.brush(cg, QPalette::Highlight));
-        painter->setOpacity(opacity);
-    } else if (option.state & QStyle::State_Selected) {
-        const qreal opacity = painter->opacity();
-        painter->setOpacity(0.15);
-        painter->fillRect(option.rect, option.palette.highlight());
-        painter->setOpacity(opacity);
-    }
-#endif
     // This requires the view's setMouseTracking(true)
     if (option.state & QStyle::State_MouseOver) {
         const qreal opacity = painter->opacity();
@@ -197,43 +178,6 @@ void BmpBlendDelegate::paint(QPainter *painter,
         painter->setPen(oldPen);
     }
 
-#if 0
-    // Rule header.
-    QString label = tr("Rule #%1: index=%2 color=%3,%4,%5")
-            .arg(m->blendIndex(blend))
-            .arg(blend->bitmapIndex)
-            .arg(qRed(blend->color)).arg(qGreen(blend->color)).arg(qBlue(blend->color));
-    if (blend->condition != qRgb(0, 0, 0))
-        label += QString::fromLatin1(" condition=%1,%2,%3")
-                .arg(qRed(blend->condition)).arg(qGreen(blend->condition)).arg(qBlue(blend->condition));
-    QString name = fm.elidedText(label, Qt::ElideRight, option.rect.width());
-    if (mMouseOverIndex == index) {
-        QFont newFont = font;
-        newFont.setUnderline(true);
-        painter->setFont(newFont);
-    }
-    painter->drawText(option.rect.left() + extra + labelWidth, option.rect.top() + extra,
-                      option.rect.width() - labelWidth - extra * 2, labelHeight, Qt::AlignLeft | Qt::AlignVCenter, name);
-    if (mMouseOverIndex == index)
-        painter->setFont(font);
-#endif
-#if 0
-    // Focus rect around 'current' item
-    if (option.state & QStyle::State_HasFocus) {
-        QStyleOptionFocusRect o;
-        o.QStyleOption::operator=(option);
-        o.rect = option.rect.adjusted(1,1,-1,-1);
-        o.state |= QStyle::State_KeyboardFocusChange;
-        o.state |= QStyle::State_Item;
-        QPalette::ColorGroup cg = (option.state & QStyle::State_Enabled)
-                                  ? QPalette::Normal : QPalette::Disabled;
-        o.backgroundColor = option.palette.color(cg, (option.state & QStyle::State_Selected)
-                                                 ? QPalette::Highlight : QPalette::Window);
-        const QWidget *widget = 0/*d->widget(option)*/;
-        QStyle *style = /*widget ? widget->style() :*/ QApplication::style();
-        style->drawPrimitive(QStyle::PE_FrameFocusRect, &o, painter, widget);
-    }
-#endif
 }
 
 QSize BmpBlendDelegate::sizeHint(const QStyleOptionViewItem &option,
@@ -323,24 +267,6 @@ QVariant BmpBlendModel::data(const QModelIndex &index, int role) const
 {
     Q_UNUSED(index)
     Q_UNUSED(role)
-#if 0
-    if (role == Qt::BackgroundRole) {
-        if (Item *item = toItem(index))
-            return item->mBackground;
-    }
-    if (role == Qt::DisplayRole) {
-        if (Tile *tile = tileAt(index))
-            return tile->image();
-    }
-    if (role == Qt::DecorationRole) {
-        if (Item *item = toItem(index))
-            return item->mLabel;
-    }
-    if (role == Qt::ToolTipRole) {
-        if (Item *item = toItem(index))
-            return item->mToolTip;
-    }
-#endif
     return QVariant();
 }
 
@@ -349,17 +275,6 @@ bool BmpBlendModel::setData(const QModelIndex &index, const QVariant &value, int
     Q_UNUSED(index)
     Q_UNUSED(value)
     Q_UNUSED(role)
-#if 0
-    if (Item *item = toItem(index)) {
-        if (role == Qt::DisplayRole) {
-            if (item->mTile && value.canConvert<Tile*>()) {
-                item->mTile = qvariant_cast<Tile*>(value);
-                emit dataChanged(index, index);
-                return true;
-            }
-        }
-    }
-#endif
     return false;
 }
 
@@ -586,18 +501,6 @@ void BmpBlendView::mouseMoveEvent(QMouseEvent *event)
 
 void BmpBlendView::mousePressEvent(QMouseEvent *event)
 {
-#if 0
-    QModelIndex index = indexAt(event->pos());
-    int layerIndex = model()->layerAt(index);
-    if (layerIndex >= 0) {
-        QRect r = visualRect(index);
-        if (event->pos().y() < r.top() + 2 + fontMetrics().lineSpacing()) {
-            emit layerNameClicked(layerIndex);
-            mIgnoreMouse = true;
-            return;
-        }
-    }
-#endif
     QTableView::mousePressEvent(event);
 }
 
@@ -643,33 +546,6 @@ void BmpBlendView::clear()
 
 void BmpBlendView::setBlends(const Map *map)
 {
-#if 0
-    QSet<Tileset*> tilesets;
-    QMap<QString,BmpAlias*> aliasByName;
-    foreach (BmpAlias *alias, map->bmpSettings()->aliases())
-        aliasByName[alias->name] = alias;
-    QList<BmpBlend*> blends = map->bmpSettings()->blends();
-    foreach (BmpBlend *blend, blends) {
-        QStringList tileChoices;
-        foreach (QString tileName, blend->tileChoices) {
-            if (aliasByName.contains(tileName))
-                tileChoices += aliasByName[tileName]->tiles;
-            else
-                tileChoices += tileName;
-        }
-        foreach (QString tileName, tileChoices) {
-            Tile *tile;
-            if (tileName.isEmpty())
-                tile = BuildingTilesMgr::instance()->noneTiledTile();
-            else {
-                tile = BuildingTilesMgr::instance()->tileFor(tileName);
-                if (tile && TileMetaInfoMgr::instance()->indexOf(tile->tileset()) != -1)
-                    tilesets += tile->tileset();
-            }
-        }
-    }
-    TileMetaInfoMgr::instance()->loadTilesets(tilesets.toList());
-#endif
     model()->setBlends(map);
 }
 

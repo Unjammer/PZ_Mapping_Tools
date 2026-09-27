@@ -207,7 +207,7 @@ public:
     void roomRemoved(Room *room);
 
     void tilesetAdded(Tiled::Tileset *tileset);
-    void tilesetAboutToBeRemoved(Tiled::Tileset *tileset);
+    void tilesetAboutToBeRemoved(Tiled::Tileset *tileset, bool updateLayers = true);
     void tilesetRemoved(Tiled::Tileset *tileset);
 
     void recreateAllLater();

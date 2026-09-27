@@ -98,11 +98,6 @@ void RoadTemplates::deleteInstance()
 RoadTemplates::RoadTemplates()
 {
     mRoadTiles += QString();
-#if 0
-    mRoadTiles += QLatin1String("floors_exterior_street_01_16");
-    mRoadTiles += QLatin1String("floors_exterior_street_01_17");
-    mRoadTiles += QLatin1String("floors_exterior_street_01_18");
-#endif
 
     /////
 
@@ -110,55 +105,6 @@ RoadTemplates::RoadTemplates()
     lines->name = QLatin1String("None");
     mNullTrafficLines = lines;
     mTrafficLines += mNullTrafficLines;
-#if 0
-    lines = new TrafficLines();
-    lines->name = QLatin1String("Double White (Faded)");
-    lines->inner.ns = QLatin1String("street_trafficlines_01_0");
-    lines->inner.we = QLatin1String("street_trafficlines_01_2");
-    lines->inner.nw = QLatin1String("street_trafficlines_01_1");
-    lines->inner.sw = QLatin1String("street_trafficlines_01_7");
-    lines->outer.ns = QLatin1String("street_trafficlines_01_4");
-    lines->outer.we = QLatin1String("street_trafficlines_01_6");
-    lines->outer.ne = QLatin1String("street_trafficlines_01_3");
-    lines->outer.se = QLatin1String("street_trafficlines_01_5");
-    mTrafficLines += lines;
-
-    lines = new TrafficLines();
-    lines->name = QLatin1String("Double White");
-    lines->inner.ns = QLatin1String("street_trafficlines_01_8");
-    lines->inner.we = QLatin1String("street_trafficlines_01_10");
-    lines->inner.nw = QLatin1String("street_trafficlines_01_9");
-    lines->inner.sw = QLatin1String("street_trafficlines_01_15");
-    lines->outer.ns = QLatin1String("street_trafficlines_01_12");
-    lines->outer.we = QLatin1String("street_trafficlines_01_14");
-    lines->outer.ne = QLatin1String("street_trafficlines_01_11");
-    lines->outer.se = QLatin1String("street_trafficlines_01_13");
-    mTrafficLines += lines;
-
-    lines = new TrafficLines();
-    lines->name = QLatin1String("Double Yellow (Faded)");
-    lines->inner.ns = QLatin1String("street_trafficlines_01_16");
-    lines->inner.we = QLatin1String("street_trafficlines_01_18");
-    lines->inner.nw = QLatin1String("street_trafficlines_01_17");
-    lines->inner.sw = QLatin1String("street_trafficlines_01_23");
-    lines->outer.ns = QLatin1String("street_trafficlines_01_20");
-    lines->outer.we = QLatin1String("street_trafficlines_01_22");
-    lines->outer.ne = QLatin1String("street_trafficlines_01_19");
-    lines->outer.se = QLatin1String("street_trafficlines_01_21");
-    mTrafficLines += lines;
-
-    lines = new TrafficLines();
-    lines->name = QLatin1String("Double Yellow");
-    lines->inner.ns = QLatin1String("street_trafficlines_01_24");
-    lines->inner.we = QLatin1String("street_trafficlines_01_26");
-    lines->inner.nw = QLatin1String("street_trafficlines_01_25");
-    lines->inner.sw = QLatin1String("street_trafficlines_01_31");
-    lines->outer.ns = QLatin1String("street_trafficlines_01_28");
-    lines->outer.we = QLatin1String("street_trafficlines_01_30");
-    lines->outer.ne = QLatin1String("street_trafficlines_01_27");
-    lines->outer.se = QLatin1String("street_trafficlines_01_29");
-    mTrafficLines += lines;
-#endif
 
     parseRoadsDotTxt();
 }

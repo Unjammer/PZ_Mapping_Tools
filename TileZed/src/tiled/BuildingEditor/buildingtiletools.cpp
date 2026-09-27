@@ -799,10 +799,6 @@ void PickTileTool::mousePressEvent(QGraphicsSceneMouseEvent *event)
 void PickTileTool::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
     Q_UNUSED(event)
-#if 0
-    qDebug() << mEditor->tileUnderPoint(event->scenePos().x(),
-                                        event->scenePos().y());
-#endif
 }
 
 void PickTileTool::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
@@ -971,7 +967,6 @@ void FloorGrimeTileTool::updateCursor(const QPointF &scenePos, bool force)
     } else {
         mCursorTileBounds = QRect(tilePos, QSize(1, 1));
         mCursorTileBounds &= floor()->bounds(1, 1);
-#if 1
         BuildingTilesMgr *mgr = BuildingTilesMgr::instance();
         BuildingTileCategory *cat = mgr->catGrimeFloor();
         BuildingTileEntry *entry = cat->entry(mFloorGrimeEntry);
@@ -985,22 +980,6 @@ void FloorGrimeTileTool::updateCursor(const QPointF &scenePos, bool force)
                 mTileName = tile->name();
             }
         }
-#else
-        if (Room *room = floor()->GetRoomAt(tilePos)) {
-            if (BuildingTileEntry *entry = room->tile(Room::GrimeFloor)) {
-                if (!entry->isNone()) {
-                    if (mRotating) {
-                        mFloorGrime = pickGrimeEnum(scenePos);
-                    } else if (mFloorGrime == -1) {
-                        mFloorGrime = BTC_GrimeFloor::West;
-                    }
-                    if (BuildingTile *tile = entry->tile(mFloorGrime)) {
-                        mTileName = tile->name();
-                    }
-                }
-            }
-        }
-#endif
     }
 
     mCursor->setTileRegion(mCursorTileBounds);

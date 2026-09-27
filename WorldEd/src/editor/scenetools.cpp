@@ -591,7 +591,6 @@ void CreateObjectTool::editObjectPreset()
 void CreateObjectTool::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-#if 1
         mStartScenePos = event->scenePos();
         mMousePressed = true;
         mAnchorPos = mScene->renderer()->pixelToTileCoordsInt(event->scenePos(), mScene->document()->currentLevel());
@@ -604,17 +603,6 @@ void CreateObjectTool::mousePressEvent(QGraphicsSceneMouseEvent *event)
         }
         if (typeRequiresUnitRectangle(typeName))
             startNewMapObject(mAnchorPos);
-#else
-        mAnchorPos = mScene->renderer()->pixelToTileCoords(event->scenePos(), mScene->document()->currentLevel());
-
-        bool snapToGrid = Preferences::instance()->snapToGrid();
-        if (event->modifiers() & Qt::ControlModifier)
-            snapToGrid = !snapToGrid;
-        if (snapToGrid)
-            mAnchorPos = mAnchorPos.toPoint();
-
-        startNewMapObject(mAnchorPos);
-#endif
         event->accept();
     }
 
@@ -643,17 +631,7 @@ void CreateObjectTool::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
             event->accept();
             return;
         }
-#if 1
         QPointF pos = mScene->renderer()->pixelToTileCoordsInt(event->scenePos(), mScene->document()->currentLevel());
-#else
-        QPointF pos = mScene->renderer()->pixelToTileCoords(event->scenePos(), mScene->document()->currentLevel());
-
-        bool snapToGrid = Preferences::instance()->snapToGrid();
-        if (event->modifiers() & Qt::ControlModifier)
-            snapToGrid = !snapToGrid;
-        if (snapToGrid)
-            pos = pos.toPoint();
-#endif
 
         QRectF bounds(mAnchorPos, pos);
         bounds = bounds.normalized();
@@ -704,7 +682,6 @@ void CreateObjectTool::startNewMapObject(const QPointF &pos)
                                                pos.x(), pos.y(),
                                                mScene->document()->currentLevel(),
                                                MIN_OBJECT_SIZE, MIN_OBJECT_SIZE);
-#if 1
     if (obj->isBasement()) {
         if (PropertyTemplate *pt = mScene->world()->propertyTemplate(QStringLiteral("Basement"))) {
             obj->addTemplate(obj->templates().size(), pt);
@@ -714,7 +691,6 @@ void CreateObjectTool::startNewMapObject(const QPointF &pos)
             }
         }
     }
-#endif
     WorldObjectValidation::applyCreationDefaults(obj);
     mItem = mScene->newObjectItem(obj, nullptr);
     mItem->labelItem()->setShowSize(true);
@@ -1041,15 +1017,7 @@ void SelectMoveObjectTool::updateMovingItems(const QPointF &pos,
     QPointF startScenePos = renderer->tileToPixelCoords(startTilePos, level);
     QPointF newTilePos = renderer->pixelToTileCoords(startScenePos + (pos - mStartScenePos), level);
 
-#if 1
     newTilePos = newTilePos.toPoint();
-#else
-    bool snapToGrid = Preferences::instance()->snapToGrid();
-    if (modifiers & Qt::ControlModifier)
-        snapToGrid = !snapToGrid;
-    if (snapToGrid)
-        newTilePos = newTilePos.toPoint();
-#endif
 
     foreach (ObjectItem *item, mMovingItems)
         item->setDragOffset(newTilePos - startTilePos);
@@ -3009,18 +2977,6 @@ void AbstractCreatePolygonObjectTool::updatePathItem()
             path.addPolygon(mScene->renderer()->tileToPixelCoords(mPolygon, level));
         }
     }
-#if 0
-    if (mPolygon.isEmpty()) {
-        QPointF tilePos = mScene->renderer()->pixelToTileCoordsNearest(mScenePos);
-        QPointF scenePos = mScene->renderer()->tileToPixelCoords(tilePos);
-        path.addRect(scenePos.x() - 5, scenePos.y() - 5, 10, 10);
-    } else {
-        for (const QPoint& point : std::as_const(mPolygon)) {
-            QPointF p = mScene->renderer()->tileToPixelCoords(point);
-            path.addRect(p.x() - 5, p.y() - 5, 10, 10);
-        }
-    }
-#endif
     if (!mPolygon.isEmpty()) {
         QPointF p1 = mScene->renderer()->tileToPixelCoords(mPolygon[0], level);
         path.moveTo(p1);
@@ -3696,38 +3652,6 @@ void WorldCellTool::updateMovingItems(const QPointF &pos,
                                       Qt::KeyboardModifiers modifiers)
 {
     Q_UNUSED(modifiers)
-#if 0
-    // Snap-to-grid
-    QPointF pt = mScene->pixelToCellCoords(mStartScenePos);
-    qreal x1 = pt.x() - (int)pt.x();
-    qreal y1 = pt.y() - (int)pt.y();
-
-    pt = mScene->pixelToCellCoords(pos);
-
-    // Pick the correct quadrant of the mouse-over cell depending on
-    // the quadrant the hot-spot is in
-    qreal x2 = pt.x() - int(pt.x());
-    qreal y2 = pt.y() - int(pt.y());
-    if (x2 - x1 > 0.5)
-        pt.setX(pt.x() + 1);
-    else if (x2 - x1 < -0.5)
-        pt.setX(pt.x() - 1);
-    if (y2 - y1 > 0.5)
-        pt.setY(pt.y() + 1);
-    else if (y2 - y1 < -0.5)
-        pt.setY(pt.y() - 1);
-
-    Q_ASSERT(mEventView);
-    qreal frac = 0.25, halfFrac = frac/2;
-    qreal scale = qMin(qMax(frac, mEventView->zoomable()->scale()),1.0);
-    QPolygonF poly = mScene->cellRectToPolygon(QRectF(int(pt.x())+x1-halfFrac/scale,
-                                                      int(pt.y())+y1-halfFrac/scale,
-                                                      frac/scale, frac/scale));
-    if (poly.containsPoint(pos, Qt::OddEvenFill))
-        pt = mScene->cellToPixelCoords(int(pt.x())+x1, int(pt.y())+y1);
-    else
-        pt = pos;
-#endif
     // Restrict the drop position so the cells stay in bounds
     QVector<QPoint> cellPositions(mDnDItems.size());
     cellPositions.clear();
@@ -4759,20 +4683,16 @@ bool PasteCellsTool::pasteCells()
     MainWindow::instance()->beginDocumentTransaction();
     undoStack->beginMacro(tr("Paste %1 Cell%2").arg(count).arg(QLatin1String((count > 1) ? "s" : "")));
     undoStack->push(new ProgressBegin(tr("Pasting Cells"))); // in case of multiple loadMap() calls
-#if 1
     Clipboard::instance()->pasteEverythingButCells(mScene->worldDocument());
-#endif
     QList<WorldCell*> newSelection;
     foreach (PasteCellItem *item, mDnDItems) {
         QPoint newPos = pastedCellPosition(item->cellPos(), startCellPos,
                                            dropCellPos);
         WorldCell *replace = mScene->world()->cellAt(newPos);
         WorldCellContents *contents = new WorldCellContents(item->contents(), replace);
-#if 1
         // PropertyDefs, Templates, ObjectTypes, ObjectGroups -> from clipboard-world to document-world
         contents->swapWorld(mScene->world());
         contents->mergeOnto(replace);
-#endif
         undoStack->push(new ReplaceCell(mScene->worldDocument(), replace, contents));
         newSelection += mScene->world()->cellAt(newPos);
     }
@@ -4994,113 +4914,6 @@ void WorldCreateRoadTool::finishNewRoadItem()
     mRoad = 0;
 }
 
-#if 0
-
-/////
-
-/**
- * A handle that allows moving around a point of a Road.
- */
-class RoadPointHandle : public QGraphicsItem
-{
-public:
-    RoadPointHandle(RoadItem *roadItem, int pointIndex)
-        : QGraphicsItem()
-        , mRoadItem(roadItem)
-        , mPointIndex(pointIndex)
-        , mSelected(false)
-        , mDragging(false)
-    {
-        setFlags(QGraphicsItem::ItemIgnoresTransformations |
-                 QGraphicsItem::ItemIgnoresParentOpacity);
-        setZValue(10000);
-        setCursor(Qt::SizeAllCursor);
-    }
-
-    Road *road() const { return mRoadItem->road(); }
-
-    int pointIndex() const { return mPointIndex; }
-
-    QPoint pointPosition() const;
-    void setPointPosition(const QPoint &pos);
-
-    // These override the QGraphicsItem members
-    void setSelected(bool selected) { mSelected = selected; update(); }
-    bool isSelected() const { return mSelected; }
-
-    void setDragging(bool dragging)
-    {
-        if (dragging != mDragging) {
-            mDragging = dragging;
-            if (mDragging)
-                mStartPos = pointPosition();
-        }
-    }
-
-    void setDragOffset(const QPoint &offset)
-    {
-        mDragOffset = offset;
-        update();
-    }
-
-    QPoint dragOffset() const
-    { return mDragOffset; }
-
-    QPoint startPosition() const
-    { return mStartPos; }
-
-    QRectF boundingRect() const;
-
-    void paint(QPainter *painter,
-               const QStyleOptionGraphicsItem *option,
-               QWidget *widget = 0);
-
-private:
-    RoadItem *mRoadItem;
-    int mPointIndex;
-    bool mSelected;
-    bool mDragging;
-    QPoint mDragOffset;
-    QPoint mStartPos;
-};
-
-QPoint RoadPointHandle::pointPosition() const
-{
-    if (mPointIndex == 0)
-        return road()->start();
-    else
-        return road()->end();
-}
-
-void RoadPointHandle::setPointPosition(const QPoint &pos)
-{
-    if (mPointIndex == 0)
-        road()->setCoords(pos, road()->end());
-    else
-        road()->setCoords(road()->start(), pos);
-    mRoadItem->synchWithRoad();
-}
-
-QRectF RoadPointHandle::boundingRect() const
-{
-    return QRectF(-5, -5, 10 + 1, 10 + 1);
-}
-
-void RoadPointHandle::paint(QPainter *painter,
-                            const QStyleOptionGraphicsItem *,
-                            QWidget *)
-{
-    painter->setPen(Qt::black);
-    if (mSelected) {
-        painter->setBrush(QApplication::palette().highlight());
-        painter->drawRect(QRectF(-4, -4, 8, 8));
-    } else {
-        painter->setBrush(Qt::lightGray);
-        painter->drawRect(QRectF(-3, -3, 6, 6));
-    }
-}
-
-#endif
 
 /////
 
@@ -5815,13 +5628,6 @@ void WorldBMPTool::updateMovingItems(const QPointF &pos,
                                      Qt::KeyboardModifiers modifiers)
 {
     Q_UNUSED(modifiers)
-#if 0
-    // Restrict the drop position so the images stay in bounds
-    QVector<QPoint> cellPositions;
-    cellPositions.append(mClickedItem->bmp()->pos());
-    cellPositions.append(mClickedItem->bmp()->bounds().bottomRight());
-    QPointF pt = restrictDragging(cellPositions, mStartScenePos, pos);
-#endif
     QPoint startCellPos = mScene->pixelToCellCoordsInt(mStartScenePos);
     QPoint dropCellPos = mScene->pixelToCellCoordsInt(pos);
     mDragOffset = dropCellPos - startCellPos;

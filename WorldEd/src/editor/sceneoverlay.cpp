@@ -146,13 +146,6 @@ void LightSwitchOverlays::update()
     QVector<const Cell*> cells(40);
     OrderedCellsTemporaries vars;
 
-#if 0
-    qDebug() << "CellSceneOverlays prepareDrawing2...";
-    // This is quite slow due to BmpBlender::flush() on the entire map (incl adjacent maps).
-    foreach (CompositeLayerGroup *lg, mScene->mapComposite()->layerGroups())
-        lg->prepareDrawing2();
-    qDebug() << "CellSceneOverlays prepareDrawing2 DONE";
-#endif
 
     QSet<Tile*> lightSwitchTiles;
     foreach (Tileset *ts, mScene->mapComposite()->usedTilesets()) {

@@ -81,7 +81,6 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
         if (!images) {
             goto errorExit;
         }
-#if 1
         originalFormat[&images->mBmp] = images->mBmp.format();
         originalFormat[&images->mBmpVeg] = images->mBmpVeg.format();
         if (images->mBmp.colorCount() > 0) {
@@ -108,36 +107,10 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
                 goto errorExit;
             }
         }
-#endif
         mImages += images;
     }
 
     if (mode == GenerateSelected) {
-#if 0
-        // Merge the selected map BMP data with existing images
-        if (mDoMain) {
-            if (QFileInfo(settings.mainFile).exists()) {
-                mImageMain = QImage(settings.mainFile);
-                if (mImageMain.isNull() || (mImageMain.size() != world->size() * 300)) {
-                    mError = tr("The existing 'main' image file could not be loaded or is the wrong size, can't merge.");
-                    goto errorExit;
-                }
-            } else {
-                mImageMain = QImage(world->size() * 300, QImage::Format_ARGB32);
-            }
-        }
-        if (mDoVeg) {
-            if (QFileInfo(settings.vegetationFile).exists()) {
-                mImageVeg = QImage(settings.vegetationFile);
-                if (mImageVeg.isNull() || (mImageVeg.size() != world->size() * 300)) {
-                    mError = tr("The existing 'vegetation' image file could not be loaded or is the wrong size, can't merge.");
-                    goto errorExit;
-                }
-            } else {
-                mImageVeg = QImage(world->size() * 300, QImage::Format_ARGB32);
-            }
-        }
-#endif
         if (mDoBldg) {
             if (QFileInfo(settings.buildingsFile).exists()) {
                 mImageBldg = QImage(settings.buildingsFile);
@@ -155,12 +128,6 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
         }
     } else {
         // Don't bother loading the existing image since it will be replaced.
-#if 0
-        if (mDoMain)
-            mImageMain = QImage(world->size() * 300, QImage::Format_ARGB32);
-        if (mDoVeg)
-            mImageVeg = QImage(world->size() * 300, QImage::Format_ARGB32);
-#endif
         if (mDoBldg) {
             mImageBldg = QImage(
                         world->size() * cellSize,
@@ -203,7 +170,6 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
 
     MapManager::instance()->purgeUnreferencedMaps();
 
-#if 1
     foreach (BMPToTMXImages *images, mImages) {
         if (!mModifiedImages.contains(images))
             continue;
@@ -250,16 +216,6 @@ bool TMXToBMP::generateWorld(WorldDocument *worldDoc, TMXToBMP::GenerateMode mod
         }
     }
 
-#else
-    if (mDoMain) {
-        progress.update(QLatin1String("Saving main image"));
-        mImageMain.save(settings.mainFile);
-    }
-    if (mDoVeg) {
-        progress.update(QLatin1String("Saving vegetation image"));
-        mImageVeg.save(settings.vegetationFile);
-    }
-#endif
     if (mDoBldg) {
         progress.update(QLatin1String("Saving buildings image"));
         mBldgPainter.end();
@@ -463,10 +419,6 @@ bool TMXToBMP::processObjectGroup(WorldCell *cell, ObjectGroup *objectGroup,
     level += levelOffset;
 
     foreach (const MapObject *mapObject, objectGroup->objects()) {
-#if 0
-        if (mapObject->name().isEmpty() || mapObject->type().isEmpty())
-            continue;
-#endif
         if (!mapObject->width() || !mapObject->height())
             continue;
 

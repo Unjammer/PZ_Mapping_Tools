@@ -244,9 +244,6 @@ protected:
     };
 
     ImageData generateMapImage(const QString &mapFilePath, bool force = false);
-#if 0
-    ImageData generateMapImage(MapComposite *mapComposite);
-#endif
     void paintDummyImage(ImageData &data, MapInfo *mapInfo);
 
 #ifdef WORLDED

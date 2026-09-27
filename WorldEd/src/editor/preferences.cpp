@@ -649,15 +649,7 @@ QString Preferences::configPath(const QString &fileName) const
 
 QString Preferences::appConfigPath() const
 {
-#ifdef Q_OS_WIN
     return PortableSettings::applicationConfigPath();
-#elif defined(Q_OS_MAC)
-    return QCoreApplication::applicationDirPath() + QLatin1String("/../Config");
-#elif defined(Q_OS_UNIX)
-    return QCoreApplication::applicationDirPath() + QLatin1String("/../../TileZed/share/tilezed/config");
-#else
-#error "Unsupported platform: implement the WorldEd configuration path."
-#endif
 }
 
 QString Preferences::appConfigPath(const QString &fileName) const
@@ -670,15 +662,7 @@ QString Preferences::appConfigPath(const QString &fileName) const
 
 QString Preferences::docsPath() const
 {
-#ifdef Q_OS_WIN
     return PortableSettings::installPath(QLatin1String("docs"));
-#elif defined(Q_OS_MAC)
-    return QCoreApplication::applicationDirPath() + QLatin1String("/../Docs");
-#elif defined(Q_OS_UNIX)
-    return QCoreApplication::applicationDirPath() + QLatin1String("/../share/tilezed/docs");
-#else
-#error "Unsupported platform: implement the WorldEd documentation path."
-#endif
 }
 
 QString Preferences::docsPath(const QString &fileName) const
@@ -688,15 +672,7 @@ QString Preferences::docsPath(const QString &fileName) const
 
 QString Preferences::luaPath() const
 {
-#ifdef Q_OS_WIN
     return PortableSettings::installPath(QLatin1String("lua"));
-#elif defined(Q_OS_MAC)
-    return QCoreApplication::applicationDirPath() + QLatin1String("/../Lua");
-#elif defined(Q_OS_UNIX)
-    return QCoreApplication::applicationDirPath() + QLatin1String("/../share/tilezed/lua");
-#else
-#error "Unsupported platform: implement the WorldEd Lua path."
-#endif
 }
 
 QString Preferences::luaPath(const QString &fileName) const

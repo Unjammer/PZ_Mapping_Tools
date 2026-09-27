@@ -32,9 +32,7 @@
 #include <QVector>
 
 class MapInfo;
-#if 1 // ROAD_CRUD
 class Road;
-#endif // ROAD_CRUD
 
 namespace Tiled {
 class Cell;
@@ -343,10 +341,8 @@ private:
     QVector<bool> mForceNonEmpty;
     QVector<bool> mUseImageBlack;
 #endif // BUILDINGED
-#if 1 // ROAD_CRUD
     Tiled::TileLayer *mRoadLayer0; // 0_Floor
     Tiled::TileLayer *mRoadLayer1; // 0_FloorOverlay
-#endif // ROAD_CRUD
 };
 
 class MapComposite : public QObject
@@ -505,11 +501,9 @@ public:
 
     MapComposite* cropToMinimum(QPoint& offset);
 
-#if 1 // ROAD_CRUD
     void generateRoadLayers(const QPoint &roadPos, const QList<Road *> &roads);
     Tiled::TileLayer *roadLayer1() const { return mRoadLayer1; }
     Tiled::TileLayer *roadLayer0() const { return mRoadLayer0; }
-#endif // ROAD_CRUD
 
     void incrChangeCount()
     { ++mChangeCount; }
@@ -584,10 +578,8 @@ private:
     QRegion mSuppressRgn;
     int mSuppressLevel;
 
-#if 1 // ROAD_CRUD
     Tiled::TileLayer *mRoadLayer1;
     Tiled::TileLayer *mRoadLayer0;
-#endif // ROAD_CRUD
 
 public:
     MapComposite *root();

@@ -46,28 +46,6 @@ QString writableImageFormatsFilter();
  */
 QList<QRegion> coherentRegions(const QRegion &region);
 
-/**
- * Looks up the icon with the specified \a name from the system theme and set
- * it on the instance \a t when found.
- *
- * This is a templated method which is used on instances of QAction, QMenu,
- * QToolButton, etc.
- *
- * Does nothing when the platform is not Linux.
- */
-template <class T>
-void setThemeIcon(T *t, const char *name)
-{
-#ifdef Q_OS_LINUX
-    QIcon themeIcon = QIcon::fromTheme(QLatin1String(name));
-    if (!themeIcon.isNull())
-        t->setIcon(themeIcon);
-#else
-    Q_UNUSED(t)
-    Q_UNUSED(name)
-#endif
-}
-
 } // namespace Utils
 } // namespace Tiled
 

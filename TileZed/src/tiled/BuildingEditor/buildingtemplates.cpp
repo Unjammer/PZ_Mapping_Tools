@@ -777,11 +777,6 @@ QString BuildingTemplate::enumToString(int n)
     return mEnumNames[n];
 }
 
-QString BuildingTemplate::enumToTileName(int n)
-{
-    initNames();
-    return mTileNames[n];
-}
 
 void BuildingTemplate::initNames()
 {

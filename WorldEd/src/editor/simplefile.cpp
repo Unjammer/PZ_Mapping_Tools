@@ -67,11 +67,7 @@ bool SimpleFile::write(const QString &filePath)
 
     QTextStream ts(&tempFile);
     mIndent = -1;
-#if 1
     SimpleFileBlock::write(ts, -1);
-#else
-    writeBlock(ts, *this);
-#endif
     if (tempFile.error() != QFile::NoError) {
         mError = tempFile.errorString();
         return false;

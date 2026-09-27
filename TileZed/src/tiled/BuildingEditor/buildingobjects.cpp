@@ -306,18 +306,6 @@ void FurnitureObject::rotate(bool right)
         mY = oldWidth - x - oldTile->resolved()->size().width();
     }
 
-#if 0
-    // Stop things going out of bounds, which can happen if the furniture
-    // is asymmetric.
-    if (mX < 0)
-        mX = 0;
-    if (mX + newTile->size().width() > mFloor->width())
-        mX = mFloor->width() - newTile->size().width();
-    if (mY < 0)
-        mY = 0;
-    if (mY + newTile->size().height() > mFloor->height())
-        mY = mFloor->height() - newTile->size().height();
-#endif
 
     mFurnitureTile = newTile;
 }
@@ -470,14 +458,6 @@ QPolygonF FurnitureObject::calcShape() const
 
 void FurnitureObject::setFurnitureTile(FurnitureTile *tile)
 {
-#if 0
-    // FIXME: the object might change size and go out of bounds.
-    QSize oldSize = mFurnitureTile ? mFurnitureTile->size() : QSize(0, 0);
-    QSize newSize = tile ? tile->size() : QSize(0, 0);
-    if (oldSize != newSize) {
-
-    }
-#endif
     mFurnitureTile = tile;
 }
 
@@ -1672,123 +1652,6 @@ QRect RoofObject::southEdge()
     return QRect();
 }
 
-#if 0
-QRect RoofObject::northCapRise()
-{
-    if (!isCappedN())
-        return QRect();
-    QRect r = bounds();
-    switch (mType) {
-    case ShallowSlopeW:
-        return QRect(r.x(), r.top(), r.width(), 1);
-    case ShallowPeakNS:
-        return QRect(r.x(), r.top(), r.width() / 2, 1);
-    }
-    return QRect();
-}
-
-QRect RoofObject::northCapFall()
-{
-    if (!isCappedN())
-        return QRect();
-    QRect r = bounds();
-    switch (mType) {
-    case ShallowSlopeE:
-        return QRect(r.x(), r.top(), r.width(), 1);
-    case ShallowPeakNS:
-        return QRect(r.center().x(), r.top(), r.width() / 2, 1);
-    }
-    return QRect();
-}
-
-QRect RoofObject::southCapRise()
-{
-    if (!isCappedS())
-        return QRect();
-    QRect r = bounds();
-    switch (mType) {
-    case ShallowSlopeW:
-        return QRect(r.x(), r.bottom() + 1, r.width(), 1);
-    case ShallowPeakNS:
-        return QRect(r.x(), r.bottom() + 1, r.width() / 2, 1);
-    }
-    return QRect();
-}
-
-QRect RoofObject::southCapFall()
-{
-    if (!isCappedS())
-        return QRect();
-    QRect r = bounds();
-    switch (mType) {
-    case ShallowSlopeE:
-        return QRect(r.x(), r.bottom() + 1, r.width(), 1);
-    case ShallowPeakNS:
-        return QRect(r.center().x(), r.bottom() + 1, r.width() / 2, 1);
-    }
-    return QRect();
-}
-
-QRect RoofObject::westGap(RoofDepth depth)
-{
-    if (depth != mDepth || !mCappedW)
-        return QRect();
-    QRect r = bounds();
-    if (mType == SlopeE || mType == FlatTop
-            || mType == CornerInnerSW
-            || mType == CornerInnerNW) {
-        return QRect(r.left(), r.top(), 1, r.height());
-    }
-    if ((mType == PeakWE || mType == DormerW) && mHeight > 6)
-        return QRect(r.left(), r.top() + 3, 1, r.height() - 6);
-    return QRect();
-}
-
-QRect RoofObject::northGap(RoofDepth depth)
-{
-    if (depth != mDepth || !mCappedN)
-        return QRect();
-    QRect r = bounds();
-    if (mType == SlopeS || mType == FlatTop
-            || mType == CornerInnerNW
-            || mType == CornerInnerNE) {
-        return QRect(r.left(), r.top(), r.width(), 1);
-    }
-    if ((mType == PeakNS || mType == DormerN) && mWidth > 6)
-        return QRect(r.left() + 3, r.top(), r.width() - 6, 1);
-    return QRect();
-}
-
-QRect RoofObject::eastGap(RoofDepth depth)
-{
-    if (depth != mDepth || !mCappedE)
-        return QRect();
-    QRect r = bounds();
-    if (mType == SlopeW || mType == FlatTop
-            || mType == CornerInnerSE
-            || mType == CornerInnerNE) {
-        return QRect(r.right() + 1, r.top(), 1, r.height());
-    }
-    if ((mType == PeakWE || mType == DormerE) && mHeight > 6)
-        return QRect(r.right() + 1, r.top() + 3, 1, r.height() - 6);
-    return QRect();
-}
-
-QRect RoofObject::southGap(RoofDepth depth)
-{
-    if (depth != mDepth || !mCappedS)
-        return QRect();
-    QRect r = bounds();
-    if (mType == SlopeN || mType == FlatTop
-            || mType == CornerInnerSE
-            || mType == CornerInnerSW) {
-        return QRect(r.left(), r.bottom() + 1, r.width(), 1);
-    }
-    if ((mType == PeakNS || mType == DormerS) && mWidth > 6)
-        return QRect(r.left() + 3, r.bottom() + 1, r.width() - 6, 1);
-    return QRect();
-}
-#endif
 
 QRect RoofObject::flatTop()
 {
@@ -3786,40 +3649,6 @@ QVector<RoofObject::RoofTile> RoofObject::cornerTiles(QRect &b)
     }
     return ret;
 }
-#if 0
-QRect RoofObject::cornerInner(bool &slopeE, bool &slopeS)
-{
-    QRect r = bounds();
-    switch (mType) {
-    case DormerE:
-        slopeE = false, slopeS = true;
-        return QRect(r.left(), r.bottom() - slopeThickness() + 1,
-                     slopeThickness(), slopeThickness());
-    case DormerS:
-        slopeE = true, slopeS = false;
-        return QRect(r.right() - slopeThickness() + 1, r.top(),
-                     slopeThickness(), slopeThickness());
-    case CornerInnerNW:
-        slopeE = slopeS = true;
-        return r;
-    default:
-        break;
-    }
-    return QRect();
-}
-
-QRect RoofObject::cornerOuter()
-{
-    QRect r = bounds();
-    switch (mType) {
-    case CornerOuterSE:
-        return r;
-    default:
-        break;
-    }
-    return QRect();
-}
-#endif
 
 QString RoofObject::typeToString(RoofObject::RoofType type)
 {

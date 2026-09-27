@@ -14,7 +14,7 @@
    <string>Generate Lots</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
-   <item row="7" column="0">
+   <item row="8" column="0">
     <spacer name="verticalSpacer">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
@@ -171,7 +171,7 @@
      </layout>
     </widget>
    </item>
-   <item row="8" column="0">
+   <item row="9" column="0">
     <widget class="QDialogButtonBox" name="buttonBox">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
@@ -181,7 +181,7 @@
      </property>
    </widget>
   </item>
-  <item row="6" column="0">
+  <item row="7" column="0">
    <widget class="QGroupBox" name="exportModGroup">
     <property name="title">
      <string>Export as a complete Project Zomboid mod</string>
@@ -289,6 +289,16 @@
    </widget>
   </item>
   <item row="5" column="0">
+   <widget class="QCheckBox" name="preservePlacedTrees">
+    <property name="text">
+     <string>Bypass jumbo rules (preserve placed trees)</string>
+    </property>
+    <property name="toolTip">
+     <string>Keep placed tree tiles, including XL and XXL trees, during export in both 300x300 and 256x256 projects. When checked, skip automatic jumbo placeholder replacement and removal of neighboring trees. When unchecked, apply jumbo rules in both formats. This does not change source maps or in-game tree behavior.</string>
+    </property>
+   </widget>
+  </item>
+  <item row="6" column="0">
    <widget class="QGroupBox" name="holeRepairGroup">
     <property name="title">
      <string>Hole handling</string>

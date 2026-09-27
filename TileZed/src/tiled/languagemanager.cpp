@@ -52,17 +52,7 @@ LanguageManager::LanguageManager()
     , mAppTranslator(0)
 {
     mTranslationsDir = PortableSettings::installRootPath();
-#ifdef Q_OS_WIN32
     mTranslationsDir += QLatin1String("/translations");
-#elif defined(Q_OS_MACOS)
-    mTranslationsDir += QLatin1String("/../Translations");
-#else
-#ifdef ZOMBOID
-    mTranslationsDir += QLatin1String("/../share/tilezed/translations");
-#else
-    mTranslationsDir += QLatin1String("/../share/tiled/translations");
-#endif // ZOMBOID
-#endif
 }
 
 LanguageManager::~LanguageManager()

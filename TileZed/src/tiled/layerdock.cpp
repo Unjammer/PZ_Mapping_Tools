@@ -96,7 +96,6 @@ LayerDock::LayerDock(QWidget *parent):
 #ifdef ZOMBOID
     newLayerButton->setToolTip(tr("New Layer"));
 #endif
-    Utils::setThemeIcon(newLayerButton, "document-new");
 
     QToolBar *buttonContainer = new QToolBar;
     buttonContainer->setFloatable(false);

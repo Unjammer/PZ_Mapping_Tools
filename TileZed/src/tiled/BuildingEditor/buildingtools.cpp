@@ -1451,23 +1451,6 @@ void FurnitureTool::updateCursorObject()
     mCursorObject->setPos(x, y);
 
     setCursorObject(mCursorObject);
-#if 0
-    QRegion rgn;
-    if (FloorTileGrid *tiles = ftiles->tile(orient)->resolved()->toFloorTileGrid(rgn)) {
-        QString layerName;
-        switch (ftiles->layer()) {
-        case FurnitureTiles::LayerWalls: layerName = QLatin1String("Walls"); break;
-        case FurnitureTiles::LayerRoofCap: layerName = QLatin1String("RoofCap"); break;
-        case FurnitureTiles::LayerWallOverlay: layerName = QLatin1String("WallOverlay"); break;
-        case FurnitureTiles::LayerWallFurniture: layerName = QLatin1String("WallFurniture"); break;
-        case FurnitureTiles::LayerFrames: layerName = QLatin1String("Frames"); break;
-        case FurnitureTiles::LayerDoors: layerName = QLatin1String("Doors"); break;
-        case FurnitureTiles::LayerFurniture: layerName = QLatin1String("Furniture"); break;
-        case FurnitureTiles::LayerRoof: layerName = QLatin1String("Roof"); break;
-        }
-        mEditor->setToolTiles(tiles, mCursorObject->pos(), layerName);
-    }
-#endif
 }
 
 void FurnitureTool::startRightClickDrag(BuildingObject *object)
@@ -1787,7 +1770,6 @@ void RoofTool::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         if (mCurrentPos.y() >= floor()->height())
             diff.setY(floor()->height() - mStartPos.y() - 1);
 
-#if 1
         // Fugly code to determine if a corner should be half-depth.
         bool halfDepth = false;
         if (mHandleObject->roofType() == RoofObject::CornerOuterSE
@@ -1823,7 +1805,6 @@ void RoofTool::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
             if (mHandleObject->roofType() == RoofObject::SlopeS)
                 halfDepth = !halfDepth;
         }
-#endif
 
         resizeRoof(mHandleObject->width() + diff.x(),
                    mHandleObject->height() + diff.y(),
@@ -1840,7 +1821,6 @@ void RoofTool::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 
         QPoint pos = mStartPos;
 
-#if 1
         // Fugly code to determine if a roof should be half-depth.
         bool halfDepth = false;
         if (mObject->roofType() == RoofObject::CornerOuterSE
@@ -1880,7 +1860,6 @@ void RoofTool::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
             if (mObject->roofType() == RoofObject::SlopeS)
                 halfDepth = !halfDepth;
         }
-#endif
 
         // This call might restrict the width and/or height.
         mObject->resize(qAbs(diff.x()) + 1, qAbs(diff.y()) + 1, halfDepth);
@@ -2583,11 +2562,6 @@ void SelectMoveObjectTool::updateSelection(const QPointF &pos,
 {
     QRectF sceneRect = QRectF(mStartScenePos, pos);
     QRectF tileRect = mEditor->sceneToTileRectF(sceneRect, mEditor->currentLevel()).normalized();
-#if 0
-    // Make sure the rect has some contents, otherwise intersects returns false
-    tileRect.setWidth(qMax(qreal(1), tileRect.width()));
-    tileRect.setHeight(qMax(qreal(1), tileRect.height()));
-#endif
     QSet<BuildingObject*> selectedObjects;
 
     foreach (BuildingObject *object, mEditor->objectsInRect(tileRect))

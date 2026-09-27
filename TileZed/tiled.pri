@@ -2,9 +2,6 @@
 isEmpty(PREFIX):PREFIX = /usr/local
 isEmpty(LIBDIR):LIBDIR = $${PREFIX}/lib
 
-macx {
-    include(../shared/macos.pri)
-}
 
 # Only "make install" newer files when copying files from the source
 # directory to the shadow-build directory.

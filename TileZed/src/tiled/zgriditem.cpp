@@ -60,13 +60,11 @@ void ZGridItem::paint(QPainter *painter,
     if (!mMapDocument || !mMapDocument->renderer())
         return;
     const MapRenderer *renderer = mMapDocument->renderer();
-#if 1
     const QRect bounds = QRect(0, 0, mMapDocument->map()->width(), mMapDocument->map()->height());
     QRectF boundsF = mMapDocument->renderer()->boundingRect(bounds, mMapDocument->currentLevel());
 //  Q_ASSERT(mBoundingRect == boundsF);
     if (mBoundingRect != boundsF)
         return;
-#endif
 	QColor gridColor = Preferences::instance()->gridColor();
     renderer->drawGrid(painter, option->exposedRect, gridColor, mMapDocument->currentLevel());
 }

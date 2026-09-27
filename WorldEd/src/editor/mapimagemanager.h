@@ -277,9 +277,6 @@ protected:
 
     ImageData generateMapImage(const QString &mapFilePath, bool force = false,
                               int firstLevel = std::numeric_limits<int>::min());
-#if 0
-    ImageData generateMapImage(MapComposite *mapComposite);
-#endif
     void paintDummyImage(ImageData &data, MapInfo *mapInfo);
 
 #ifdef WORLDED

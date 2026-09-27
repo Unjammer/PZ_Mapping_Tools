@@ -358,10 +358,8 @@ bool sameOrInside(const QString &candidate, const QString &parent)
 {
     QString child = QDir::cleanPath(QFileInfo(candidate).absoluteFilePath());
     QString root = QDir::cleanPath(QFileInfo(parent).absoluteFilePath());
-#ifdef Q_OS_WIN
     child = child.toLower();
     root = root.toLower();
-#endif
     return child == root
             || child.startsWith(root + QDir::separator());
 }

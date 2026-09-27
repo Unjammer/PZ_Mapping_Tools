@@ -192,7 +192,6 @@ public:
     bool openAutoSave(const QString &fileName);
 
     bool confirmAllSave();
-    bool closeYerself();
 
     bool Startup();
     void setDiagnosticShortcutsEnabled(bool enabled);

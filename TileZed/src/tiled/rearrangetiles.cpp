@@ -292,23 +292,6 @@ bool RearrangeTilesModel::setData(const QModelIndex &index, const QVariant &valu
     Q_UNUSED(index)
     Q_UNUSED(value)
     Q_UNUSED(role)
-#if 0
-    if (Item *item = toItem(index)) {
-       if (role == Qt::BackgroundRole) {
-           if (value.canConvert<QBrush>()) {
-               item->mBackground = qvariant_cast<QBrush>(value);
-               emit dataChanged(index, index);
-               return true;
-           }
-       }
-       if (role == Qt::DisplayRole) {
-           if (item->mTile1x && value.canConvert<Tile*>()) {
-               item->mTile1x = qvariant_cast<Tile*>(value);
-               return true;
-           }
-       }
-    }
-#endif
     return false;
 }
 

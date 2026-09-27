@@ -943,20 +943,12 @@ public:
 
     BuildingTileEntry *defaultCategoryTile(int e) const;
 
-    BuildingTileEntry *defaultExteriorWall() const;
     BuildingTileEntry *defaultInteriorWall() const;
-    BuildingTileEntry *defaultExteriorWallTrim() const;
     BuildingTileEntry *defaultInteriorWallTrim() const;
     BuildingTileEntry *defaultFloorTile() const;
-    BuildingTileEntry *defaultDoorTile() const;
-    BuildingTileEntry *defaultDoorFrameTile() const;
-    BuildingTileEntry *defaultWindowTile() const;
-    BuildingTileEntry *defaultCurtainsTile() const;
-    BuildingTileEntry *defaultStairsTile() const;
     BuildingTileEntry *defaultCeilingTile() const;
     BuildingTileEntry *defaultRoofCapTiles() const;
     BuildingTileEntry *defaultRoofSlopeTiles() const;
-    BuildingTileEntry *defaultRoofTopTiles() const;
 
     QString errorString() const
     { return mError; }

@@ -277,10 +277,8 @@ private:
     QBitArray mUseImageBlack;
     QRect mUseImageBlackBounds;
 #endif // BUILDINGED
-#if 1 // ROAD_CRUD
     Tiled::TileLayer *mRoadLayer0; // 0_Floor
     Tiled::TileLayer *mRoadLayer1; // 0_FloorOverlay
-#endif // ROAD_CRUD
 };
 
 class MapComposite : public QObject
@@ -512,10 +510,8 @@ private:
     QRegion mSuppressRgn;
     int mSuppressLevel;
 
-#if 1 // ROAD_CRUD
     Tiled::TileLayer *mRoadLayer1;
     Tiled::TileLayer *mRoadLayer0;
-#endif // ROAD_CRUD
 
 public:
     MapComposite *root();

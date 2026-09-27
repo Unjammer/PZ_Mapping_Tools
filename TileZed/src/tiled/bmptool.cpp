@@ -1891,27 +1891,6 @@ void BmpBucketTool::bmpImageChanged()
 
 /////
 
-#if 0
-// Calculate the region of no-blend values that do *not* have a given value.
-static QRegion noBlendRegion(Map *map, MapNoBlend *noBlend,
-                                const QRegion &tileRgn, bool value)
-{
-    QRect mapBounds(QPoint(), map->size());
-
-    QRegion ret;
-    for (QRect r : tileRgn) {
-        r &= mapBounds;
-        for (int y = r.top(); y <= r.bottom(); y++) {
-            for (int x = r.left(); x <= r.right(); x++) {
-                if (noBlend->get(x, y) != value) {
-                    ret += QRect(x, y, 1, 1);
-                }
-            }
-        }
-    }
-    return ret;
-}
-#endif
 
 NoBlendTool *NoBlendTool::mInstance = 0;
 
@@ -2164,23 +2143,6 @@ QRect NoBlendTool::selectedArea() const
                    qMin(mStartTilePos.y(), tilePos.y())),
             QPoint(qMax(mStartTilePos.x(), tilePos.x()),
                    qMax(mStartTilePos.y(), tilePos.y())));
-#if 0
-    if (qApp->keyboardModifiers() & Qt::ShiftModifier) {
-        int side = qMax(r.width(), r.height());
-        if (tilePos.x() < mStartTilePos.x()) {
-            r.setLeft(mStartTilePos.x() - side + 1);
-            r.setRight(mStartTilePos.x());
-        } else {
-            r.setWidth(side);
-        }
-        if (tilePos.y() < mStartTilePos.y()) {
-            r.setTop(mStartTilePos.y() - side + 1);
-            r.setBottom(mStartTilePos.y());
-        } else {
-            r.setHeight(side);
-        }
-    }
-#endif
     return r & QRect(QPoint(0, 0), mapDocument()->map()->size());
 }
 
@@ -2213,7 +2175,6 @@ void BmpFloodFill::floodFillScanlineStack(int x, int y, QRgb newColor, QRgb oldC
         QRect r;
         while (y1 < mImage.height() && pixel(x, y1) == oldColor ) {
             setPixel(x, y1, newColor);
-#if 1 // This seems a lot faster (in Debug mode at least) than mRegion += QRect(x, y, 1, 1) each setPixel()
             if (r.isEmpty()) {
                 r = QRect(x, y1, 1, 1);
             } else if (r.bottom() + 1 != y1) {
@@ -2222,9 +2183,6 @@ void BmpFloodFill::floodFillScanlineStack(int x, int y, QRgb newColor, QRgb oldC
             } else {
                 r.setBottom(y1);
             }
-#else
-            mRegion += QRect(x, y1, 1, 1);
-#endif
             if (!spanLeft && x > 0 && pixel(x - 1, y1) == oldColor) {
                 if (!push(x - 1, y1)) return;
                 spanLeft = true;
@@ -2232,12 +2190,10 @@ void BmpFloodFill::floodFillScanlineStack(int x, int y, QRgb newColor, QRgb oldC
             else if (spanLeft && x > 0 && pixel(x - 1, y1) != oldColor) {
                 spanLeft = false;
             }
-#if 1 // For visually-vertical columns of tiles, test square to the northwest.
             if (!spanLeft && x > 0 && y > 0 && pixel(x - 1, y1 - 1) == oldColor) {
                 if (!push(x - 1, y1 - 1)) return;
                 spanLeft = true;
             }
-#endif
             if (!spanRight && x < mImage.width() - 1 && pixel(x + 1, y1) == oldColor) {
                 if (!push(x + 1, y1)) return;
                 spanRight = true;
@@ -2245,12 +2201,10 @@ void BmpFloodFill::floodFillScanlineStack(int x, int y, QRgb newColor, QRgb oldC
             else if (spanRight && x < mImage.width() - 1 && pixel(x + 1, y1) != oldColor) {
                 spanRight = false;
             }
-#if 1 // For visually-vertical columns of tiles, test square to the southeast.
             if (!spanRight && x < mImage.width() - 1 && y < mImage.height() - 1 && pixel(x + 1, y1 + 1) == oldColor) {
                 if (!push(x + 1, y1 + 1)) return;
                 spanRight = true;
             }
-#endif
             y1++;
         }
         if (!r.isEmpty())

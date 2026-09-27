@@ -5,6 +5,7 @@
 #include "curbtool.h"
 #include "erasetiles.h"
 #include "mapcomposite.h"
+#include "lotcompositionvalidation.h"
 #include "mapdocument.h"
 #include "mapmanager.h"
 #include "mapscene.h"
@@ -42,6 +43,8 @@ inline bool validateTileWorkflows(QString *error)
         *error = QStringLiteral("Street curb tiles are unavailable");
         return false;
     }
+    if (!validateLotComposition(tiles, error))
+        return false;
     auto *map = new Map(Map::LevelIsometric, 8, 8, 64, 32);
     map->addTileset(tiles);
     auto *furniture = new TileLayer(QStringLiteral("Furniture"), 0, 0, 8, 8);

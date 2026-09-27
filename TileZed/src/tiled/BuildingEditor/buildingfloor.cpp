@@ -904,14 +904,6 @@ void BuildingFloor::LayoutToSquares()
         case FurnitureTile::FurnitureS:
             dy = 1;
             break;
-#if 0
-        case FurnitureTile::FurnitureNW:
-            s.mWallOrientation = Square::WallOrientNW;
-            break;
-        case FurnitureTile::FurnitureSE:
-            s.mWallOrientation = Square::WallOrientSE;
-            break;
-#endif
         default:
             break;
         }
@@ -1032,49 +1024,9 @@ void BuildingFloor::LayoutToSquares()
     }
 }
 
-Door *BuildingFloor::GetDoorAt(int x, int y)
-{
-    foreach (BuildingObject *o, mObjects) {
-        if (!o->bounds().contains(x, y))
-            continue;
-        if (Door *door = o->asDoor())
-            return door;
-    }
-    return 0;
-}
 
-Window *BuildingFloor::GetWindowAt(int x, int y)
-{
-    foreach (BuildingObject *o, mObjects) {
-        if (!o->bounds().contains(x, y))
-            continue;
-        if (Window *window = o->asWindow())
-            return window;
-    }
-    return 0;
-}
 
-Stairs *BuildingFloor::GetStairsAt(int x, int y)
-{
-    foreach (BuildingObject *o, mObjects) {
-        if (!o->bounds().contains(x, y))
-            continue;
-        if (Stairs *stairs = o->asStairs())
-            return stairs;
-    }
-    return 0;
-}
 
-FurnitureObject *BuildingFloor::GetFurnitureAt(int x, int y)
-{
-    foreach (BuildingObject *o, mObjects) {
-        if (!o->bounds().contains(x, y))
-            continue;
-        if (FurnitureObject *fo = o->asFurniture())
-            return fo;
-    }
-    return 0;
-}
 
 void BuildingFloor::SetRoomAt(int x, int y, Room *room)
 {
@@ -1159,14 +1111,6 @@ QVector<QRect> BuildingFloor::roomRegion(Room *room)
     return result;
 }
 
-QVector<QVector<Room *> > BuildingFloor::resizeGrid(const QSize &newSize) const
-{
-    QVector<QVector<Room *> > grid = mRoomAtPos;
-    grid.resize(newSize.width());
-    for (int x = 0; x < newSize.width(); x++)
-        grid[x].resize(newSize.height());
-    return grid;
-}
 
 QMap<QString,FloorTileGrid*> BuildingFloor::resizeGrime(const QSize &newSize) const
 {
@@ -1182,12 +1126,6 @@ QMap<QString,FloorTileGrid*> BuildingFloor::resizeGrime(const QSize &newSize) co
     return grid;
 }
 
-Tiled::PropertiesGrid *BuildingFloor::resizeSquarePropertiesGrid(const QSize &newSize) const
-{
-    Tiled::PropertiesGrid *result = new Tiled::PropertiesGrid(newSize.width(), newSize.height());
-    result->copy(*mSquarePropertiesGrid);
-    return result;
-}
 
 void BuildingFloor::rotate(bool right)
 {
@@ -1350,10 +1288,6 @@ Tiled::PropertiesGrid *BuildingFloor::setSquarePropertiesGrid(Tiled::PropertiesG
     return old;
 }
 
-Tiled::PropertiesGrid *BuildingFloor::createSquarePropertiesGrid() const
-{
-    return mSquarePropertiesGrid->clone();
-}
 
 /////
 
@@ -1605,17 +1539,7 @@ void BuildingFloor::Square::ReplaceFurniture(BuildingTile *btile,
 
 void BuildingFloor::Square::ReplaceRoof(RoofObject *object, BuildingTileEntry *tile, int offset)
 {
-#if 1
     Q_UNUSED(object)
-#else
-    // XXX Reverted this since the non-30-degree dormers don't actually work where the InnerPt5/InnerOnePt5/InnerTwoPt5 overlap sloped roofs.
-    // Placing a dormer onto a sloped roof should keep only the dormer tile.
-    // FIXME: The reverse order doesn't work here, i.e. placing a sloped roof onto a dormer.
-    if (tile != nullptr && !tile->tile(offset)->isNone() && object->isDormer()) {
-        mEntries[SectionRoof] = nullptr;
-        mEntryEnum[SectionRoof] = 0;
-    }
-#endif
     if (mEntries[SectionRoof] && !mEntries[SectionRoof]->isNone()) {
         mEntries[SectionRoof2] = tile;
         mEntryEnum[SectionRoof2] = offset;
@@ -2008,7 +1932,6 @@ static bool tileHasGrimeProperties(BuildingTile *btile, GrimeProperties *props)
     return false;
 }
 
-#if 1
 void BuildingFloor::Square::ReplaceWallGrime(BuildingTileEntry *grimeTile, const QString &userTileWalls, const QString &userTileWalls2)
 {
     if (!grimeTile || grimeTile->isNone())
@@ -2063,6 +1986,15 @@ void BuildingFloor::Square::ReplaceWallGrime(BuildingTileEntry *grimeTile, const
             tileSE = btile;
             grimeEnumW = BTC_GrimeWall::SouthEast;
             break;
+        default:
+            if (tileEntry1->isWest(mEntryEnum[SectionWall])) {
+                tileW = btile;
+                grimeEnumW = BTC_GrimeWall::WestWindow;
+            } else if (tileEntry1->isNorth(mEntryEnum[SectionWall])) {
+                tileN = btile;
+                grimeEnumN = BTC_GrimeWall::NorthWindow;
+            }
+            break;
         }
     }
     if (tileEntry2) {
@@ -2100,6 +2032,15 @@ void BuildingFloor::Square::ReplaceWallGrime(BuildingTileEntry *grimeTile, const
         case BTC_Walls::SouthEast:
             tileSE = btile;
             grimeEnumW = BTC_GrimeWall::SouthEast;
+            break;
+        default:
+            if (tileEntry2->isWest(mEntryEnum[SectionWall2])) {
+                tileW = btile;
+                grimeEnumW = BTC_GrimeWall::WestWindow;
+            } else if (tileEntry2->isNorth(mEntryEnum[SectionWall2])) {
+                tileN = btile;
+                grimeEnumN = BTC_GrimeWall::NorthWindow;
+            }
             break;
         }
     }
@@ -2224,217 +2165,6 @@ void BuildingFloor::Square::ReplaceWallGrime(BuildingTileEntry *grimeTile, const
         mEntryEnum[SectionWallGrime2] = grimeEnumN;
     }
 }
-#else
-void BuildingFloor::Square::ReplaceWallGrime(BuildingTileEntry *grimeTile, const QString &userTileWalls, const QString &userTileWalls2)
-{
-    if (!grimeTile || grimeTile->isNone())
-        return;
-
-    BuildingTileEntry *wallTile1 = mEntries[SectionWall];
-    if (wallTile1 && wallTile1->isNone()) wallTile1 = 0;
-
-    BuildingTileEntry *wallTile2 = mEntries[SectionWall2];
-    if (wallTile2 && wallTile2->isNone()) wallTile2 = 0;
-
-    Q_ASSERT(!(wallTile1 == 0 && wallTile2 != 0));
-
-    int grimeEnumW = -1, grimeEnumN = -1;
-    GrimeProperties props;
-
-    if (wallTile1) {
-        switch (mEntryEnum[SectionWall]) {
-        case BTC_Walls::West: grimeEnumW = BTC_GrimeWall::West; break;
-        case BTC_Walls::WestDoor: grimeEnumW = BTC_GrimeWall::WestDoor; break;
-        case BTC_Walls::WestWindow: grimeEnumW = BTC_GrimeWall::WestWindow; break;
-        case BTC_Walls::North: grimeEnumN = BTC_GrimeWall::North; break;
-        case BTC_Walls::NorthDoor: grimeEnumN = BTC_GrimeWall::NorthDoor; break;
-        case BTC_Walls::NorthWindow: grimeEnumN = BTC_GrimeWall::NorthWindow; break;
-        case BTC_Walls::NorthWest: grimeEnumW = BTC_GrimeWall::NorthWest; break;
-        case BTC_Walls::SouthEast: grimeEnumW = BTC_GrimeWall::SouthEast; break;
-        }
-        BuildingTile *btile = wallTile1->tile(mEntryEnum[SectionWall]);
-        if (tileHasGrimeProperties(btile, &props)) {
-            switch (mEntryEnum[SectionWall]) {
-            case BTC_Walls::West:
-            case BTC_Walls::WestDoor:
-            case BTC_Walls::WestWindow:
-                if (props.FullWindow)
-                    grimeEnumW = -1;
-                else if (props.Trim)
-                    grimeEnumW = BTC_GrimeWall::WestTrim;
-                else if (props.DoubleLeft)
-                    grimeEnumW = BTC_GrimeWall::WestDoubleLeft;
-                else if (props.DoubleRight)
-                    grimeEnumW = BTC_GrimeWall::WestDoubleRight;
-                break;
-            case BTC_Walls::North:
-            case BTC_Walls::NorthDoor:
-            case BTC_Walls::NorthWindow:
-                if (props.FullWindow)
-                    grimeEnumN = -1;
-                else if (props.Trim)
-                    grimeEnumN = BTC_GrimeWall::NorthTrim;
-                else if (props.DoubleLeft)
-                    grimeEnumN = BTC_GrimeWall::NorthDoubleLeft;
-                else if (props.DoubleRight)
-                    grimeEnumN = BTC_GrimeWall::NorthDoubleRight;
-                break;
-            case BTC_Walls::NorthWest:
-                if (props.FullWindow)
-                    grimeEnumW = -1;
-                else if (props.Trim)
-                    grimeEnumW = BTC_GrimeWall::NorthWestTrim;
-                break;
-            case BTC_Walls::SouthEast:
-                if (props.Trim)
-                    grimeEnumW = BTC_GrimeWall::SouthEastTrim;
-                break;
-            }
-        }
-    }
-
-    if (wallTile2) {
-        switch (mEntryEnum[SectionWall2]) {
-        case BTC_Walls::West: grimeEnumW = BTC_GrimeWall::West; break;
-        case BTC_Walls::WestDoor: grimeEnumW = BTC_GrimeWall::WestDoor; break;
-        case BTC_Walls::WestWindow: grimeEnumW = BTC_GrimeWall::WestWindow; break;
-        case BTC_Walls::North: grimeEnumN = BTC_GrimeWall::North; break;
-        case BTC_Walls::NorthDoor: grimeEnumN = BTC_GrimeWall::NorthDoor; break;
-        case BTC_Walls::NorthWindow: grimeEnumN = BTC_GrimeWall::NorthWindow; break;
-        case BTC_Walls::NorthWest: Q_ASSERT(false); break;
-        case BTC_Walls::SouthEast: Q_ASSERT(false); break;
-        }
-        BuildingTile *btile = wallTile1->tile(mEntryEnum[SectionWall2]);
-        if (tileHasGrimeProperties(btile, &props)) {
-            switch (mEntryEnum[SectionWall2]) {
-            case BTC_Walls::West:
-            case BTC_Walls::WestDoor:
-            case BTC_Walls::WestWindow:
-                if (props.FullWindow)
-                    grimeEnumW = -1;
-                else if (props.Trim)
-                    grimeEnumW = BTC_GrimeWall::WestTrim;
-                else if (props.DoubleLeft)
-                    grimeEnumW = BTC_GrimeWall::WestDoubleLeft;
-                else if (props.DoubleRight)
-                    grimeEnumW = BTC_GrimeWall::WestDoubleRight;
-                break;
-            case BTC_Walls::North:
-            case BTC_Walls::NorthDoor:
-            case BTC_Walls::NorthWindow:
-                if (props.FullWindow)
-                    grimeEnumN = -1;
-                else if (props.Trim)
-                    grimeEnumN = BTC_GrimeWall::NorthTrim;
-                else if (props.DoubleLeft)
-                    grimeEnumN = BTC_GrimeWall::NorthDoubleLeft;
-                else if (props.DoubleRight)
-                    grimeEnumN = BTC_GrimeWall::NorthDoubleRight;
-                break;
-            }
-        }
-    }
-
-    // Handle furniture in Walls layer
-    if (mWallW.furnitureBldgTile && mWallW.furniture->resolved()->allowGrime()) {
-        grimeEnumW = BTC_GrimeWall::West;
-        if (tileHasGrimeProperties(mWallW.furnitureBldgTile, &props)) {
-            if (props.FullWindow)
-                grimeEnumW = -1;
-            else if (props.Trim)
-                grimeEnumW = BTC_GrimeWall::WestTrim;
-            else if (props.DoubleLeft)
-                grimeEnumW = BTC_GrimeWall::WestDoubleLeft;
-            else if (props.DoubleRight)
-                grimeEnumW = BTC_GrimeWall::WestDoubleRight;
-        }
-    }
-    if (mWallN.furnitureBldgTile && mWallN.furniture->resolved()->allowGrime()) {
-        grimeEnumN = BTC_GrimeWall::North;
-        if (tileHasGrimeProperties(mWallN.furnitureBldgTile, &props)) {
-            if (props.FullWindow)
-                grimeEnumN = -1;
-            else if (props.Trim)
-                grimeEnumN = BTC_GrimeWall::NorthTrim;
-            else if (props.DoubleLeft)
-                grimeEnumN = BTC_GrimeWall::NorthDoubleLeft;
-            else if (props.DoubleRight)
-                grimeEnumN = BTC_GrimeWall::NorthDoubleRight;
-        }
-    }
-
-    if (!userTileWalls.isEmpty()) {
-        if (BuildingTile *btile = BuildingTilesMgr::instance()->get(userTileWalls)) {
-            if (tileHasGrimeProperties(btile, &props)) {
-                if (props.FullWindow) {
-                    if (props.West) grimeEnumW = -1;
-                    if (props.North) grimeEnumN = -1;
-                } else if (props.Trim) {
-                    if (props.West && props.North) {
-                        grimeEnumW = BTC_GrimeWall::NorthWestTrim;
-                        grimeEnumN = -1;
-                    } else if (props.West) {
-                        grimeEnumW = BTC_GrimeWall::WestTrim;
-                    } else if (props.North) {
-                        grimeEnumN = BTC_GrimeWall::NorthTrim;
-                    } else if (props.SouthEast) {
-                        grimeEnumW = BTC_GrimeWall::SouthEastTrim;
-                    }
-                } else if (props.DoubleLeft) {
-                    if (props.West) grimeEnumW = BTC_GrimeWall::WestDoubleLeft;
-                    else if (props.North) grimeEnumN = BTC_GrimeWall::NorthDoubleLeft;
-                } else if (props.DoubleRight) {
-                    if (props.West) grimeEnumW = BTC_GrimeWall::WestDoubleRight;
-                    else if (props.North) grimeEnumN = BTC_GrimeWall::NorthDoubleRight;
-                }
-            }
-        }
-    }
-    if (!userTileWalls2.isEmpty()) {
-        if (BuildingTile *btile = BuildingTilesMgr::instance()->get(userTileWalls2)) {
-            if (tileHasGrimeProperties(btile, &props)) {
-                if (props.FullWindow) {
-                    if (props.West) grimeEnumW = -1;
-                    if (props.North) grimeEnumN = -1;
-                } else if (props.Trim) {
-                    if (props.West && props.North) {
-                        grimeEnumW = BTC_GrimeWall::NorthWestTrim;
-                        grimeEnumN = -1;
-                    } else if (props.West) {
-                        grimeEnumW = BTC_GrimeWall::WestTrim;
-                    } else if (props.North) {
-                        grimeEnumN = BTC_GrimeWall::NorthTrim;
-                    } else if (props.SouthEast) {
-                        grimeEnumW = BTC_GrimeWall::SouthEastTrim;
-                    }
-                } else if (props.DoubleLeft) {
-                    if (props.West) grimeEnumW = BTC_GrimeWall::WestDoubleLeft;
-                    else if (props.North) grimeEnumN = BTC_GrimeWall::NorthDoubleLeft;
-                } else if (props.DoubleRight) {
-                    if (props.West) grimeEnumW = BTC_GrimeWall::WestDoubleRight;
-                    else if (props.North) grimeEnumN = BTC_GrimeWall::NorthDoubleRight;
-                }
-            }
-        }
-    }
-
-    // Handle 2 different wall tiles due to a possible mix of regular walls,
-    // WallObjects, and FurnitureObjects.
-    if (grimeEnumW == BTC_GrimeWall::West && grimeEnumN == BTC_GrimeWall::North) {
-        grimeEnumW = BTC_GrimeWall::NorthWest;
-        grimeEnumN = -1;
-    }
-
-    if (grimeEnumW >= 0) {
-        mEntries[SectionWallGrime] = grimeTile;
-        mEntryEnum[SectionWallGrime] = grimeEnumW;
-    }
-    if (grimeEnumN >= 0) {
-        mEntries[SectionWallGrime2] = grimeTile;
-        mEntryEnum[SectionWallGrime2] = grimeEnumN;
-    }
-}
-#endif
 
 void BuildingFloor::Square::ReplaceWallTrim()
 {

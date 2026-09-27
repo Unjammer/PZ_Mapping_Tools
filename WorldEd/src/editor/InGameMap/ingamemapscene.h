@@ -248,6 +248,7 @@ public:
 
     void activate();
     void deactivate();
+    void endClearScene() override;
 
     void keyPressEvent(QKeyEvent *event);
     void mousePressEvent(QGraphicsSceneMouseEvent *event);

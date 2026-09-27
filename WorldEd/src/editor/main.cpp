@@ -32,8 +32,11 @@
 #include "../firstlaunchdialog.h"
 #include "../portablesettings.h"
 #include "pztoolsbuild.h"
+#include "displayscaling.h"
+#include "displayscalingvalidation.h"
 #include "tiledefwatchervalidation.h"
 #include "tilesetimageloadervalidation.h"
+#include "lotcompositionvalidation.h"
 
 #ifdef ZOMBOID
 #include "documentmanager.h"
@@ -83,6 +86,7 @@ using namespace Tiled::Internal;
 
 int main(int argc, char *argv[])
 {
+    PZTools::configureDisplayScaling();
 #if ZOMBOID
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 #endif
@@ -100,11 +104,15 @@ int main(int argc, char *argv[])
     a.setApplicationVersion(QLatin1String("0.0.1"));
 #endif
 
-#ifdef Q_WS_MAC
-    a.setAttribute(Qt::AA_DontShowIconsInMenus);
-#endif
 
     const QStringList commandLineArguments = a.arguments().mid(1);
+    if (commandLineArguments.contains(QStringLiteral("--validate-jumbo-export"))) {
+        QString error;
+        const bool valid = LotFilesManager256::validateJumboExport(&error);
+        qInfo().noquote() << "Jumbo export validation:"
+                         << (valid ? QStringLiteral("PASS") : error);
+        return valid ? 0 : 1;
+    }
     if (commandLineArguments.contains(QStringLiteral("--validate-basement-thumbnails"))) {
         QString error;
         const bool valid = MapImageRenderWorker::validateBasementThumbnails(&error);
@@ -151,6 +159,7 @@ int main(int argc, char *argv[])
     QString validateThumbnailLifecycleProject;
     bool validateTilesetCleanup = false;
     bool validateCellMoveCoordinates = false;
+    bool validateIssueWorkflows = false;
     for (const QString &argument : commandLineArguments) {
         const QString thumbnailLifecyclePrefix =
                 QLatin1String("--validate-thumbnail-lifecycle=");
@@ -912,7 +921,10 @@ int main(int argc, char *argv[])
     w.show();
     w.readSettings();
 
-    const bool configuredCommand =
+    validateIssueWorkflows = commandLineArguments.contains(QStringLiteral("--validate-editor-workflows"));
+    const bool validateDisplay = commandLineArguments.contains(
+                QStringLiteral("--validate-display-scaling"));
+    const bool configuredCommand = validateDisplay || validateIssueWorkflows ||
             !renderWorldGenPreviewRoot.isEmpty()
             || !renderWorldGenPrefabRoot.isEmpty()
             || !renderWorldGenPrefabWindowRoot.isEmpty()
@@ -929,6 +941,28 @@ int main(int argc, char *argv[])
             || validateCellMoveCoordinates;
     if (configuredCommand && !w.InitConfigFiles())
         return 0;
+
+    if (validateDisplay) {
+        QString error;
+        const bool valid = PZTools::validateDisplayScaling(
+                    &w, QStringLiteral("WorldEd"), &error)
+                && GenerateLotsDialog::validateTreeOptions(&w, &error)
+                && CellScene::validateScaledRendering(&error);
+        qInfo().noquote() << "Display scaling validation:"
+                         << (valid ? QStringLiteral("PASS") : error);
+        return valid ? 0 : 1;
+    }
+
+    if (validateIssueWorkflows) {
+        QString error;
+        if (!validateLotComposition(TileMetaInfoMgr::instance()->tileset(QStringLiteral("street_curbs_01")), &error) ||
+                !CellScene::validateInGameMapReload(&error)) {
+            qCritical().noquote() << "Editor workflow validation failed:" << error;
+            return 61;
+        }
+        qInfo() << "Editor workflow validation passed: lot composition and repeated InGameMap reload";
+        return 0;
+    }
 
     if (validateCellMoveCoordinates) {
         QString dataSummary;

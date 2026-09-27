@@ -56,12 +56,6 @@ PropertyEnumDialog::PropertyEnumDialog(WorldDocument *worldDoc, QWidget *parent)
             this, &PropertyEnumDialog::propertyEnumChanged);
     connect(mDocument, &WorldDocument::propertyEnumChoicesChanged,
             this, &PropertyEnumDialog::setChoicesList);
-#if 0
-    connect(mDocument->undoStack(), SIGNAL(canUndoChanged(bool)),
-            ui->undo, SLOT(setEnabled(bool)));
-    connect(mDocument->undoStack(), SIGNAL(canRedoChanged(bool)),
-            ui->redo, SLOT(setEnabled(bool)));
-#endif
     connect(mDocument->undoStack(), &QUndoStack::indexChanged,
             this, &PropertyEnumDialog::updateActions);
 
@@ -103,16 +97,10 @@ void PropertyEnumDialog::currentEnumChanged(int row)
 
 void PropertyEnumDialog::propertyEnumAboutToBeRemoved(int index)
 {
-#if 1
     PropertyEnum *pe = world()->propertyEnums().at(index);
     int row = rowOf(pe);
     ui->enumList->item(row)->setHidden(true);
     delete ui->enumList->takeItem(row);
-#else
-    ui->enumList->blockSignals(true);
-    delete ui->enumList->takeItem(index);
-    ui->enumList->blockSignals(false);
-#endif
 }
 
 void PropertyEnumDialog::propertyEnumChanged(PropertyEnum *pe)

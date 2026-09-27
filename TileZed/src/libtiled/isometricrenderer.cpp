@@ -369,10 +369,6 @@ void IsometricRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *l
     startPos.rx() -= tileWidth / 2;
     startPos.ry() += tileHeight;
 
-#if 0
-    // Compensate for the layer position
-    rowItr -= QPoint(layer->x(), layer->y());
-#endif
 
     /* Determine in which half of the tile the top-left corner of the area we
      * need to draw is. If we're in the upper half, we need to start one row

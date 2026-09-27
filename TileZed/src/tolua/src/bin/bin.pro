@@ -9,19 +9,9 @@ CONFIG -= qt
 
 TARGET = tolua
 
-win32 {
     DESTDIR = $$top_builddir
-} else {
-    DESTDIR = $$top_builddir/bin
-}
 
-macx {
-    LIBS += -framework Foundation
-} else:win32 {
     LIBS += -L$$top_builddir/lib
-} else {
-    QMAKE_LIBDIR_FLAGS += -L$$OUT_PWD/../../../../lib
-}
 
 DEFINES += LUA_SOURCE LUA_SOURCE_PATH=\\\"$$PWD/lua/\\\"
 

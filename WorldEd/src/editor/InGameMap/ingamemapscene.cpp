@@ -58,6 +58,8 @@ QRectF InGameMapFeatureItem::boundingRect() const
 
 void InGameMapFeatureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *)
 {
+    if (mPolygon.isEmpty())
+        return;
     QColor color = mHoverRefCount > 0 ? Qt::blue : Qt::darkBlue;
     if (isSelected())
         color = mHoverRefCount ? Qt::green : Qt::darkGreen;
@@ -100,6 +102,8 @@ void InGameMapFeatureItem::paint(QPainter *painter, const QStyleOptionGraphicsIt
         path.addPolygon(screenPolygon);
         QPainterPath path2;
         for (auto& hole : mHoles) {
+            if (hole.isEmpty())
+                continue;
             QPolygonF screenPolygon2 = mRenderer->tileToPixelCoords(hole.translated(mDragOffset));
             if (screenPolygon2.isClosed() == false) {
                 screenPolygon2 += screenPolygon2.first();
@@ -117,20 +121,6 @@ void InGameMapFeatureItem::paint(QPainter *painter, const QStyleOptionGraphicsIt
         break;
     }
     case Type::Polyline:
-#if 0
-    {
-        int width = feature()->properties().getInt(QStringLiteral("width"), -1);
-        if (width > 0) {
-            QPainterPathStroker stroker;
-            stroker.setWidth(width * 64);
-            QPainterPath path1;
-            path1.addPolygon(screenPolygon);
-            QPainterPath path = stroker.createStroke(path1);
-            painter->drawPath(path);
-            break;
-        }
-    }
-#endif
         painter->drawPolyline(screenPolygon);
 
         pen.setColor(color);
@@ -231,6 +221,8 @@ void InGameMapFeatureItem::hoverLeaveEvent(QGraphicsSceneHoverEvent *event)
 
 QPainterPath InGameMapFeatureItem::shape() const
 {
+    if (mPolygon.isEmpty())
+        return QPainterPath();
     QPolygonF polygon = mRenderer->tileToPixelCoords(mPolygon, 0);
 
     if (isPolygon())
@@ -278,6 +270,9 @@ void InGameMapFeatureItem::synchWithFeature()
     case Type::INVALID:
         break;
     case Type::Point: {
+        if (mFeature->mGeometry.mCoordinates.isEmpty() ||
+                mFeature->mGeometry.mCoordinates.first().isEmpty())
+            break;
         InGameMapPoint center = mFeature->mGeometry.mCoordinates[0][0];
         mPolygon += { center.x , center.y };
         QPointF scenePos = mRenderer->tileToPixelCoords(mPolygon[0] + mDragOffset);
@@ -869,6 +864,7 @@ EditInGameMapFeatureTool::~EditInGameMapFeatureTool()
 void EditInGameMapFeatureTool::setScene(BaseGraphicsScene *scene)
 {
     if (mScene) {
+        mScene->disconnect(this);
         mScene->worldDocument()->disconnect(this);
         mScene->document()->disconnect(this);
     }
@@ -885,10 +881,18 @@ void EditInGameMapFeatureTool::setScene(BaseGraphicsScene *scene)
 
         connect(mScene->document(), &CellDocument::selectedInGameMapFeaturesChanged,
                 this, &EditInGameMapFeatureTool::selectedFeaturesChanged);
+        connect(mScene, &CellScene::mapReloaded,
+                this, &EditInGameMapFeatureTool::selectedFeaturesChanged);
     }
 }
 
 void EditInGameMapFeatureTool::activate()
+{
+    BaseCellSceneTool::activate();
+    selectedFeaturesChanged();
+}
+
+void EditInGameMapFeatureTool::endClearScene()
 {
     BaseCellSceneTool::activate();
 }
@@ -995,11 +999,15 @@ void EditInGameMapFeatureTool::geometryChanged(WorldCell *cell, int featureIndex
 
 void EditInGameMapFeatureTool::selectedFeaturesChanged()
 {
+    if (!mScene || !isCurrent())
+        return;
     auto& selected = mScene->document()->selectedInGameMapFeatures();
     if (selected.size() == 1) {
         InGameMapFeature* feature = selected.first();
         if (InGameMapFeatureItem* item = mScene->itemForInGameMapFeature(feature)) {
             setSelectedItem(item);
+        } else {
+            setSelectedItem(nullptr);
         }
     } else {
         setSelectedItem(nullptr);
@@ -1046,6 +1054,8 @@ void EditInGameMapFeatureTool::setSelectedItem(InGameMapFeatureItem *featureItem
             }
             break;
         case InGameMapFeatureItem::Type::Polygon: {
+            if (coordList.isEmpty())
+                break;
             int coordIndex = featureItem->mSelectedCoordIndex;
             if (coordIndex < 0 || coordIndex >= coordList.size()) {
                 coordIndex = 0;

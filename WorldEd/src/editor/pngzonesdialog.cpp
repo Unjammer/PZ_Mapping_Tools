@@ -155,17 +155,6 @@ bool PNGZonesDialog::generateCell(WorldCell *cell, const QStringList &objectType
 {
     QPainter *painter = mPainter;
     const int cellSize = cell->world()->cellSize();
-#if 0
-    QStringList validZones;
-    validZones << QLatin1String("DeepForest");
-    validZones << QLatin1String("Farm");
-    validZones << QLatin1String("FarmLand");
-    validZones << QLatin1String("Forest");
-    validZones << QLatin1String("Nav");
-    validZones << QLatin1String("TownZone");
-    validZones << QLatin1String("TrailerPark");
-    validZones << QLatin1String("Vegitation");
-#endif
     for (WorldCellObject *object : cell->objects()) {
         if (object->type() == nullptr) {
             continue;
@@ -193,15 +182,6 @@ bool PNGZonesDialog::generateCell(WorldCell *cell, const QStringList &objectType
             }
             painter->drawPolygon(poly);
         }
-#if 0
-        if (object->isPolyline() && (object->polylineWidth() > 0)) {
-            if (mPolylineOutlines.contains(object) == false) {
-                mPolylineOutlines[object] = createPolylineOutline(mScene, object);
-            }
-            QPolygonF poly = mPolylineOutlines[object];
-            painter->drawPolygon(poly);
-        }
-#endif
     }
     return true;
 }

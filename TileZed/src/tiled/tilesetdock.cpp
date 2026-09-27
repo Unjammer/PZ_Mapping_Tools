@@ -192,11 +192,6 @@ TilesetDock::TilesetDock(QWidget *parent):
     mDeleteTileset->setIcon(QIcon(QLatin1String(":images/16x16/edit-delete.png")));
     mRenameTileset->setIcon(QIcon(QLatin1String(":images/16x16/edit-rename.png")));
 
-    Utils::setThemeIcon(mImportTileset, "document-import");
-    Utils::setThemeIcon(mExportTileset, "document-export");
-    Utils::setThemeIcon(mPropertiesTileset, "document-properties");
-    Utils::setThemeIcon(mDeleteTileset, "edit-delete");
-    Utils::setThemeIcon(mRenameTileset, "edit-rename");
 
     connect(mImportTileset, SIGNAL(triggered()),
             SLOT(importTileset()));
@@ -1044,12 +1039,6 @@ TilesetDock::TilesetDock(QWidget *parent):
     mActionDeleteTileset->setIcon(QIcon(QLatin1String(":images/16x16/edit-delete.png")));
     mActionRenameTileset->setIcon(QIcon(QLatin1String(":images/16x16/edit-rename.png")));
 
-    Utils::setThemeIcon(mActionNewTileset, "document-new");
-    Utils::setThemeIcon(mActionImportTileset, "document-import");
-    Utils::setThemeIcon(mActionExportTileset, "document-export");
-    Utils::setThemeIcon(mActionPropertiesTileset, "document-properties");
-    Utils::setThemeIcon(mActionDeleteTileset, "edit-delete");
-    Utils::setThemeIcon(mActionRenameTileset, "edit-rename");
 
     connect(mActionNewTileset, &QAction::triggered, this, &TilesetDock::newTileset);
     connect(mActionImportTileset, &QAction::triggered, this, &TilesetDock::importTileset);
@@ -1109,8 +1098,6 @@ TilesetDock::TilesetDock(QWidget *parent):
     connect(mActionTilesetUp, &QAction::triggered, this, &TilesetDock::moveTilesetUp);
     connect(mActionTilesetDown, &QAction::triggered, this, &TilesetDock::moveTilesetDown);
 
-    Utils::setThemeIcon(mActionTilesetUp, "go-up");
-    Utils::setThemeIcon(mActionTilesetDown, "go-down");
 
     mActionSortByName->setIcon(QIcon(QLatin1String(":/images/16x16/sort-by-name.svg")));
     mActionSortByName->setCheckable(true);

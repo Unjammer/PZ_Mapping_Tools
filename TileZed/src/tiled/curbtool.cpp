@@ -572,10 +572,6 @@ void CurbTool::drawEdgeTile(const QPoint &origin, int x, int y, Edge edge, bool 
         // far
         if (!half && (currentE == nearS || currentE == nearSJoinE || currentE == nearSE))
             tile = farEJoinS;
-#if 0
-        else if (currentS == nearE || currentS == nearSE)
-            tile = farSJoinE;
-#endif
         else if (!half && (currentW == farJoinSE || currentW == farS))
             tile = farSE;
         else if (half && (currentE == farS || currentE == farSE))

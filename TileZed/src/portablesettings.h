@@ -24,7 +24,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
-#ifdef Q_OS_WIN
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -32,13 +31,6 @@
 #include <psapi.h>
 #ifdef _MSC_VER
 #pragma comment(lib, "user32.lib")
-#endif
-#elif defined(Q_OS_LINUX)
-#include <sys/sysinfo.h>
-#include <unistd.h>
-#elif defined(Q_OS_MAC)
-#include <mach/mach.h>
-#include <sys/sysctl.h>
 #endif
 namespace PortableSettings {
 static const int SETTINGS_SCHEMA_VERSION = 2;
@@ -281,23 +273,10 @@ inline bool isGamePath(const QString &candidate)
 inline QString detectGamePath()
 {
     QStringList candidates;
-#ifdef Q_OS_WIN
     candidates << QStringLiteral(
                       "C:/Program Files (x86)/Steam/steamapps/common/ProjectZomboid")
                << QStringLiteral(
                       "C:/Program Files/Steam/steamapps/common/ProjectZomboid");
-#elif defined(Q_OS_MAC)
-    candidates << QStringLiteral(
-                      "/Applications/Project Zomboid.app/Contents/Resources")
-               << QDir::home().filePath(QStringLiteral(
-                      "Library/Application Support/Steam/steamapps/common/"
-                      "ProjectZomboid/Project Zomboid.app/Contents/Resources"));
-#else
-    candidates << QDir::home().filePath(QStringLiteral(
-                      ".steam/steam/steamapps/common/ProjectZomboid"))
-               << QDir::home().filePath(QStringLiteral(
-                      ".local/share/Steam/steamapps/common/ProjectZomboid"));
-#endif
     for (const QString &candidate : candidates) {
         const QString normalized = normalizedGamePath(candidate);
         if (!normalized.isEmpty())
@@ -553,7 +532,6 @@ inline void configure()
 }
 inline QString cpuDescription()
 {
-#ifdef Q_OS_WIN
     QSettings cpuRegistry(
                 QStringLiteral(
                     "HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\"
@@ -563,82 +541,27 @@ inline QString cpuDescription()
                 QStringLiteral("ProcessorNameString")).toString().simplified();
     if (!description.isEmpty())
         return description;
-#elif defined(Q_OS_LINUX)
-    QFile cpuInfo(QStringLiteral("/proc/cpuinfo"));
-    if (cpuInfo.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        const QList<QByteArray> lines = cpuInfo.readAll().split('\n');
-        for (const QByteArray &line : lines) {
-            if (!line.startsWith("model name") &&
-                    !line.startsWith("Hardware"))
-                continue;
-            const int separator = line.indexOf(':');
-            if (separator >= 0) {
-                const QString description =
-                        QString::fromLocal8Bit(line.mid(separator + 1))
-                        .simplified();
-                if (!description.isEmpty())
-                    return description;
-            }
-        }
-    }
-#elif defined(Q_OS_MAC)
-    size_t length = 0;
-    if (sysctlbyname("machdep.cpu.brand_string", nullptr, &length,
-                     nullptr, 0) == 0 && length > 1) {
-        QByteArray description(int(length), '\0');
-        if (sysctlbyname("machdep.cpu.brand_string", description.data(),
-                         &length, nullptr, 0) == 0) {
-            return QString::fromLocal8Bit(description.constData()).simplified();
-        }
-    }
-#endif
     return QSysInfo::currentCpuArchitecture();
 }
 inline quint64 totalPhysicalMemoryBytes()
 {
-#ifdef Q_OS_WIN
     MEMORYSTATUSEX memory = {};
     memory.dwLength = sizeof(memory);
     if (GlobalMemoryStatusEx(&memory))
         return quint64(memory.ullTotalPhys);
-#elif defined(Q_OS_LINUX)
-    struct sysinfo memory = {};
-    if (::sysinfo(&memory) == 0)
-        return quint64(memory.totalram) * quint64(memory.mem_unit);
-#elif defined(Q_OS_MAC)
-    quint64 memory = 0;
-    size_t length = sizeof(memory);
-    if (sysctlbyname("hw.memsize", &memory, &length, nullptr, 0) == 0)
-        return memory;
-#endif
     return 0;
 }
 inline quint64 availablePhysicalMemoryBytes()
 {
-#ifdef Q_OS_WIN
     MEMORYSTATUSEX memory = {};
     memory.dwLength = sizeof(memory);
     if (GlobalMemoryStatusEx(&memory))
         return quint64(memory.ullAvailPhys);
-#elif defined(Q_OS_LINUX)
-    QFile memInfo(QStringLiteral("/proc/meminfo"));
-    if (memInfo.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        const QList<QByteArray> lines = memInfo.readAll().split('\n');
-        for (const QByteArray &line : lines) {
-            if (!line.startsWith("MemAvailable:"))
-                continue;
-            const QList<QByteArray> fields = line.simplified().split(' ');
-            if (fields.size() >= 2)
-                return fields.at(1).toULongLong() * 1024ULL;
-        }
-    }
-#endif
     return 0;
 }
 inline QStringList graphicsAdapterDescriptions()
 {
     QStringList adapters;
-#ifdef Q_OS_WIN
     for (DWORD index = 0; ; ++index) {
         DISPLAY_DEVICEW adapter = {};
         adapter.cb = sizeof(adapter);
@@ -671,27 +594,6 @@ inline QStringList graphicsAdapterDescriptions()
             adapters[existing] = labelledDescription;
         }
     }
-#elif defined(Q_OS_LINUX)
-    const QDir drm(QStringLiteral("/sys/class/drm"));
-    const QStringList cards = drm.entryList(
-                QStringList() << QStringLiteral("card[0-9]*"),
-                QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-    for (const QString &card : cards) {
-        QFile vendorFile(drm.filePath(
-                             card + QStringLiteral("/device/vendor")));
-        QFile deviceFile(drm.filePath(
-                             card + QStringLiteral("/device/device")));
-        if (!vendorFile.open(QIODevice::ReadOnly | QIODevice::Text) ||
-                !deviceFile.open(QIODevice::ReadOnly | QIODevice::Text))
-            continue;
-        const QString vendor =
-                QString::fromLatin1(vendorFile.readAll()).trimmed();
-        const QString device =
-                QString::fromLatin1(deviceFile.readAll()).trimmed();
-        adapters += QStringLiteral("%1 PCI %2:%3")
-                .arg(card, vendor, device);
-    }
-#endif
     return adapters;
 }
 inline QString gibibytes(quint64 bytes)
@@ -703,7 +605,6 @@ inline QString gibibytes(quint64 bytes)
 }
 inline quint64 currentProcessMemoryBytes()
 {
-#ifdef Q_OS_WIN
     typedef BOOL (WINAPI *GetProcessMemoryInfoFunction)(
             HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD);
     static GetProcessMemoryInfoFunction queryMemory =
@@ -720,29 +621,6 @@ inline quint64 currentProcessMemoryBytes()
         return 0;
     }
     return quint64(counters.WorkingSetSize);
-#elif defined(Q_OS_LINUX)
-    QFile statm(QStringLiteral("/proc/self/statm"));
-    if (!statm.open(QIODevice::ReadOnly | QIODevice::Text))
-        return 0;
-    const QList<QByteArray> values = statm.readLine().simplified().split(' ');
-    if (values.size() < 2)
-        return 0;
-    bool ok = false;
-    const quint64 residentPages = values.at(1).toULongLong(&ok);
-    const long pageSize = sysconf(_SC_PAGESIZE);
-    return ok && pageSize > 0 ? residentPages * quint64(pageSize) : 0;
-#elif defined(Q_OS_MAC)
-    mach_task_basic_info_data_t info = {};
-    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
-    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
-                  reinterpret_cast<task_info_t>(&info), &count)
-            != KERN_SUCCESS) {
-        return 0;
-    }
-    return quint64(info.resident_size);
-#else
-    return 0;
-#endif
 }
 inline void logMachineDiagnostics()
 {
@@ -832,7 +710,6 @@ inline void messageHandler(QtMsgType type,
     if (type == QtFatalMsg)
         std::abort();
 }
-#ifdef Q_OS_WIN
 inline LONG WINAPI unhandledExceptionLogger(EXCEPTION_POINTERS *exceptionInfo)
 {
     if (exceptionInfo && exceptionInfo->ExceptionRecord) {
@@ -869,7 +746,6 @@ inline LONG WINAPI unhandledExceptionLogger(EXCEPTION_POINTERS *exceptionInfo)
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }
-#endif
 inline void terminateLogger()
 {
     qCritical() << "Unhandled C++ exception or std::terminate()";
@@ -911,9 +787,7 @@ inline QString installLogging()
 #ifdef PZTOOLS_APP_ISSUE_NOTIFIER
     AppIssueNotifier::initialize();
 #endif
-#ifdef Q_OS_WIN
     SetUnhandledExceptionFilter(unhandledExceptionLogger);
-#endif
     std::set_terminate(terminateLogger);
     qInfo().noquote() << "Logging to" << QDir::toNativeSeparators(filePath);
     qInfo().noquote() << "Installation root" << QDir::toNativeSeparators(installRootPath());

@@ -16,6 +16,7 @@
  */
 
 #include "mapcomposite.h"
+#include "lotcomposition.h"
 
 #include "bmpblender.h"
 #include "mapmanager.h"
@@ -108,10 +109,8 @@ CompositeLayerGroup::CompositeLayerGroup(MapComposite *owner, int level)
     , mAnyVisibleLayers(false)
     , mNeedsSynch(true)
     , mNoBlendCell(Tiled::Internal::TilesetManager::instance()->noBlendTile())
-#if 1 // ROAD_CRUD
     , mRoadLayer0(0)
     , mRoadLayer1(0)
-#endif // ROAD_CRUD
 {
 
 }
@@ -292,7 +291,7 @@ bool CompositeLayerGroup::orderedCellsAt(const QPoint &pos,
             for (int i = cellsToKeep.size() - 1; i >= 0; --i) {
                 const QString &name = cellsToKeep.at(i).layer->name();
                 for (const OrderedCell &replacement : qAsConst(orderedCells)) {
-                    if (name == replacement.layer->name()) {
+                    if (PZTools::lotLayerSuppressesLayer(replacement.layer->name(), name)) {
                         cellsToKeep.remove(i);
                         break;
                     }
@@ -432,12 +431,6 @@ void CompositeLayerGroup::orderedCellsAt(const QPoint &pos, const QRegion &suppr
         }
         if (!cell->isEmpty()) {
             cells.append(OrderedCell(this, index, tl, cell, mLayerOpacity[index]));
-#if 0
-            if (mHighlightLayer.isEmpty() || tl->name() == mHighlightLayer)
-                opacities.append(mLayerOpacity[index]);
-            else
-                opacities.append(0.25);
-#endif
         }
 
         // Draw the no-blend tile.
@@ -527,7 +520,7 @@ bool CompositeLayerGroup::orderedCellsAt2(const QPoint &pos, OrderedCellsTempora
             for (int i = cellsToKeep.size() - 1; i >= 0; --i) {
                 const QString &name = cellsToKeep.at(i).layer->name();
                 for (const OrderedCell &replacement : qAsConst(orderedCells)) {
-                    if (name == replacement.layer->name()) {
+                    if (PZTools::lotLayerSuppressesLayer(replacement.layer->name(), name)) {
                         cellsToKeep.remove(i);
                         break;
                     }
@@ -754,7 +747,7 @@ bool CompositeLayerGroup::orderedCellsAt3(const QPoint &pos, OrderedCellsTempora
             for (TilePlusLayer &cell : buildingCells) {
                 const QString name = MapComposite::layerNameWithoutPrefix(cell.mLayerName);
                 for (const OrderedCell &replacement : qAsConst(orderedCells)) {
-                    if (name == replacement.layer->name()) {
+                    if (PZTools::lotLayerSuppressesLayer(replacement.layer->name(), name)) {
                         cell.mHideIfVisible = subMapLayer.mSubMap;
                         break;
                     }
@@ -772,7 +765,7 @@ bool CompositeLayerGroup::orderedCellsAt3(const QPoint &pos, OrderedCellsTempora
         for (const TilePlusLayer &replacement : qAsConst(buildingCells)) {
             const QString name = MapComposite::layerNameWithoutPrefix(replacement.mLayerName);
             for (TilePlusLayer &cell : cellMapCells) {
-                if (name == sFloor || name == MapComposite::layerNameWithoutPrefix(cell.mLayerName))
+                if (PZTools::lotLayerSuppressesLayer(name, MapComposite::layerNameWithoutPrefix(cell.mLayerName)))
                     cell.mHideIfVisible = replacement.mSubMap;
             }
         }
@@ -874,14 +867,6 @@ void CompositeLayerGroup::orderedCellsAt3(const QPoint &pos, QVector<OrderedCell
         }
 #endif // ROAD_CRUD
         const Cell *cell = &tl->cellAt(subPos);
-#if 0
-        if (!mOwner->isCellMap() && root->showLotFloorsOnly()) {
-            bool isFloor = !mLevel && !index && (tl->name() == sFloor);
-            if (!isFloor && !tl->name().contains(sAboveLot)) {
-                continue;
-            }
-        }
-#endif
         TileLayer *tlBmpBlend = mBmpBlendLayers[index];
         MapNoBlend *noBlend = mNoBlends[index];
         if (tlBmpBlend != nullptr && tlBmpBlend->contains(subPos) && !tlBmpBlend->cellAt(subPos).isEmpty()) {
@@ -902,10 +887,8 @@ bool CompositeLayerGroup::isLayerEmpty(int index) const
         return true;
     if (mBmpBlendLayers[index] && !mBmpBlendLayers[index]->isEmpty())
         return false;
-#if 1
     // There could be no user-drawn tiles, only blender tiles.
     if (mLevel == 0) return false; // FIXME: check for non-empty BMP images
-#endif
 #ifdef BUILDINGED
     if (mForceNonEmpty[index])
         return false;
@@ -1469,17 +1452,14 @@ MapComposite::MapComposite(MapInfo *mapInfo, Map::Orientation orientRender,
             int levelOffset = objectGroup->level();
             foreach (MapObject *object, objectGroup->objects()) {
                 if (object->name() == QLatin1String("lot") && !object->type().isEmpty()) {
-#if 1
                     MapInfo *subMapInfo = MapManager::instance()->loadMap(
                                 object->type(), QFileInfo(mMapInfo->path()).absolutePath(),
                                 true, MapManager::PriorityLow);
 
                     if (!subMapInfo) {
                         qDebug() << "failed to find sub-map" << object->type() << "inside map" << mMapInfo->path();
-#if 1 // FIXME: attempt to load this if mapsDirectory changes
                         subMapInfo = MapManager::instance()->getPlaceholderMap(
                                     object->type(), 32, 32); // FIXME: calculate map size
-#endif
                     }
                     if (subMapInfo) {
                         if (subMapInfo->isLoading()) {
@@ -1496,26 +1476,6 @@ MapComposite::MapComposite(MapInfo *mapInfo, Map::Orientation orientRender,
                                    + mOrientAdjustPos * levelOffset,
                                    levelOffset, true);
                     }
-#else
-                    // FIXME: if this sub-map is converted from LevelIsometric to Isometric,
-                    // then any sub-maps of its own will lose their level offsets.
-                    MapInfo *subMapInfo = MapManager::instance()->loadMap(object->type(),
-                                                                          QFileInfo(mMapInfo->path()).absolutePath());
-                    if (!subMapInfo) {
-                        qDebug() << "failed to find sub-map" << object->type() << "inside map" << mMapInfo->path();
-#if 0 // FIXME: attempt to load this if mapsDirectory changes
-                        subMapInfo = MapManager::instance()->getPlaceholderMap(object->type(), mMap->orientation(),
-                                                                               32, 32); // FIXME: calculate map size
-#endif
-                    }
-                    if (subMapInfo) {
-                        int levelOffset;
-                        (void) levelForLayer(objectGroup, &levelOffset);
-                        addMap(subMapInfo, object->position().toPoint()
-                               + mOrientAdjustPos * levelOffset,
-                               levelOffset, true);
-                    }
-#endif
                 }
             }
         }
@@ -1746,14 +1706,12 @@ void MapComposite::removeLayerFromGroup(int index)
     Layer *layer = mMap->layerAt(index);
     Q_ASSERT(layer->isTileLayer());
     if (TileLayer *tl = layer->asTileLayer()) {
-#if 1
         // Unused hack for MiniMapScene
         if (!mMapInfo->isBeingEdited()) {
             if (CompositeLayerGroup *layerGroup = tileLayersForLevel(tl->level()))
                 layerGroup->removeTileLayer(tl);
             return;
         }
-#endif
         Q_ASSERT(tl->group());
         if (CompositeLayerGroup *layerGroup = (CompositeLayerGroup*)tl->group()) {
             layerGroup->removeTileLayer(tl);
@@ -2165,10 +2123,6 @@ void MapComposite::recreate()
                                                                           true, MapManager::PriorityLow);
                     if (!subMapInfo) {
                         qDebug() << "failed to find sub-map" << object->type() << "inside map" << mMapInfo->path();
-#if 0 // FIXME: attempt to load this if mapsDirectory changes
-                        subMapInfo = MapManager::instance()->getPlaceholderMap(object->type(), mMap->orientation(),
-                                                                               32, 32); // FIXME: calculate map size
-#endif
                     }
                     if (subMapInfo) {
                         if (subMapInfo->isLoading()) {
@@ -2279,13 +2233,6 @@ void MapComposite::mapLoaded(MapInfo *mapInfo)
 
     // Let the scene know it needs to synch.
     if (synch) {
-#if 0
-        MapComposite *mc = mParent;
-        while (mc) {
-            mc->ensureMaxLevels(mLevelOffset + mMaxLevel);
-            mc = mc->mParent;
-        }
-#endif
         mChangeCount++;
         emit needsSynch();
     }
@@ -2341,21 +2288,12 @@ MapComposite *MapComposite::cropToMinimum(QPoint &offset)
     if (maxX - minX + 1 == mapWidth && maxY - minY + 1 == mapHeight) {
         return nullptr;
     }
-#if 1
     Map *mapNew = map()->clone();
     mapNew->setWidth(maxX - minX + 1);
     mapNew->setHeight(maxY - minY + 1);
     for (Layer* layer : mapNew->layers()) {
         layer->resize(mapNew->size(), { -minX, -minY });
     }
-#else
-    Map *mapNew = new Map(Map::LevelIsometric, maxX - minX + 1, maxY - minY + 1, 64, 32);
-    for (Layer* layer : map()->layers()) {
-        Layer* newLayer = layer->clone();
-        newLayer->resize(mapNew->size(), { -minX, -minY });
-        mapNew->addLayer(newLayer);
-    }
-#endif
     MapInfo *mapInfoNew = MapManager::instance()->newFromMap(mapNew);
     MapComposite *mapCompositeNew = new MapComposite(mapInfoNew, mapNew->orientation());
     offset.setX(minX);

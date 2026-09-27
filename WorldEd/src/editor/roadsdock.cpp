@@ -169,12 +169,6 @@ RoadsDock::RoadsDock(QWidget *parent)
 
     setWidget(w);
 
-#if 0
-    // Workaround since a tabbed dockwidget that is not currently visible still
-    // returns true for isVisible()
-    connect(this, SIGNAL(visibilityChanged(bool)),
-            mView, SLOT(setVisible(bool)));
-#endif
 }
 
 void RoadsDock::changeEvent(QEvent *e)

@@ -410,13 +410,6 @@ void BaseGraphicsView::autoScrollTimeout()
     if(mScrollDirection & ScrollDown) {
         verticalScrollBar()->setValue(verticalScrollBar()->value()+mScrollMagnitude);
     }
-#if 0
-    if(rubberBand->isVisible()) { // update the rubber band
-        QPoint mouseDownView = mapFromScene(mouseDownPos);
-        QPoint diff = (lastMouseViewPos-mouseDownView);
-        rubberBand->setGeometry(qMin(lastMouseViewPos.x(), mouseDownView.x()), qMin(lastMouseViewPos.y(), mouseDownView.y()), qAbs(diff.x()), qAbs(diff.y()));
-    }
-#endif
 }
 
 void BaseGraphicsView::startAutoScroll()
@@ -712,16 +705,6 @@ MiniMap::MiniMap(BaseGraphicsView *parent)
     connect(button, &QAbstractButton::clicked, this, &MiniMap::bigger);
     layout->addWidget(button);
 
-#if 0
-    button = new QToolButton(mButtons);
-    button->setAutoRaise(true);
-    button->setAutoRepeat(true);
-    button->setIconSize(QSize(16, 16));
-    button->setIcon(QIcon(QLatin1String(":/images/16x16/edit-redo.png")));
-    button->setToolTip(tr("Refresh the MiniMap image"));
-    connect(button, SIGNAL(clicked()), SLOT(updateImage()));
-    layout->addWidget(button);
-#endif
 
     setGeometry(20, 20, 220, 220);
 

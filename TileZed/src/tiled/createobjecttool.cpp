@@ -61,12 +61,10 @@ CreateObjectTool::CreateObjectTool(CreationMode mode, QObject *parent)
 {
     switch (mMode) {
     case CreateArea:
-        Utils::setThemeIcon(this, "insert-object");
         break;
 
     case CreateTile:
         setIcon(QIcon(QLatin1String(":images/24x24/insert-image.png")));
-        Utils::setThemeIcon(this, "insert-image");
         break;
 
     case CreatePolygon:

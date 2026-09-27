@@ -19,11 +19,7 @@ isEmpty(INSTALL_ONLY_BUILD) {
     target.path = $${PREFIX}/bin
     INSTALLS += target
 }
-win32 {
     DESTDIR = ../..
-} else {
-    DESTDIR = ../../bin
-}
 
 greaterThan(QT_MAJOR_VERSION, 4) {
     QT += widgets
@@ -42,6 +38,8 @@ HEADERS += ../../../shared/pztoolspaths.h
 HEADERS += ../../../shared/tilesetimageloader.h
 HEADERS += ../../../shared/loadingdialog.h
 HEADERS += ../../../shared/startupwindowgeometry.h
+HEADERS += ../../../shared/displayscaling.h
+HEADERS += ../../../shared/displayscalingvalidation.h
 HEADERS += ../../../shared/tilesetimageloadervalidation.h
 
 DEFINES += QT_NO_CAST_FROM_ASCII \
@@ -49,22 +47,9 @@ DEFINES += QT_NO_CAST_FROM_ASCII \
 DEFINES += ZOMBOID
 DEFINES += PZTOOLS_APP_ISSUE_NOTIFIER
 
-macx {
-    LIBS += -framework Foundation
-} else:win32 {
     LIBS += -L$$OUT_PWD/../../lib
-} else {
-    QMAKE_LIBDIR_FLAGS += -L$$OUT_PWD/../../lib
-}
 
 # Make sure the Tiled executable can find libtiled
-!win32:!macx {
-    QMAKE_RPATHDIR += \$\$ORIGIN/../lib
-
-    # It is not possible to use ORIGIN in QMAKE_RPATHDIR, so a bit manually
-    QMAKE_LFLAGS += -Wl,-z,origin \'-Wl,-rpath,$$join(QMAKE_RPATHDIR, ":")\'
-    QMAKE_RPATHDIR =
-}
 
 #MOC_DIR = .moc
 #UI_DIR = .uic
@@ -180,7 +165,6 @@ SOURCES += ../../../shared/appissuenotifier.cpp \
     shortcut/shortcuteditorwidget.cpp \
     snoweditor.cpp \
     stampbrush.cpp \
-    tiledapplication.cpp \
     tiledeftextfile.cpp \
     tilelayeritem.cpp \
     tileoverlaydialog.cpp \
@@ -205,7 +189,6 @@ SOURCES += ../../../shared/appissuenotifier.cpp \
     zlotmanager.cpp \
     ZomboidScene.cpp \
     zprogress.cpp \
-    ztilelayergroupitem.cpp \
     mapcomposite.cpp \
     mapmanager.cpp \
     mapimagemanager.cpp \
@@ -387,7 +370,6 @@ HEADERS += ../../../shared/settingsvalue.h \
     layerdock.h \
     layermodel.h \
     luatable.h \
-    macsupport.h \
     mainwindow.h \
     mapdocumentactionhandler.h \
     mapdocument.h \
@@ -440,7 +422,6 @@ HEADERS += ../../../shared/settingsvalue.h \
     shortcut/shortcuteditorwidget.h \
     snoweditor.h \
     stampbrush.h \
-    tiledapplication.h \
     tiledeftextfile.h \
     tilelayeritem.h \
     tileoverlaydialog.h \
@@ -580,9 +561,6 @@ HEADERS += ../../../shared/settingsvalue.h \
     rearrangetiles.h \
     BuildingEditor/roofhiding.h
 
-macx {
-    OBJECTIVE_SOURCES += macsupport.mm
-}
 
 FORMS += aboutdialog.ui \
     BuildingEditor/buildingattributesdock.ui \
@@ -651,16 +629,8 @@ RESOURCES += tiled.qrc \
     qdarkstyle/light/lightstyle.qrc \
     breeze/breeze.qrc
 
-macx {
-    QMAKE_INFO_PLIST = Info.plist
-    equals(TARGET, BuildingEd):QMAKE_INFO_PLIST = BuildingEd-Info.plist
-    ICON = images/tiled-icon-mac.icns
-    include(../../../shared/macosbundle.pri)
-}
-win32 {
     RC_FILE = tiled.rc
-}
-win32:INCLUDEPATH += .
+INCLUDEPATH += .
 contains(CONFIG, static) {
     DEFINES += STATIC_BUILD
     QTPLUGIN += qgif \
@@ -680,29 +650,17 @@ TOLUA_DEPS = $$PWD/luatiled.h
 include(../tolua/src/bin/tolua.pri)
 
 isEmpty(INSTALL_ONLY_BUILD) {
-    win32:CONFIG_PREFIX = $${target.path}
-    unix:CONFIG_PREFIX = $${target.path}/../share/tilezed/config
-    macx:CONFIG_PREFIX = $${target.path}/$${TARGET}.app/Contents/Config
+    CONFIG_PREFIX = $${target.path}
 
-    win32:DOCS_PREFIX = $${target.path}/docs
-    unix:DOCS_PREFIX = $${target.path}/../share/tilezed/docs
-    macx:DOCS_PREFIX = $${target.path}/$${TARGET}.app/Contents/Docs
+    DOCS_PREFIX = $${target.path}/docs
 
-    win32:LUA_PREFIX = $${target.path}/lua
-    unix:LUA_PREFIX = $${target.path}/../share/tilezed/lua
-    macx:LUA_PREFIX = $${target.path}/$${TARGET}.app/Contents/Lua
+    LUA_PREFIX = $${target.path}/lua
 } else {
-    win32:CONFIG_PREFIX = $${top_builddir}
-    unix:CONFIG_PREFIX = $${top_builddir}/share/tilezed/config
-    macx:CONFIG_PREFIX = $${top_builddir}/bin/$${TARGET}.app/Contents/Config
+    CONFIG_PREFIX = $${top_builddir}
 
-    win32:DOCS_PREFIX = $${top_builddir}/docs
-    unix:DOCS_PREFIX = $${top_builddir}/share/tilezed/docs
-    macx:DOCS_PREFIX = $${top_builddir}/bin/$${TARGET}.app/Contents/Docs
+    DOCS_PREFIX = $${top_builddir}/docs
 
-    win32:LUA_PREFIX = $${top_builddir}/lua
-    unix:LUA_PREFIX = $${top_builddir}/share/tilezed/lua
-    macx:LUA_PREFIX = $${top_builddir}/bin/$${TARGET}.app/Contents/Lua
+    LUA_PREFIX = $${top_builddir}/lua
 }
 
 configTxtFiles.path = $${CONFIG_PREFIX}

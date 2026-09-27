@@ -210,7 +210,6 @@ TileMetaInfoDialog::TileMetaInfoDialog(QWidget *parent) :
 
     QToolButton *button = new QToolButton(this);
     button->setIcon(undoIcon);
-    Utils::setThemeIcon(button, "edit-undo");
     button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     button->setText(undoAction->text());
     button->setEnabled(mUndoGroup->canUndo());
@@ -223,7 +222,6 @@ TileMetaInfoDialog::TileMetaInfoDialog(QWidget *parent) :
     button = new QToolButton(this);
     button->setIcon(redoIcon);
     button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    Utils::setThemeIcon(button, "edit-redo");
     button->setText(redoAction->text());
     button->setEnabled(mUndoGroup->canRedo());
     button->setShortcut(QKeySequence::Redo);

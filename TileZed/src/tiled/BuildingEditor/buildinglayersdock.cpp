@@ -190,19 +190,10 @@ void BuildingLayersDock::currentFloorChanged()
 void BuildingLayersDock::currentLayerChanged()
 {
     if (mDocument) {
-#if 1
         auto items = ui->layers->findItems(mDocument->currentLayer(), Qt::MatchExactly);
         if (items.size() == 1) {
             ui->layers->setCurrentItem(items.at(0));
         }
-#else
-        QStringList layerNames = BuildingMap::layerNames(mDocument->currentLevel());
-        int index = layerNames.indexOf(mDocument->currentLayer());
-        if (index >= 0) {
-            int row = ui->layers->count() - index - 1;
-            ui->layers->setCurrentRow(row);
-        }
-#endif
     }
     updateActions();
 }

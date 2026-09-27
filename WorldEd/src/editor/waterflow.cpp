@@ -82,12 +82,10 @@ void WaterFlow::readOldWaterDotLua(WorldDocument* worldDoc)
                                 lua_pop(L, 1); // pop value
                             }
                             lua_pop(L, 1); // pop space for the key
-#if 1
                             QString objectString = QStringLiteral(
                                         "  { name = \"%1\", type = \"WaterFlow\", x = %2, y = %3, width = 1, height = 1, properties = { speed = %4, flow = %5 }},")
                                     .arg(oldFlow.name).arg(oldFlow.x).arg(oldFlow.y).arg(oldFlow.speed).arg(/*qRadiansToDegrees*/(oldFlow.flow));
                             qDebug() << objectString;
-#endif
                             if (WorldCell* cell = worldDoc->world()->cellAt(oldFlow.x / 300 - worldMinX, oldFlow.y / 300 - worldMinY)) {
                                 WorldCellObject* object = new WorldCellObject(cell, oldFlow.name, objectType, objectGroup, oldFlow.x - cell->x() * 300, oldFlow.y - cell->y() * 300, 0, 1, 1);
                                 Property* property1 = new Property(propertyDirection, QString::number(oldFlow.flow));

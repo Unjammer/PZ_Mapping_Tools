@@ -571,18 +571,6 @@ bool InGameMapModel::dropMimeData(const QMimeData* data,
          features << mCell->inGameMap().mFeatures.at(text.toInt());
          ++rows;
      }
-#if 0
-     WorldDocument* worldDoc = mWorldDoc ? mWorldDoc : mCellDoc->worldDocument();
-
-     // Note: parentItem may be destroyed by setCell()
-     int count = features.size();
-     if (count > 1)
-         worldDoc->undoStack()->beginMacro(tr("Change %1 Lots' Level").arg(count));
-     foreach (InGameMapFeature* feature, features)
-         worldDoc->setLotLevel(lot, level);
-     if (count > 1)
-         worldDoc->undoStack()->endMacro();
-#endif
      return true;
 }
 

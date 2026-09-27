@@ -177,9 +177,7 @@ QString OtherWorldsDialog::pathIdentity(const QString &path) const
     QString identity = info.canonicalFilePath();
     if (identity.isEmpty())
         identity = info.absoluteFilePath();
-#ifdef Q_OS_WIN
     identity = identity.toLower();
-#endif
     return QDir::cleanPath(identity);
 }
 

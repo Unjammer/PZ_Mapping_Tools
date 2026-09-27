@@ -88,19 +88,9 @@ MapView::MapView(QWidget *parent)
 #endif
 {
     setTransformationAnchor(QGraphicsView::AnchorViewCenter);
-#ifdef Q_OS_MACOS
-    setFrameStyle(QFrame::NoFrame);
-#endif
 
 #ifndef QT_NO_OPENGL
     Preferences *prefs = Preferences::instance();
-#if 0
-    // The minimap isn't displayed for documents after the first, for some reason, when using OpenGL acceleration.
-    // If the OpenGL preference is changed after a document is loaded, the minimap is displayed just fine.
-    // This started happening with Qt 5.15, I believe.
-    // See currentDocumentChanged().
-    setUseOpenGL(prefs->useOpenGL());
-#endif
     connect(prefs, &Preferences::useOpenGLChanged, this, &MapView::setUseOpenGL);
 #endif
 

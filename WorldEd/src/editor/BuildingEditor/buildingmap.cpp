@@ -423,7 +423,6 @@ void BuildingMap::addRoomDefObjects(Map *map, BuildingFloor *floor)
     QPoint offset(delta, delta);
     int roomID = 1;
     foreach (Room *room, building->rooms()) {
-#if 1
         BuildingRoomDefecator rd(floor, room);
         rd.defecate();
         foreach (QRegion roomRgn, rd.mRegions) {
@@ -437,17 +436,6 @@ void BuildingMap::addRoomDefObjects(Map *map, BuildingFloor *floor)
             }
             ++roomID;
         }
-#else
-        foreach (QRect rect, floor->roomRegion(room)) {
-            QString name = room->internalName + QLatin1Char('#')
-                    + QString::number(roomID);
-            MapObject *mapObject = new MapObject(name, QLatin1String("room"),
-                                                 rect.topLeft() + offset,
-                                                 rect.size());
-            objectGroup->addObject(mapObject);
-        }
-        ++roomID;
-#endif
     }
 
     // emptyoutside rooms should only exist above ground level.

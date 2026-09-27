@@ -30,7 +30,9 @@
 #include "progress.h"
 #include "../portablesettings.h"
 #include "scenetools.h"
+#include "toolmanager.h"
 #include "tilesetmanager.h"
+#include "tilemetainfomgr.h"
 #include "undoredo.h"
 #include "vehiclemeshpreview.h"
 #include "world.h"
@@ -73,12 +75,14 @@
 #include <QMimeData>
 #include <QOpenGLFunctions>
 #include <QOpenGLWidget>
+#include <QPaintEngine>
 #include <QQueue>
 #include <QSaveFile>
 #include <QScopedValueRollback>
 #include <QScopeGuard>
 #include <QSettings>
 #include <QStyleOptionGraphicsItem>
+#include <QTemporaryDir>
 #include <QUrl>
 #include <QUndoStack>
 
@@ -766,35 +770,6 @@ void TilesetTextures::tilesetChanged(Tileset *tileset)
     for (TilesetTexturesPerContext *contextTextures : std::as_const(mContextToTextures)) {
         contextTextures->mChanged[tileset->name()] = tileset->changeCount();
     }
-#if 0
-    QOpenGLContext *current = QOpenGLContext::currentContext();
-
-    if (mMissing.contains(tileset->name())) {
-        mMissing.remove(tileset->name());
-        get(tileset->name());
-        return;
-    }
-
-    for (TilesetTexturesPerContext *contextTextures : std::as_const(mContextToTextures)) {
-        if (contextTextures->mTextureMap.contains(tileset->name()) == false) {
-            continue;
-        }
-        TilesetTexture *texture = contextTextures->mTextureMap[tileset->name()];
-        qDebug() << "TilesetTextures::tilesetChanged" << tileset->name() << contextTextures->mContext;
-        if (contextTextures->mContext->makeCurrent(contextTextures->mContext->surface())) {
-            texture->mTexture->destroy();
-            texture->mTexture->create();
-            texture->mTexture->setData(tileset->image(), QOpenGLTexture::DontGenerateMipMaps);
-            texture->mChanged = false;
-        } else {
-            texture->mChanged = true;
-        }
-    }
-
-    if (current != nullptr) {
-        current->makeCurrent(current->surface());
-    }
-#endif
 }
 
 static TilesetTextures TILESET_TEXTURES;
@@ -972,12 +947,6 @@ void LayerGroupVBO::paint2(QPainter *painter, Tiled::MapRenderer *renderer,
 
     if (mCreated == false) {
         mCreated = true;
-#if 0
-        GLint maxVertices, maxIndices;
-        glGetIntegerv(GL_MAX_ELEMENTS_INDICES, &maxIndices);
-        glGetIntegerv(GL_MAX_ELEMENTS_VERTICES, &maxVertices);
-        qDebug() << "GL_MAX_ELEMENTS_INDICES" << maxIndices << "GL_MAX_ELEMENTS_VERTICES" << maxVertices;
-#endif
     }
 
     for (VBOTiles *vboTiles : qAsConst(exposedTiles)) {
@@ -1099,7 +1068,8 @@ void LayerGroupVBO::paint2(QPainter *painter, Tiled::MapRenderer *renderer,
     glDisable(GL_DEPTH_TEST);
 
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,
+                        GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
     GLuint textureID = 0;
 
@@ -1373,12 +1343,10 @@ void LayerGroupVBO::gatherTiles(Tiled::MapRenderer *renderer, const QRectF& expo
     rasterize.scanTriangle({TR.x(), TR.y()}, {BR.x(), BR.y()}, {BL.x(), BL.y()}, -VBO_PER_CELL, VBO_PER_CELL * 2);
 
     auto* layerGroup = mLayerGroup;
-#if 1
     CompositeLayerGroup *rootGroup = mLayerGroup->owner()->root()->tileLayersForLevel(mLayerGroup->level());
     if (rootGroup != nullptr) {
         layerGroup = rootGroup; // so we get overlapping buildings
     }
-#endif
 
     const int tileWidth = DISPLAY_TILE_WIDTH;
     const int tileHeight = DISPLAY_TILE_HEIGHT;
@@ -1690,10 +1658,6 @@ void LayerGroupVBO::getSquaresInRect(Tiled::MapRenderer *renderer, const QRectF 
         QPoint columnItr = rowItr;
 
         for (int x = startPos.x(); x < rect.right(); x += tileWidth) {
-#if 0
-            if (columnItr.x() % 10 != 0 || columnItr.y() % 10 != 0)
-                continue;
-#endif
             if (mMapCompositeVBO->mBounds.contains(columnItr)) {
                 // TODO: change x,y,x2 spans
                 out += columnItr;
@@ -1753,12 +1717,6 @@ MapCompositeVBO::~MapCompositeVBO()
 
 LayerGroupVBO *MapCompositeVBO::getLayerVBO(CompositeLayerGroupItem *item)
 {
-#if 0
-    if (mMapComposite == nullptr) {
-        mMapComposite = mScene->mapComposite();
-        mUsedTilesets = mMapComposite->usedTilesets();
-    }
-#endif
     LayerGroupVBO* layerVBO = mLayerVBOs[item->layerGroup()->level() + WORLD_GROUND_LEVEL];
     if (layerVBO == nullptr) {
         layerVBO = new LayerGroupVBO();
@@ -1814,15 +1772,9 @@ void CompositeLayerGroupItem::paint(QPainter *p, const QStyleOptionGraphicsItem 
 
     if (mLayerGroup->needsSynch())
         return; // needed, see MapComposite::mapAboutToChange
-#if 0
-    QImage image = createZoomedOutImage(mRenderer);
-    if (image.isNull() == false) {
-        p->drawImage(mLayerGroup->boundingRect(mRenderer).toAlignedRect(), image);
-        return;
-    }
-#endif
 
-    if (Preferences::instance()->useOpenGL()) {
+    if (qobject_cast<QOpenGLWidget *>(view) && p->paintEngine()
+            && p->paintEngine()->type() == QPaintEngine::OpenGL2) {
         QRect exposed = option->exposedRect.toAlignedRect();
         // Flush area covered by whole VBOTiles
         const int level = mLayerGroup->level();
@@ -1893,12 +1845,6 @@ void CompositeLayerGroupItem::paint(QPainter *p, const QStyleOptionGraphicsItem 
 
 #ifdef _DEBUG
     p->drawRect(mBoundingRect);
-#endif
-#if 0
-    Tileset *tileset = TILESET_TEXTURES.findTileset(QStringLiteral("blends_street_01"), Tiled::Internal::TilesetManager::instance()->tilesets());
-    if (tileset != nullptr) {
-        p->drawImage(QRect(exposed.topLeft(), tileset->image().size()), tileset->image());
-}
 #endif
 }
 
@@ -2442,15 +2388,7 @@ QVariant ResizeHandle::itemChange(GraphicsItemChange change,
             tileCoords.setY(qMax(tileCoords.y(), qreal(MIN_OBJECT_SIZE)));
             tileCoords += objectPos;
 
-#if 1
             tileCoords = tileCoords.toPoint();
-#else
-            bool snapToGrid = Preferences::instance()->snapToGrid();
-            if (QApplication::keyboardModifiers() & Qt::ControlModifier)
-                snapToGrid = !snapToGrid;
-            if (snapToGrid)
-                tileCoords = tileCoords.toPoint();
-#endif
 
             return mScene->renderer()->tileToPixelCoords(tileCoords, level) - itemPos;
         }
@@ -2524,1095 +2462,6 @@ QRectF ObjectItem::boundingRect() const
     return mBoundingRect;
 }
 
-#if 0
-namespace {
-
-class OutlineCell {
-public:
-    OutlineCell(int x, int y)
-        : x(x)
-        , y(y)
-    {
-    }
-
-    void reset()
-    {
-        w = n = e = s = false;
-        tw = tn = te = ts = false;
-        start = false;
-    }
-
-    int x = -1, y = -1;
-    bool w = false, n = false, e = false, s = false; // true if no cell in this direction
-    bool tw = false, tn = false, te = false, ts = false; // true if traced the given edge
-    bool inner = false;
-    bool start = false;
-};
-
-typedef std::shared_ptr<OutlineCell> OutlineCellPtr;
-
-class OutlineGrid {
-public:
-    std::vector<OutlineCellPtr> elements;
-    int W, H;
-    bool EXTEND = true;
-
-    void setSize(int w, int h) {
-        elements.resize(size_t(w * h));
-        W = w;
-        H = h;
-    }
-
-    void setInner(int x, int y) {
-        OutlineCellPtr f1 = get(x, y);
-        if (f1) {
-            f1->inner = true;
-        }
-    }
-
-    bool isInner(int x, int y) {
-        OutlineCellPtr f1 = get(x, y);
-        return f1 && (f1->start || f1->inner);
-    }
-
-    bool canTrace_W(int x, int y) {
-        OutlineCellPtr cell = get(x, y);
-        return cell && cell->inner && cell->w && !cell->tw;
-    }
-
-    bool canTrace_N(int x, int y) {
-        OutlineCellPtr cell = get(x, y);
-        return cell && cell->inner && cell->n && !cell->tn;
-    }
-
-    bool canTrace_E(int x, int y) {
-        OutlineCellPtr cell = get(x, y);
-        return cell && cell->inner && cell->e && !cell->te;
-    }
-
-    bool canTrace_S(int x, int y) {
-        OutlineCellPtr cell = get(x, y);
-        return cell && cell->inner && cell->s && !cell->ts;
-    }
-
-    OutlineCellPtr& elementAt(int x, int y) {
-        return elements[size_t(x + y * W)];
-    }
-
-    OutlineCellPtr get(int x, int y) {
-        if (x < 0 || x >= W)
-            return nullptr;
-        if (y < 0 || y >= H)
-            return nullptr;
-        if (!elementAt(x, y))
-            elementAt(x, y) = std::make_shared<OutlineCell>(x, y);
-        return elementAt(x, y);
-    }
-
-    void trace_W(OutlineCell& cell, QPolygon& nodes, int extend) {
-        const int x = cell.x, y = cell.y;
-        if (EXTEND && extend != -1) {
-            nodes[extend] = { x, y };
-        } else {
-            nodes += { x, y };
-        }
-        cell.tw = true; // done
-
-        // turn w, continue n, turn e
-        if (canTrace_S(x - 1, y - 1)) {
-            trace_S(*get(x - 1, y - 1), nodes, -1);
-        } else if (canTrace_W(x, y - 1)) {
-            trace_W(*get(x, y - 1), nodes, nodes.size()-1);
-        } else if (canTrace_N(x, y)) {
-            trace_N(cell, nodes, -1);
-        }
-    }
-
-    void trace_N(OutlineCell& cell, QPolygon& nodes, int extend) {
-        const int x = cell.x, y = cell.y;
-        if (EXTEND && extend != -1) {
-            nodes[extend] = { x + 1, y };
-        } else {
-            nodes += { x + 1, y };
-        }
-        cell.tn = true; // done
-
-        // turn n, continue e, turn s
-        if (canTrace_W(x + 1, y - 1)) {
-            trace_W(*get(x + 1, y - 1), nodes, -1);
-        } else if (canTrace_N(x + 1, y)) {
-            trace_N(*get(x + 1, y), nodes, nodes.size()-1);
-        } else if (canTrace_E(x, y)) {
-            trace_E(cell, nodes, -1);
-        }
-    }
-
-    void trace_E(OutlineCell& cell, QPolygon& nodes, int extend) {
-        const int x = cell.x, y = cell.y;
-        if (EXTEND && extend != -1) {
-            nodes[extend] = { x + 1, y + 1 };
-        } else {
-            nodes += { x + 1, y + 1 };
-        }
-        cell.te = true; // done
-
-        // turn e, continue s, turn w
-        if (canTrace_N(x + 1, y + 1)) {
-            trace_N(*get(x + 1, y + 1), nodes, -1);
-        } else if (canTrace_E(x, y + 1)) {
-            trace_E(*get(x, y + 1), nodes, nodes.size()-1);
-        } else if (canTrace_S(x, y)) {
-            trace_S(cell, nodes, -1);
-        }
-    }
-
-    void trace_S(OutlineCell& cell, QPolygon& nodes, int extend) {
-        const int x = cell.x, y = cell.y;
-        if (EXTEND && extend != -1) {
-            nodes[extend] = { x, y + 1 };
-        } else {
-            nodes += { x, y + 1 };
-        }
-        cell.ts = true; // done
-
-        // turn s, continue w, turn n
-        if (canTrace_E(x - 1, y + 1)) {
-            trace_E(*get(x - 1, y + 1), nodes, -1);
-        } else if (canTrace_S(x - 1, y)) {
-            trace_S(*get(x - 1, y), nodes, nodes.size()-1);
-        } else if (canTrace_W(x, y)) {
-            trace_W(cell, nodes, -1);
-        }
-    }
-
-    QPolygon trace(OutlineCell& cell) {
-        const int x = cell.x, y = cell.y;
-        QPolygon nodes;
-        QPoint node1(x, y);
-        nodes += node1;
-        cell.start = true;
-        trace_N(cell, nodes, -1);
-        if (nodes.back() == nodes.first())
-            nodes.pop_back();
-        return nodes;
-    }
-
-    void trace(bool extend, std::function<void(QPolygon&)> callback) {
-        EXTEND = extend;
-        for (int y = 0; y < H; y++) {
-            for (int x = 0; x < W; x++) {
-                OutlineCell& cell = *get(x, y);
-                cell.reset();
-                if (!cell.inner)
-                    continue;
-                if (!isInner(x - 1, y))
-                    cell.w = true;
-                if (!isInner(x, y - 1))
-                    cell.n = true;
-                if (!isInner(x + 1, y))
-                    cell.e = true;
-                if (!isInner(x, y + 1))
-                    cell.s = true;
-            }
-        }
-
-        for (int y = 0; y < H; y++) {
-            for (int x = 0; x < W; x++) {
-                OutlineCellPtr cell = get(x, y);
-                // every poly must have a nw corner.
-                // this should only happen once.
-                if (cell && cell->n && cell->w && cell->inner && !(cell->tw | cell->tn | cell->te | cell->ts)) {
-                    QPolygon nodes = trace(*cell);
-                    if (nodes.isEmpty())
-                        continue;
-                    callback(nodes);
-                }
-            }
-        }
-    }
-};
-
-namespace networkx
-{
-
-class NodeAttributes : public QMap<QString,QString>
-{
-public:
-    void update(NodeAttributes attrs)
-    {
-
-    }
-};
-
-template <typename T>
-class Node
-{
-public:
-    Node()
-        : _value()
-    {
-    }
-
-    Node(T value)
-        : _value(value)
-    {
-
-    }
-
-    bool operator==(const Node& rhs) const
-    {
-        return _value == rhs._value;
-    }
-
-    bool operator!=(const Node& rhs) const
-    {
-        return _value != rhs._value;
-    }
-
-#if 1 // for QHash
-#endif
-#if 0 // for QMap
-    bool operator<(const Node& rhs) const
-    {
-        return _value < rhs._value;
-    }
-#endif
-
-    T _value;
-};
-
-template <typename T>
-uint qHash(const Node<T> &key)
-{
-    return ::qHash(key._value);
-}
-
-template <typename T>
-class Edge
-{
-public:
-    bool operator==(const Edge& rhs) const
-    {
-        return (node1 == rhs.node1) && (node2 == rhs.node2);
-    }
-
-    Node<T> node1;
-    Node<T> node2;
-};
-
-template <typename T>
-class Graph;
-
-template <typename T>
-class EdgeView
-{
-public:
-    EdgeView(const Graph<T>& graph)
-        : _graph(graph)
-    {
-
-    }
-
-    bool contains(const Edge<T>& edge) const
-    {
-
-    }
-
-    const Graph<T>& _graph;
-};
-
-
-template <typename T>
-class Graph
-{
-public:
-    void add_node(T node_for_adding, const NodeAttributes& attrs)
-    {
-        if (_node.contains(node_for_adding)) {
-            _node[node_for_adding].update(attrs);
-        } else {
-            _adj[node_for_adding].clear();
-            _node[node_for_adding].update(attrs);
-        }
-    }
-
-    void add_edge(const Node<T> &u, const Node<T> &v)
-    {
-        NodeAttributes attrs;
-        if (_node.contains(u) == false) {
-            _adj[u].clear();
-            _node[u].update(attrs);
-        }
-        if (_node.contains(v) == false) {
-            _adj[v].clear();
-            _node[v].update(attrs);
-        }
-#if 1
-        if (_adj[u].contains(v) == false)
-             _adj[u] += v;
-         if (_adj[v].contains(u) == false)
-             _adj[v] += u;
-#else
-        datadict = self._adj[u].get(v, self.edge_attr_dict_factory())
-        datadict.update(attr)
-        self._adj[u][v] = datadict
-        self._adj[v][u] = datadict
-#endif
-    }
-
-    void add_edges_from(const QList<Edge<T>>& ebunch_to_add)
-    {
-        for (const Edge<T> &e : ebunch_to_add) {
-            add_edge(e.node1, e.node2);
-        }
-    }
-
-    void remove_edge(const Node<T>& u, const Node<T>& v)
-    {
-        if (_adj.contains(u) == false) {
-            throw std::exception("The edge {u}-{v} is not in the graph");
-        }
-        _adj[u].removeOne(v);
-        if (u != v) { // self-loop needs only one entry removed
-            _adj[v].removeOne(u);
-        }
-    }
-
-    QVector<Edge<T>> edges() const
-    {
-        // FIXME: should this return u,v and v,u ???
-        QVector<Edge<T>> result;
-        for (const auto& node : _node.keys()) {
-            for (const auto& adj : _adj[node]) {
-                result += { node, adj };
-            }
-        }
-        return result;
-    }
-
-    QList<Node<T>> nodes() const
-    {
-        return _node.keys();
-    }
-
-    QHash<Node<T>,int> degree() const
-    {
-        QHash<Node<T>,int> result;
-        for (auto& n : _adj.keys()) {
-            result[n] = _adj[n].size();
-        }
-        return result;
-    }
-
-    QList<Node<T>> neighbours(const Node<T>& n) const
-    {
-        return _adj[n];
-    }
-
-    int len() const
-    {
-        return _node.size();
-    }
-
-    bool is_directed() const
-    {
-        return false;
-    }
-
-    QHash<Node<T>, QList<Node<T>>> _adj;
-    QHash<Node<T>, NodeAttributes> _node; // unordered for arbitrary_element()
-};
-
-template <typename T>
-Node<T> arbitrary_element(const Graph<T> &G)
-{
-    return G._node.cbegin().key();
-}
-
-template <typename T>
-QSet<Node<T>> _plain_bfs(const Graph<T> &G, const Node<T> &source)
-{
-    const auto& G_adj = G._adj;
-    QSet<Node<T>> seen;
-    QSet<Node<T>> nextlevel;
-    nextlevel.insert(source);
-    while (nextlevel.isEmpty() == false) {
-        auto thislevel = nextlevel;
-        nextlevel.clear();
-        for (const auto &v : thislevel) {
-            if (seen.contains(v) == false) {
-                seen.insert(v);
-                for (const auto &n : G_adj[v]) {
-                    nextlevel += n;
-                }
-            }
-        }
-    }
-    return seen;
-}
-
-template <typename T>
-bool is_connected(const Graph<T> &G)
-{
-    if (G.len() == 0) {
-        throw std::exception("Connectivity is undefined for the null graph.");
-    }
-    return _plain_bfs(G, arbitrary_element(G)).size() == G.len();
-}
-
-template <typename T>
-bool is_weakly_connected(const Graph<T> &G)
-{
-    throw std::exception("unimplemented");
-    return false;
-}
-
-template <typename T>
-QList<Node<T>> isolates(const Graph<T> &G) // should return an iterator
-{
-    QList<Node<T>> result;
-    QHash<Node<T>,int> degree = G.degree();
-    for (Node<T> n : degree.keys()) {
-        if (degree[n] == 0) {
-            result += n;
-        }
-    }
-    return result;
-}
-
-namespace bipartite
-{
-
-template<typename T>
-QHash<Node<T>, bool> color(const Graph<T> &G)
-{
-    if (G.is_directed()) {
-        throw std::exception("unimplemented");
-    }
-    QHash<Node<T>, bool> _color;
-    for (const auto &n : G.nodes()) { // handle disconnected graphs
-        if (_color.contains(n) || G.neighbours(n).isEmpty()) // skip isolates
-            continue;
-        QVector<Node<T>> queue;
-        queue += n;
-        _color[n] = true;
-        while (queue.isEmpty() == false) {
-            auto v = queue.back();
-            queue.pop_back();
-            bool c = !_color[v]; // opposite color of node v
-            for (const auto& w : G.neighbours(v)) {
-                if (_color.contains(w)) {
-                    if (_color[w] == _color[v]) {
-                        throw std::exception("Graph is not bipartite.");
-                    }
-                } else {
-                    _color[w] = c;
-                    queue += w;
-                }
-            }
-        }
-    }
-    // color isolates with 0
-    for (auto& n : isolates(G)) {
-        _color[n] = false;
-    }
-    return _color;
-}
-
-template<typename T>
-bool is_bipartite(const Graph<T>& G)
-{
-    try {
-        color(G);
-        return true;
-    }  catch (std::exception e) {
-        return false;
-    }
-}
-
-template<typename T>
-void sets(const Graph<T>& G, const QSet<Node<T>> &top_nodes, QSet<Node<T>> &X, QSet<Node<T>> &Y)
-{
-    std::function<bool(const Graph<T>&)> is_connected1;
-    if (G.is_directed()) {
-        is_connected1 = networkx::is_weakly_connected<T>;
-    } else {
-        is_connected1 = networkx::is_connected<T>;
-    }
-
-    if (top_nodes.isEmpty() == false) {
-        X.clear();
-        X = top_nodes;
-        const QList<Node<T>> nodes = G.nodes();
-        Y = QSet<Node<T>>(nodes.constBegin(), nodes.constEnd()) - X;
-    } else {
-#if 0 //
-        if (is_connected1(G) == false) {
-            QSet<Node<int>> plain = _plain_bfs(G, arbitrary_element(G));
-            qDebug() << "is_connected()==false" << "_plain_bfs.size()=" << plain.size() << "len=" << G.len();
-            for (auto& n : plain) qDebug() << "plain" << n._value << "#adj=" << G.neighbours(n).size();
-            for (auto& n : G.nodes()) qDebug() << "G.nodes" << n._value << "#adj=" << G.neighbours(n).size();
-            throw std::exception("Disconnected graph: Ambiguous solution for bipartite sets.");
-        }
-#endif
-        auto c = color(G);
-        for (auto& node : c.keys()) {
-            if (c[node])
-                X.insert(node);
-            else
-                Y.insert(node);
-        }
-    }
-}
-
-template <typename T>
-QHash<Node<T>, Node<T>> maximum_matching(Graph<T>& G, const QSet<Node<T>> &top_nodes, const Node<T> &None)
-{
-    QSet<Node<T>> left, right;
-    sets(G, top_nodes, left, right);
-
-    QHash<Node<T>, Node<T>> leftmatches, rightmatches;
-    for (const auto& n : left) {
-        leftmatches[n] = None;
-    }
-    for (const auto& n : right) {
-        rightmatches[n] = None;
-    }
-
-    QHash<Node<T>, int> distances;
-    QVector<Node<T>> queue;
-
-    const int inf = std::numeric_limits<int>::max(); // infinity();
-
-    auto breadth_first_search = [&]() -> bool {
-        for (const auto& v : left) {
-            if (leftmatches[v] == None) {
-                distances[v] = 0;
-                queue.append(v);
-            } else {
-                distances[v] = inf;
-            }
-        }
-        distances[None] = inf;
-        while (queue.size() > 0) {
-            auto v = queue.front();
-            queue.pop_front();
-            if (distances[v] < distances[None]) {
-                for (auto& u : G.neighbours(v)) {
-                    if (distances[rightmatches[u]] == inf) {
-                        distances[rightmatches[u]] = distances[v] + 1;
-                        queue.append(rightmatches[u]);
-                    }
-                }
-            }
-        }
-        return distances[None] != inf;
-    };
-
-    std::function<bool(const Node<T>&)> depth_first_search;
-    depth_first_search = [&](const Node<T>& v) -> bool {
-        if (v == None) {
-            return true;
-        }
-        for (auto& u : G.neighbours(v)) {
-            if (distances[rightmatches[u]] == distances[v] + 1) {
-                if (depth_first_search(rightmatches[u])) {
-                    rightmatches[u] = v;
-                    leftmatches[v] = u;
-                    return true;
-                }
-            }
-        }
-        distances[v] = inf;
-        return false;
-    };
-
-    // Implementation note: this counter is incremented as pairs are matched but
-    // it is currently not used elsewhere in the computation.
-    int num_matched_pairs = 0;
-    while (breadth_first_search()) {
-        for (const auto& v : left) {
-            if (leftmatches[v] == None) {
-                if (depth_first_search(v)) {
-                    num_matched_pairs += 1;
-                }
-            }
-        }
-    }
-
-    // Strip the entries matched to `None`.
-
-    // At this point, the left matches and the right matches are inverses of one
-    // another. In other words,
-    //
-    //     leftmatches == {v, k for k, v in rightmatches.items()}
-    //
-    // Finally, we combine both the left matches and right matches.
-    QHash<Node<T>, Node<T>> result;
-    for (auto& n : leftmatches.keys()) {
-        if (leftmatches[n] == None)
-            continue;
-        result[n] = leftmatches[n];
-    }
-    for (auto& n : rightmatches.keys()) {
-        if (rightmatches[n] == None)
-            continue;
-        result[n] = rightmatches[n];
-    }
-    return result;
-}
-
-// namespace bipartite
-}
-
-// namespace networkx
-}
-
-// https://github.com/mittalgovind/Polygon-Partition
-class PolygonPartition
-{
-public:
-    enum class VertexType
-    {
-        Collinear,
-        Convex,
-        Concave
-    };
-
-    class Vertex
-    {
-    public:
-        int x;
-        int y;
-        VertexType type;
-    };
-
-    class Chord
-    {
-    public:
-        int v1;
-        int v2;
-    };
-
-//    QVector<VertexType> vertex_type;
-    QVector<int> x;
-    QVector<int> y;
-    QVector<int> collinear_vertices;
-    QVector<int> concave_vertices;
-    QVector<Chord> horizontal_chords;
-    QVector<Chord> vertical_chords;
-
-    void compute_maximum_partition(const QVector<Vertex> &p)
-    {
-        x.clear();
-        y.clear();
-        collinear_vertices.clear();
-        concave_vertices.clear();
-        horizontal_chords.clear();
-        vertical_chords.clear();
-
-        for (int i = 0; i < p.size(); i++) {
-            x += p[i].x;
-            y += p[i].y;
-            if (p[i].type == VertexType::Collinear) {
-                collinear_vertices += i;
-            }
-            if (p[i].type == VertexType::Concave) {
-                concave_vertices += i;
-            }
-        }
-
-        for (int i = 0; i < concave_vertices.size(); i++) {
-            for (int j = i+1; j < concave_vertices.size(); j++) {
-                if (concave_vertices[j] != concave_vertices[i] + 1) {
-                    if (y[concave_vertices[i]] == y[concave_vertices[j]]) {
-                        QVector<int> middles;
-                        for (int k = 0; k < x.size(); k++) {
-                            if ((y[concave_vertices[i]] == y[k]) &&
-                                    ((x[concave_vertices[i]] < x[k] && x[concave_vertices[j]] > x[k]) ||
-                                     (x[concave_vertices[i]] > x[k] && x[concave_vertices[j]] < x[k]))) {
-                                middles.append(k);
-                            }
-                        }
-                        if (middles.isEmpty()) {
-                            horizontal_chords.append({ concave_vertices[i], concave_vertices[j] });
-                        }
-                    }
-                    if (x[concave_vertices[i]] == x[concave_vertices[j]]) {
-                        QVector<int> middles;
-                        for (int k = 0; k < x.size(); k++) {
-                            if ((x[concave_vertices[i]] == x[k]) &&
-                                    ((y[concave_vertices[i]] < y[k] && y[concave_vertices[j]] > y[k]) ||
-                                     (y[concave_vertices[i]] > y[k] && y[concave_vertices[j]] < y[k]))) {
-                                middles.append(k);
-                            }
-                        }
-                        if (middles.isEmpty()) {
-                            vertical_chords.append({concave_vertices[i],concave_vertices[j]});
-                        }
-                    }
-                }
-            }
-        }
-
-        for (int i = 0; i < collinear_vertices.size(); i++) {
-            for (int j = 0; j < concave_vertices.size(); j++) {
-                if (y[collinear_vertices[i]] == y[concave_vertices[j]]) {
-                    QVector<int> middles;
-                    if (collinear_vertices[i] < concave_vertices[j]) {
-                        for (int k  = 0; k < x.size(); k++) {
-                            if ((y[k] == y[collinear_vertices[i]]) &&
-                                    ((x[k] < x[concave_vertices[j]] && x[k] > x[collinear_vertices[i]]) ||
-                                     (x[k] > x[concave_vertices[j]] && x[k] < x[collinear_vertices[i]]))) {
-                                middles.append(k);
-                            }
-                        }
-                        if (collinear_vertices[i]+1 == concave_vertices[j]) {
-                            middles.append(0);
-                        }
-                    } else {
-                        for (int k  = 0; k < x.size(); k++) {
-                            if ((y[k] == y[collinear_vertices[i]]) &&
-                                    ((x[k] > x[concave_vertices[j]] && x[k] < x[collinear_vertices[i]]) ||
-                                     (x[k] < x[concave_vertices[j]] && x[k] > x[collinear_vertices[i]]))) {
-                                middles.append(k);
-                            }
-                        }
-                        if (collinear_vertices[i] == concave_vertices[j]+1) {
-                            middles.append(0);
-                        }
-                    }
-                    if (middles.isEmpty()) {
-                        horizontal_chords.append({collinear_vertices[i],concave_vertices[j]});
-                    }
-                }
-                if (x[collinear_vertices[i]] == x[concave_vertices[j]]) {
-                    QVector<int> middles;
-                    if (collinear_vertices[i] < concave_vertices[j]) {
-                        for (int k  = 0; k < x.size(); k++) {
-                            if ((x[k] == x[collinear_vertices[i]]) &&
-                                    ((y[k] < y[concave_vertices[j]] && y[k] > y[collinear_vertices[i]]) ||
-                                     (y[k] > y[concave_vertices[j]] && y[k] < y[collinear_vertices[i]]))) {
-                                middles.append(k);
-                            }
-                        }
-                        if (collinear_vertices[i]+1 == concave_vertices[j]) {
-                            middles.append(0);
-                        }
-                    } else {
-                        for (int k  = 0; k < x.size(); k++) {
-                            if ((x[k] == x[collinear_vertices[i]]) &&
-                                    ((y[k] > y[concave_vertices[j]] && y[k] < y[collinear_vertices[i]]) ||
-                                     (y[k] < y[concave_vertices[j]] && y[k] > y[collinear_vertices[i]]))) {
-                                middles.append(k);
-                            }
-                        }
-                        if (collinear_vertices[i] == concave_vertices[j]+1) {
-                            middles.append(0);
-                        }
-                    }
-                    if (middles.isEmpty()) {
-                        vertical_chords.append({collinear_vertices[i],concave_vertices[j]});
-                    }
-                }
-            }
-        }
-    }
-
-    QVector<QPoint> min1, min2;
-
-    void compute_minimum_partition(const QVector<Vertex> &p)
-    {
-        x.clear();
-        y.clear();
-        collinear_vertices.clear();
-        concave_vertices.clear();
-        horizontal_chords.clear();
-        vertical_chords.clear();
-
-        // and the origin is always going to be a convex vertex
-        if (p[0].type != VertexType::Convex)
-            throw std::exception("origin should be convex");
-
-        for (int i = 0; i < p.size(); i++) {
-            x += p[i].x;
-            y += p[i].y;
-            if (p[i].type == VertexType::Collinear) {
-                collinear_vertices += i;
-            }
-            if (p[i].type == VertexType::Concave) {
-                concave_vertices += i;
-            }
-        }
-
-        // middles is used because, there are cases when there is a chord between vertices
-        // and they intersect with external chords, hence if there is any vertex in between
-        // two vertices then skip that chord.
-        for (int i = 0; i < concave_vertices.size(); i++) {
-            for (int j = i+1; j < concave_vertices.size(); j++) {
-                if (concave_vertices[j] != concave_vertices[i] + 1) {
-                    if (y[concave_vertices[i]] == y[concave_vertices[j]]) {
-                        QVector<int> middles;
-                        for (int k = 0; k < x.size(); k++) {
-                            if ((y[concave_vertices[i]] == y[k]) &&
-                                    ((x[concave_vertices[i]] < x[k] && x[concave_vertices[j]] > x[k]) ||
-                                     (x[concave_vertices[i]] > x[k] && x[concave_vertices[j]] < x[k]))) {
-                                middles.append(k);
-                            }
-                        }
-                        if (middles.isEmpty()) {
-                            horizontal_chords.append({ concave_vertices[i], concave_vertices[j] });
-                        }
-                    }
-                    if (x[concave_vertices[i]] == x[concave_vertices[j]]) {
-                        QVector<int> middles;
-                        for (int k = 0; k < x.size(); k++) {
-                            if ((x[concave_vertices[i]] == x[k]) &&
-                                    ((y[concave_vertices[i]] < y[k] && y[concave_vertices[j]] > y[k]) ||
-                                     (y[concave_vertices[i]] > y[k] && y[concave_vertices[j]] < y[k]))) {
-                                middles.append(k);
-                            }
-                        }
-                        if (middles.isEmpty()) {
-                            vertical_chords.append({concave_vertices[i],concave_vertices[j]});
-                        }
-                    }
-                }
-            }
-        }
-
-        // Creating a bipartite graph from the set of chords
-        networkx::Graph<int> G;
-        for (int i = 0; i < horizontal_chords.size(); i++) {
-            const Chord& h = horizontal_chords[i];
-            int y1 = y[h.v1];
-            int x1 = std::min(x[h.v1], x[h.v2]);
-            int x2 = std::max(x[h.v1], x[h.v2]);
-            networkx::NodeAttributes attrs1;
-            attrs1.insert(QStringLiteral("bipartite"), QStringLiteral("true"));
-            G.add_node(i, attrs1);
-            for (int j = 0; j < vertical_chords.size(); j++) {
-                const Chord &v = vertical_chords[j];
-                int x3 = x[v.v1];
-                int y3 = std::min(y[v.v1], y[v.v2]);
-                int y4 = std::max(y[v.v1], y[v.v2]);
-                networkx::NodeAttributes attrs2;
-                attrs2.insert(QStringLiteral("bipartite"), QStringLiteral("false"));
-                G.add_node(j + horizontal_chords.size(), attrs2);
-                if (x1 <= x3 && x3 <= x2 && y3 <= y1 && y1 <= y4) {
-                    G.add_edge(i, j + horizontal_chords.size());
-                }
-            }
-        }
-
-        if (horizontal_chords.isEmpty()) {
-            for (int j = 0; j < vertical_chords.size(); j++) {
-                networkx::NodeAttributes attrs2;
-                attrs2.insert(QStringLiteral("bipartite"), QStringLiteral("false"));
-                G.add_node(j, attrs2);
-            }
-        }
-
-        if (networkx::bipartite::is_bipartite(G) == false)
-            return;
-
-        // There could be no horizontal and no vertical chords
-        if (G.len() == 0) {
-//            return; // FIXME: this should be allowed I think
-        }
-
-        // finding the maximum matching of the bipartite graph, G.
-        networkx::Node<int> None(-1);
-        auto maximum_matching1 = networkx::bipartite::maximum_matching(G, QSet<networkx::Node<int>>(), None);
-        QList<networkx::Edge<int>> maximum_matching_list;
-        auto it = maximum_matching1.constBegin();
-        for (; it != maximum_matching1.constEnd(); it++) {
-            maximum_matching_list += { it.key(), it.value() };
-        }
-        networkx::Graph<int> M;
-        M.add_edges_from(maximum_matching_list);
-        auto maximum_matching = M.edges();
-
-        // breaking up into two sets
-        QSet<networkx::Node<int>> H, V;
-        networkx::bipartite::sets(G, QSet<networkx::Node<int>>(), H, V);
-        QVector<networkx::Node<int>> free_vertices;
-        for (const auto& u : H) {
-            QVector<networkx::Node<int>> temp;
-            for (const auto &v : V) {
-                if (maximum_matching.contains({u,v}) || maximum_matching.contains({v,u})) {
-                    temp += v;
-                }
-            }
-            if (temp.isEmpty()) {
-                free_vertices += u;
-            }
-        }
-        for (auto &u : V) {
-            QVector<networkx::Node<int>> temp;
-            for (auto& v : H) {
-                if (maximum_matching.contains({u,v}) || maximum_matching.contains({v,u})) {
-                    temp += v;
-                }
-            }
-            if (temp.isEmpty()) {
-                free_vertices += u;
-            }
-        }
-
-        // finding the maximum independent set
-        QList<networkx::Node<int>> max_independent;
-        while (free_vertices.size() != 0 || maximum_matching.size() != 0) {
-            networkx::Node<int> u(-1);
-            if (free_vertices.size() != 0) {
-                u = free_vertices.back();
-                free_vertices.pop_back();
-                max_independent += u;
-            } else {
-                networkx::Edge<int> uv = maximum_matching.back();
-                maximum_matching.pop_back();
-                u = uv.node1;
-                auto v = uv.node2;
-                G.remove_edge(u, v);
-                max_independent += u;
-            }
-            for (const networkx::Node<int> &v : G.neighbours(u)) {
-                G.remove_edge(u, v);
-                for (const networkx::Node<int> &h : G.nodes()) {
-                    if (maximum_matching.contains({v,h})) {
-                        maximum_matching.removeOne({v,h});
-                        free_vertices += h;
-                    }
-                    if (maximum_matching.contains({h,v})) {
-                        maximum_matching.removeOne({h,v});
-                        free_vertices += h;
-                    }
-                }
-            }
-        }
-
-        // drawing the partitioned polygon
-        QList<Chord> ind_chords;
-        for (const auto& i : max_independent) {
-            if (i._value >= horizontal_chords.size()) {
-                ind_chords += vertical_chords[i._value-horizontal_chords.size()];
-            } else {
-                ind_chords += horizontal_chords[i._value];
-            }
-        }
-        QVector<int> unmatched_concave_vertices = concave_vertices;
-        for (const auto& ij : ind_chords) {
-            auto& i = ij.v1;
-            auto& j = ij.v2;
-            if (unmatched_concave_vertices.contains(i))
-                unmatched_concave_vertices.removeOne(i);
-            if (unmatched_concave_vertices.contains(j))
-                unmatched_concave_vertices.removeOne(j);
-        }
-
-        const int inf = std::numeric_limits<int>::max(); // infinity();
-
-        QList<Chord> nearest_chord;
-        for (const auto& i : unmatched_concave_vertices) {
-            int dist = 0;
-            int nearest_distance = inf;
-            for (const auto& j : max_independent) {
-                if (j._value < horizontal_chords.size()) {
-                    Chord hc = horizontal_chords[j._value];
-                    auto temp1 = hc.v1, temp2 = hc.v2;
-                    if ((std::abs(y[i] - y[temp1]) < nearest_distance) &&
-                            (((x[i] <= x[temp1]) && (x[i] >= x[temp2])) || ((x[i] >= x[temp1]) && (x[i] <= x[temp2]))) &&
-                            (std::abs(temp1 - i) != 1) && (std::abs(temp2 - i) != 1)) {
-                        QVector<int> middles;
-                        for (int u = 0; u < x.size(); u++) {
-                            if ((x[i] == x[u]) && (((y[i] < y[u]) && (y[u] < y[temp1])) || ((y[temp1] < y[u]) && (y[u] < y[i])))) {
-                                middles.append(u);
-                            }
-                        }
-                        if (middles.isEmpty()) {
-                            nearest_distance = std::abs(y[i] - y[temp1]);
-                            dist = y[temp1] - y[i];
-                        }
-                    }
-                }
-            }
-
-            if (nearest_distance != inf) {
-                nearest_chord.append({i, dist});
-            } else {
-                for (int k : collinear_vertices) {
-                    if ((x[k] == x[i]) && (std::abs(y[k] - y[i]) < nearest_distance) && (std::abs(k-i) != 1)) {
-                        QVector<int> middles;
-                        for (int u = 0; u < x.size(); u++) {
-                            if ((x[i] == x[u]) && (((y[i] < y[u]) && (y[u] < y[k])) || ((y[k] < y[u]) && (y[u] < y[i])))) {
-                                middles.append(u);
-                            }
-                        }
-                        if (middles.isEmpty()) {
-                            nearest_distance = std::abs(y[i] - y[k]);
-                            dist = y[k] - y[i];
-                        }
-                    }
-                }
-                nearest_chord.append({i, dist});
-            }
-        }
-
-#if 0
-        for i,j in ind_chords:
-                ax.plot([x[i],x[j]],[y[i],y[j]],color='black')
-            for i,dist in nearest_chord:
-                ax.plot([x[i],x[i]],[y[i], y[i]+dist],color='black')
-#endif
-        for (int i = 0; i < ind_chords.size(); i++) {
-            auto &c = ind_chords[i];
-            min1 += {x[c.v1], y[c.v1]};
-            min1 += {x[c.v2], y[c.v2]};
-        }
-        for (int i = 0; i < nearest_chord.size(); i++) {
-            auto &c = nearest_chord[i];
-            min2 += {x[c.v1], y[c.v1]};
-            min2 += {x[c.v1], y[c.v1] + c.v2};
-        }
-    }
-};
-
-} // namespace
-
-// Copied from BuildingFloor::roomRegion()
-static QRegion cleanupRegion(QRegion region)
-{
-    // Clean up the region by merging vertically-adjacent rectangles of the
-    // same width.
-    QVector<QRect> rects = region.rects();
-    for (int i = 0; i < rects.size(); i++) {
-        QRect r = rects[i];
-        if (!r.isValid()) continue;
-        for (int j = 0; j < rects.size(); j++) {
-            if (i == j) continue;
-            QRect r2 = rects.at(j);
-            if (!r2.isValid()) continue;
-            if (r2.left() == r.left() && r2.right() == r.right()) {
-                if (r.bottom() + 1 == r2.top()) {
-                    r.setBottom(r2.bottom());
-                    rects[j] = QRect();
-                } else if (r.top() == r2.bottom() + 1) {
-                    r.setTop(r2.top());
-                    rects[j] = QRect();
-                }
-            }
-        }
-        rects[i] = r;
-    }
-
-    QRegion ret;
-    foreach (QRect r, rects) {
-        if (r.isValid())
-            ret += r;
-    }
-    return ret;
-}
-#endif
 
 #include "InGameMap/clipper.hpp"
 
@@ -3684,30 +2533,10 @@ void ObjectItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWid
             painter->setBrush(brush);
             screenPolygon.translate(0, -1);
             painter->drawPolyline(screenPolygon);
-#if 1
             int width = mObject->polylineWidth();
             if (width <= 0)
                 break;
             QPolygonF screenPolygon2;
-#endif
-#if 0
-            for (int i = 0; i < mPolygon.size() - 1; i++) {
-                QPointF& p1 = mPolygon[i];
-                QPointF& p2 = mPolygon[i + 1];
-                QVector2D v(p2 - p1);
-                v.normalize();
-                qreal xp = v.x() * qCos(qDegreesToRadians(90.0)) - v.y() * qSin(qDegreesToRadians(90.0));
-                qreal yp = v.x() * qSin(qDegreesToRadians(90.0)) + v.y() * qCos(qDegreesToRadians(90.0));
-                screenPolygon2.clear();
-                screenPolygon2 += mRenderer->tileToPixelCoords(p1.x() + mDragOffset.x() + xp * width/2, p1.y() + mDragOffset.y() + yp * width / 2);
-                screenPolygon2 += mRenderer->tileToPixelCoords(p2.x() + mDragOffset.x() + xp * width/2, p2.y() + mDragOffset.y() + yp * width / 2);
-                screenPolygon2 += mRenderer->tileToPixelCoords(p2.x() + mDragOffset.x() - xp * width/2, p2.y() + mDragOffset.y() - yp * width / 2);
-                screenPolygon2 += mRenderer->tileToPixelCoords(p1.x() + mDragOffset.x() - xp * width/2, p1.y() + mDragOffset.y() - yp * width / 2);
-                screenPolygon2 += screenPolygon2[0];
-                painter->drawPolyline(screenPolygon2);
-            }
-#endif
-#if 1
             if (mPolylineOutline.isEmpty())
                 break;
             for (const QPointF& op : qAsConst(mPolylineOutline)) {
@@ -3715,198 +2544,9 @@ void ObjectItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWid
             }
             screenPolygon2 += screenPolygon2[0];
             painter->drawPolyline(screenPolygon2);
-#endif
-#if 0
-            ClipperLib::ClipperOffset offset;
-            ClipperLib::Path path;
-            for (int i = 0; i < mPolygon.size(); i++) {
-                QPointF& p1 = mPolygon[i];
-                path << ClipperLib::IntPoint((p1.x() + mDragOffset.x()) * 100, (p1.y() + mDragOffset.y()) * 100);
-                if (/*i < mPolygon.size() - 1 && */(width % 2) != 0) {
-//                    QPointF& p1 = mPolygon[i];
-//                    QPointF& p2 = mPolygon[i + 1];
-
-//                    // Calculate a perpedicular vector to the line segment.
-//                    QVector2D v(p2 - p1);
-//                    v.normalize();
-//                    qreal xp = v.x() * qCos(qDegreesToRadians(90.0)) - v.y() * qSin(qDegreesToRadians(90.0));
-//                    qreal yp = v.x() * qSin(qDegreesToRadians(90.0)) + v.y() * qCos(qDegreesToRadians(90.0));
-                    ClipperLib::IntPoint cp = path[path.size()-1];
-                    path[path.size()-1] = ClipperLib::IntPoint(cp.X + 50, cp.Y + 50);
-                }
-            }
-            offset.AddPath(path, ClipperLib::JoinType::jtMiter, ClipperLib::EndType::etOpenButt);
-            ClipperLib::Paths paths;
-            offset.Execute(paths, width * 100 / 2.0);
-            for (const auto &path : paths) {
-                screenPolygon2.clear();
-                for (const auto& cp : path) {
-                    screenPolygon2 += mRenderer->tileToPixelCoords(cp.X / 100.0, cp.Y / 100.0);
-                }
-                screenPolygon2 += screenPolygon2[0];
-                painter->drawPolyline(screenPolygon2);
-            }
-#endif
             break;
         }
         }
-#if 0
-        if (mAddPointIndex != -1) {
-            auto scene = static_cast<CellScene*>(this->scene());
-            auto view = static_cast<CellView*>(scene->views().first());
-            qreal zoom = view->zoomable()->scale();
-            zoom = qMin(zoom, 1.0);
-
-            painter->drawRect(mAddPointPos.x() - 5/zoom, mAddPointPos.y() -5/zoom, (int)(10 / zoom), (int)(10 / zoom));
-        }
-#endif
-#if 0
-        if (isPolygon())
-        {
-            QPolygonF polygon;
-
-            int minX = std::numeric_limits<int>::max();
-            int minY = std::numeric_limits<int>::max();
-            int maxX = std::numeric_limits<int>::min();
-            int maxY = std::numeric_limits<int>::min();
-            for (const auto& point : mObject->points()) {
-                minX = std::min(minX, point.x);
-                minY = std::min(minY, point.y);
-                maxX = std::max(maxX, point.x);
-                maxY = std::max(maxY, point.y);
-                polygon += {qreal(point.x), qreal(point.y)};
-            }
-            polygon += polygon[0];
-#if 0
-            OutlineGrid outlineGrid;
-            outlineGrid.EXTEND = false;
-            outlineGrid.setSize(maxX - minX + 1, maxY - minY + 1);
-            for (int y = minY; y <= maxY; y++) {
-                for (int x = minX; x <= maxX; x++) {
-                    if (polygon.containsPoint(QPointF(x + 0.5, y + 0.5), Qt::OddEvenFill)) {
-                        outlineGrid.setInner(x - minX, y - minY);
-                    }
-                }
-            }
-            outlineGrid.trace(true, [&](QPolygon& nodes) {
-                QPolygonF screenPolygon = mRenderer->tileToPixelCoords(nodes.translated(minX, minY)/*.translated(mDragOffset)*/);
-                painter->drawPolygon(screenPolygon);
-            });
-
-            outlineGrid.trace(false, [&](QPolygon& nodes) {
-                QVector<PolygonPartition::Vertex> p;
-                QPolygonF polygonF;
-                // 'nodes' is clockwise order
-                // we require counter-clockwise
-                // the first node must be convex (it's a north-west corner)
-                p += { nodes[0].x(), nodes[0].y(), PolygonPartition::VertexType::Convex };
-                polygonF += nodes[0];
-                for (int i = nodes.size() - 1; i > 0; i--) {
-                    p += { nodes[i].x(), nodes[i].y(), PolygonPartition::VertexType::Collinear };
-                    polygonF += nodes[i];
-                }
-//                p += p[0]; // last is same as the first
-                for (int i = 0; i < p.size(); i++) {
-                    const auto& p1 = p[i];
-                    auto& p2 = p[(i+1) % p.size()];
-                    const auto& p3 = p[(i+2) % p.size()];
-                    int dx1 = p1.x - p2.x;
-                    int dy1 = p1.y - p2.y;
-                    int dx3 = p3.x - p2.x;
-                    int dy3 = p3.y - p2.y;
-                    int normalX = dx1 + dx3;
-                    int normalY = dy1 + dy3;
-                    if (normalX == 0 && normalY == 0) {
-                        p2.type = PolygonPartition::VertexType::Collinear;
-                        qDebug() << (i+1) % p.size() << "Collinear";
-                    } else {
-                        if (polygonF.containsPoint(QPoint(p2.x + normalX / 2.0, p2.y + normalY / 2.0), Qt::OddEvenFill)) {
-                            p2.type = PolygonPartition::VertexType::Convex;
-                            qDebug() << (i+1) % p.size() << "Convex";
-                        } else {
-                            p2.type = PolygonPartition::VertexType::Concave;
-                            qDebug() << (i+1) % p.size() << "Concave";
-                        }
-                    }
-                }
-
-                PolygonPartition partition;
-#if 1 // minimum partition
-                try {
-                    partition.compute_minimum_partition(p);
-                    for (int i = 0; i < partition.min1.size() - 1; i += 2) {
-                        QPoint pA = partition.min1[i];
-                        QPoint pB = partition.min1[i + 1];
-                        QPointF p1 = mRenderer->tileToPixelCoords(QPoint(minX + pA.x(), minY + pA.y()));
-                        QPointF p2 = mRenderer->tileToPixelCoords(QPoint(minX + pB.x(), minY + pB.y()));
-                        painter->drawLine(p1, p2);
-                    }
-                    for (int i = 0; i < partition.min2.size() - 1; i += 2) {
-                        QPoint pA = partition.min2[i];
-                        QPoint pB = partition.min2[i + 1];
-                        QPointF p1 = mRenderer->tileToPixelCoords(QPoint(minX + pA.x(), minY + pA.y()));
-                        QPointF p2 = mRenderer->tileToPixelCoords(QPoint(minX + pB.x(), minY + pB.y()));
-                        painter->drawLine(p1, p2);
-                    }
-                }  catch (std::exception e) {
-                    for (const auto& chord : partition.horizontal_chords) {
-                        QPointF p1 = mRenderer->tileToPixelCoords(QPoint(minX + p[chord.v1].x, minY + p[chord.v1].y));
-                        QPointF p2 = mRenderer->tileToPixelCoords(QPoint(minX + p[chord.v2].x, minY + p[chord.v2].y));
-                        painter->drawLine(p1, p2);
-                    }
-                    for (const auto& chord : partition.vertical_chords) {
-                        QPointF p1 = mRenderer->tileToPixelCoords(QPoint(minX + p[chord.v1].x, minY + p[chord.v1].y));
-                        QPointF p2 = mRenderer->tileToPixelCoords(QPoint(minX + p[chord.v2].x, minY + p[chord.v2].y));
-                        painter->drawLine(p1, p2);
-                    }
-                }
-            });
-#endif
-#if 0 // maximum partition
-                partition.compute_maximum_partition(p);
-                for (const auto& chord : partition.horizontal_chords) {
-                    QPointF p1 = mRenderer->tileToPixelCoords(QPoint(minX + p[chord.v1].x, minY + p[chord.v1].y));
-                    QPointF p2 = mRenderer->tileToPixelCoords(QPoint(minX + p[chord.v2].x, minY + p[chord.v2].y));
-                    painter->drawLine(p1, p2);
-                }
-                for (const auto& chord : partition.vertical_chords) {
-                    QPointF p1 = mRenderer->tileToPixelCoords(QPoint(minX + p[chord.v1].x, minY + p[chord.v1].y));
-                    QPointF p2 = mRenderer->tileToPixelCoords(QPoint(minX + p[chord.v2].x, minY + p[chord.v2].y));
-                    painter->drawLine(p1, p2);
-                }
-            });
-#endif
-#endif
-#if 0
-            QRegion region;
-            for (int y = minY; y <= maxY; y++) {
-                for (int x = minX; x <= maxX; x++) {
-                    if (polygon.containsPoint(QPointF(x + 0.5, y + 0.5), Qt::OddEvenFill)) {
-                        int x2 = x + 1;
-                        while (x2 <= maxX && polygon.containsPoint(QPointF(x2 + 0.5, y + 0.5), Qt::OddEvenFill)) {
-                            x2++;
-                        }
-                        region += QRect(x, y, x2 - x, 1);
-                    }
-                }
-            }
-            region = cleanupRegion(region);
-            for (const QRect& rect : region.rects()) {
-                QPolygonF screenPolygon = mRenderer->tileToPixelCoords(rect/*.translated(mDragOffset)*/);
-                painter->drawPolygon(screenPolygon);
-            }
-#endif
-#if 0
-            QPainterPath painterPath;
-            painterPath.addRegion(region);
-            QList<QPolygonF> regionPolygon = painterPath.toSubpathPolygons();
-            for (const QPolygonF &subPoly : regionPolygon) {
-                QPolygonF screenPolygon = mRenderer->tileToPixelCoords(subPoly.translated(mDragOffset));
-                painter->drawPolygon(screenPolygon);
-            }
-#endif
-        }
-#endif
         paintVehicleMeshPreviews(painter);
         return;
     }
@@ -4480,10 +3120,6 @@ QVariant ObjectPointHandle::itemChange(GraphicsItemChange change, const QVariant
 
             const QPointF objectPos = { 0, 0 };
             tileCoords -= objectPos;
-#if 0
-            tileCoords.setX(qMax(tileCoords.x(), qreal(0)));
-            tileCoords.setY(qMax(tileCoords.y(), qreal(0)));
-#endif
             if (snapToGrid)
                 tileCoords = tileCoords.toPoint();
             tileCoords += objectPos;
@@ -5068,12 +3704,6 @@ SubMapItem::SubMapItem(MapComposite *map, WorldCellLot *lot, MapRenderer *render
     mBoundingRect = mMap->boundingRect(mRenderer).united(volumeBoundingRect());
 
     QString mapFileName = mMap->mapInfo()->path();
-#if 0
-    if (!lot->cell()->mapFilePath().isEmpty()) {
-        QDir mapDir = QFileInfo(lot->cell()->mapFilePath()).absoluteDir();
-        mapFileName = mapDir.relativeFilePath(mapFileName);
-    }
-#endif
     QString toolTip = QDir::toNativeSeparators(mapFileName);
     toolTip += QLatin1String(" (lot)");
     setToolTip(toolTip);
@@ -5638,6 +4268,11 @@ CellScene::~CellScene()
     delete mMapBuildings;
 }
 
+bool CellScene::inGameMapFeaturesVisible() const
+{
+    return dynamic_cast<BaseInGameMapFeatureTool *>(mActiveTool) != nullptr;
+}
+
 void CellScene::setTool(AbstractTool *tool)
 {
     BaseCellSceneTool *cellTool = tool ? tool->asCellTool() : 0;
@@ -5681,7 +4316,7 @@ void CellScene::setTool(AbstractTool *tool)
         }
     }
 
-    bool bFeatureToolActive = dynamic_cast<BaseInGameMapFeatureTool*>(mActiveTool) != nullptr;
+    bool bFeatureToolActive = inGameMapFeaturesVisible();
     for (InGameMapFeatureItem* item : std::as_const(mFeatureItems)) {
         item->setVisible(bFeatureToolActive);
     }
@@ -6110,20 +4745,6 @@ static int calculateLayerInsertIndex(MapLevel *mapLevel, TileLayer *layer, const
     if (minIndexAbove != -1) {
         return minIndexAbove;
     }
-#if 0
-    for (int i = index1 + 1; i < defaultLayerNames.size(); i++) {
-        int index = mapLevel->indexOfLayer(defaultLayerNames[i]);
-        if (index != -1) {
-            return index;
-        }
-    }
-    for (int i = index1 - 1; i >= 0; i--) {
-        int index = mapLevel->indexOfLayer(defaultLayerNames[i]);
-        if (index != -1) {
-            return index + 1;
-        }
-    }
-#endif
     return mapLevel->layerCount();
 }
 
@@ -6162,6 +4783,9 @@ void CellScene::loadMap()
         mSubMapItems.clear();
         mSelectedSubMapItems.clear();
         mRoadItems.clear();
+        mFeatureItems.clear();
+        mSelectedFeatureItems.clear();
+        mSubMapsLoading.clear();
 
         // mMap, mMapInfo are shared, don't destroy
         mMap = nullptr;
@@ -6201,7 +4825,6 @@ void CellScene::loadMap()
                    .arg(cellSize)
                    .arg(cell()->mapFilePath());
     }
-#if 1
     // Add any missing default tile layers so the user can hide/show them in the Layers Dock.
     // FIXME: mMap is shared, is this safe?
     for (int level = MIN_WORLD_LEVEL; level <= MAX_WORLD_LEVEL; level++) {
@@ -6225,7 +4848,6 @@ void CellScene::loadMap()
             mapLevel->insertLayer(index, layer);
         }
     }
-#endif
 
     switch (mMap->orientation()) {
     case Map::Isometric:
@@ -6282,9 +4904,11 @@ void CellScene::loadMap()
     for (auto* feature : qAsConst(cell()->inGameMap().mFeatures)) {
         InGameMapFeatureItem* item = new InGameMapFeatureItem(feature, this);
         item->setZValue(ZVALUE_ROADITEM_UNSELECTED);
+        item->setVisible(inGameMapFeaturesVisible());
         addItem(item);
         mFeatureItems += item;
     }
+    selectedInGameMapFeaturesChanged();
 
     // Explicitly set sceneRect, otherwise it will just be as large as is needed to display
     // all the items in the scene (without getting smaller, ever).
@@ -6319,6 +4943,7 @@ void CellScene::loadMap()
     if (mPoweredPreviewEnabled || mSnowPreviewEnabled ||
             mJumboPreviewEnabled)
         rebuildEnvironmentPreview();
+    emit mapReloaded();
 }
 
 void CellScene::updateBordersItem()
@@ -6554,6 +5179,7 @@ void CellScene::inGameMapFeatureAdded(WorldCell *cell, int index)
     InGameMapFeature* feature = cell->inGameMap().mFeatures[index];
     InGameMapFeatureItem* item = new InGameMapFeatureItem(feature, this);
     item->setZValue(ZVALUE_ROADITEM_UNSELECTED);
+    item->setVisible(inGameMapFeaturesVisible());
     addItem(item);
     mFeatureItems += item;
     doLater(ZOrder);
@@ -6633,7 +5259,8 @@ void CellScene::selectedInGameMapFeaturesChanged()
 
     QSet<InGameMapFeatureItem*> items;
     for (auto* feature : selected) {
-        items.insert(itemForInGameMapFeature(feature));
+        if (InGameMapFeatureItem *item = itemForInGameMapFeature(feature))
+            items.insert(item);
     }
 
     for (auto* item : mSelectedFeatureItems - items) {
@@ -7394,18 +6021,11 @@ void CellScene::setHighlightCurrentLevel(bool highlight)
 void CellScene::doLater(PendingFlags flags)
 {
     mPendingFlags |= flags;
-#if 0
-    // Got a crash when undoing stuff and the progress dialog popped up
-    // which called handlePendingUpdates during loadMap but before
-    // the mMapComposite was loaded.
-    handlePendingUpdates();
-#else
     if (mPendingActive)
         return;
     QMetaObject::invokeMethod(this, "handlePendingUpdates",
                               Qt::QueuedConnection);
     mPendingActive = true;
-#endif
 }
 
 void CellScene::synchLayerGroupsLater()
@@ -7861,6 +6481,184 @@ bool CellScene::validateHoleRepair(QString *error)
         return false;
     }
     return true;
+}
+
+bool CellScene::validateScaledRendering(QString *error)
+{
+    QTemporaryDir directory;
+    Tileset *tileset = TileMetaInfoMgr::instance()->tileset(QStringLiteral("blends_natural_01"));
+    if (!directory.isValid() || !tileset || tileset->tileCount() < 2) {
+        *error = QStringLiteral("Rendering validation resources are unavailable");
+        return false;
+    }
+    const QString mapPath = directory.filePath(QStringLiteral("scaled-rendering.tmx"));
+    {
+        Map map(Map::LevelIsometric, 256, 256, 64, 32);
+        map.addTileset(tileset);
+        auto *floor = new TileLayer(QStringLiteral("Floor"), 0, 0, 256, 256);
+        floor->setLevel(0);
+        for (int y = 18; y < 23; ++y) {
+            for (int x = 18; x < 23; ++x)
+                floor->setCell(x, y, Cell(tileset->tileAt((x + y) % 2)));
+        }
+        map.addLayer(floor);
+        MapWriter writer;
+        if (!writer.writeMap(&map, mapPath)) {
+            *error = writer.errorString();
+            return false;
+        }
+    }
+    WorldDocument worldDocument(new World(1, 1, WorldGridFormat::Native256));
+    WorldCell *cell = worldDocument.world()->cellAt(0, 0);
+    cell->setMapFilePath(mapPath);
+    CellDocument document(&worldDocument, cell);
+    CellView view;
+    view.setAttribute(Qt::WA_DontShowOnScreen);
+    CellScene &scene = *new CellScene(&view);
+    view.setScene(&scene);
+    scene.setDocument(&document);
+    document.setView(&view);
+    document.setScene(&scene);
+    view.resize(640, 480);
+    view.show();
+    scene.loadMap();
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    QImage images[3];
+    for (int capture = 0; capture < 3; ++capture) {
+        const bool openGL = capture == 1;
+        if (!QMetaObject::invokeMethod(&view, "setUseOpenGL", Qt::DirectConnection,
+                                       Q_ARG(bool, openGL))
+                || bool(qobject_cast<QOpenGLWidget *>(view.viewport())) != openGL) {
+            *error = QStringLiteral("The requested viewport renderer was not selected");
+            return false;
+        }
+        view.resetTransform();
+        view.centerOn(scene.renderer()->tileToPixelCoords(QPointF(20.5, 20.5), 0));
+        view.viewport()->update();
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        images[capture] = view.viewport()->grab().toImage().convertToFormat(QImage::Format_RGB32);
+        if (images[capture].isNull()) {
+            *error = QStringLiteral("The scaled cell viewport could not be rendered");
+            return false;
+        }
+        if (openGL) {
+            LayerGroupVBO *layer = scene.mapCompositeVBO()->mLayerVBOs[WORLD_GROUND_LEVEL];
+            if (!layer || !layer->mCreated
+                    || !scene.mapCompositeVBO()->mShaderProgram.isLinked()) {
+                *error = QStringLiteral("The OpenGL viewport did not render the tile layer with its shader");
+                return false;
+            }
+        }
+        const QString output = QString::fromLocal8Bit(qgetenv("PZTOOLS_VALIDATION_IMAGE_DIRECTORY"));
+        if (!output.isEmpty())
+            images[capture].save(QDir(output).filePath(openGL
+                       ? QStringLiteral("WorldEd-OpenGL.png")
+                       : capture == 0 ? QStringLiteral("WorldEd-raster.png")
+                                      : QStringLiteral("WorldEd-raster-restored.png")));
+    }
+    if (images[0].size() != images[1].size() || images[0].size() != images[2].size()) {
+        *error = QStringLiteral("Raster and OpenGL viewport sizes differ");
+        return false;
+    }
+    const int radius = qRound(100 * view.devicePixelRatioF());
+    const QRect sample(images[0].width() / 2 - radius,
+                       images[0].height() / 2 - radius, radius * 2, radius * 2);
+    int changed = 0;
+    int colored = 0;
+    int restored = 0;
+    for (int y = sample.top(); y <= sample.bottom(); ++y) {
+        for (int x = sample.left(); x <= sample.right(); ++x) {
+            const QRgb raster = images[0].pixel(x, y);
+            const QRgb gl = images[1].pixel(x, y);
+            restored += raster != images[2].pixel(x, y);
+            colored += qAbs(qRed(raster) - qGreen(raster)) > 15;
+            changed += qAbs(qRed(raster) - qRed(gl)) > 24
+                    || qAbs(qGreen(raster) - qGreen(gl)) > 24
+                    || qAbs(qBlue(raster) - qBlue(gl)) > 24;
+        }
+    }
+    qInfo() << "Scaled raster/OpenGL comparison:" << view.devicePixelRatioF()
+            << "DPR," << colored << "colored pixels," << changed << "differing pixels,"
+            << restored << "changed after restoring raster";
+    if (colored < 100 || changed > sample.width() * sample.height() / 20 || restored != 0) {
+        *error = QStringLiteral("Scaled map tiles do not align between raster and OpenGL");
+        return false;
+    }
+    return true;
+}
+
+bool CellScene::validateInGameMapReload(QString *error)
+{
+    auto *world = new World(1, 1);
+    WorldDocument worldDocument(world, QString());
+    WorldCell *cell = world->cellAt(0, 0);
+    CellDocument document(&worldDocument, cell);
+    CellView view;
+    view.setAttribute(Qt::WA_DontShowOnScreen);
+    CellScene scene;
+    view.setScene(&scene);
+    scene.setDocument(&document);
+    document.setView(&view);
+    document.setScene(&scene);
+    view.resize(640, 480);
+    view.show();
+    ToolManager *manager = ToolManager::instance();
+    manager->setScene(&scene);
+    const auto cleanup = qScopeGuard([&]() { manager->setScene(nullptr); });
+    auto *feature = new InGameMapFeature(&cell->inGameMap());
+    feature->mGeometry.mType = QStringLiteral("Polygon");
+    InGameMapCoordinates coordinates;
+    coordinates << InGameMapPoint(10, 10) << InGameMapPoint(20, 10)
+                << InGameMapPoint(20, 20) << InGameMapPoint(10, 20);
+    feature->mGeometry.mCoordinates.append(coordinates);
+    worldDocument.addInGameMapFeature(cell, 0, feature);
+    QStringList failures;
+    for (int pass = 0; pass < 6; ++pass) {
+        const bool editing = pass % 2;
+        if (editing)
+            manager->selectTool(EditInGameMapFeatureTool::instancePtr());
+        else
+            manager->selectTool(SubMapTool::instance());
+        document.setSelectedInGameMapFeatures({feature});
+        scene.loadMap();
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        if (view.viewport()->grab().isNull())
+            failures.append(QStringLiteral("Reloaded cell viewport could not be rendered"));
+        if (scene.mFeatureItems.size() != 1 || scene.mSelectedFeatureItems.size() != 1) {
+            failures.append(QStringLiteral("Reload retained stale feature references"));
+            break;
+        }
+        InGameMapFeatureItem *item = scene.mFeatureItems.first();
+        if (item->isVisible() != editing || item->isEditable() != editing ||
+                !scene.mSelectedFeatureItems.contains(item))
+            failures.append(QStringLiteral("Reload changed feature visibility or selection"));
+        manager->selectTool(SubMapTool::instance());
+        if (item->isVisible())
+            failures.append(QStringLiteral("Feature remained visible outside InGameMap tools"));
+        worldDocument.removeInGameMapFeature(cell, 0);
+        if (!scene.mFeatureItems.isEmpty() || !scene.mSelectedFeatureItems.isEmpty())
+            failures.append(QStringLiteral("Feature removal retained scene references"));
+        worldDocument.undoStack()->undo();
+        if (scene.mFeatureItems.size() != 1 || scene.mFeatureItems.first()->isVisible())
+            failures.append(QStringLiteral("Feature Undo did not restore hidden geometry"));
+    }
+    manager->selectTool(EditInGameMapFeatureTool::instancePtr());
+    feature->mGeometry.mCoordinates.clear();
+    document.setSelectedInGameMapFeatures({feature});
+    scene.loadMap();
+    for (const QString &type : {QStringLiteral("Polygon"), QStringLiteral("Point")}) {
+        feature->mGeometry.mType = type;
+        InGameMapFeatureItem *item = scene.itemForInGameMapFeature(feature);
+        item->synchWithFeature();
+        if (!item->shape().isEmpty())
+            failures.append(QStringLiteral("Empty geometry produced a selectable outline"));
+        QImage image(32, 32, QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        item->paint(&painter, nullptr, nullptr);
+    }
+    *error = failures.join(QLatin1Char('\n'));
+    return failures.isEmpty();
 }
 
 bool CellScene::validateBasementPlacement(QString *error)
@@ -8571,7 +7369,6 @@ void CellScene::dropEvent(QGraphicsSceneDragDropEvent *event)
     if (mDnDItem) {
         QPoint dropPos = mDnDItem->dropPosition();
         int level = document()->currentLevel();
-#if 1
         QFileInfo fileInfo(mDnDItem->mapInfo()->path());
         if (fileInfo.fileName().startsWith(QStringLiteral("ba_"))) {
             // Check for dropping a basement access lot onto a Basement object.
@@ -8609,7 +7406,6 @@ void CellScene::dropEvent(QGraphicsSceneDragDropEvent *event)
                 return;
             }
         }
-#endif
         WorldCellLot *lot = new WorldCellLot(cell(), mDnDItem->mapInfo()->path(),
                                              dropPos.x(), dropPos.y(), level,
                                              mDnDItem->mapInfo()->width(),
@@ -9091,6 +7887,7 @@ void AdjacentMap::inGameMapFeatureAdded(WorldCell *cell, int index)
     InGameMapFeature *feature = cell->inGameMap().features().at(index);
     InGameMapFeatureItem *item = new InGameMapFeatureItem(feature, scene(), mInGameMapFeatureParent);
     item->setAdjacent(true);
+    item->setVisible(scene()->inGameMapFeaturesVisible());
     item->synchWithFeature();
     mInGameMapFeatureItems.insert(index, item);
 
@@ -9175,6 +7972,7 @@ void AdjacentMap::mapLoaded(MapInfo *mapInfo)
         for (InGameMapFeature* feature : cell()->inGameMap().features()) {
             InGameMapFeatureItem *item = new InGameMapFeatureItem(feature, scene(), mInGameMapFeatureParent);
             item->setAdjacent(true);
+            item->setVisible(scene()->inGameMapFeaturesVisible());
             item->synchWithFeature();
             mInGameMapFeatureItems += item;
         }

@@ -476,8 +476,6 @@ BuildingEditorWindow::BuildingEditorWindow(QWidget *parent) :
     redoIcon.addFile(QLatin1String(":images/24x24/edit-redo.png"));
     mUndoAction->setIcon(undoIcon);
     mRedoAction->setIcon(redoIcon);
-    Tiled::Utils::setThemeIcon(mUndoAction, "edit-undo");
-    Tiled::Utils::setThemeIcon(mRedoAction, "edit-redo");
     ui->menuEdit->insertAction(ui->menuEdit->actions().at(0), mUndoAction);
     ui->menuEdit->insertAction(ui->menuEdit->actions().at(1), mRedoAction);
     ui->menuEdit->insertSeparator(ui->menuEdit->actions().at(2));
@@ -703,17 +701,8 @@ BuildingEditorWindow::BuildingEditorWindow(QWidget *parent) :
 BuildingEditorWindow::~BuildingEditorWindow()
 {
     LuaConsole::clearScriptRunnerIfExists();
-#if 1
     BuildingTilesDialog::deleteInstance();
     ToolManager::deleteInstance();
-#else
-    BuildingTemplates::deleteInstance();
-    BuildingTilesDialog::deleteInstance();
-    BuildingTilesMgr::deleteInstance(); // Ensure all the tilesets are released
-    BuildingTMX::deleteInstance();
-    BuildingPreferences::deleteInstance();
-    ToolManager::deleteInstance();
-#endif
     delete ui;
 }
 
@@ -864,18 +853,6 @@ bool BuildingEditorWindow::confirmAllSave()
     return true;
 }
 
-// Called by Tiled::Internal::MainWindow::closeEvent
-bool BuildingEditorWindow::closeYerself()
-{
-    if (confirmAllSave()) {
-        writeSettings();
-        docman()->closeAllDocuments();
-        delete this;
-        return true;
-    }
-    return false;
-}
-
 bool BuildingEditorWindow::Startup()
 {
     connect(BuildingTilesMgr::instance(), &BuildingTilesMgr::tilesetAdded,
@@ -942,16 +919,6 @@ void BuildingEditorWindow::readSettings()
                                              QByteArray()).toByteArray();
     if (!state.isEmpty())
         qInfo() << "BuildingEd dock layout restored:" << restoreState(state);
-#if 0
-    mOrthoView->zoomable()->setScale(mSettings.value(QLatin1String("EditorScale"),
-                                                1.0).toReal());
-    mIsoView->zoomable()->setScale(mSettings.value(QLatin1String("IsoEditorScale"),
-                                                1.0).toReal());
-    QString orient = mSettings.value(QLatin1String("Orientation"),
-                                     QLatin1String("isometric")).toString();
-    if (orient == QLatin1String("isometric"))
-        toggleOrthoIso();
-#endif
     mSettings.endGroup();
     PortableSettings::applyStartupMainWindowGeometry(this);
     restoreSplitterStates(this, mSettings);
@@ -993,13 +960,6 @@ void BuildingEditorWindow::writeWindowSettings()
     mSettings.beginGroup(QLatin1String("MainWindow"));
     PZTools::setValueIfChanged(mSettings, QLatin1String("geometry"), saveGeometry());
     PZTools::setValueIfChanged(mSettings, QLatin1String("state"), saveState());
-#if 0
-    PZTools::setValueIfChanged(mSettings, QLatin1String("EditorScale"), mOrthoView->zoomable()->scale());
-    PZTools::setValueIfChanged(mSettings, QLatin1String("IsoEditorScale"), mIsoView->zoomable()->scale());
-    PZTools::setValueIfChanged(mSettings, QLatin1String("Orientation"),
-                       (mOrient == OrientOrtho) ? QLatin1String("orthogonal")
-                                                : QLatin1String("isometric"));
-#endif
     mSettings.endGroup();
     mSettings.sync();
 }
@@ -1310,124 +1270,6 @@ void BuildingEditorWindow::documentAdded(BuildingDocument *doc)
     mAttributeEditMode->setEnabled(true);
 
 //    reportMissingTilesets();
-#if 1
-#else
-    if (mCurrentDocument) {
-        // Disable all the tools before losing the document/views/etc.
-        ToolManager::instance()->clearDocument();
-        mRoomComboBox->clear();
-        mOrthoScene->clearDocument();
-        mIsoView->clearDocument();
-        mLayersDock->clearDocument();
-        mTilesetDock->clearDocument();
-        mUndoGroup->removeStack(mCurrentDocument->undoStack());
-        delete mCurrentDocument->building();
-        delete mCurrentDocument;
-        removeAutoSaveFile();
-        if (mAutoSaveTimer->isActive())
-            mAutoSaveTimer->stop();
-    }
-
-    mCurrentDocument = doc;
-
-    Building *building = mCurrentDocument->building();
-    mCurrentDocument->setCurrentFloor(building->floor(0));
-    mUndoGroup->addStack(mCurrentDocument->undoStack());
-    mUndoGroup->setActiveStack(mCurrentDocument->undoStack());
-
-    // Roof tiles need to be non-none to enable the roof tools.
-    // Old templates will have 'none' for these tiles.
-    BuildingTilesMgr *btiles = BuildingTilesMgr::instance();
-    if (building->roofCapTile()->isNone())
-        building->setRoofCapTile(btiles->defaultRoofCapTiles());
-    if (building->roofSlopeTile()->isNone())
-        building->setRoofSlopeTile(btiles->defaultRoofSlopeTiles());
-#if 0
-    if (building->roofTopTile()->isNone())
-        building->setRoofTopTile(btiles->defaultRoofTopTiles());
-#endif
-
-    // Handle reading old buildings
-    if (building->usedTiles().isEmpty()) {
-        QList<BuildingTileEntry*> entries;
-        QList<FurnitureTiles*> furniture;
-        foreach (BuildingFloor *floor, building->floors()) {
-            foreach (BuildingObject *object, floor->objects()) {
-                if (FurnitureObject *fo = object->asFurniture()) {
-                    if (FurnitureTile *ftile = fo->furnitureTile()) {
-                        if (!furniture.contains(ftile->owner()))
-                            furniture += ftile->owner();
-                    }
-                    continue;
-                }
-                for (int i = 0; i < 3; i++) {
-                    if (object->tile(i) && !object->tile(i)->isNone()
-                            && !entries.contains(object->tile(i)))
-                        entries += object->tile(i);
-                }
-            }
-        }
-        BuildingTileEntry *entry = building->exteriorWall();
-        if (entry && !entry->isNone() && !entries.contains(entry))
-            entries += entry;
-        foreach (Room *room, building->rooms()) {
-            foreach (BuildingTileEntry *entry, room->tiles()) {
-                if (entry && !entry->isNone() && !entries.contains(entry))
-                    entries += entry;
-            }
-        }
-        building->setUsedTiles(entries);
-        building->setUsedFurniture(furniture);
-    }
-
-    if (ui->categoryList->currentRow() < 2)
-        categorySelectionChanged();
-
-    mOrthoScene->setDocument(mCurrentDocument);
-    mIsoView->setDocument(mCurrentDocument);
-    mLayersDock->setDocument(mCurrentDocument);
-    mTilesetDock->setDocument(mCurrentDocument);
-
-    updateRoomComboBox();
-
-    resizeCoordsLabel();
-
-    // Redisplay "Used Tiles" and "Used Furniture"
-    connect(mCurrentDocument, SIGNAL(usedFurnitureChanged()),
-            SLOT(usedFurnitureChanged()));
-    connect(mCurrentDocument, SIGNAL(usedTilesChanged()),
-            SLOT(usedTilesChanged()));
-
-    connect(mCurrentDocument, SIGNAL(roomAdded(Room*)), SLOT(roomAdded(Room*)));
-    connect(mCurrentDocument, SIGNAL(roomRemoved(Room*)), SLOT(roomRemoved(Room*)));
-    connect(mCurrentDocument, SIGNAL(roomsReordered()), SLOT(roomsReordered()));
-    connect(mCurrentDocument, SIGNAL(roomChanged(Room*)), SLOT(roomChanged(Room*)));
-
-    connect(mCurrentDocument, SIGNAL(floorAdded(BuildingFloor*)),
-            SLOT(updateActions()));
-    connect(mCurrentDocument, SIGNAL(floorRemoved(BuildingFloor*)),
-            SLOT(updateActions()));
-    connect(mCurrentDocument, SIGNAL(currentFloorChanged()),
-            SLOT(updateActions()));
-    connect(mCurrentDocument, SIGNAL(currentLayerChanged()),
-            SLOT(updateActions()));
-
-    connect(mCurrentDocument, SIGNAL(selectedObjectsChanged()),
-            SLOT(updateActions()));
-
-    connect(mCurrentDocument, SIGNAL(tileSelectionChanged(QRegion)),
-            SLOT(updateActions()));
-    connect(mCurrentDocument, SIGNAL(clipboardTilesChanged()),
-            SLOT(updateActions()));
-
-    connect(mCurrentDocument, SIGNAL(cleanChanged()), SLOT(updateWindowTitle()));
-
-    updateActions();
-
-    updateWindowTitle();
-
-    reportMissingTilesets();
-#endif
 }
 
 void BuildingEditorWindow::documentAboutToClose(int index, BuildingDocument *doc)
@@ -1542,28 +1384,6 @@ void BuildingEditorWindow::documentTabCloseRequested(int index)
     docman()->closeDocument(index);
 }
 
-#if 0
-void BuildingEditorWindow::clearDocument()
-{
-    if (mCurrentDocument) {
-        // Disable all the tools before losing the document/views/etc.
-        ToolManager::instance()->clearDocument();
-        mOrthoScene->clearDocument();
-        mIsoView->clearDocument();
-        mLayersDock->clearDocument();
-        mTilesetDock->clearDocument();
-        mUndoGroup->removeStack(mCurrentDocument->undoStack());
-        delete mCurrentDocument->building();
-        delete mCurrentDocument;
-        mCurrentDocument = 0;
-        updateRoomComboBox();
-        resizeCoordsLabel();
-        updateActions();
-        updateWindowTitle();
-        removeAutoSaveFile();
-    }
-}
-#endif
 
 void BuildingEditorWindow::updateWindowTitle()
 {
@@ -1667,9 +1487,10 @@ void BuildingEditorWindow::captureTileClipboard(bool cut)
             QList<BuildingDocument::ClipboardRoomLayer> roomLayers;
             QHash<Room *, int> roomIndexes;
             QUndoStack *undoStack = mCurrentDocument->undoStack();
-            const bool cutRooms = cut && mTileSelectionScope &&
+            const bool copyRooms = mTileSelectionScope &&
                     mTileSelectionScope->layerMode() ==
                     Tiled::Internal::TileSelectionScope::AllLayers;
+            const bool cutRooms = cut && copyRooms;
             if (cut) {
                 mCurrentDocumentStuff->beginAtomicEdit();
                 undoStack->beginMacro(tr("Cut Building Selection"));
@@ -1684,39 +1505,41 @@ void BuildingEditorWindow::captureTileClipboard(bool cut)
                     continue;
                 }
 
-                BuildingDocument::ClipboardRoomLayer roomLayer;
-                roomLayer.level = floor->level();
-                roomLayer.rooms.resize(r.width());
-                QVector<QVector<Room *> > cutGrid = floor->grid();
-                bool roomsCut = false;
-                for (int x = 0; x < r.width(); ++x) {
-                    roomLayer.rooms[x] = QVector<int>(r.height(), -2);
-                    for (int y = 0; y < r.height(); ++y) {
-                        const QPoint source = r.topLeft() + QPoint(x, y);
-                        if (!selection.contains(source) ||
-                                !floor->bounds().contains(source)) {
-                            continue;
-                        }
-                        Room *room = floor->GetRoomAt(source);
-                        roomLayer.rooms[x][y] = -1;
-                        if (room) {
-                            if (!roomIndexes.contains(room)) {
-                                roomIndexes.insert(room, rooms.size());
-                                rooms.append(new Room(room));
+                if (copyRooms) {
+                    BuildingDocument::ClipboardRoomLayer roomLayer;
+                    roomLayer.level = floor->level();
+                    roomLayer.rooms.resize(r.width());
+                    QVector<QVector<Room *> > cutGrid = floor->grid();
+                    bool roomsCut = false;
+                    for (int x = 0; x < r.width(); ++x) {
+                        roomLayer.rooms[x] = QVector<int>(r.height(), -2);
+                        for (int y = 0; y < r.height(); ++y) {
+                            const QPoint source = r.topLeft() + QPoint(x, y);
+                            if (!selection.contains(source) ||
+                                    !floor->bounds().contains(source)) {
+                                continue;
                             }
-                            roomLayer.rooms[x][y] = roomIndexes.value(room);
-                            if (cutRooms) {
-                                cutGrid[source.x()][source.y()] = nullptr;
-                                roomsCut = true;
+                            Room *room = floor->GetRoomAt(source);
+                            roomLayer.rooms[x][y] = -1;
+                            if (room) {
+                                if (!roomIndexes.contains(room)) {
+                                    roomIndexes.insert(room, rooms.size());
+                                    rooms.append(new Room(room));
+                                }
+                                roomLayer.rooms[x][y] = roomIndexes.value(room);
+                                if (cutRooms) {
+                                    cutGrid[source.x()][source.y()] = nullptr;
+                                    roomsCut = true;
+                                }
                             }
                         }
                     }
-                }
-                roomLayers.append(roomLayer);
-                if (roomsCut) {
-                    undoStack->push(new SwapFloorGrid(
-                                        mCurrentDocument, floor, cutGrid,
-                                        "Cut Rooms"));
+                    roomLayers.append(roomLayer);
+                    if (roomsCut) {
+                        undoStack->push(new SwapFloorGrid(
+                                            mCurrentDocument, floor, cutGrid,
+                                            "Cut Rooms"));
+                    }
                 }
 
                 for (const QString &layerName : BuildingMap::layerNames(
@@ -1760,10 +1583,18 @@ void BuildingEditorWindow::captureTileClipboard(bool cut)
                 mCurrentDocumentStuff->endAtomicEdit();
             }
             if (!clips.isEmpty() || !roomLayers.isEmpty()) {
-                mCurrentDocument->setClipboardTileLayers(
+                const bool currentPlane = !mTileSelectionScope ||
+                        (mTileSelectionScope->layerMode() == Tiled::Internal::TileSelectionScope::CurrentLayer &&
+                         mTileSelectionScope->levelMode() == Tiled::Internal::TileSelectionScope::CurrentLevel);
+                if (currentPlane && clips.size() == 1) {
+                    mCurrentDocument->setClipboardTiles(
+                                clips.first().tiles, selection.translated(-r.topLeft()));
+                } else {
+                    mCurrentDocument->setClipboardTileLayers(
                             clips, selection.translated(-r.topLeft()),
                             mCurrentDocument->currentLevel(), rooms,
                             roomLayers);
+                }
                 qInfo() << "BuildingEd clipboard captured"
                         << (cut ? "cut" : "copy")
                         << "bounds" << r
@@ -1980,7 +1811,8 @@ bool BuildingEditorWindow::pasteClipboardAt(const QPoint &requestedTargetPos)
         if (!floor || targetRegion.isEmpty())
             continue;
         undoStack->push(new PaintFloorTiles(
-                            mCurrentDocument, floor, clip.layerName,
+                            mCurrentDocument, floor,
+                            mCurrentDocument->clipboardPreservesPlanes() ? clip.layerName : currentLayer(),
                             targetRegion, targetPos, clip.tiles->clone(),
                             "Paste Tiles"));
         ++pastedTileLayers;
@@ -2188,66 +2020,6 @@ void BuildingEditorWindow::roomsDialog()
 
     if (dialog.exec() != QDialog::Accepted)
         return;
-#if 0
-    mCurrentDocument->undoStack()->beginMacro(tr("Edit Rooms"));
-
-    QList<Room*> deletedRooms = originalRoomList;
-    // Rooms may have been added, moved, deleted, and/or edited.
-    foreach (Room *dialogRoom, dialog.rooms()) {
-        if (Room *room = dialog.originalRoom(dialogRoom)) {
-            int oldIndex = mCurrentDocument->building()->rooms().indexOf(room);
-            int newIndex = dialog.rooms().indexOf(dialogRoom);
-            if (oldIndex != newIndex) {
-                qDebug() << "move room" << room->Name << "from " << oldIndex << " to " << newIndex;
-                mCurrentDocument->undoStack()->push(new ReorderRoom(mCurrentDocument,
-                                                                    newIndex,
-                                                                    room));
-            }
-            if (*room != *dialogRoom) {
-                qDebug() << "change room" << room->Name;
-                mCurrentDocument->undoStack()->push(new ChangeRoom(mCurrentDocument,
-                                                                   room,
-                                                                   dialogRoom));
-            }
-            deletedRooms.removeOne(room);
-        } else {
-            // This is a new room.
-            qDebug() << "add room" << dialogRoom->Name << "at" << dialog.rooms().indexOf(dialogRoom);
-            Room *newRoom = new Room(dialogRoom);
-            int index = dialog.rooms().indexOf(dialogRoom);
-            mCurrentDocument->undoStack()->push(new AddRoom(mCurrentDocument,
-                                                            index,
-                                                            newRoom));
-        }
-    }
-    // now handle deleted rooms
-    foreach (Room *room, deletedRooms) {
-        qDebug() << "delete room" << room->Name;
-        int index = mCurrentDocument->building()->rooms().indexOf(room);
-        foreach (BuildingFloor *floor, currentBuilding()->floors()) {
-            bool changed = false;
-            QVector<QVector<Room*> > grid = floor->grid();
-            for (int x = 0; x < grid.size(); x++) {
-                for (int y = 0; y < grid[x].size(); y++) {
-                    if (grid[x][y] == room) {
-                        grid[x][y] = 0;
-                        changed = true;
-                    }
-                }
-            }
-            if (changed) {
-                mCurrentDocument->undoStack()->push(new SwapFloorGrid(mCurrentDocument,
-                                                                      floor,
-                                                                      grid,
-                                                                      "Remove Room From Floor"));
-            }
-        }
-        mCurrentDocument->undoStack()->push(new RemoveRoom(mCurrentDocument,
-                                                           index));
-    }
-
-    mCurrentDocument->undoStack()->endMacro();
-#endif
 }
 
 void BuildingEditorWindow::proceduralLootEditor()
@@ -2440,54 +2212,8 @@ void BuildingEditorWindow::exportNewBinaryFile(ExportBasementsDialog *dialog, co
     BuildingMap bmap(building);
     Map *map = bmap.mergedMap();
 
-#if 0
-    if (map->orientation() == Map::LevelIsometric) {
-        if (!BuildingPreferences::instance()->levelIsometric()) {
-            Map *isoMap = MapManager::instance()->convertOrientation(map, Map::Isometric);
-            TilesetManager::instance()->removeReferences(map->tilesets());
-            delete map;
-            map = isoMap;
-        }
-    }
-#endif
 
     for (BuildingFloor *floor : building->floors()) {
-#if 0
-        // The given map has layers required by the editor, i.e., Floors, Walls,
-        // Doors, etc.  The TMXConfig.txt file may specify extra layer names.
-        // So we need to insert any extra layers in the order specified in
-        // TMXConfig.txt.  If the layer name has a N_ prefix, it is only added
-        // to level N, otherwise it is added to every level.  Object layers are
-        // added above *all* the tile layers in the map.
-        int previousExistingLayer = -1;
-        foreach (LayerInfo layerInfo, mLayers) {
-            QString layerName = layerInfo.mName;
-            int level;
-            if (MapComposite::levelForLayer(layerName, &level)) {
-                if (level != floor->level())
-                    continue;
-            } else {
-                layerName = tr("%1_%2").arg(floor->level()).arg(layerName);
-            }
-            int n;
-            if ((n = map->indexOfLayer(layerName)) >= 0) {
-                previousExistingLayer = n;
-                continue;
-            }
-            if (layerInfo.mType == LayerInfo::Tile) {
-                TileLayer *tl = new TileLayer(layerName, 0, 0,
-                                              map->width(), map->height());
-                if (previousExistingLayer < 0)
-                    previousExistingLayer = 0;
-                map->insertLayer(previousExistingLayer + 1, tl);
-                previousExistingLayer++;
-            } else {
-                ObjectGroup *og = new ObjectGroup(layerName,
-                                                  0, 0, map->width(), map->height());
-                map->addLayer(og);
-            }
-        }
-#endif
 
         bmap.addRoomDefObjects(map, floor);
     }
@@ -2608,7 +2334,6 @@ void BuildingEditorWindow::resizeBuilding()
     if (!mCurrentDocument)
         return;
 
-#if 1
     ResizeDialog dialog(this);
     dialog.setOldSize(currentBuilding()->size());
     if (dialog.exec() != QDialog::Accepted)
@@ -2702,30 +2427,6 @@ void BuildingEditorWindow::resizeBuilding()
     }
     undoStack->push(new EmitResizeBuilding(mCurrentDocument, false));
     undoStack->endMacro();
-#else
-    ResizeBuildingDialog dialog(mCurrentDocument->building(), this);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-
-    QSize newSize = dialog.buildingSize();
-
-    QUndoStack *undoStack = mCurrentDocument->undoStack();
-    undoStack->beginMacro(tr("Resize Building"));
-    undoStack->push(new EmitResizeBuilding(mCurrentDocument, true));
-    undoStack->push(new ResizeBuilding(mCurrentDocument, newSize));
-    foreach (BuildingFloor *floor, mCurrentDocument->building()->floors()) {
-        undoStack->push(new ResizeFloor(mCurrentDocument, floor, newSize));
-        // Remove objects that aren't in bounds.
-        for (int i = floor->objectCount() - 1; i >= 0; --i) {
-            BuildingObject *object = floor->object(i);
-            if (!object->isValidPos())
-                undoStack->push(new RemoveObject(mCurrentDocument,
-                                                 floor, i));
-        }
-    }
-    undoStack->push(new EmitResizeBuilding(mCurrentDocument, false));
-    undoStack->endMacro();
-#endif
 }
 
 void BuildingEditorWindow::flipHorizontal()
@@ -3035,34 +2736,21 @@ void BuildingEditorWindow::highlightUnlitRoomsChanged(bool show)
 void BuildingEditorWindow::tilesetAdded(Tileset *tileset)
 {
     Q_UNUSED(tileset)
-#if 0
-    categorySelectionChanged();
-#endif
 }
 
 void BuildingEditorWindow::tilesetAboutToBeRemoved(Tileset *tileset)
 {
     Q_UNUSED(tileset)
-#if 0
-    ui->tilesetView->clear();
-    // FurnitureView doesn't cache Tiled::Tiles
-#endif
 }
 
 void BuildingEditorWindow::tilesetRemoved(Tileset *tileset)
 {
     Q_UNUSED(tileset)
-#if 0
-    categorySelectionChanged();
-#endif
 }
 
 void BuildingEditorWindow::tilesetChanged(Tileset *tileset)
 {
     Q_UNUSED(tileset)
-#if 0
-    categorySelectionChanged();
-#endif
 }
 
 void BuildingEditorWindow::reportMissingTilesets()
@@ -3163,7 +2851,7 @@ void BuildingEditorWindow::updateActions()
     bool hasTileSel = hasDoc && !objectMode && !mCurrentDocument->tileSelection().isEmpty();
     ui->actionCut->setEnabled(hasTileSel && !attributeMode);
     ui->actionCopy->setEnabled(hasTileSel && !attributeMode);
-    ui->actionPaste->setEnabled(hasDoc && !objectMode && !attributeMode && mCurrentDocument->clipboardTiles());
+    ui->actionPaste->setEnabled(hasDoc && !objectMode && !attributeMode && mCurrentDocument->clipboardHasContent());
     if (!objectMode) {
         ui->actionSelectAll->setEnabled(!currentLayer().isEmpty());
         ui->actionSelectNone->setEnabled(hasTileSel);
@@ -3230,87 +2918,3 @@ void BuildingEditorWindow::viewAddedForDocument(BuildingDocument *doc, BuildingI
 {
     mDocumentStuff[doc]->viewAddedForDocument(view);
 }
-
-#if 0
-void BuildingEditorWindow::setEditMode()
-{
-    if (!mCurrentDocument)
-        return;
-
-    switch (mCurrentDocumentStuff->editMode())
-    {
-    case EditorWindowPerDocumentStuff::OrthoObjectMode: {
-        ModeManager::instance().setCurrentMode(mOrthoObjectEditMode);
-#if 0
-        if (mEditMode == EditorWindowPerDocumentStuff::TileMode) {
-            // Switch from Tile to OrthoObject
-            mCurrentDocument->setTileSelection(QRegion());
-            mModeStack->setCurrentWidget(mObjectEditMode->widget());
-        }
-#endif
-        break;
-    }
-    case EditorWindowPerDocumentStuff::IsoObjectMode: {
-        ModeManager::instance().setCurrentMode(mIsoObjectEditMode);
-#if 0
-        if (mEditMode == EditorWindowPerDocumentStuff::TileMode) {
-            // Switch from Tile to IsoObject
-            mCurrentDocument->setTileSelection(QRegion());
-            mModeStack->setCurrentWidget(mObjectEditMode->widget());
-        }
-#endif
-        break;
-    }
-    case EditorWindowPerDocumentStuff::TileMode: {
-        ModeManager::instance().setCurrentMode(mTileEditMode);
-#if 0
-        // Switch from OrthoObject/IsoObject to Tile
-        mModeStack->setCurrentWidget(mTileEditMode->widget());
-        ModeManager::instance().setCurrentMode(mTileEditMode);
-        break;
-#endif
-    }
-    }
-//    mTabWidget->setCurrentIndex(mCurrentDocumentStuff->editMode());
-//    mModeStack->setCurrentWidget(ModeManager::instance().currentMode()->widget());
-
-    mEditMode = mCurrentDocumentStuff->editMode();
-
-    updateActions();
-
-//    mCurrentDocumentStuff->restoreTool();
-}
-
-void BuildingEditorWindow::toggleOrthoIso()
-{
-    if (!mCurrentDocument)
-        return;
-
-    if (mCurrentDocumentStuff->isTile()) {
-        toggleEditMode();
-        return;
-    }
-
-    mCurrentDocumentStuff->rememberTool();
-    if (mCurrentDocumentStuff->isOrthoObject())
-        mCurrentDocumentStuff->toIsoObject();
-    else
-        mCurrentDocumentStuff->toOrthoObject();
-
-    setEditMode();
-}
-
-void BuildingEditorWindow::toggleEditMode()
-{
-    if (!mCurrentDocument)
-        return;
-
-    mCurrentDocumentStuff->rememberTool();
-    if (mCurrentDocumentStuff->isTile())
-        mCurrentDocumentStuff->toObject();
-    else
-        mCurrentDocumentStuff->toTile();
-
-    setEditMode();
-}
-#endif

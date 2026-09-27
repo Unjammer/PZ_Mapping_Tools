@@ -67,84 +67,6 @@ const char *Lua::cstring(const QString &qstring)
 
 /////
 
-#if 0
-/* function to release collected object via destructor */
-static int tolua_collect_QRect(lua_State* tolua_S)
-{
-    QRect* self = (QRect*) tolua_tousertype(tolua_S,1,0);
-    tolua_release(tolua_S,self);
-    delete self;
-    return 0;
-}
-
-/* method: rects of class QRegion */
-static int tolua_tiled_Region_rects00(lua_State* tolua_S)
-{
-#ifndef TOLUA_RELEASE
-    tolua_Error tolua_err;
-    if (
-            !tolua_isusertype(tolua_S,1,"QRegion",0,&tolua_err) ||
-            !tolua_isnoobj(tolua_S,2,&tolua_err)
-            )
-        goto tolua_lerror;
-    else
-#endif
-    {
-        QRegion* self = (QRegion*)  tolua_tousertype(tolua_S,1,0);
-#ifndef TOLUA_RELEASE
-        if (!self) tolua_error(tolua_S,"invalid 'self' in function 'rects'",NULL);
-#endif
-        {
-            lua_newtable(tolua_S);
-            for (int i = 0; i < self->rectCount(); i++) {
-                void* tolua_obj = new QRect(self->rects()[i]);
-                void* v = tolua_clone(tolua_S,tolua_obj,tolua_collect_QRect);
-                tolua_pushfieldusertype(tolua_S,2,i+1,v,"QRect");
-            }
-        }
-        return 1;
-    }
-    return 0;
-#ifndef TOLUA_RELEASE
-tolua_lerror:
-    tolua_error(tolua_S,"#ferror in function 'rects'.",&tolua_err);
-    return 0;
-#endif
-}
-
-/* method: tiles of class LuaBmpRule */
-static int tolua_tiled_BmpRule_tiles00(lua_State* tolua_S)
-{
-#ifndef TOLUA_RELEASE
-    tolua_Error tolua_err;
-    if (
-            !tolua_isusertype(tolua_S,1,"LuaBmpRule",0,&tolua_err) ||
-            !tolua_isnoobj(tolua_S,2,&tolua_err)
-            )
-        goto tolua_lerror;
-    else
-#endif
-    {
-        LuaBmpRule* self = (LuaBmpRule*)  tolua_tousertype(tolua_S,1,0);
-#ifndef TOLUA_RELEASE
-        if (!self) tolua_error(tolua_S,"invalid 'self' in function 'tiles'",NULL);
-#endif
-        {
-            lua_newtable(tolua_S);
-            for (int i = 0; i < self->mRule->tileChoices.size(); i++) {
-                tolua_pushfieldstring(tolua_S,2,i+1,cstring(self->mRule->tileChoices[i]));
-            }
-        }
-        return 1;
-    }
-    return 0;
-#ifndef TOLUA_RELEASE
-tolua_lerror:
-    tolua_error(tolua_S,"#ferror in function 'tiles'.",&tolua_err);
-    return 0;
-#endif
-}
-#endif
 
 /////
 
@@ -174,14 +96,6 @@ lua_State *LuaScript::init()
     registerApplicationApi();
 
     tolua_beginmodule(L,NULL);
-#if 0
-    tolua_beginmodule(L,"Region");
-    tolua_function(L,"rects",tolua_tiled_Region_rects00);
-    tolua_endmodule(L);
-    tolua_beginmodule(L,"BmpRule");
-    tolua_function(L,"tiles",tolua_tiled_BmpRule_tiles00);
-    tolua_endmodule(L);
-#endif
     tolua_endmodule(L);
 
     return L;
@@ -1622,13 +1536,6 @@ LuaPerlin::LuaPerlin()
 
 double LuaPerlin::perlin(double x, double y, double z)
 {
-#if 0
-    if(repeat > 0) {									// If we have any repeat on, change the coordinates to their "local" repetitions
-        x = x%repeat;
-        y = y%repeat;
-        z = z%repeat;
-    }
-#endif
     int xi = (int)x & 255;								// Calculate the "unit cube" that the point asked will be located in
     int yi = (int)y & 255;								// The left bound is ( |_x_|,|_y_|,|_z_| ) and the right bound is that
     int zi = (int)z & 255;								// plus 1.  Next we calculate the location (from 0.0 to 1.0) in that cube.

@@ -186,18 +186,6 @@ void ShadowMap::regionAltered(const QRegion &rgn, Layer *layer)
 {
     Q_UNUSED(rgn)
     Q_UNUSED(layer)
-#if 0
-    int index = mMaster->layers().indexOf(layer);
-    if (TileLayer *tl = mMapComposite->map()->layerAt(index)->asTileLayer()) {
-        for (QRect r : rgn) {
-            for (int x = r.x(); x <= r.right(); x++) {
-                for (int y = r.y(); y <= r.bottom(); y++) {
-                    tl->setCell(x, y, layer->asTileLayer()->cellAt(x, y));
-                }
-            }
-        }
-    }
-#endif
 }
 
 void ShadowMap::lotAdded(quintptr id, MapInfo *mapInfo, const QPoint &pos, int level)
@@ -532,20 +520,8 @@ void MiniMapRenderWorker::processChanges(const QList<MapChange *> &changes)
         case MapChange::RegionAltered: {
             // The layer might not exist anymore, redrawAll catches that.
             if (redrawAll) break;
-#if 1
             QRect tileBounds = c.mRegion.boundingRect();
-#else
-            QRect tileBounds;
-#endif
             TileLayer *tl = sm.mMapComposite->map()->layerAt(c.mLayerIndex)->asTileLayer(); // kinda slow
-#if 0
-            foreach (const MapChange::CellEntry &ce, c.mCells) {
-                if (tileBounds.isEmpty())
-                    tileBounds = QRect(ce.x, ce.y, 1, 1);
-                else
-                    tileBounds |= QRect(ce.x, ce.y, 1, 1);
-            }
-#endif
             QMargins margins = sm.mMapComposite->map()->drawMargins();
             QRectF r = mRenderer->boundingRect(tileBounds, tl->level());
             r.adjust(-margins.left(),
@@ -1038,16 +1014,11 @@ void MiniMapItem::noBlendPainted(MiniMapItem::MapNoBlend *noBlend, const QRegion
 
 void MiniMapItem::painted(QImage image, QRectF sceneRect)
 {
-#if 1
     if (mMapImage.size() != image.size()) {
         mMapImageBounds = sceneRect;
         emit resized(image.size(), sceneRect); // update the minimap scene + view
     }
     mMapImage = image;
-#else
-    QPainter painter(&mMapImage);
-    painter.drawImage(r, image, r);
-#endif
 
     // There seems to be a conflict with QGraphicsScene's use of QueuedConnection.
     // Since this slot is called as a QueuedConnection (due to the render thread

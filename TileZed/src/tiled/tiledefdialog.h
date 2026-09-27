@@ -194,9 +194,6 @@ private:
 
     void loadTilesets();
     Tileset *loadTileset(const QString &source);
-#if 0
-    bool loadTilesetImage(Tileset *ts, const QString &source);
-#endif
     void tilesDirChanged();
     void checkProperties();
 

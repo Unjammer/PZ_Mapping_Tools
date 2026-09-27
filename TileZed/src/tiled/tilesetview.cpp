@@ -397,7 +397,6 @@ void TilesetView::contextMenuEvent(QContextMenuEvent *event)
         menu.addSeparator();
         actionProperties = menu.addAction(
                     propIcon, tr("Edit Project Zomboid Tile &Definition..."));
-        Utils::setThemeIcon(actionProperties, "document-properties");
         QAction *editImage = menu.addAction(tr("Edit in TileSetZ..."));
         connect(editImage, &QAction::triggered, this, [tile] {
             MainWindow::instance()->editInTileSetZ(tile);
@@ -405,7 +404,6 @@ void TilesetView::contextMenuEvent(QContextMenuEvent *event)
         actionExportSelection = menu.addAction(
                     QIcon(QLatin1String(":images/16x16/document-export.png")),
                     tr("Export Selection as PNG..."));
-        Utils::setThemeIcon(actionExportSelection, "document-export");
         menu.addSeparator();
     }
 #else
@@ -419,7 +417,6 @@ void TilesetView::contextMenuEvent(QContextMenuEvent *event)
         QAction *tileProperties = menu.addAction(propIcon,
                                                  tr("Tile &Properties..."));
         tileProperties->setEnabled(!isExternal);
-        Utils::setThemeIcon(tileProperties, "document-properties");
         menu.addSeparator();
 
         connect(tileProperties, SIGNAL(triggered()),

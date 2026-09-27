@@ -129,37 +129,18 @@ void TemplatesDialog::updateSelectedTemplate()
 {
     mWorldDoc->changeTemplate(mTemplate, ui->templateName->text(),
                               ui->templateDesc->toPlainText());
-#if 0
-    PropertyTemplate *pt = mTemplate;
-    setList();
-    int row = mWorldDoc->world()->propertyTemplates().sorted().indexOf(pt);
-    ui->templatesView->setCurrentRow(row, QItemSelectionModel::Select);
-    synchButtons();
-#endif
 }
 
 void TemplatesDialog::removeSelectedTemplate()
 {
-#if 0
-    int row = ui->templatesView->currentRow();
-#endif
     int index = mWorldDoc->world()->propertyTemplates().indexOf(mTemplate);
     mWorldDoc->removeTemplate(index);
-#if 0
-    clearTemplate();
-    delete ui->templatesView->takeItem(row);
-#endif
 }
 
 void TemplatesDialog::addTemplate()
 {
     mWorldDoc->addTemplate(ui->templateName->text(),
                            ui->templateDesc->toPlainText());
-#if 0
-    setList();
-//    ui->templatesView->clearSelection();
-    clearTemplate();
-#endif
 }
 
 void TemplatesDialog::displayDescription()

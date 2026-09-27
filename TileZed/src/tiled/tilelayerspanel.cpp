@@ -131,20 +131,6 @@ void LayersPanelDelegate::paint(QPainter *painter,
                             .adjusted(margins.left(), margins.top(), -margins.right(), -margins.bottom()),
                             tileImage);
     }
-#if 0
-    // Overlay with highlight color when selected
-    if (option.state & QStyle::State_Selected) {
-        const qreal opacity = painter->opacity();
-        painter->setOpacity(0.5);
-        QPalette::ColorGroup cg = option.state & QStyle::State_Enabled
-                                  ? QPalette::Normal : QPalette::Disabled;
-        if (cg == QPalette::Normal && !(option.state & QStyle::State_Active))
-            cg = QPalette::Inactive;
-        painter->fillRect(option.rect.adjusted(extra, extra, -extra, -extra),
-                          option.palette.brush(cg, QPalette::Highlight));
-        painter->setOpacity(opacity);
-    }
-#endif
     if (option.state & QStyle::State_Selected) {
         const qreal opacity = painter->opacity();
         painter->setOpacity(0.15);
@@ -196,23 +182,6 @@ void LayersPanelDelegate::paint(QPainter *painter,
                           Qt::AlignHCenter | Qt::AlignBottom, elidedName);
     }
 
-#if 0
-    // Focus rect around 'current' item
-    if (option.state & QStyle::State_HasFocus) {
-        QStyleOptionFocusRect o;
-        o.QStyleOption::operator=(option);
-        o.rect = option.rect.adjusted(1,1,-1,-1);
-        o.state |= QStyle::State_KeyboardFocusChange;
-        o.state |= QStyle::State_Item;
-        QPalette::ColorGroup cg = (option.state & QStyle::State_Enabled)
-                                  ? QPalette::Normal : QPalette::Disabled;
-        o.backgroundColor = option.palette.color(cg, (option.state & QStyle::State_Selected)
-                                                 ? QPalette::Highlight : QPalette::Window);
-        const QWidget *widget = 0/*d->widget(option)*/;
-        QStyle *style = /*widget ? widget->style() :*/ QApplication::style();
-        style->drawPrimitive(QStyle::PE_FrameFocusRect, &o, painter, widget);
-    }
-#endif
 }
 
 QSize LayersPanelDelegate::sizeHint(const QStyleOptionViewItem &option,
@@ -682,35 +651,7 @@ void TileLayersPanel::setTilePosition(const QPoint &tilePos)
 
     mTilePos = tilePos;
 
-#if 1
     setList();
-#else
-    // Not calling setList() only because it scrolls the view when setting
-    // the current index.
-
-    int level = mDocument->currentLevel();
-    CompositeLayerGroup *lg = mDocument->mapComposite()->layerGroupForLevel(level);
-    if (!lg) return;
-
-    QStringList blendLayerNames = mDocument->mapComposite()->bmpBlender()->blendLayers();
-
-    int index = 0;
-    foreach (TileLayer *tl, lg->layers()) {
-        Tile *tile = tl->contains(mTilePos) ? tl->cellAt(mTilePos).tile : 0;
-        TileLayer *blendLayer = lg->bmpBlendLayers().at(index);
-        if (blendLayer && blendLayer->contains(tilePos))
-            if (!blendLayerNames.contains(tl->name()) ||
-                    !mDocument->map()->noBlend(tl->name())->get(tilePos.x(), tilePos.y()))
-                if (Tile *blendTile = blendLayer->cellAt(tilePos).tile)
-                    tile = blendTile;
-        if (!tile)
-            tile = BuildingEditor::BuildingTilesMgr::instance()->noneTiledTile();
-        int layerIndex = mDocument->map()->layers().indexOf(tl);
-        mView->model()->setData(mView->model()->index(layerIndex),
-                                QVariant::fromValue(tile), Qt::DisplayRole);
-        ++index;
-    }
-#endif
 }
 
 void TileLayersPanel::setList()
@@ -754,34 +695,9 @@ void TileLayersPanel::setList()
 
 void TileLayersPanel::activated(const QModelIndex &index)
 {
-#if 1
     Tile *tile = mView->model()->tileAt(index);
     if (tile && tile != BuildingEditor::BuildingTilesMgr::instance()->noneTiledTile())
         emit tilePicked(tile);
-#else
-    int layerIndex = mView->model()->layerAt(index);
-    if (layerIndex >= 0 && layerIndex < mDocument->map()->layerCount()) {
-        Layer *layer = mDocument->map()->layerAt(layerIndex);
-        if (!layer || !layer->asTileLayer())
-            return;
-        TileLayer *tl = layer->asTileLayer();
-        Tile *tile = tl->contains(mTilePos) ? tl->cellAt(mTilePos).tile : 0;
-        if (tl->contains(mTilePos) && )
-        if (CompositeLayerGroup *lg = mDocument->mapComposite()->layerGroupForLevel(mCurrentLevel)) {
-            int index = lg->layers().indexOf(layer->asTileLayer());
-            TileLayer *blendLayer = lg->bmpBlendLayers().at(index);
-            if (blendLayer && blendLayer->contains(mTilePos)) {
-                if (!mDocument->map()->noBlend(layer->name())->get(mTilePos.x(), mTilePos.y())) {
-                    Tile *tile = blendLayer->cellAt(mTilePos).tile;
-                    emit tilePicked(tile);
-                    return;
-                }
-            }
-        }
-        if (tile)
-            emit tilePicked(tl->cellAt(mTilePos).tile);
-    }
-#endif
 }
 
 void TileLayersPanel::layerNameClicked(int layerIndex)

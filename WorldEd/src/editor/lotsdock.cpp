@@ -686,15 +686,6 @@ void LotsModel::setModelData()
 
     int minLevel = MIN_WORLD_LEVEL;
     int maxLevel = MAX_WORLD_LEVEL;
-#if 0
-    if (mCellDoc) {
-        maxLevel = mCellDoc->scene()->mapComposite()->maxLevel();
-    } else {
-        maxLevel = 0; // Could use MapInfo to get maxLevel
-        foreach (WorldCellLot *lot, mCell->lots())
-            maxLevel = qMax(lot->level(), maxLevel);
-    }
-#endif
     mRootItem = new Item();
 
     for (int level = minLevel; level <= maxLevel; level++)

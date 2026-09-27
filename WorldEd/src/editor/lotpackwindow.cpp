@@ -70,7 +70,6 @@ bool LotPackLayerGroup::orderedCellsAt(const QPoint &point,
 {
     cells.resize(0);
     opacities.resize(0);
-#if 1
     static QVector<Tiled::Cell> staticCells; // NOTE: results of the previous call are invalidated by the next call!!!
     staticCells.clear();
     staticCells.reserve(20); // so QVector reallocations don't change addresses of Cells.
@@ -86,21 +85,6 @@ bool LotPackLayerGroup::orderedCellsAt(const QPoint &point,
             }
         }
     }
-#else
-    int x = point.x() - mWorld->CurrentCell->ChunkMap->getWorldXMinTiles();
-    int y = point.y() - mWorld->CurrentCell->ChunkMap->getWorldYMinTiles();
-    if (IsoGridSquare *sq = mWorld->CurrentCell->getGridSquare(point.x(), point.y(), level())) {
-        foreach (QString tileName, sq->tiles) {
-            if (!mScene->mTileByName.contains(tileName)) continue;
-            if (Tile *tile = mScene->mTileByName[tileName]) {
-                mGrids[cells.size()]->replace(x, y, Cell(tile)); // FIXME: could this affect the address of previously-stored Cells?
-                const Cell *cell = &mGrids[cells.size()]->at(x, y);
-                cells += cell;
-                opacities += 1.0;
-            }
-        }
-    }
-#endif
     return !cells.isEmpty();
 }
 
@@ -214,7 +198,6 @@ void IsoWorldGridItem::paint(QPainter *painter,
                              const QStyleOptionGraphicsItem *,
                              QWidget *)
 {
-#if 1
     QColor gridColor(Qt::black);
 //    gridColor.setAlpha(128);
 
@@ -239,40 +222,6 @@ void IsoWorldGridItem::paint(QPainter *painter,
         const QPointF end = mScene->renderer()->tileToPixelCoords(x * isoConstants.SQUARES_PER_CELL, endY * isoConstants.SQUARES_PER_CELL, 0);
         painter->drawLine(start, end);
     }
-#else
-    const int tileWidth = 64;
-    const int tileHeight = 32;
-
-    QRectF r = option->exposedRect;
-    r.adjust(-tileWidth / 2, -tileHeight / 2,
-             tileWidth / 2, tileHeight / 2);
-
-    const int startX = qMax(qreal(0), mRenderer->pixelToTileCoords(r.topLeft()).x());
-    const int startY = qMax(qreal(0), mRenderer->pixelToTileCoords(r.topRight()).y());
-    const int endX = qMin(qreal(mWorld->getWidthInTiles()),
-                          mRenderer->pixelToTileCoords(r.bottomRight()).x());
-    const int endY = qMin(qreal(mWorld->getHeightInTiles()),
-                          mRenderer->pixelToTileCoords(r.bottomLeft()).y());
-
-    QColor gridColor(Qt::black);
-//    gridColor.setAlpha(128);
-
-    QPen gridPen(gridColor);
-    painter->setPen(gridPen);
-
-    for (int y = startY; y <= endY; ++y) {
-        if (y % 300) continue;
-        const QPointF start = mRenderer->pixelToTileCoords(startX, (qreal)y);
-        const QPointF end = mRenderer->pixelToTileCoords(endX, (qreal)y);
-        painter->drawLine(start, end);
-    }
-    for (int x = startX; x <= endX; ++x) {
-        if (x % 300) continue;
-        const QPointF start = mRenderer->pixelToTileCoords(x, (qreal)startY);
-        const QPointF end = mRenderer->pixelToTileCoords(x, (qreal)endY);
-        painter->drawLine(start, end);
-    }
-#endif
 }
 
 void IsoWorldGridItem::setWorld(IsoWorld *world)

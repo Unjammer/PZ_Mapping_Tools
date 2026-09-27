@@ -242,10 +242,6 @@ public:
     inline BuildingObject *objectAt(const QPoint &pos)
     { return objectAt(pos.x(), pos.y()); }
 
-    Door *GetDoorAt(int x, int y);
-    Window *GetWindowAt(int x, int y);
-    Stairs *GetStairsAt(int x, int y);
-    FurnitureObject *GetFurnitureAt(int x, int y);
 
     void SetRoomAt(int x, int y, Room *room);
 
@@ -276,9 +272,7 @@ public:
 
     QVector<QRect> roomRegion(Room *room);
 
-    QVector<QVector<Room*> > resizeGrid(const QSize &newSize) const;
     QMap<QString,FloorTileGrid*> resizeGrime(const QSize &newSize) const;
-    Tiled::PropertiesGrid *resizeSquarePropertiesGrid(const QSize &newSize) const;
 
     void rotate(bool right);
     void flip(bool horizontal);
@@ -328,7 +322,6 @@ public:
 
     Tiled::PropertiesGrid *squarePropertiesGrid() { return mSquarePropertiesGrid; }
     Tiled::PropertiesGrid *setSquarePropertiesGrid(Tiled::PropertiesGrid *other);
-    Tiled::PropertiesGrid *createSquarePropertiesGrid() const;
 
 private:
     Building *mBuilding;

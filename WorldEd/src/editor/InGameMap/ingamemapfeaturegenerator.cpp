@@ -351,6 +351,9 @@ InGameMapFeatureGenerator::InGameMapFeatureGenerator(QObject *parent) :
 {
 }
 
+static void simplifyRoadPolygon(ClipperLib::Path &nodes, int cellSize,
+                                double tolerance, int maximumPointSpacing);
+
 bool InGameMapFeatureGenerator::validateRoadMaskProcessing(QString *summary,
                                                            QString *error)
 {
@@ -359,6 +362,16 @@ bool InGameMapFeatureGenerator::validateRoadMaskProcessing(QString *summary,
             *error = message;
         return false;
     };
+
+    ClipperLib::Path angled = {{100, 100}, {100, 102}, {102, 100}, {102, 98}};
+    const double angledArea = ClipperLib::Area(angled);
+    simplifyRoadPolygon(angled, 300, 0.0, 1);
+    if (angled.size() != 4 || ClipperLib::Area(angled) != angledArea)
+        return fail(QStringLiteral("road simplification removed a non-collinear corner"));
+    ClipperLib::Path aligned = {{100, 100}, {100, 101}, {100, 102}, {102, 102}, {102, 100}};
+    simplifyRoadPolygon(aligned, 300, 0.0, 1);
+    if (aligned.size() != 4 || qAbs(ClipperLib::Area(aligned)) != 4.0)
+        return fail(QStringLiteral("road simplification changed an aligned outline"));
 
     RoadMask trail(QSize(24, 24));
     for (int x = 2; x <= 16; ++x) {
@@ -505,13 +518,6 @@ bool InGameMapFeatureGenerator::generateWorld(WorldDocument *worldDoc, InGameMap
         dialog.exec();
     }
 
-#if 0
-    // While displaying this, the MapManager's FileSystemWatcher might see some
-    // changed .tmx files, which results in the PROGRESS dialog being displayed.
-    // It's a bit odd to see the PROGRESS dialog blocked behind this messagebox.
-    QMessageBox::information(MainWindow::instance(),
-                             tr("InGameMap Feature Generator"), tr("Finished!"));
-#endif
     return true;
 
 errorExit:
@@ -882,6 +888,8 @@ static void douglas_peucker(std::vector<DPPoint> &geom, size_t start, size_t n, 
 
 static void simplifyPolygon(ClipperLib::Path& nodes, int cellSize)
 {
+    if (nodes.size() < 3)
+        return;
     // Simplification of the polygon using Ramer-Douglas-Peucker algorithm
     std::vector<DPPoint> points;
     std::int64_t SCALE = 1000;
@@ -915,7 +923,7 @@ static void simplifyPolygon(ClipperLib::Path& nodes, int cellSize)
     }
 
     // Merge horizontal/vertical spans (on cell borders)
-    for (size_t i = 0; i < nodes.size() - 1; i++) {
+    for (size_t i = 0; i + 1 < nodes.size(); i++) {
         const auto& n0 = nodes[i];
         size_t end = i;
         for (size_t j = i + 1; j < nodes.size(); j++) {
@@ -927,7 +935,7 @@ static void simplifyPolygon(ClipperLib::Path& nodes, int cellSize)
         if (i != end)
             nodes.erase(nodes.begin() + i + 1, nodes.begin() + end /*- i - 1*/);
     }
-    for (size_t i = 0; i < nodes.size() - 1; i++) {
+    for (size_t i = 0; i + 1 < nodes.size(); i++) {
         const auto& n0 = nodes[i];
         size_t end = i;
         for (size_t j = i + 1; j < nodes.size(); j++) {
@@ -1092,17 +1100,7 @@ static void simplifyRoadPolygon(ClipperLib::Path &nodes, int cellSize,
         if (point.necessary)
             nodes.push_back({point.x / scale, point.y / scale});
     }
-    for (size_t i = 0; i + 1 < nodes.size(); ++i) {
-        const ClipperLib::IntPoint first = nodes[i];
-        size_t end = i;
-        for (size_t j = i + 1; j < nodes.size(); ++j) {
-            if (first.X != nodes[j].X && first.Y != nodes[j].Y)
-                break;
-            end = j;
-        }
-        if (end > i)
-            nodes.erase(nodes.begin() + i + 1, nodes.begin() + end);
-    }
+    ClipperLib::CleanPolygon(nodes, 0.1);
 }
 bool InGameMapFeatureGenerator::doRoads(WorldCell *worldCell, MapInfo *mapInfo)
 {
@@ -1415,12 +1413,6 @@ bool InGameMapFeatureGenerator::doTrees(WorldCell *cell, MapInfo *mapInfo)
         }
     }
 
-#if 0
-    int nextID = 0;
-    for (auto *feature : cell->inGameMap().features()) {
-        nextID = std::max(nextID, feature->mProperties.getInt(QStringLiteral("id"), 0));
-    }
-#endif
 
     for (pzPolygon *poly : allPolygons) {
         ClipperLib::Path simple = poly->outer;
@@ -1430,21 +1422,6 @@ bool InGameMapFeatureGenerator::doTrees(WorldCell *cell, MapInfo *mapInfo)
                                       mCleanedPolygonCount, mRejectedPolygonCount)) {
             continue;
         }
-#if 0
-        int minX = std::numeric_limits<int>::max();
-        int minY = std::numeric_limits<int>::max();
-        int maxX = std::numeric_limits<int>::min();
-        int maxY = std::numeric_limits<int>::min();
-        for (auto& point : simple) {
-            minX = std::min(minX, (int) point.X);
-            minY = std::min(minY, (int) point.Y);
-            maxX = std::max(maxX, (int) point.X);
-            maxY = std::max(maxY, (int) point.Y);
-        }
-        if ((maxX - minX + 1) * (maxY - minY + 1) < 1000) {
-            continue;
-        }
-#endif
 
         InGameMapFeature* feature = new InGameMapFeature(&cell->inGameMap());
         feature->properties().set(QStringLiteral("natural"), QStringLiteral("forest"));
@@ -1456,7 +1433,6 @@ bool InGameMapFeatureGenerator::doTrees(WorldCell *cell, MapInfo *mapInfo)
         feature->mGeometry.mCoordinates += coords;
 
         if (poly->inner.empty() == false) {
-#if 1
             for (auto& hole : poly->inner) {
                 simple = hole;
                 simplifyPolygon(simple, bounds.width());
@@ -1473,31 +1449,10 @@ bool InGameMapFeatureGenerator::doTrees(WorldCell *cell, MapInfo *mapInfo)
                 }
                 feature->mGeometry.mCoordinates += coords;
             }
-#else
-            // If this polygon has holes, assign a unique ID so holes can refer to this polygon.
-            ++nextID;
-            feature->properties().set(QStringLiteral("id"), nextID);
-#endif
         }
 
         mWorldDoc->addInGameMapFeature(cell, cell->inGameMap().features().size(), feature);
 
-#if 0
-        for (auto& hole : poly->inner) {
-            InGameMapFeature* feature = new InGameMapFeature(&cell->inGameMap());
-            feature->properties().set(QStringLiteral("natural"), QStringLiteral("forest"));
-            feature->properties().set(QStringLiteral("hole"), nextID);
-            feature->mGeometry.mType = QStringLiteral("Polygon");
-            InGameMapCoordinates coords;
-            simple = hole;
-            simplifyPolygon(simple, bounds.width());
-            for (auto& point : simple) {
-                coords += InGameMapPoint(point.X, point.Y);
-            }
-            feature->mGeometry.mCoordinates += coords;
-            mWorldDoc->addInGameMapFeature(cell, cell->inGameMap().features().size(), feature);
-        }
-#endif
     }
 
     qDeleteAll(allPolygons);

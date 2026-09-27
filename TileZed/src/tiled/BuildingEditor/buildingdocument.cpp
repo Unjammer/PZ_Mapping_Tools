@@ -53,10 +53,6 @@ BuildingDocument::BuildingDocument(Building *building, const QString &fileName) 
         building->setRoofCapTile(btiles->defaultRoofCapTiles());
     if (building->roofSlopeTile()->isNone())
         building->setRoofSlopeTile(btiles->defaultRoofSlopeTiles());
-#if 0
-    if (building->roofTopTile()->isNone())
-        building->setRoofTopTile(btiles->defaultRoofTopTiles());
-#endif
 
     // Handle reading old buildings
     if (building->usedTiles().isEmpty()) {

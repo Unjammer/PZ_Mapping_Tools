@@ -62,17 +62,7 @@ void PluginManager::loadPlugins()
 
     // Determine the plugin path based on the application location
     QString pluginPath = PortableSettings::installRootPath();
-#ifdef Q_OS_WIN32
     pluginPath += QLatin1String("/plugins/tiled");
-#elif defined(Q_OS_MACOS)
-    pluginPath += QLatin1String("/../PlugIns");
-#else
-#ifdef ZOMBOID
-    pluginPath += QLatin1String("/../lib/tilezed/plugins");
-#else
-    pluginPath += QLatin1String("/../lib/tiled/plugins");
-#endif // ZOMBOID
-#endif
 
     // Load dynamic plugins
     QDirIterator iterator(pluginPath, QDir::Files | QDir::Readable);

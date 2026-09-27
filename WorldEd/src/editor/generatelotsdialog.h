@@ -10,6 +10,7 @@ class GenerateLotsDialog;
 }
 
 class WorldDocument;
+class GenerateLotsSettings;
 
 class GenerateLotsDialog : public QDialog
 {
@@ -27,6 +28,10 @@ public:
     bool fillHolesWithNearestTile() const;
     QString holeFillTileName() const;
     static bool validatePathSelection(QString *error);
+    static bool validateTreeOptions(QWidget *parent, QString *error);
+
+protected:
+    void showEvent(QShowEvent *event) override;
 
 private slots:
     void exportBrowse();
@@ -43,6 +48,7 @@ private slots:
 
 private:
     static void selectComboItem(QComboBox *comboBox, const QString &text);
+    GenerateLotsSettings editedSettings() const;
     QStringList comboboxStringList(QComboBox *comboBox) const;
     bool validate();
     bool prepareModExport(QString *error);

@@ -155,10 +155,6 @@ bool NewMapBinaryFile::write(MapComposite *mapComposite, const QVector<Tiled::Pr
     }
 
     file.close();
-#if 0
-    Navigate::ChunkDataFile cdf;
-    cdf.fromMap(cell->x(), cell->y(), mapComposite, mRoomRectByLevel[0], lotSettings);
-#endif
     return true;
 }
 
@@ -594,10 +590,6 @@ bool NewMapBinaryFile::processObjectGroup(ObjectGroup *objectGroup, int levelOff
     level += levelOffset;
 
     for (const MapObject *mapObject : objectGroup->objects()) {
-#if 0
-        if (mapObject->name().isEmpty() || mapObject->type().isEmpty())
-            continue;
-#endif
         if (!int(mapObject->width()) || !int(mapObject->height()))
             continue;
 
@@ -620,15 +612,6 @@ bool NewMapBinaryFile::processObjectGroup(ObjectGroup *objectGroup, int levelOff
         y += offset.y();
 
         if (objectGroup->name().contains(QLatin1String("RoomDefs"))) {
-#if 0 // NOTE: can't place buildings across cell boundaries
-            if (x < 0 || y < 0 || x + w > 300 || y + h > 300) {
-                x = qBound(0, x, 300);
-                y = qBound(0, y, 300);
-                mError = tr("A RoomDef in cell %1,%2 overlaps cell boundaries.\nNear x,y=%3,%4")
-                        .arg(cell->x()).arg(cell->y()).arg(x).arg(y);
-                return false;
-            }
-#endif
             LotFile::RoomRect *rr = new LotFile::RoomRect(name, x, y, level,
                                                           w, h);
             mRoomRects += rr;

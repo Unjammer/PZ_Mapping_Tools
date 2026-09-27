@@ -300,7 +300,6 @@ void InGameMapImageDialog::tileToImage(QImage &image, const BuildingEditor::Buil
         return; // failed to parse the tile name
     }
     int tileIndex = buildingTile.mIndex;
-#if 1
     for (int i = mRules.size() - 1; i >= 0; i--) {
         const MapToPNGFileRule &rule = mRules[i];
         if ((rule.mTilesetCompare == QLatin1String("contains")) && (buildingTile.mTilesetName.contains(rule.mTileset) == false)) {
@@ -318,61 +317,6 @@ void InGameMapImageDialog::tileToImage(QImage &image, const BuildingEditor::Buil
         image.setPixel(pixelX, pixelY, qRgba(rule.mColor.red(), rule.mColor.green(), rule.mColor.blue(), rule.mColor.alpha()));
         break;
     }
-#else
-    if (buildingTile.mTilesetName.contains(QStringLiteral("_trees"))) {
-        image.setPixel(pixelX, pixelY, qRgb(38, 53, 22)); // normaltree
-    }
-    if (buildingTile.mTilesetName.contains(QStringLiteral("jumbo"))) {
-        image.setPixel(pixelX, pixelY, qRgb(38, 53, 22)); // jumbotree
-    }
-    if (buildingTile.mTilesetName.contains(QStringLiteral("_railroad"))) {
-        image.setPixel(pixelX, pixelY, qRgb(73, 58, 43)); // rails
-    }
-    if (buildingTile.mTilesetName.startsWith(QStringLiteral("vegetation"))) {
-        image.setPixel(pixelX, pixelY, qRgb(48, 73, 32)); // vegetation
-    }
-    if (buildingTile.mTilesetName.startsWith(QStringLiteral("blends_natural_01"))) {
-        if (tileIndex >= 0 && tileIndex <= 15) {
-            image.setPixel(pixelX, pixelY, qRgb(217, 207, 183)); // sand
-        }
-        if (tileIndex >= 16 && tileIndex <= 31) {
-            image.setPixel(pixelX, pixelY, qRgb(75, 88, 27)); // darkgrass
-        }
-        if (tileIndex >= 32 && tileIndex <= 47) {
-            image.setPixel(pixelX, pixelY, qRgb(97, 103, 36)); // medgrass
-        }
-        if (tileIndex >= 48 && tileIndex <= 63) {
-            image.setPixel(pixelX, pixelY, qRgb(127, 120, 45)); // litegrass
-        }
-        if (tileIndex >= 64 && tileIndex <= 79) {
-            image.setPixel(pixelX, pixelY, qRgb(91, 63, 21)); // dirt
-        }
-        if (tileIndex >= 80 && tileIndex <= 95) {
-            image.setPixel(pixelX, pixelY, qRgb(91, 63, 21)); // dirt + grass
-        }
-    }
-    if (buildingTile.mTilesetName.startsWith(QStringLiteral("blends_natural_02"))) {
-        image.setPixel(pixelX, pixelY, qRgb(108, 127, 131)); // water
-    }
-    if (buildingTile.mTilesetName.startsWith(QStringLiteral("blends_street_01"))) {
-        image.setPixel(pixelX, pixelY, qRgb(128, 128, 128)); // street
-    }
-    if (buildingTile.mTilesetName.startsWith(QStringLiteral("floors_exterior_tilesandstone"))) {
-        image.setPixel(pixelX, pixelY, qRgb(132, 81, 76)); // tilesand
-    }
-    if (buildingTile.mTilesetName.startsWith(QStringLiteral("floors_exterior_tilesandwood"))) {
-        image.setPixel(pixelX, pixelY, qRgb(132, 81, 76)); // tilesand
-    }
-    if (buildingTile.mTilesetName.startsWith(QStringLiteral("location_"))) {
-        image.setPixel(pixelX, pixelY, qRgb(132, 81, 76)); // tilesand
-    }
-    if (buildingTile.mTilesetName.startsWith(QStringLiteral("vegetation_farm"))) {
-        image.setPixel(pixelX, pixelY, qRgb(218, 165, 32)); // Corn
-    }
-    if (buildingTile.mTilesetName.startsWith(QStringLiteral("walls_"))) {
-        image.setPixel(pixelX, pixelY, qRgb(93, 44, 39)); // walls
-    }
-#endif
 }
 
 /////

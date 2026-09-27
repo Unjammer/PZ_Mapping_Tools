@@ -1,4 +1,4 @@
-# PZ Mapping Tools - Build 20260909f
+# PZ Mapping Tools - Build 20260927e
 
 _Changes since Build 20260827_
 
@@ -12,6 +12,31 @@ This changelog contains only user-visible work added after that tagged
 release.
 
 ## Included applications
+
+- WorldEd selects its tile renderer from the active drawing surface rather
+  than the saved OpenGL preference, preventing blank tiles when a raster
+  surface is used while OpenGL is configured.
+  Its OpenGL renderer also preserves alpha correctly when blending tiles,
+  removing bright fringes from semi-transparent edges.
+- TileZed and BuildingEd now select their application identity at compile
+  time instead of switching interfaces based on the executable filename.
+  Shared catalogue, map, building and scripting support is retained.
+- The maintained source and packaging target Windows x64. Obsolete native
+  Linux/macOS packaging, the old Qt 4 CMake projects, inactive code branches
+  and unused editor components have been removed. Third-party notices and
+  upstream library sources are retained.
+- Generate Lots adds **Bypass jumbo rules (preserve placed trees)** for both
+  300x300 and 256x256 projects. The per-project option is off by default and
+  skips both placeholder replacement and neighboring-tree removal, preserving authored
+  XL and XXL tiles. When unchecked, jumbo rules apply in both formats.
+  Native 256x256 export no longer bypasses these rules unconditionally.
+  Applying export settings retains the existing biome-map path.
+- All three applications support fractional Windows display scaling,
+  including 120%, 125% and 150%, without rounding to an integer scale.
+  Generate Lots fits the available desktop, with scrollable options and
+  confirmation buttons that remain visible.
+  WorldEd wraps its lower view controls and scrolls the Street Names, Regions
+  and InGameMap panels on smaller desktops.
 
 - All three applications use the same loading window, with a completed
   tileset counter and progress bar. Their main windows start centered at
@@ -68,9 +93,22 @@ release.
 - TileZed and BuildingEd palette context menus offer a saved Show Tile Numbers
   toggle. Erasing a curb restores its blend suppression when no remaining
   neighboring curb needs it. Undo restores the curb and its blend flags.
-- Exterior building tiles without a floor retain map tiles on other layers,
-  including vegetation. Matching layers are replaced and building floors
-  continue to cover underlying map tiles in rendering and export.
+- Floorless building walls, trims, doors, windows and frames retain underlying
+  vegetation. Furniture and other nonstructural layers clear underlying
+  Vegetation layers. Matching layers are replaced, building floors cover
+  underlying map tiles, and AboveLot layers remain above buildings in
+  rendering and export.
+- BuildingEd copies room layouts only with All Layers selected. Current-layer,
+  current-level tile copies paste onto the destination layer without creating
+  or replacing rooms. Complete building copies retain their room layouts.
+- BuildingEd and WorldEd retain wall grime around extended window shapes.
+- WorldEd safely recreates InGameMap scene items when an edited map reloads.
+  Feature visibility follows the active tool, including adjacent cells.
+- Road-outline simplification no longer removes non-collinear corners.
+- InGameMap editing handles follow the active tool and are restored after a
+  map reload. Empty geometry does not crash selection or drawing.
+- BuildingEd catalogue changes respect deferred updates to hidden views,
+  preventing a crash after a building resize.
 - Raster drawing reuses filtered tile images at supported 25% and 50%
   zooms with a bounded cache. Edited images select fresh cache entries.
 - TileZed and BuildingEd avoid rewriting unchanged window and dock settings.
@@ -86,17 +124,6 @@ release.
   preparing their maps, and loading tile catalogues with patch files configured.
   Property-file changes and reordering refresh the merged data, and removing
   a patch or one of its properties restores the underlying values.
-- A macOS setup script installs the development dependencies, selects or
-  downloads the source, checks the Qt toolchain, and builds all three editors.
-  It supports resuming setup, preserves existing sources and build directories,
-  and reports failures with a complete log. Downloaded sources are updated only
-  when requested, without discarding local modifications.
-- macOS source builds give BuildingEd its own application identity and TBX
-  document association. Each application bundle includes the configuration
-  catalogues, documentation, and Lua scripts. Build libraries use a shared
-  compiler-output directory with relative runtime search paths. Editor
-  commands resolve adjacent macOS application bundles. Native macOS builds
-  still require testing on the target operating system.
 - Initial Setup now applies the selected configuration and Tiles directories
   to the running application before its catalogues load. A restart is no
   longer needed to clear missing-image placeholders caused by a previously

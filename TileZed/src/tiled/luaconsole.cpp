@@ -49,10 +49,7 @@ LuaConsole::LuaConsole(QWidget *parent) :
     ui(new Ui::LuaConsole),
     mBuildingEditorMode(false)
 {
-#ifdef Q_OS_MACOS
-#else
     setWindowFlags(windowFlags() | Qt::Tool);
-#endif
 
     ui->setupUi(this);
 

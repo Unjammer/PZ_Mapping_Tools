@@ -733,6 +733,11 @@ private:
                 count = std::min(count, 16);
                 settings.numberOfThreads = std::max(count, 1);
                 xml.skipCurrentElement();
+            } else if (xml.name() == QLatin1String("preservePlacedTrees")) {
+                settings.preservePlacedTrees =
+                        xml.attributes().value(QLatin1String("enabled"))
+                        == QLatin1String("true");
+                xml.skipCurrentElement();
             } else
                 readUnknownElement();
         }

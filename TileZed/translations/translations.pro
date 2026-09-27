@@ -12,7 +12,7 @@ LANGUAGES = en nl pt es de pt_BR ja fr it cs he lv zh ru
 
 # Helper function to adapt the slashes in a path to the system
 defineReplace(fixSlashes) {
-    win32:1 ~= s|/|\\|g
+    1 ~= s|/|\\|g
     return($$1)
 }
 
@@ -31,7 +31,7 @@ QT =
 LIBS =
 QMAKE_LINK = @: IGNORE THIS LINE
 OBJECTS_DIR =
-win32:CONFIG -= embed_manifest_exe
+CONFIG -= embed_manifest_exe
 
 TRANSLATIONS = $$prependAppend(LANGUAGES, $$PWD/tiled_, .ts)
 LUPDATE = $$fixSlashes($$[QT_INSTALL_BINS]/lupdate) -locations relative
@@ -40,13 +40,7 @@ LRELEASE = $$fixSlashes($$[QT_INSTALL_BINS]/lrelease)
 ts.commands = cd $$PWD/.. && $$LUPDATE src -ts $$TRANSLATIONS
 QMAKE_EXTRA_TARGETS += ts
 
-win32 {
     TARGET_DIR = .
-} else:macx {
-    TARGET_DIR = ../bin/TileZed.app/Contents/Translations
-} else {
-    TARGET_DIR = ../share/tilezed/translations
-}
 
 updateqm.input = TRANSLATIONS
 updateqm.output = $$OUT_PWD/$$TARGET_DIR/${QMAKE_FILE_BASE}.qm
@@ -56,15 +50,6 @@ updateqm.name = LRELEASE ${QMAKE_FILE_IN}
 updateqm.CONFIG += no_link
 QMAKE_EXTRA_COMPILERS += updateqm
 
-macx {
-    buildingqm.input = TRANSLATIONS
-    buildingqm.output = $$OUT_PWD/../bin/BuildingEd.app/Contents/Translations/${QMAKE_FILE_BASE}.qm
-    buildingqm.variable_out = PRE_TARGETDEPS
-    buildingqm.commands = $$LRELEASE ${QMAKE_FILE_IN} -qm ${QMAKE_FILE_OUT}
-    buildingqm.name = LRELEASE ${QMAKE_FILE_IN}
-    buildingqm.CONFIG += no_link
-    QMAKE_EXTRA_COMPILERS += buildingqm
-}
 
 # Install rule for translations
 isEmpty(INSTALL_ONLY_BUILD) {

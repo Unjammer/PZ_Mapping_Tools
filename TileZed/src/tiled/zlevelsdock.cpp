@@ -87,7 +87,6 @@ ZLevelsDock::ZLevelsDock(QWidget *parent) :
     newLayerButton->setMenu(newLayerMenu);
     newLayerButton->setIcon(newIcon);
     newLayerButton->setToolTip(tr("New Layer"));
-    Utils::setThemeIcon(newLayerButton, "document-new");
 
     QToolBar *toolBar = new QToolBar;
     toolBar->setFloatable(false);

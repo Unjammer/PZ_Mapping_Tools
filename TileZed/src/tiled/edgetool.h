@@ -130,10 +130,6 @@ private:
     };
 
     void drawEdge(const QPointF &start, const QPointF &end, Edge edge);
-#if 0
-    void drawEdgeTile(int x, int y, Edge edge);
-    void drawGapTile(int x, int y);
-#endif
 
     void getMapChanges(const QPointF &start, const QPointF &end, Edge edge,
                        TileLayer &stamp, QMap<QString,QRegion> &eraseRgn,

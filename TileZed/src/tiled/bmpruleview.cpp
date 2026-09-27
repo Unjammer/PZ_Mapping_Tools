@@ -102,25 +102,6 @@ void BmpRuleDelegate::paint(QPainter *painter,
     if (!rule) return;
 
     const int extra = 2;
-#if 0
-    // Overlay with highlight color when selected
-    if ((option.state & QStyle::State_Selected) && (option.state & QStyle::State_Active)) {
-        const qreal opacity = painter->opacity();
-        painter->setOpacity(0.5);
-        QPalette::ColorGroup cg = option.state & QStyle::State_Enabled
-                                  ? QPalette::Normal : QPalette::Disabled;
-        if (cg == QPalette::Normal && !(option.state & QStyle::State_Active))
-            cg = QPalette::Inactive;
-        painter->fillRect(option.rect/*.adjusted(extra, extra, -extra, -extra)*/,
-                          option.palette.brush(cg, QPalette::Highlight));
-        painter->setOpacity(opacity);
-    } else if (option.state & QStyle::State_Selected) {
-        const qreal opacity = painter->opacity();
-        painter->setOpacity(0.15);
-        painter->fillRect(option.rect, option.palette.highlight());
-        painter->setOpacity(opacity);
-    }
-#endif
     if (rule->obsolete) {
         const qreal opacity = painter->opacity();
         painter->setOpacity(1.0);
@@ -218,23 +199,6 @@ void BmpRuleDelegate::paint(QPainter *painter,
     if (mMouseOverIndex == index)
         painter->setFont(font);
 
-#if 0
-    // Focus rect around 'current' item
-    if (option.state & QStyle::State_HasFocus) {
-        QStyleOptionFocusRect o;
-        o.QStyleOption::operator=(option);
-        o.rect = option.rect.adjusted(1,1,-1,-1);
-        o.state |= QStyle::State_KeyboardFocusChange;
-        o.state |= QStyle::State_Item;
-        QPalette::ColorGroup cg = (option.state & QStyle::State_Enabled)
-                                  ? QPalette::Normal : QPalette::Disabled;
-        o.backgroundColor = option.palette.color(cg, (option.state & QStyle::State_Selected)
-                                                 ? QPalette::Highlight : QPalette::Window);
-        const QWidget *widget = 0/*d->widget(option)*/;
-        QStyle *style = /*widget ? widget->style() :*/ QApplication::style();
-        style->drawPrimitive(QStyle::PE_FrameFocusRect, &o, painter, widget);
-    }
-#endif
 }
 
 QSize BmpRuleDelegate::sizeHint(const QStyleOptionViewItem &option,
@@ -322,24 +286,6 @@ QVariant BmpRuleModel::data(const QModelIndex &index, int role) const
 {
     Q_UNUSED(index)
     Q_UNUSED(role)
-#if 0
-    if (role == Qt::BackgroundRole) {
-        if (Item *item = toItem(index))
-            return item->mBackground;
-    }
-    if (role == Qt::DisplayRole) {
-        if (Tile *tile = tileAt(index))
-            return tile->image();
-    }
-    if (role == Qt::DecorationRole) {
-        if (Item *item = toItem(index))
-            return item->mLabel;
-    }
-    if (role == Qt::ToolTipRole) {
-        if (Item *item = toItem(index))
-            return item->mToolTip;
-    }
-#endif
     return QVariant();
 }
 
@@ -348,17 +294,6 @@ bool BmpRuleModel::setData(const QModelIndex &index, const QVariant &value, int 
     Q_UNUSED(index)
     Q_UNUSED(value)
     Q_UNUSED(role)
-#if 0
-    if (Item *item = toItem(index)) {
-        if (role == Qt::DisplayRole) {
-            if (item->mTile && value.canConvert<Tile*>()) {
-                item->mTile = qvariant_cast<Tile*>(value);
-                emit dataChanged(index, index);
-                return true;
-            }
-        }
-    }
-#endif
     return false;
 }
 
@@ -521,38 +456,6 @@ QSize BmpRuleView::sizeHint() const
 
 bool BmpRuleView::viewportEvent(QEvent *event)
 {
-#if 0
-    switch (event->type()) {
-    case QEvent::HoverEnter:
-    case QEvent::HoverMove: {
-        QModelIndex mouseOver;
-        QPoint pos = static_cast<QHoverEvent*>(event)->pos();
-        QModelIndex index = indexAt(pos);
-        BmpRule *rule = model()->ruleAt(index);
-        if (rule) {
-            QRect r = visualRect(index);
-            if (pos.y() < r.top() + 2 + fontMetrics().lineSpacing())
-                mouseOver = index;
-        }
-        if (mouseOver != mDelegate->mouseOverIndex()) {
-            if (mDelegate->mouseOverIndex().isValid())
-                update(mDelegate->mouseOverIndex());
-            mDelegate->setMouseOver(mouseOver);
-            update(mouseOver);
-        }
-        break;
-    }
-    case QEvent::HoverLeave: {
-        QModelIndex index = mDelegate->mouseOverIndex();
-        if (index.isValid()) {
-            mDelegate->setMouseOver(QModelIndex());
-            update(index);
-        }
-    }
-    default:
-            break;
-    }
-#endif
     return QTableView::viewportEvent(event);
 }
 
@@ -566,18 +469,6 @@ void BmpRuleView::mouseMoveEvent(QMouseEvent *event)
 
 void BmpRuleView::mousePressEvent(QMouseEvent *event)
 {
-#if 0
-    QModelIndex index = indexAt(event->pos());
-    int layerIndex = model()->layerAt(index);
-    if (layerIndex >= 0) {
-        QRect r = visualRect(index);
-        if (event->pos().y() < r.top() + 2 + fontMetrics().lineSpacing()) {
-            emit layerNameClicked(layerIndex);
-            mIgnoreMouse = true;
-            return;
-        }
-    }
-#endif
     QTableView::mousePressEvent(event);
 }
 
@@ -592,18 +483,6 @@ void BmpRuleView::mouseReleaseEvent(QMouseEvent *event)
 
 void BmpRuleView::mouseDoubleClickEvent(QMouseEvent *event)
 {
-#if 0
-    QModelIndex index = indexAt(event->pos());
-    int layerIndex = model()->layerAt(index);
-    if (layerIndex >= 0) {
-        QRect r = visualRect(index);
-        if (event->pos().y() < r.top() + 2 + fontMetrics().lineSpacing()) {
-            emit layerNameClicked(layerIndex);
-            mIgnoreMouse = true;
-            return; // don't activated() the item
-        }
-    }
-#endif
     QTableView::mouseDoubleClickEvent(event);
 }
 

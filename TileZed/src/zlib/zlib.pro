@@ -6,7 +6,7 @@ TARGET = zlib1
 CONFIG -= app_bundle
 CONFIG -= qt
 
-win32:DEFINES += ZLIB_DLL
+DEFINES += ZLIB_DLL
 
 isEmpty(INSTALL_ONLY_BUILD) {
     target.path = $${LIBDIR}
@@ -47,7 +47,7 @@ HEADERS += \
     zlib.h \
     zutil.h
 
-win32:OTHER_FILES += \
+OTHER_FILES += \
     win32/zlib.def \
     win32/zlib1.rc
 

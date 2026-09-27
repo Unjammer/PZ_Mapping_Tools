@@ -68,8 +68,6 @@ ObjectsDock::ObjectsDock(QWidget *parent)
     mActionObjectProperties->setIcon(QIcon(QLatin1String(":/images/16x16/document-properties.png")));
     mActionObjectProperties->setToolTip(tr("Object Properties"));
 
-    Utils::setThemeIcon(mActionRemoveObjects, "edit-delete");
-    Utils::setThemeIcon(mActionObjectProperties, "document-properties");
 
     connect(mActionDuplicateObjects, &QAction::triggered, this, &ObjectsDock::duplicateObjects);
     connect(mActionRemoveObjects, &QAction::triggered, this, &ObjectsDock::removeObjects);

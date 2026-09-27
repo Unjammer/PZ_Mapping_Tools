@@ -225,14 +225,10 @@ bool BuildingTilesMgr::parseTileName(const QString &tileName, QString &tilesetNa
     tilesetName = tileName.mid(0, n);
     QString indexString = tileName.mid(n + 1);
     // Strip leading zeroes from the tile index
-#if 1
     int i = 0;
     while (i < indexString.length() - 1 && indexString[i] == QLatin1Char('0'))
         i++;
     indexString.remove(0, i);
-#else
-    indexString.remove( QRegExp(QLatin1String("^[0]*")) );
-#endif
     bool ok;
     index = indexString.toInt(&ok);
     return !tilesetName.isEmpty() && ok && index >= 0;
@@ -349,21 +345,6 @@ bool BuildingTilesMgr::readTxt()
             category->insertEntry(category->entryCount(), sourceEntry->createCopy(category));
         }
     }
-#if 0
-    // Check that all the tiles exist
-    foreach (BuildingTileCategory *category, categories()) {
-        foreach (BuildingTileEntry *entry, category->entries()) {
-            for (int i = 0; i < category->enumCount(); i++) {
-                if (tileFor(entry->tile(i)) == mMissingTile) {
-                    mError = tr("Tile %1 #%2 doesn't exist.")
-                            .arg(entry->tile(i)->mTilesetName)
-                            .arg(entry->tile(i)->mIndex);
-                    return false;
-                }
-            }
-        }
-    }
-#endif
     for (BuildingTileCategory *category : std::as_const(mCategories)) {
         category->setDefaultEntry(category->entry(0));
     }
@@ -500,20 +481,12 @@ BuildingTile *BuildingTilesMgr::fromTiledTile(Tile *tile)
     return get(nameForTile(tile));
 }
 
-BuildingTileEntry *BuildingTilesMgr::defaultExteriorWall() const
-{
-    return mCatEWalls->defaultEntry();
-}
 
 BuildingTileEntry *BuildingTilesMgr::defaultInteriorWall() const
 {
     return mCatIWalls->defaultEntry();
 }
 
-BuildingTileEntry *BuildingTilesMgr::defaultExteriorWallTrim() const
-{
-    return mCatEWallTrim->defaultEntry();
-}
 
 BuildingTileEntry *BuildingTilesMgr::defaultInteriorWallTrim() const
 {
@@ -525,30 +498,10 @@ BuildingTileEntry *BuildingTilesMgr::defaultFloorTile() const
     return mCatFloors->defaultEntry();
 }
 
-BuildingTileEntry *BuildingTilesMgr::defaultDoorTile() const
-{
-    return mCatDoors->defaultEntry();
-}
 
-BuildingTileEntry *BuildingTilesMgr::defaultDoorFrameTile() const
-{
-    return mCatDoorFrames->defaultEntry();
-}
 
-BuildingTileEntry *BuildingTilesMgr::defaultWindowTile() const
-{
-    return mCatWindows->defaultEntry();
-}
 
-BuildingTileEntry *BuildingTilesMgr::defaultCurtainsTile() const
-{
-    return mCatCurtains->defaultEntry();
-}
 
-BuildingTileEntry *BuildingTilesMgr::defaultStairsTile() const
-{
-    return mCatStairs->defaultEntry();
-}
 
 BuildingTileEntry *BuildingTilesMgr::defaultCeilingTile() const
 {
@@ -565,10 +518,6 @@ BuildingTileEntry *BuildingTilesMgr::defaultRoofSlopeTiles() const
     return mCatRoofSlopes->defaultEntry();
 }
 
-BuildingTileEntry *BuildingTilesMgr::defaultRoofTopTiles() const
-{
-    return mCatRoofTops->defaultEntry();
-}
 
 /////
 
@@ -1406,14 +1355,6 @@ BuildingTileEntry *BTC_RoofCaps::createEntryFromSingleTile(const QString &tileNa
     entry->mTiles[PeakOnePt5E] = getTile(tileName, 14);
     entry->mTiles[PeakTwoPt5S] = getTile(tileName, 17);
     entry->mTiles[PeakTwoPt5E] = getTile(tileName, 16);
-#if 0 // impossible to guess these
-    entry->mTiles[CapGapS1] = getTile(tileName, );
-    entry->mTiles[CapGapS2] = getTile(tileName, );
-    entry->mTiles[CapGapS3] = getTile(tileName, );
-    entry->mTiles[CapGapE1] = getTile(tileName, );
-    entry->mTiles[CapGapE2] = getTile(tileName, );
-    entry->mTiles[CapGapE3] = getTile(tileName, );
-#endif
     return entry;
 }
 

@@ -747,14 +747,6 @@ bool BMPToTMX::generateWorld(WorldDocument *worldDoc, BMPToTMX::GenerateMode mod
         mError = tr("The Tiles Directory could not be found.  Please set it in the Preferences.");
         return false;
     }
-#if 0
-    if (!TileMetaInfoMgr::instance()->readTxt()) {
-        mError = tr("%1\n(while reading %2)")
-                .arg(TileMetaInfoMgr::instance()->errorString())
-                .arg(TileMetaInfoMgr::instance()->txtName());
-        return false;
-    }
-#endif
     TileMetaInfoMgr::instance()->resolveTilesets();
 
     const BMPToTMXSettings &settings = world->getBMPToTMXSettings();
@@ -1079,19 +1071,9 @@ void BMPToTMX::assignMapToCell(WorldCell *cell)
     if (bmp == 0)
         return;
 
-#if 1
     QString fileName = tmxNameForCell(cell, bmp);
     if (cell->mapFilePath() != fileName)
         mWorldDoc->undoStack()->push(new SetCellMainMap(mWorldDoc, cell, fileName));
-#else
-    // QFileInfo::operator!= will fail if the files don't exist because it
-    // uses canonicalFilePath() comparison
-    QFileInfo infoCurrent(cell->mapFilePath());
-    QFileInfo infoDesired(tmxNameForCell(cell, bmp));
-    if (infoCurrent != infoDesired) {
-        mWorldDoc->setCellMapName(cell, infoDesired.absoluteFilePath());
-    }
-#endif
 }
 
 QString BMPToTMX::tmxNameForCell(WorldCell *cell, WorldBMP *bmp)
@@ -1250,16 +1232,6 @@ QImage BMPToTMX::loadImage(const QString &path, const QString &suffix,
     }
 
     Q_UNUSED(format)
-#if 0
-    // This is the fastest format for QImage::pixel() and QImage::setPixel().
-    if (image.format() != format) {
-        image = image.convertToFormat(format);
-        if (image.isNull()) {
-            mError = tr("The image%1 file couldn't be loaded.\n%2\n\nThere might not be enough memory.  Try closing any open Cells or restart the application.")
-                    .arg(suffix).arg(QDir::toNativeSeparators(path));
-        }
-    }
-#endif
 
     return image;
 }

@@ -143,12 +143,6 @@ QPolygonF EnflatulatorFaceItem::toScene(QRectF &r)
     Q_UNUSED(r)
 
     QPolygonF polygon;
-#if 0
-    polygon << QPointF(toScene(r.x(), r.y()));
-    polygon << QPointF(toScene(r.right(), r.y()));
-    polygon << QPointF(toScene(r.right(), r.bottom()));
-    polygon << QPointF(toScene(r.x(), r.bottom()));
-#endif
     return polygon;
 }
 
@@ -696,13 +690,9 @@ void EnflatulatorTool::setShape(EnflatulatorShape *shape)
 
     qreal x = 16, y = 16;
     foreach (EnflatulatorFace *face, shape->mFaces) {
-#if 0
-        mFaceItems += new EnflatulatorFaceItem(this, face);
-#else
         EnflatulatorFace *editFace = new EnflatulatorFace;
         *editFace = *face;
         mFaceItems += new EnflatulatorFaceItem(mScene, editFace);
-#endif
         mFaceItems.last()->setPos(x, y);
         x += 48;
 

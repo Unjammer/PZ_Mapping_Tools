@@ -61,11 +61,13 @@
 #include <QPushButton>
 #include <QQueue>
 #include <QRandomGenerator>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QUndoStack>
 
 #include <algorithm>
+#include <memory>
 
 using namespace Tiled;
 
@@ -365,25 +367,6 @@ void LotFilesManager256::stopThreads()
         mWorkerThreads[i]->interrupt();
         mWorkerThreads[i]->quit();
     }
-#if 0
-    while (true) {
-        bool bAnyAlive = false;
-        for (int i = 0; i < mWorkerThreads.size(); i++) {
-            if (mWorkers[i] != nullptr) {
-                qDebug() << "LotFilesManager256: bAnyAlive #" << i;
-                bAnyAlive = true;
-                break;
-            }
-        }
-        if (bAnyAlive == false) {
-            break;
-        }
-        qApp->processEvents(QEventLoop::ProcessEventsFlag::AllEvents);
-        QThread::msleep(1000 / 30);
-    }
-    mWorkerThreads.clear();
-    mWorkers.clear();
-#endif
 }
 
 bool LotFilesManager256::generateWorld(WorldDocument *worldDoc, GenerateMode mode)
@@ -487,14 +470,6 @@ bool LotFilesManager256::generateWorld(WorldDocument *worldDoc, GenerateMode mod
         mDialog = nullptr;
         return false;
     }
-#if 0
-    if (!TileMetaInfoMgr::instance()->readTxt()) {
-        mError = tr("%1\n(while reading %2)")
-                .arg(TileMetaInfoMgr::instance()->errorString())
-                .arg(TileMetaInfoMgr::instance()->txtName());
-        return false;
-    }
-#endif
 
     mStats.reset();
     mAutoFilledHoleCount.storeRelease(0);
@@ -578,53 +553,10 @@ bool LotFilesManager256::generateWorld(WorldDocument *worldDoc, GenerateMode mod
     Tiled::Internal::TileDefWatcher *tileDefWatcher = BuildingEditor::getTileDefWatcher();
     tileDefWatcher->check();
 
-#if 1
     // The application should continue normally with the modal dialog box visible until everything finishes.
     mTimer.setInterval(1000 / 30);
     connect(&mTimer, &QTimer::timeout, this, &LotFilesManager256::workTimerTimeout);
     mTimer.start();
-#else
-    while (true) {
-        qDebug() << "LotFilesManager256: Waiting for workers to finish";
-        updateWorkers();
-        if (getBusyWorker() == nullptr) {
-            break;
-        }
-        qApp->processEvents(QEventLoop::ProcessEventsFlag::AllEvents);
-        Sleep::msleep(1000 / 30);
-    }
-
-    qDebug() << "LotFilesManager256: Stopping threads";
-    stopThreads();
-
-    qDebug() << "LotFilesManager256: Stopped threads";
-    qApp->processEvents(QEventLoop::ProcessEventsFlag::AllEvents);
-    progress.setVisible(false);
-
-    if (!mFailures.isEmpty()) {
-        QStringList errorList;
-        for (GenerateCellFailure failure : mFailures) {
-            errorList += QString(QStringLiteral("Cell %1,%2: %3")).arg(failure.cell->x()).arg(failure.cell->y()).arg(failure.error);
-        }
-        GenerateLotsFailureDialog dialog(errorList, MainWindow::instance());
-        dialog.exec();
-    }
-
-    QString stats = tr("Finished!\n\nBuildings: %1\nRooms: %2\nRoom rects: %3\nRoom objects: %4")
-            .arg(mStats.numBuildings)
-            .arg(mStats.numRooms)
-            .arg(mStats.numRoomRects)
-            .arg(mStats.numRoomObjects);
-    const int autoFilledHoles = mAutoFilledHoleCount.loadAcquire();
-    if (autoFilledHoles > 0) {
-        stats += tr("\nHoles filled in generated LOT files: %1")
-                .arg(autoFilledHoles);
-        qInfo() << "LOT export automatically filled" << autoFilledHoles
-                << "hole coordinate(s) without modifying source maps";
-    }
-    QMessageBox::information(MainWindow::instance(),
-                             tr("Generate Lot Files"), stats);
-#endif
     return true;
 }
 
@@ -747,7 +679,6 @@ bool LotFilesManager256::generateCell(WorldCell *cell)
     const QRect cellBounds256 = CombinedCellMaps::outputCellRect(
             mWorldDoc->world()->gridFormat(),
             QRect(sourceCellX, sourceCellY, 1, 1));
-#if 1
     for (int cell256Y = cellBounds256.top(); cell256Y <= cellBounds256.bottom(); cell256Y++) {
         for (int cell256X = cellBounds256.left(); cell256X <= cellBounds256.right(); cell256X++) {
             CellJob cellJob;
@@ -757,27 +688,6 @@ bool LotFilesManager256::generateCell(WorldCell *cell)
             mCell256Queue += cellJob;
         }
     }
-#else
-    for (int cell256Y = cellBounds256.top(); cell256Y <= cellBounds256.bottom(); cell256Y++) {
-        if (mCancel) {
-            break;
-        }
-        for (int cell256X = cellBounds256.left(); cell256X <= cellBounds256.right(); cell256X++) {
-            if (mCancel) {
-                break;
-            }
-            QPair<int, int> doneCell(cell256X, cell256Y);
-            if (mDoneCells256.contains(doneCell)) {
-                continue;
-            }
-            mDoneCells256.insert(doneCell);
-            if (generateCell(cell, cell256X, cell256Y) == false) {
-                mProgressDialog->setCellStatus(cell256X - mCellBounds256.left(), cell256Y - mCellBounds256.top(), ExportLotsProgressDialog::CellStatus::Failed);
-                return false;
-            }
-        }
-    }
-#endif
     return true;
 }
 
@@ -1030,20 +940,6 @@ LotFilesWorker256 *LotFilesManager256::getBusyWorker()
 
 bool LotFilesManager256::generateCell(LotFilesWorker256 *worker, WorldCell *cell, int cell256X, int cell256Y)
 {
-#if 1
-#else
-    // Busy-wait until a worker is available.
-    LotFilesWorker256 *worker = nullptr;
-    while ((worker = getIdleWorker()) == nullptr) {
-        updateWorkers();
-        qApp->processEvents(QEventLoop::ProcessEventsFlag::AllEvents);
-        Sleep::msleep(1000 / 30);
-    }
-    if (mCancel) {
-        mError.clear();
-        return false;
-    }
-#endif
     mProgressDialog->setPrompt(tr("Loading maps (%1,%2)").arg(cell256X).arg(cell256Y));
     CombinedCellMaps *combinedMaps = new CombinedCellMaps();
     bool ok = combinedMaps->startLoading(mWorldDoc, cell256X, cell256Y, mLotsOverlappingCellBounds);
@@ -1534,8 +1430,7 @@ bool LotFilesWorker256::generateCell()
 
     generateBuildingObjects(mapWidth, mapHeight);
 
-    if (mWorldDoc->world()->gridFormat() != WorldGridFormat::Native256)
-        generateJumboTrees(combinedMaps);
+    generateJumboTrees(combinedMaps);
 
     generateHeaderAux(cell256X, cell256Y);
 
@@ -2359,6 +2254,8 @@ void LotFilesWorker256::generateBuildingObjects(int mapWidth, int mapHeight, Lot
 void LotFilesWorker256::generateJumboTrees(CombinedCellMaps& combinedMaps)
 {
     const GenerateLotsSettings &lotSettings = mWorldDoc->world()->getGenerateLotsSettings();
+    if (lotSettings.preservePlacedTrees)
+        return;
 
     const quint8 JUMBO_ZONE = 1;
     const quint8 PREVENT_JUMBO = 2;
@@ -2571,7 +2468,7 @@ void LotFilesWorker256::generateJumboTrees(CombinedCellMaps& combinedMaps)
                     LotFile::Entry *e = squareEntries[i];
                     LotFile::Tile *tile = TileMap[e->gid];
                     if (treeTiles.contains(tile->name)) {
-                        squareEntries.removeAt(i);
+                        delete squareEntries.takeAt(i);
                         break;
                     }
                 }
@@ -2656,24 +2553,11 @@ bool LotFilesWorker256::handleTileset(const Tiled::Tileset *tileset, uint &first
 
     // TODO: Verify that two tilesets sharing the same name are identical
     // between maps.
-#if 1
     auto it = mTilesetNameToFirstGid.find(name);
     if (it != mTilesetNameToFirstGid.end()) {
         mTilesetToFirstGid.insert(tileset, it.value());
         return true;
     }
-#else
-    QMap<const Tileset*,uint>::const_iterator i = mTilesetToFirstGid.begin();
-    QMap<const Tileset*,uint>::const_iterator i_end = mTilesetToFirstGid.end();
-    while (i != i_end) {
-        QString name2 = nameOfTileset(i.key());
-        if (name == name2) {
-            mTilesetToFirstGid.insert(tileset, i.value());
-            return true;
-        }
-        ++i;
-    }
-#endif
 
     for (int i = 0; i < tileset->tileCount(); ++i) {
         int localID = i;
@@ -2699,23 +2583,12 @@ uint LotFilesWorker256::cellToGid(const Cell *cell)
 {
     Tileset *tileset = cell->tile->tileset();
 
-#if 1
     auto v = mTilesetToFirstGid.find(tileset);
     if (v == mTilesetToFirstGid.end()) {
         // tileset not found
         return 0;
     }
     return v.value() + cell->tile->id();
-#else
-    QMap<const Tileset*,uint>::const_iterator i = mTilesetToFirstGid.begin();
-    QMap<const Tileset*,uint>::const_iterator i_end = mTilesetToFirstGid.end();
-    while (i != i_end && i.key() != tileset)
-        ++i;
-    if (i == i_end) // tileset not found
-        return 0;
-
-    return i.value() + cell->tile->id();
-#endif
 }
 
 bool LotFilesWorker256::processObjectGroups(CombinedCellMaps &combinedMaps, MapComposite *mapComposite, const WorldCell *sourceCell)
@@ -2751,10 +2624,6 @@ bool LotFilesWorker256::processObjectGroup(CombinedCellMaps &combinedMaps, Objec
                     * combinedMaps.mSourceCellSize;
 
     for (const MapObject *mapObject : objectGroup->objects()) {
-#if 0
-        if (mapObject->name().isEmpty() || mapObject->type().isEmpty())
-            continue;
-#endif
         if (!mapObject->width() || !mapObject->height())
             continue;
 
@@ -2775,15 +2644,6 @@ bool LotFilesWorker256::processObjectGroup(CombinedCellMaps &combinedMaps, Objec
         }
 
         if (objectGroup->name().contains(QLatin1String("RoomDefs"))) {
-#if 0
-            if (x < 0 || y < 0 || x + w > CELL_WIDTH || y + h > CELL_HEIGHT) {
-                x = qBound(0, x, CELL_WIDTH);
-                y = qBound(0, y, CELL_HEIGHT);
-                mError = tr("A RoomDef in cell %1,%2 overlaps cell boundaries.\nNear x,y=%3,%4")
-                        .arg(cell->x()).arg(cell->y()).arg(x).arg(y);
-                return false;
-            }
-#endif
             // Apply the MapComposite offset in the top-level map.
             x += offset1.x();
             y += offset1.y();
@@ -3050,7 +2910,6 @@ int CombinedCellMaps::checkLoading(WorldDocument *worldDoc)
             mSourceCells.insert(subMap, cell);
         }
     }
-#if 1
     for (WorldCellLot *lot : qAsConst(mLotsOverlappingCellBounds)) {
         MapInfo *info = MapManager::instance()->mapInfo(lot->mapName());
         WorldCell *cell = lot->cell();
@@ -3062,7 +2921,6 @@ int CombinedCellMaps::checkLoading(WorldDocument *worldDoc)
         MapComposite *subMap = mMapComposite->addMap(info, lot->pos() + cellPos, lot->level());
         mSourceCells.insert(subMap, cell);
     }
-#endif
     mMapComposite->synch(); //
     if (mMapComposite->waitingForMapsToLoad()) {
         qInfo() << "LOT output cell" << mCell256X << mCell256Y
@@ -3176,6 +3034,157 @@ QRect CombinedCellMaps::toCellRect300(const QRect &cellRect256)
     int maxCell300Y = std::ceil(((cellRect256.bottom() + 1) * CELL_SIZE_256 - 1) / float(CELL_HEIGHT));
     return QRect(minCell300X, minCell300Y, maxCell300X - minCell300X, maxCell300Y - minCell300Y);
 }
+bool LotFilesManager256::validateJumboExport(QString *error)
+{
+    const auto savedDefinitions = Navigate::IsoGridSquare256::mTileDefFiles;
+    const auto restoreDefinitions = qScopeGuard([&]() {
+        Navigate::IsoGridSquare256::mTileDefFiles = savedDefinitions;
+    });
+    TileDefFile definitions;
+    const QStringList names = {
+        QStringLiteral("American_Linden_XXL"), QStringLiteral("American_Linden_XL"),
+        QStringLiteral("blends_natural_01"), QStringLiteral("fencing_01"),
+        QStringLiteral("jumbo_tree_01")
+    };
+    for (int i = 0; i < names.size(); ++i) {
+        auto *sheet = new TileDefTileset;
+        sheet->mName = names.at(i);
+        sheet->mColumns = sheet->mRows = 0;
+        sheet->resize(1, 1);
+        if (i < 2) {
+            sheet->tileAt(0)->mProperties.insert(QStringLiteral("tree"), QStringLiteral("6"));
+            sheet->tileAt(0)->mProperties.insert(QStringLiteral("vegitation"), QString());
+        } else if (i == 2) {
+            sheet->tileAt(0)->mProperties.insert(QStringLiteral("solidfloor"), QString());
+        }
+        definitions.insertTileset(i, sheet);
+    }
+    Navigate::IsoGridSquare256::mTileDefFiles = {&definitions};
+    LotFilesManager256 manager;
+    const auto clearZones = qScopeGuard([&]() { qDeleteAll(manager.mJumboZoneList); });
+    for (WorldGridFormat format : {WorldGridFormat::Legacy300, WorldGridFormat::Native256}) {
+        for (bool preserve : {false, true}) {
+            auto runCase = [&](bool polygon, int cellIndex, const QPoint &origin) {
+                WorldDocument document(new World(2, 2, format));
+                World *world = document.world();
+                if (world->getGenerateLotsSettings().preservePlacedTrees) {
+                    *error = QStringLiteral("The jumbo bypass is enabled by default");
+                    return false;
+                }
+                GenerateLotsSettings settings = world->getGenerateLotsSettings();
+                settings.preservePlacedTrees = preserve;
+                settings.worldOrigin = origin;
+                document.changeGenerateLotsSettings(settings);
+                document.undoStack()->undo();
+                if (world->getGenerateLotsSettings().preservePlacedTrees) {
+                    *error = QStringLiteral("Undo did not restore the jumbo option");
+                    return false;
+                }
+                document.undoStack()->redo();
+                QBuffer buffer;
+                buffer.open(QIODevice::ReadWrite);
+                WorldWriter writer;
+                writer.writeWorld(world, &buffer, QDir::tempPath());
+                buffer.seek(0);
+                WorldReader reader;
+                std::unique_ptr<World> restored(reader.readWorld(&buffer, QDir::tempPath()));
+                if (!restored || restored->getGenerateLotsSettings().preservePlacedTrees != preserve
+                        || restored->getGenerateLotsSettings().worldOrigin != origin
+                        || restored->gridFormat() != format) {
+                    *error = QStringLiteral("PZW did not retain the jumbo option: %1").arg(reader.errorString());
+                    return false;
+                }
+                WorldCell *cell = world->cellAt(cellIndex, cellIndex);
+                auto *type = new ObjectType(QStringLiteral("DeepForest"));
+                world->insertObjectType(world->objectTypes().size(), type);
+                auto *zone = new WorldCellObject(cell, QString(), type,
+                           world->nullObjectGroup(), 0, 0, 0, 100, 100);
+                if (polygon) {
+                    zone->setGeometryType(ObjectGeometryType::Polygon);
+                    WorldCellObjectPoints points;
+                    points << WorldCellObjectPoint(0, 0) << WorldCellObjectPoint(100, 0)
+                           << WorldCellObjectPoint(100, 100) << WorldCellObjectPoint(0, 100);
+                    zone->setPoints(points);
+                }
+                cell->insertObject(0, zone);
+                manager.mWorldDoc = &document;
+                LotFilesWorker256 worker(&manager, nullptr);
+                const auto clearTiles = qScopeGuard([&]() { qDeleteAll(worker.TileMap); });
+                Tileset jumbo(QStringLiteral("jumbo_tree_01"), 64, 128);
+                worker.mJumboTreeTileset = &jumbo;
+                worker.mTilesetToFirstGid.insert(&jumbo, 5);
+                for (int i = 0; i < names.size(); ++i)
+                    worker.TileMap.insert(i + 1, new LotFile::Tile(names.at(i) + QStringLiteral("_0")));
+                worker.mGridData.resize(CELL_SIZE_256);
+                for (auto &column : worker.mGridData) {
+                    column.resize(CELL_SIZE_256);
+                    for (auto &square : column)
+                        square.resize(2 - MIN_WORLD_LEVEL);
+                }
+                const QList<QPoint> positions = {
+                    {10, 10}, {11, 10}, {20, 20}, {1, 1}, {30, 30}, {40, 40}, {200, 200}
+                };
+                for (int i = 0; i < positions.size(); ++i) {
+                    const QPoint p = positions.at(i);
+                    worker.mGridData[p.x()][p.y()][-MIN_WORLD_LEVEL].Entries
+                            << new LotFile::Entry(i % 2 + 1);
+                }
+                worker.mGridData[30][30][1 - MIN_WORLD_LEVEL].Entries << new LotFile::Entry(3);
+                worker.mGridData[41][40][-MIN_WORLD_LEVEL].Entries << new LotFile::Entry(4);
+                CombinedCellMaps combined;
+                combined.mMinSourceCellX = origin.x() + cellIndex;
+                combined.mMinSourceCellY = origin.y() + cellIndex;
+                combined.mSourceCellSize = world->cellSize();
+                combined.mCell256X = combined.mMinSourceCellX * combined.mSourceCellSize / CELL_SIZE_256;
+                combined.mCell256Y = combined.mMinSourceCellY * combined.mSourceCellSize / CELL_SIZE_256;
+                combined.mCells = {cell};
+                worker.generateJumboTrees(combined);
+                int jumboCount = 0;
+                int removedCount = 0;
+                for (int i = 0; i < positions.size(); ++i) {
+                    const QPoint p = positions.at(i);
+                    const auto &entries = worker.mGridData[p.x()][p.y()][-MIN_WORLD_LEVEL].Entries;
+                    const int gid = entries.isEmpty() ? 0 : entries.first()->gid;
+                    const bool unchanged = preserve || i >= 3;
+                    if (unchanged && gid != i % 2 + 1) {
+                        *error = QStringLiteral("Placed tree changed unexpectedly at %1,%2").arg(p.x()).arg(p.y());
+                        return false;
+                    }
+                    jumboCount += gid == 5;
+                    removedCount += gid == 0;
+                }
+                if (!preserve && (jumboCount != 2 || removedCount != 1)) {
+                    *error = QStringLiteral("Default jumbo generation or neighboring-tree removal changed");
+                    return false;
+                }
+                if (worker.mGridData[30][30][1 - MIN_WORLD_LEVEL].Entries.first()->gid != 3
+                        || worker.mGridData[41][40][-MIN_WORLD_LEVEL].Entries.first()->gid != 4) {
+                    *error = QStringLiteral("Jumbo processing changed a non-tree tile");
+                    return false;
+                }
+                return true;
+            };
+            for (bool polygon : {false, true}) {
+                if (!runCase(polygon, 0, QPoint()) || !runCase(polygon, 1, QPoint(63, 63))) {
+                    *error = QStringLiteral("%1, bypass %2, polygon %3: %4")
+                            .arg(worldGridFormatName(format)).arg(preserve).arg(polygon).arg(*error);
+                    return false;
+                }
+            }
+        }
+    }
+    QBuffer oldProject;
+    oldProject.setData("<world version=\"1.0\" width=\"1\" height=\"1\"><GenerateLots/></world>");
+    oldProject.open(QIODevice::ReadOnly);
+    WorldReader reader;
+    std::unique_ptr<World> oldWorld(reader.readWorld(&oldProject));
+    if (!oldWorld || oldWorld->getGenerateLotsSettings().preservePlacedTrees) {
+        *error = QStringLiteral("An older PZW did not retain default jumbo behavior");
+        return false;
+    }
+    return true;
+}
+
 bool LotFilesManager256::validateRoomOwnership(QString *error)
 {
     QTemporaryDir directory;

@@ -182,7 +182,6 @@ public:
     static QString enumToString(int n);
 
     static QStringList enumTileNames() { return mTileNames; }
-    static QString enumToTileName(int n);
 
 private:
     static void initNames();

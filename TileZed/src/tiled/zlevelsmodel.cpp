@@ -368,14 +368,6 @@ void ZLevelsModel::removeLayerFromLevel(int layerIndex, int oldLevel)
             delete parentItem->children.takeAt(row);
             endRemoveRows();
         }
-#if 0
-        if (parentItem->children.isEmpty()) {
-            row = mRootItem->children.indexOf(parentItem);
-            beginRemoveRows(QModelIndex(), row, row);
-            delete mRootItem->children.takeAt(row);
-            endRemoveRows();
-        }
-#endif
     }
 }
 

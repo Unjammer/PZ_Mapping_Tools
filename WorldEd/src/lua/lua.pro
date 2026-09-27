@@ -15,9 +15,6 @@ DLLDESTDIR = ../..
 contains(CONFIG,Debug):DEFINES += LUA_DEBUG
 #DEFINES += LUA_BUILD_AS_DLL
 
-linux {
-DEFINES += LUA_USE_LINUX
-}
 
 SOURCES += \
     src/lzio.c \

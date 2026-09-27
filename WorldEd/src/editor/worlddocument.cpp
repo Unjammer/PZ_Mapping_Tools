@@ -275,16 +275,6 @@ bool WorldDocument::save(const QString &filePath, QString &error)
         message.exec();
     }
 
-#if 0
-    {
-        QFileInfo fi(filePath);
-        QString luaPath = fi.absolutePath() + QLatin1Char('/') + fi.completeBaseName() + QLatin1String(".lua");
-        LuaWriter writer;
-        if (!writer.writeWorld(mWorld, luaPath)) {
-            error += writer.errorString();
-        }
-    }
-#endif
 
     undoStack()->setClean();
     setFileName(filePath);

@@ -532,10 +532,6 @@ IsoLot::IsoLot(QString directory, int cX, int cY, int wX, int wY, IsoChunk *ch)
                                 --skip;
                             }
                         }  else {
-#if 0
-                            if (count <= 1)
-                                continue;
-#endif
                             int room = readInt(in);
                             roomIDs[x][y][z - info->minLevel] = room;
 
@@ -695,10 +691,8 @@ IsoCell *CellLoader::LoadCellBinaryChunk(IsoWorld *world, int wx, int wy)
 
     for (int x = minwx; x < maxwx; ++x) {
         for (int y = minwy; y < maxwy; ++y) {
-#if 1
             if (!cell->World->MetaGrid->chunkBounds().contains(x, y))
                 continue;
-#endif
             if ((x == wx) && (y == wy))
                 cell->ChunkMap->LoadChunk(x, y, x - minwx, y - minwy);
             else
@@ -829,68 +823,21 @@ void IsoCell::PlaceLot(IsoLot *lot, int sx, int sy, int sz, IsoChunk *ch, int WX
                         square->setY(y);
                         square->setZ(z);
 
-#if 1
                         int roomID = lot->roomIDs[(x - (WX + sx))][(y - (WY + sy))][z - sz];
-#else
-                        int roomID = ch->lotheader->getRoomAt(x, y, z);
-#endif
                         square->setRoomID(roomID);
                     }
 
-#if 1
-#elif 0 // BUG IN LEMMY'S???
-                    if ((s > 0) && (z > MaxHeight))
-                        MaxHeight = z;
-#else
-                    if ((s > 1) && (z > MaxHeight))
-                        MaxHeight = z;
-#endif
 
-#if 1
                     square->tiles.clear();
                     for (n = 0; n < s; ++n) {
                         QString tile = lot->info->tilesUsed[ints.at(n)];
                         square->tiles += tile;
-#else
-                    for (n = 0; n < s; ++n) {
-                        QString tile = lot->info->tilesUsed[ints.at(n)];
-                        IsoSprite spr = (IsoSprite)this.SpriteManager.NamedMap.get(tile);
-                        if (spr == null) {
-                            Logger.getLogger(GameApplet.class.getName()).log(Level.SEVERE, "Missing tile definition: " + tile);
-                        } else {
-                            if ((n == 0) && (spr.getProperties().Is(IsoFlagType.solidfloor)) &&
-                                    (((!(spr.Properties.Is(IsoFlagType.hidewalls))) || (ints.size() > 1)))) {
-                                bDoIt = true;
-                            }
-                            if ((bDoIt) && (n == 0)) {
-                                square.getObjects().clear();
-                            }
-
-                            CellLoader.DoTileObjectCreation(spr, spr.getType(), this, x, y, z, BedList, false, tile);
-                        }
-#endif
                     }
                 }
             }
         }
     }
-#if 1
     else {
-#else
-      catch (Exception ex)
-      {
-          System.out.println("Failed to load chunk, blocking out area");
-          ex.printStackTrace();
-          for (int x = WX + sx; x < WX + sx + isoConstants.SQUARES_PER_CHUNK; ++x) {
-              for (int y = WY + sy; y < WY + sy + isoConstants.SQUARES_PER_CHUNK; ++y) {
-                  for (int z = sz; z < sz + IsoChunkMap::MaxLevels; ++z)
-                  {
-                      ch->setSquare(x - WX, y - WY, z, nullptr);
-                      setCacheGridSquare(x, y, z, nullptr);
-                  }
-              }
-          }
-#endif
           return;
       }
 
@@ -1074,12 +1021,6 @@ void IsoMetaGrid::Create(const QString &directory)
                     int x = IsoLot::readInt(in);
                     int y = IsoLot::readInt(in);
                     Q_UNUSED(e) Q_UNUSED(x) Q_UNUSED(y)
-#if 0
-                    def->objects += new MetaObject(e,
-                                                   x + wX * 300 - def->x,
-                                                   y + wY * 300 - def->y,
-                                                   def);
-#endif
                 }
 
             }

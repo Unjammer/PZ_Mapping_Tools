@@ -64,8 +64,6 @@ BuildingTemplatesDialog::BuildingTemplatesDialog(QWidget *parent) :
         redoIcon.addFile(QLatin1String(":images/24x24/edit-redo.png"));
         mUndoAction->setIcon(undoIcon);
         mRedoAction->setIcon(redoIcon);
-        Tiled::Utils::setThemeIcon(mUndoAction, "edit-undo");
-        Tiled::Utils::setThemeIcon(mRedoAction, "edit-redo");
     }
 
     ui->tilesList->clear();
@@ -76,13 +74,7 @@ BuildingTemplatesDialog::BuildingTemplatesDialog(QWidget *parent) :
     toolBar->addAction(ui->actionAdd);
     toolBar->addAction(ui->actionDuplicate);
     toolBar->addAction(ui->actionRemove);
-#if 1
     toolBar->addSeparator();
-#else
-    QWidget *spacerWidget = new QWidget(this);
-    spacerWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
-    toolBar->addWidget(spacerWidget);
-#endif
     toolBar->addAction(ui->actionMoveUp);
     toolBar->addAction(ui->actionMoveDown);
     toolBar->addAction(ui->actionImport);

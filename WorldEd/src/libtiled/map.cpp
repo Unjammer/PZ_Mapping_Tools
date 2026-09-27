@@ -388,20 +388,9 @@ bool Map::hasMissingTilesets() const
 
 bool Map::hasUsedMissingTilesets() const
 {
-#if 1
     foreach (Tileset *ts, mUsedTilesets.keys())
         if (ts->isMissing())
             return true;
-#else
-    QSet<Tileset*> usedTilesets;
-    foreach (TileLayer *tl, tileLayers())
-        usedTilesets += tl->usedTilesets();
-
-    foreach (Tileset *ts, mTilesets) {
-        if (ts->isMissing() && usedTilesets.contains(ts))
-            return true;
-    }
-#endif
     return false;
 }
 

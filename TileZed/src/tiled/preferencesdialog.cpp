@@ -160,8 +160,6 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) :
     horizontalHeader->setResizeMode(QHeaderView::Stretch);
 #endif
 
-    Utils::setThemeIcon(mUi->addObjectTypeButton, "add");
-    Utils::setThemeIcon(mUi->removeObjectTypeButton, "remove");
 
 #ifdef ZOMBOID
     mUi->tabWidget->setCurrentIndex(0);

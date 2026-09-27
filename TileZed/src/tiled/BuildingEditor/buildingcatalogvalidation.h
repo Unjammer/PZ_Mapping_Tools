@@ -107,6 +107,30 @@ inline bool validateBuildingEditorWorkflows(BuildingEditorWindow *window, QStrin
         if (!valid)
             failures.append(name);
     };
+    BTC_Walls wallCategory(QStringLiteral("exterior_walls"), QStringLiteral("Walls"));
+    BTC_GrimeWall grimeCategory(QStringLiteral("Grime"));
+    BuildingTileEntry walls(&wallCategory);
+    BuildingTileEntry grime(&grimeCategory);
+    for (int i = 0; i < walls.mTiles.size(); ++i)
+        walls.mTiles[i] = BuildingTilesMgr::instance()->get(QStringLiteral("blends_natural_01_0"));
+    for (int i = 0; i < grime.mTiles.size(); ++i)
+        grime.mTiles[i] = BuildingTilesMgr::instance()->get(QStringLiteral("blends_natural_01_1"));
+    for (int frame = BTC_Walls::WestWindow1; frame < BTC_Walls::EnumCount; ++frame) {
+        for (bool second : {false, true}) {
+            BuildingFloor::Square square;
+            const auto wallSection = second ? BuildingFloor::Square::SectionWall2 : BuildingFloor::Square::SectionWall;
+            square.mEntries[BuildingFloor::Square::SectionWall] = &walls;
+            square.mEntryEnum[BuildingFloor::Square::SectionWall] = BTC_Walls::West;
+            square.mEntries[wallSection] = &walls;
+            square.mEntryEnum[wallSection] = frame;
+            square.ReplaceWallGrime(&grime, QString(), QString());
+            const bool west = walls.isWest(frame);
+            const auto section = west ? BuildingFloor::Square::SectionWallGrime : BuildingFloor::Square::SectionWallGrime2;
+            check(square.mEntries[section] == &grime &&
+                  square.mEntryEnum[section] == (west ? BTC_GrimeWall::WestWindow : BTC_GrimeWall::NorthWindow),
+                  QStringLiteral("Extended window grime %1/%2").arg(frame).arg(second));
+        }
+    }
     BuildingPreferences *prefs = BuildingPreferences::instance();
     const bool highlight = prefs->highlightFloor();
     const bool lower = prefs->showLowerFloors();

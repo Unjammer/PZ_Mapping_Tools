@@ -508,6 +508,10 @@ public:
         w.writeStartElement(QLatin1String("numberOfThreads"));
         w.writeAttribute(QLatin1String("count"), QString::number(settings.numberOfThreads));
         w.writeEndElement();
+        w.writeStartElement(QLatin1String("preservePlacedTrees"));
+        w.writeAttribute(QLatin1String("enabled"), settings.preservePlacedTrees
+                         ? QLatin1String("true") : QLatin1String("false"));
+        w.writeEndElement();
         w.writeEndElement(); // </GenerateLots>
     }
 

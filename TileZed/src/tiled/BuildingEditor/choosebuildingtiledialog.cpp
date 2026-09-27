@@ -73,14 +73,7 @@ BuildingTileEntry *ChooseBuildingTileDialog::selectedTile() const
     QModelIndexList selection = ui->tableView->selectionModel()->selectedIndexes();
     if (selection.count()) {
         QModelIndex index = selection.first();
-#if 1
         return ui->tableView->entry(index);
-#elif 0
-        return static_cast<BuildingTileEntry*>(ui->tableView->model()->userDataAt(index));
-#else
-        Tiled::Tile *tile = ui->tableView->model()->tileAt(index);
-        return mBuildingTiles.at(mTiles.indexOf(tile));
-#endif
     }
     return 0;
 }
@@ -88,7 +81,6 @@ BuildingTileEntry *ChooseBuildingTileDialog::selectedTile() const
 void ChooseBuildingTileDialog::setTilesList(BuildingTileCategory *category,
                                             BuildingTileEntry *initialTile)
 {
-#if 1
     QList<BuildingTileEntry*> entries;
 
     if (category->canAssignNone())
@@ -106,42 +98,6 @@ void ChooseBuildingTileDialog::setTilesList(BuildingTileCategory *category,
 
     if (entries.contains(initialTile))
         ui->tableView->setCurrentIndex(ui->tableView->index(initialTile));
-#else
-    Tiled::Tile *tile = 0;
-
-    mTiles.clear();
-    mBuildingTiles.clear();
-    QList<void*> userData;
-
-    if (category->canAssignNone()) {
-        mTiles += BuildingTilesMgr::instance()->noneTiledTile();
-        mBuildingTiles += BuildingTilesMgr::instance()->noneTileEntry();
-        userData += BuildingTilesMgr::instance()->noneTileEntry();
-        if (initialTile == mBuildingTiles[0])
-            tile = mTiles[0];
-    }
-
-    MixedTilesetView *v = ui->tableView;
-    QMap<QString,BuildingTileEntry*> entryMap;
-    int i = 0;
-    foreach (BuildingTileEntry *entry, category->entries()) {
-        QString key = entry->displayTile()->name() + QString::number(i++);
-        entryMap[key] = entry;
-    }
-    foreach (BuildingTileEntry *entry, entryMap.values()) {
-        mTiles += BuildingTilesMgr::instance()->tileFor(entry->displayTile());
-        userData += entry;
-        mBuildingTiles += entry;
-        if (entry == initialTile)
-            tile = mTiles.last();
-    }
-    v->setTiles(mTiles, userData);
-
-    if (tile != 0)
-        v->setCurrentIndex(v->model()->index(tile));
-    else
-        v->setCurrentIndex(v->model()->index(0, 0));
-#endif
 }
 
 void ChooseBuildingTileDialog::saveSettings()
@@ -162,11 +118,9 @@ void ChooseBuildingTileDialog::tilesDialog()
     dialog->reparent(this);
     dialog->exec();
     dialog->reparent(saveParent);
-#if 1
     // BUG: The underlying window for 'dialog' is destroyed behind our back, without deleting the Qt object.
     // External WM_DESTROY received for  QWidgetWindow(0x28c00e56f90, name="BuildingTilesDialogWindow") , parent:  QWindow(0x0) , transient parent:  QWidgetWindow(0x28c27cb2f60, name="BuildingEditorWindowWindow")
     dialog->deleteInstance();
-#endif
 
     if (dialog->changes()) {
         setTilesList(mCategory);

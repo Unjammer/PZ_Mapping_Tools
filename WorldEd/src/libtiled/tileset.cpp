@@ -159,15 +159,6 @@ bool Tileset::loadFromImage(const QImage &image, const QString &fileName)
     // For some reason this changes the const 'image'
     replaceTransparentColor(image3, mTransparentColor);
 //    setImage(image3); // This is used to create an OpenGL texture.
-#if 0
-    // FIXME: Non thread-safe use of TILESET_IMAGES
-    TILESET_IMAGES[fileName] = QImage();// image3;
-    TILESET_BYTES = 0L;
-    for (const QImage& image : TILESET_IMAGES) {
-        TILESET_BYTES += image.bytesPerLine() * image.height();
-    }
-    qDebug() << TILESET_IMAGES.size() << "images" << (TILESET_BYTES / (1024 * 1024)) << "MB";
-#endif
     QImage image2 = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
 //    replaceTransparentColor(image2, mTransparentColor);
 #endif

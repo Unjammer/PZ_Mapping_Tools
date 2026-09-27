@@ -1465,6 +1465,8 @@ void BuildingIsoScene::tilesetAdded(Tileset *tileset)
 {
     if (!mDocument || mLoading)
         return;
+    if (deferStructuralMapUpdate())
+        return;
     mBuildingMap->tilesetAdded(tileset);
 }
 
@@ -1475,7 +1477,7 @@ void BuildingIsoScene::tilesetAboutToBeRemoved(Tileset *tileset)
     clearToolTiles();
     if (mLoading)
         return;
-    mBuildingMap->tilesetAboutToBeRemoved(tileset);
+    mBuildingMap->tilesetAboutToBeRemoved(tileset, !deferStructuralMapUpdate());
 }
 
 void BuildingIsoScene::tilesetRemoved(Tileset *tileset)
@@ -1679,19 +1681,6 @@ bool BuildingIsoView::eventFilter(QObject *object, QEvent *event)
 {
     Q_UNUSED(object)
     Q_UNUSED(event)
-#if 0
-    Q_UNUSED(object)
-    switch (event->type()) {
-    case QEvent::KeyPress:
-    case QEvent::KeyRelease: {
-            QKeyEvent *keyEvent = static_cast<QKeyEvent*>(event);
-            TileToolManager::instance()->checkKeyboardModifiers(keyEvent->modifiers());
-        }
-        break;
-    default:
-        break;
-    }
-#endif
     return false;
 }
 

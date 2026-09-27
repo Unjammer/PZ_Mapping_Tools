@@ -299,13 +299,11 @@ TileEditMode::TileEditMode(QObject *parent) :
     connect(mTabWidget, &QTabWidget::tabCloseRequested,
             this, &TileEditMode::documentTabCloseRequested);
 
-#ifndef BUILDINGED_SA
     if (mFirstTimeSeen) {
         mFirstTimeSeen = false;
         mFurnitureDock->switchTo();
         mTilesetDock->firstTimeSetup();
     }
-#endif
 
     setWidget(mMainWindow);
 
@@ -359,12 +357,6 @@ void TileEditMode::onActiveStateChanged(bool active)
         foreach (QToolBar *toolBar, mMainWindow->toolBars())
             menu->addAction(toolBar->toggleViewAction());
 
-#ifdef BUILDINGED_SA
-        if (mFirstTimeSeen) {
-            mFirstTimeSeen = false;
-            mFurnitureDock->switchTo();
-        }
-#endif
     } else {
         if (mCurrentDocumentStuff)
             mCurrentDocumentStuff->deactivate();
