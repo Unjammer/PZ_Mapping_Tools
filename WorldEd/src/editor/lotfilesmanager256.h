@@ -189,7 +189,9 @@ public:
     bool overwriteSpawnMap(WorldDocument *worldDoc, GenerateMode mode);
     bool overwriteSpawnMapSourceCell(int sourceCellX, int sourceCellY);
     bool overwriteSpawnMap256(int cell256X, int cell256Y);
-    void writeZombieIntensity(QDataStream &out, int cell256X, int cell256Y);
+    bool writeZombieIntensity(QDataStream &out, int cell256X, int cell256Y);
+
+    static bool validateHeatmapOverwrite(QString *error);
 
     static bool validateNative256Geometry(QString *error);
     static bool validateJumboExport(QString *error);

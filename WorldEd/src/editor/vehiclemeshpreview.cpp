@@ -127,7 +127,7 @@ class BinaryFbxReader
 public:
     bool read(const QString &path, QVector<qreal> *vertices,
               QVector<int> *polygonIndices, QVector<qreal> *uv,
-              QVector<int> *uvIndices,
+              QVector<int> *uvIndices, QVector3D *modelScale,
               const QString &geometryName = QString())
     {
         QFile file(path);
@@ -145,7 +145,7 @@ public:
             qint64 discoveryOffset = 27;
             while (discoveryOffset < mData.size()) {
                 const qint64 previous = discoveryOffset;
-                if (!readNode(&discoveryOffset, false, false))
+                if (!readNode(&discoveryOffset, false, false, 0))
                     break;
                 if (discoveryOffset <= previous)
                     return false;
@@ -164,7 +164,7 @@ public:
         qint64 offset = 27;
         while (offset < mData.size()) {
             const qint64 previous = offset;
-            if (!readNode(&offset, false, false))
+            if (!readNode(&offset, false, false, 0))
                 break;
             if (offset <= previous)
                 return false;
@@ -173,6 +173,17 @@ public:
         *polygonIndices = mPolygonIndices;
         *uv = mUv;
         *uvIndices = mUvIndices;
+        if (mTargetModelId == 0) {
+            for (const QPair<qint64, qint64> &connection
+                 : qAsConst(mConnections)) {
+                if (connection.first == mTargetGeometryId) {
+                    mTargetModelId = connection.second;
+                    break;
+                }
+            }
+        }
+        *modelScale = mModelScales.value(
+                    mTargetModelId, QVector3D(1.0f, 1.0f, 1.0f));
         return !mVertices.isEmpty() && !mPolygonIndices.isEmpty()
                 && !mUv.isEmpty() && !mUvIndices.isEmpty();
     }
@@ -182,6 +193,7 @@ private:
     {
         char type = 0;
         qint64 integer = 0;
+        qreal real = 0.0;
         QByteArray data;
         quint32 count = 0;
     };
@@ -218,12 +230,24 @@ private:
             property->integer = qint64(unsignedValue<quint64>(*offset));
             *offset += 8;
             return true;
-        case 'F':
+        case 'F': {
+            if (*offset + 4 > mData.size())
+                return false;
+            float value = 0.0f;
+            std::memcpy(&value, mData.constData() + *offset, 4);
+            property->real = value;
             *offset += 4;
-            return *offset <= mData.size();
-        case 'D':
+            return true;
+        }
+        case 'D': {
+            if (*offset + 8 > mData.size())
+                return false;
+            double value = 0.0;
+            std::memcpy(&value, mData.constData() + *offset, 8);
+            property->real = value;
             *offset += 8;
-            return *offset <= mData.size();
+            return true;
+        }
         case 'S':
         case 'R': {
             const quint32 length = unsignedValue<quint32>(*offset);
@@ -315,7 +339,8 @@ private:
         return result;
     }
 
-    bool readNode(qint64 *offset, bool inUvZero, bool inGeometry)
+    bool readNode(qint64 *offset, bool inUvZero, bool inGeometry,
+                  qint64 modelId)
     {
         if (!offset)
             return false;
@@ -359,6 +384,11 @@ private:
 
         bool childUvZero = inUvZero;
         bool childGeometry = inGeometry;
+        qint64 childModelId = modelId;
+        if (name == "Model" && !properties.isEmpty()
+                && properties.first().type == 'L') {
+            childModelId = properties.first().integer;
+        }
         if (mDiscovery && name == "Model" && properties.size() >= 2
                 && properties.at(0).type == 'L'
                 && properties.at(1).type == 'S'
@@ -366,7 +396,7 @@ private:
                     mGeometryName.toLower())) {
             mTargetModelId = properties.at(0).integer;
         }
-        if (mDiscovery && name == "C" && properties.size() >= 3
+        if (name == "C" && properties.size() >= 3
                 && properties.at(1).type == 'L'
                 && properties.at(2).type == 'L') {
             mConnections.append(qMakePair(properties.at(1).integer,
@@ -375,6 +405,10 @@ private:
         if (name == "Geometry") {
             if (mGeometryName.isEmpty()) {
                 childGeometry = !mGeometryChosen;
+                if (childGeometry && !properties.isEmpty()
+                        && properties.first().type == 'L') {
+                    mTargetGeometryId = properties.first().integer;
+                }
             } else {
                 childGeometry = !properties.isEmpty()
                         && properties.first().type == 'L'
@@ -387,6 +421,21 @@ private:
         if (name == "LayerElementUV") {
             childUvZero = !properties.isEmpty()
                     && properties.first().integer == 0;
+        }
+        if (name == "P" && childModelId != 0
+                && properties.size() >= 7
+                && properties.first().type == 'S'
+                && properties.first().data == "Lcl Scaling"
+                && (properties.at(4).type == 'D'
+                    || properties.at(4).type == 'F')
+                && (properties.at(5).type == 'D'
+                    || properties.at(5).type == 'F')
+                && (properties.at(6).type == 'D'
+                    || properties.at(6).type == 'F')) {
+            mModelScales.insert(childModelId, QVector3D(
+                                    properties.at(4).real,
+                                    properties.at(5).real,
+                                    properties.at(6).real));
         }
         if (!properties.isEmpty()) {
             if (childGeometry && name == "Vertices"
@@ -409,7 +458,8 @@ private:
         const qint64 childrenEnd = qint64(endOffset) - sentinelSize;
         while (childOffset < childrenEnd) {
             const qint64 previous = childOffset;
-            if (!readNode(&childOffset, childUvZero, childGeometry))
+            if (!readNode(&childOffset, childUvZero, childGeometry,
+                          childModelId))
                 break;
             if (childOffset <= previous)
                 return false;
@@ -426,6 +476,7 @@ private:
     qint64 mTargetModelId = 0;
     qint64 mTargetGeometryId = 0;
     QVector<QPair<qint64, qint64>> mConnections;
+    QHash<qint64, QVector3D> mModelScales;
     QVector<qreal> mVertices;
     QVector<int> mPolygonIndices;
     QVector<qreal> mUv;
@@ -615,7 +666,7 @@ bool VehicleMeshPreview::loadCatalog(const QString &gameDirectory)
         return left.compare(right, Qt::CaseInsensitive) < 0;
     });
     QCryptographicHash catalogHash(QCryptographicHash::Sha256);
-    catalogHash.addData("vehicle-atlas-schema-3");
+    catalogHash.addData("vehicle-atlas-schema-4");
     for (const QString &scriptPath : qAsConst(scriptPaths)) {
         const QFileInfo scriptInfo(scriptPath);
         catalogHash.addData(scripts.relativeFilePath(scriptPath)
@@ -1028,7 +1079,7 @@ bool VehicleMeshPreview::loadAtlas(int quality, AtlasCache *atlas)
     const QJsonDocument document = QJsonDocument::fromJson(
                 manifest.readAll());
     const QJsonObject root = document.object();
-    if (root.value(QStringLiteral("schema")).toInt() != 3
+    if (root.value(QStringLiteral("schema")).toInt() != 4
             || root.value(QStringLiteral("quality")).toInt() != quality
             || root.value(QStringLiteral("fingerprint")).toString()
             != mCatalogFingerprint) {
@@ -1145,7 +1196,7 @@ void VehicleMeshPreview::saveAtlas(int quality, AtlasCache *atlas,
         entryValues.append(value);
     }
     QJsonObject root;
-    root.insert(QStringLiteral("schema"), 3);
+    root.insert(QStringLiteral("schema"), 4);
     root.insert(QStringLiteral("quality"), quality);
     root.insert(QStringLiteral("fingerprint"), mCatalogFingerprint);
     root.insert(QStringLiteral("pages"), pageValues);
@@ -1501,10 +1552,12 @@ bool VehicleMeshPreview::loadModelMesh(const QString &modelName,
     QVector<int> polygonIndices;
     QVector<qreal> uvCoordinates;
     QVector<int> uvIndices;
+    QVector3D modelScale(1.0f, 1.0f, 1.0f);
     if (header.startsWith("Kaydara FBX Binary")) {
         BinaryFbxReader reader;
         if (!reader.read(path, &coordinates, &polygonIndices,
-                         &uvCoordinates, &uvIndices, geometryName)) {
+                         &uvCoordinates, &uvIndices, &modelScale,
+                         geometryName)) {
             return false;
         }
     } else {
@@ -1541,6 +1594,9 @@ bool VehicleMeshPreview::loadModelMesh(const QString &modelName,
         QVector3D position(coordinates.at(index),
                            coordinates.at(index + 1),
                            coordinates.at(index + 2));
+        position.setX(position.x() * modelScale.x());
+        position.setY(position.y() * modelScale.y());
+        position.setZ(position.z() * modelScale.z());
         if (model.invertX)
             position.setX(-position.x());
         positions.append(position);
@@ -2247,6 +2303,30 @@ bool VehicleMeshPreview::validate(const QString &gameDirectory,
             *error = QStringLiteral("Vehicle model scale, offset, or game-scale raster dimensions were not preserved");
         return false;
     }
+    const QStringList trailerNames = {
+        QStringLiteral("base.trailer_horsebox"),
+        QStringLiteral("base.trailer_livestock")
+    };
+    for (const QString &trailerName : trailerNames) {
+        const VehicleDefinition trailer = preview.mVehicles.value(trailerName);
+        Mesh trailerMesh;
+        if (!preview.loadMesh(trailer, &trailerMesh)) {
+            if (error)
+                *error = QStringLiteral("Trailer FBX mesh could not be loaded: %1")
+                        .arg(trailerName);
+            return false;
+        }
+        const QVector3D size = (trailerMesh.maximum - trailerMesh.minimum)
+                * float(preview.mModels.value(trailer.model.toLower()).scale
+                        * trailer.modelScale);
+        if (size.x() < 1.5f || size.x() > 3.0f
+                || size.y() < 3.0f || size.y() > 6.0f) {
+            if (error)
+                *error = QStringLiteral("Trailer FBX node scaling produced an invalid body size: %1 (%2 x %3)")
+                        .arg(trailerName).arg(size.x()).arg(size.y());
+            return false;
+        }
+    }
     if (highQuality.image.width() <= north.image.width()
             || highQuality.image.height() <= north.image.height()) {
         if (error)
@@ -2458,6 +2538,12 @@ QImage VehicleMeshPreview::validationImage(const QString &gameDirectory,
     vehicles.append(preview.render(preview.mVehicles.value(
                                        QLatin1String("base.moderncar_martin")),
                                    0.0));
+    vehicles.append(preview.render(preview.mVehicles.value(
+                                       QLatin1String("base.trailer_horsebox")),
+                                   0.0));
+    vehicles.append(preview.render(preview.mVehicles.value(
+                                       QLatin1String("base.trailer_livestock")),
+                                   0.0));
     for (const RenderedVehicle &vehicle : qAsConst(vehicles)) {
         if (!vehicle.isValid()) {
             if (error)
@@ -2465,7 +2551,7 @@ QImage VehicleMeshPreview::validationImage(const QString &gameDirectory,
             return QImage();
         }
     }
-    QImage image(960, 300, QImage::Format_ARGB32_Premultiplied);
+    QImage image(1440, 300, QImage::Format_ARGB32_Premultiplied);
     image.fill(QColor(42, 46, 50));
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing, true);
@@ -2473,7 +2559,9 @@ QImage VehicleMeshPreview::validationImage(const QString &gameDirectory,
         QPointF(120.0, 210.0),
         QPointF(360.0, 210.0),
         QPointF(600.0, 210.0),
-        QPointF(840.0, 210.0)
+        QPointF(840.0, 210.0),
+        QPointF(1080.0, 210.0),
+        QPointF(1320.0, 210.0)
     };
     for (int index = 0; index < vehicles.size(); ++index) {
         const RenderedVehicle &vehicle = vehicles.at(index);

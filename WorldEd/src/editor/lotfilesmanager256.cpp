@@ -16,6 +16,7 @@
  */
 
 #include "lotfilesmanager256.h"
+#include "lotsourcefiles.h"
 
 #include "chunkdataoverride.h"
 
@@ -81,7 +82,8 @@ static QString nameOfTileset(const Tileset *tileset)
     QString name = tileset->imageSource();
     if (name.contains(QLatin1String("/")))
         name = name.mid(name.lastIndexOf(QLatin1String("/")) + 1);
-    name.replace(QLatin1String(".png"), QLatin1String(""));
+    if (name.endsWith(QLatin1String(".png"), Qt::CaseInsensitive))
+        name.chop(4);
     return name;
 }
 
@@ -1194,7 +1196,8 @@ bool LotFilesManager256::overwriteSpawnMap256(int cell256X, int cell256Y)
         }
     }
 
-    writeZombieIntensity(in, cell256X, cell256Y);
+    if (!writeZombieIntensity(in, cell256X, cell256Y))
+        return false;
 
     if (!fo.open(QFile::WriteOnly)) {
         mError = fo.errorString();
@@ -1211,15 +1214,31 @@ bool LotFilesManager256::overwriteSpawnMap256(int cell256X, int cell256Y)
 
 #define CHUNKS_PER_CELL 30 // lotfilesmanager.h
 
-void LotFilesManager256::writeZombieIntensity(QDataStream &out, int cell256X, int cell256Y)
+bool LotFilesManager256::writeZombieIntensity(QDataStream &out, int cell256X, int cell256Y)
 {
     const GenerateLotsSettings &lotSettings = mWorldDoc->world()->getGenerateLotsSettings();
 
     if (mWorldDoc->world()->gridFormat() == WorldGridFormat::Native256) {
         const int imageCellX = cell256X - lotSettings.worldOrigin.x();
         const int imageCellY = cell256Y - lotSettings.worldOrigin.y();
+        PZTools::PartialChunkSelection partialChunks;
+        World *world = mWorldDoc->world();
+        if (imageCellX >= 0 && imageCellX < world->width()
+                && imageCellY >= 0 && imageCellY < world->height()) {
+            const QString mapPath = world->cellAt(imageCellX, imageCellY)->mapFilePath();
+            QString error;
+            if (!partialChunks.load(mapPath, &error)) {
+                mError = tr("Unable to read the partial chunk selection for %1:\n%2")
+                        .arg(QDir::toNativeSeparators(mapPath), error);
+                return false;
+            }
+        }
         for (int x = 0; x < CHUNKS_PER_CELL_256; ++x) {
             for (int y = 0; y < CHUNKS_PER_CELL_256; ++y) {
+                if (partialChunks.enabled() && !partialChunks.isSelected(x, y)) {
+                    out << quint8(0);
+                    continue;
+                }
                 const int px = imageCellX * CHUNKS_PER_CELL_256 + x;
                 const int py = imageCellY * CHUNKS_PER_CELL_256 + y;
                 const quint8 intensity =
@@ -1231,7 +1250,7 @@ void LotFilesManager256::writeZombieIntensity(QDataStream &out, int cell256X, in
                 out << intensity;
             }
         }
-        return;
+        return true;
     }
     QRect cellBounds300 = CombinedCellMaps::toCellRect300(QRect(cell256X, cell256Y, 1, 1));
 
@@ -1279,6 +1298,7 @@ void LotFilesManager256::writeZombieIntensity(QDataStream &out, int cell256X, in
             out << quint8(alpha * 255);
         }
     }
+    return true;
 }
 
 void LotFilesManager256::workTimerTimeout()
@@ -1506,6 +1526,15 @@ bool LotFilesWorker256::generateCell()
     file.close();
 
     if (!generateChunkData()) {
+        mCombinedCellMaps->moveToThread(
+                    mCombinedCellMaps->mMapComposite, qApp->thread());
+        setStatus(Status::Error);
+        return false;
+    }
+
+    if (lotSettings.exportTextSources
+            && !LotSourceFiles::exportCell(lotsDirectory, cell256X,
+                                           cell256Y, &mError)) {
         mCombinedCellMaps->moveToThread(
                     mCombinedCellMaps->mMapComposite, qApp->thread());
         setStatus(Status::Error);
@@ -3339,6 +3368,104 @@ bool LotFilesManager256::validateRoomOwnership(QString *error)
     if (ok)
         qInfo() << "LOT room ownership validation passed:" << checked << "header round trips";
     return ok;
+}
+
+bool LotFilesManager256::validateHeatmapOverwrite(QString *error)
+{
+    QTemporaryDir directory;
+    if (!directory.isValid()) {
+        if (error)
+            *error = QStringLiteral("Cannot create a heatmap validation directory.");
+        return false;
+    }
+    const auto fail = [error](const QString &message) {
+        if (error)
+            *error = message;
+        return false;
+    };
+    const auto readFile = [](const QString &path) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly))
+            return QByteArray();
+        return file.readAll();
+    };
+    QByteArray header;
+    QDataStream headerStream(&header, QIODevice::WriteOnly);
+    headerStream.setByteOrder(QDataStream::LittleEndian);
+    headerStream.writeRawData("LOTH", 4);
+    headerStream << qint32(1) << qint32(0) << qint32(8) << qint32(8)
+                 << qint32(0) << qint32(0) << qint32(0) << qint32(0);
+    const QString headerPath = directory.filePath(QStringLiteral("-1_2.lotheader"));
+    {
+        QFile file(headerPath);
+        if (!file.open(QIODevice::WriteOnly)
+                || file.write(header + QByteArray(1024, char(238))) != header.size() + 1024)
+            return fail(QStringLiteral("Cannot write a heatmap validation header."));
+    }
+    const QString mapPath = directory.filePath(QStringLiteral("cell.tmx"));
+    WorldDocument document(new World(1, 1, WorldGridFormat::Native256));
+    GenerateLotsSettings settings;
+    settings.worldOrigin = QPoint(-1, 2);
+    settings.exportDir = directory.path();
+    document.world()->setGenerateLotsSettings(settings);
+    document.world()->cellAt(0, 0)->setMapFilePath(mapPath);
+    ExportLotsProgressDialog progress(nullptr);
+    progress.setWorldSize(1, 1);
+    LotFilesManager256 manager;
+    manager.mWorldDoc = &document;
+    manager.mProgressDialog = &progress;
+    manager.mCellBounds256 = QRect(-1, 2, 1, 1);
+    manager.ZombieSpawnMap = QImage(32, 32, QImage::Format_ARGB32);
+    manager.ZombieSpawnMap.fill(qRgb(17, 23, 71));
+    PZTools::PartialChunkSelection selection;
+    selection.setEnabled(true);
+    selection.clear();
+    selection.setSelected(0, 0, true);
+    selection.setSelected(31, 31, true);
+    if (!selection.save(mapPath, error) || !manager.overwriteSpawnMap256(-1, 2))
+        return fail(manager.errorString().isEmpty() ? QStringLiteral("Cannot apply a partial heatmap.")
+                                                  : manager.errorString());
+    QByteArray result = readFile(headerPath);
+    if (result.left(header.size()) != header || result.size() != header.size() + 1024)
+        return fail(QStringLiteral("Heatmap overwrite modified the lotheader metadata."));
+    const QByteArray values = result.right(1024);
+    for (int i = 0; i < values.size(); ++i) {
+        const int expected = i == 0 || i == 1023 ? 17 : 0;
+        if (quint8(values.at(i)) != expected)
+            return fail(QStringLiteral("Heatmap overwrite populated an excluded chunk."));
+    }
+    {
+        QFile file(PZTools::PartialChunkSelection::filePath(mapPath));
+        if (!file.open(QIODevice::WriteOnly) || file.write("{") != 1)
+            return fail(QStringLiteral("Cannot write an invalid chunk selection."));
+    }
+    if (manager.overwriteSpawnMap256(-1, 2) || readFile(headerPath) != result)
+        return fail(QStringLiteral("An invalid chunk selection changed the lotheader."));
+    selection.setEnabled(false);
+    if (!selection.save(mapPath, error) || !manager.overwriteSpawnMap256(-1, 2)
+            || readFile(headerPath).right(1024) != QByteArray(1024, char(17)))
+        return fail(QStringLiteral("Disabled partial chunks did not retain the full heatmap."));
+    document.world()->cellAt(0, 0)->setMapFilePath(
+                directory.filePath(QStringLiteral("without-selection.tmx")));
+    if (!manager.overwriteSpawnMap256(-1, 2)
+            || readFile(headerPath).right(1024) != QByteArray(1024, char(17)))
+        return fail(QStringLiteral("A missing sidecar did not retain the full heatmap."));
+    WorldDocument legacy(new World(1, 1, WorldGridFormat::Legacy300));
+    settings.worldOrigin = QPoint();
+    legacy.world()->setGenerateLotsSettings(settings);
+    legacy.world()->cellAt(0, 0)->setMapFilePath(mapPath);
+    selection.setEnabled(true);
+    if (!selection.save(mapPath, error))
+        return false;
+    manager.mWorldDoc = &legacy;
+    manager.ZombieSpawnMap = QImage(30, 30, QImage::Format_ARGB32);
+    manager.ZombieSpawnMap.fill(qRgb(91, 0, 0));
+    QByteArray legacyValues;
+    QDataStream legacyStream(&legacyValues, QIODevice::WriteOnly);
+    if (!manager.writeZombieIntensity(legacyStream, 0, 0)
+            || legacyValues != QByteArray(1024, char(91)))
+        return fail(QStringLiteral("Legacy300 heatmap conversion changed."));
+    return true;
 }
 
 bool LotFilesManager256::validateNative256Geometry(QString *error)

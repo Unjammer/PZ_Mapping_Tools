@@ -38,15 +38,12 @@
 #include <QContextMenuEvent>
 #include <QLabel>
 #include <QMenu>
-#include <QSettings>
 #include <QSlider>
 #include <QUndoStack>
 #include <QToolBar>
 
 using namespace Tiled;
 using namespace Tiled::Internal;
-
-static const char *KEY_LAYER_VISIBILITY = "LayerDocks/Visibility";
 
 LayerDock::LayerDock(QWidget *parent):
     QDockWidget(parent),
@@ -74,6 +71,7 @@ LayerDock::LayerDock(QWidget *parent):
 
 #ifdef ZOMBOID
     QHBoxLayout *zomboidLayerLayout = new QHBoxLayout;
+    mZomboidLayerSlider->setObjectName(QStringLiteral("layerVisibilitySlider"));
     mZomboidLayerSlider->setRange(0, 9);
     mZomboidLayerSlider->setEnabled(false);
     zomboidLayerLayout->addWidget(mZomboidLayerLabel);
@@ -165,21 +163,16 @@ void LayerDock::setMapDocument(MapDocument *mapDocument)
                 this, &LayerDock::updateZomboidLayerSlider);
         connect(mMapDocument, &MapDocument::maxVisibleLayerChanged,
                 this, &LayerDock::updateZomboidLayerSlider);
+        connect(mMapDocument, &MapDocument::layerAdded,
+                this, &LayerDock::updateZomboidLayerSlider);
+        connect(mMapDocument, &MapDocument::layerRemoved,
+                this, &LayerDock::updateZomboidLayerSlider);
 #endif
     }
 
     mLayerView->setMapDocument(mapDocument);
     updateOpacitySlider();
 #ifdef ZOMBOID
-    if (mMapDocument) {
-        const int savedVisibility = qBound(
-                    0,
-                    QSettings().value(
-                        QLatin1String(KEY_LAYER_VISIBILITY),
-                        mMapDocument->map()->layerCount()).toInt(),
-                    mMapDocument->map()->layerCount());
-        setZomboidLayer(savedVisibility);
-    }
     updateZomboidLayerSlider();
 #endif
 }
@@ -254,7 +247,6 @@ void LayerDock::setZomboidLayer(int number)
         return;
 
     number = qBound(0, number, mMapDocument->map()->layerCount());
-    QSettings().setValue(QLatin1String(KEY_LAYER_VISIBILITY), number);
 
     int index = 0;
     foreach (Layer *layer, mMapDocument->map()->layers()) {
@@ -280,7 +272,6 @@ void LayerDock::setAllLayersVisible(bool visible)
             mMapDocument->setLayerVisible(index, visible);
     }
     const int visibility = visible ? layerCount : 0;
-    QSettings().setValue(QLatin1String(KEY_LAYER_VISIBILITY), visibility);
     mMapDocument->setMaxVisibleLayer(visibility);
 }
 #endif // ZOMBOID

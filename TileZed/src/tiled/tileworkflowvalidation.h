@@ -6,6 +6,8 @@
 #include "erasetiles.h"
 #include "mapcomposite.h"
 #include "lotcompositionvalidation.h"
+#include "layerdock.h"
+#include "layermodel.h"
 #include "mapdocument.h"
 #include "mapmanager.h"
 #include "mapscene.h"
@@ -17,20 +19,141 @@
 #include "tileset.h"
 #include "tilesetview.h"
 #include "zlevelrenderer.h"
+#include "zlevelsdock.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QDebug>
 #include <QGraphicsSceneMouseEvent>
 #include <QMenu>
 #include <QMimeData>
+#include <QSettings>
+#include <QSlider>
 #include <QToolButton>
 #include <QUndoStack>
 
 namespace Tiled {
 namespace Internal {
 
+inline bool validateLayerVisibility(QString *error)
+{
+    QStringList failures;
+    int checks = 0;
+    const auto check = [&](bool valid, const QString &name) {
+        ++checks;
+        if (!valid)
+            failures += name;
+    };
+    QSettings settings;
+    const QString key = QStringLiteral("LayerDocks/Visibility");
+    const bool hadSetting = settings.contains(key);
+    const QVariant savedSetting = settings.value(key);
+    settings.setValue(key, 1);
+    const auto makeMap = [](int count) {
+        auto *map = new Map(Map::LevelIsometric, 8, 8, 64, 32);
+        for (int index = 0; index < count; ++index) {
+            auto *layer = new TileLayer(
+                        QStringLiteral("%1_Furniture").arg(index), 0, 0, 8, 8);
+            layer->setVisible(false);
+            map->addLayer(layer);
+        }
+        return map;
+    };
+    MapDocument document(makeMap(6));
+    MapDocument other(makeMap(2));
+    MapDocument empty(makeMap(0));
+    LayerDock layers;
+    ZLevelsDock levels;
+    auto *layerSlider = layers.findChild<QSlider *>(QStringLiteral("layerVisibilitySlider"));
+    auto *levelSlider = levels.findChild<QSlider *>(QStringLiteral("levelVisibilitySlider"));
+    const auto attach = [&](MapDocument *active) {
+        layers.setMapDocument(active);
+        levels.setMapDocument(active);
+    };
+    const auto checkSliders = [&](int value, int maximum) {
+        check(layerSlider && levelSlider
+              && layerSlider->value() == value && levelSlider->value() == value
+              && layerSlider->maximum() == maximum && levelSlider->maximum() == maximum,
+              QStringLiteral("Both visibility sliders track the document"));
+    };
+    const auto checkLayers = [&](MapDocument &active, int count) {
+        for (int index = 0; index < active.map()->layerCount(); ++index) {
+            check(active.map()->layerAt(index)->isVisible() == (index < count),
+                  QStringLiteral("Layer %1 visibility at cutoff %2").arg(index).arg(count));
+        }
+    };
+    attach(&document);
+    checkSliders(6, 6);
+    checkLayers(document, 6);
+    if (layerSlider && levelSlider) {
+        layerSlider->setValue(2);
+        checkSliders(2, 6);
+        checkLayers(document, 2);
+        attach(&other);
+        checkSliders(2, 2);
+        checkLayers(other, 2);
+        attach(&document);
+        checkSliders(2, 6);
+        checkLayers(document, 2);
+        document.setLayerVisible(5, true);
+        attach(&other);
+        attach(&document);
+        check(document.map()->layerAt(5)->isVisible(), QStringLiteral("Individual checks survive tab switches"));
+        levelSlider->setValue(6);
+        checkSliders(6, 6);
+        checkLayers(document, 6);
+        document.layerModel()->insertLayer(6, new TileLayer(QStringLiteral("6_Furniture"), 0, 0, 8, 8));
+        checkSliders(7, 7);
+        checkLayers(document, 7);
+        delete document.layerModel()->takeLayerAt(6);
+        checkSliders(6, 6);
+        layerSlider->setValue(2);
+        document.layerModel()->insertLayer(6, new TileLayer(QStringLiteral("6_Furniture"), 0, 0, 8, 8));
+        checkSliders(2, 7);
+        check(document.map()->layerAt(6)->isVisible(), QStringLiteral("New layers retain their default visibility"));
+        document.setLayerVisible(6, false);
+        checkLayers(document, 2);
+        document.layerModel()->insertLayer(0, new TileLayer(QStringLiteral("0_Floor"), 0, 0, 8, 8));
+        checkSliders(3, 8);
+        checkLayers(document, 3);
+        delete document.layerModel()->takeLayerAt(0);
+        checkSliders(2, 7);
+        delete document.layerModel()->takeLayerAt(6);
+        checkSliders(2, 6);
+        document.setLayerVisible(1, false);
+        Layer *hiddenLayer = document.layerModel()->takeLayerAt(1);
+        document.layerModel()->insertLayer(1, hiddenLayer);
+        check(!hiddenLayer->isVisible(), QStringLiteral("Reinserted layers retain individual visibility"));
+        checkSliders(2, 6);
+        MapDocument reopened(document.map()->clone());
+        attach(&reopened);
+        checkSliders(6, 6);
+        checkLayers(reopened, 6);
+        attach(&empty);
+        checkSliders(0, 0);
+        empty.layerModel()->insertLayer(0, new TileLayer(QStringLiteral("0_Floor"), 0, 0, 8, 8));
+        checkSliders(1, 1);
+        checkLayers(empty, 1);
+        delete empty.layerModel()->takeLayerAt(0);
+        checkSliders(0, 0);
+    }
+    attach(nullptr);
+    check(document.undoStack()->isClean() && other.undoStack()->isClean(),
+          QStringLiteral("Visibility updates leave the editing history clean"));
+    check(settings.value(key).toInt() == 1, QStringLiteral("Visibility does not overwrite legacy settings"));
+    if (hadSetting)
+        settings.setValue(key, savedSetting);
+    else
+        settings.remove(key);
+    qInfo() << "Layer visibility validation:" << checks << "checks," << failures.size() << "failures";
+    *error = failures.join(QLatin1Char('\n'));
+    return failures.isEmpty();
+}
+
 inline bool validateTileWorkflows(QString *error)
 {
+    if (!validateLayerVisibility(error))
+        return false;
+
     QStringList failures;
     int checks = 0;
     const auto check = [&](bool valid, const QString &name) {

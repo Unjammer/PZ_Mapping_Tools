@@ -6,6 +6,9 @@ tools. It includes **PZWorldEd**, **TileZed**, and **BuildingEd**.
 The maintained build targets Windows x64. TileZed and BuildingEd select their
 application identity at compile time, independently of the executable filename.
 Shared map, building, scripting and tileset functionality remains available.
+Building material and furniture catalogue readers use the same source across
+the applications. BuildingEd's basement conversion and PZBY/Lua generation are
+separate from its main window, without changing the output formats.
 
 The project continues the work in Tim Baker's
 [pzworlded](https://github.com/timbaker/pzworlded) and
@@ -15,6 +18,23 @@ portable configuration, native 256-cell support, image editing, mapping
 automation, compatibility corrections, and safer project maintenance.
 Malformed project references and thumbnail cache metadata are validated before
 they can reach editor containers or be reused as valid cached data.
+WorldEd loads buildings with missing or incompatible stair tile references
+without crashing. A warning identifies the file, floor and position, and only
+the affected stair tiles are omitted. Source building files are not changed.
+BuildingEd reports individual basement export failures, retains successful
+files in a batch and leaves the clipboard unchanged if every export fails.
+Empty tile layouts retain their dimensions during basement export.
+BuildingEd preserves each floor's layer visibility when switching floors,
+including `RoofTop`, regardless of an older saved visibility cutoff.
+WorldEd preserves west-wall trim around all extended window shapes when
+loading buildings and generating lots.
+The building catalogues include additional material and furniture definitions
+contributed by Tanimal, while retaining existing definitions, extended window
+frames and ceilings.
+Building > Remove Tilesheet from Building clears one selected sheet from the
+open TBX, including room materials, objects, furniture, painted tiles, and
+saved used tile references. The operation supports Undo and leaves shared
+tile and furniture catalogues unchanged.
 TMX maps and tile layers are limited to 300 x 300 tiles, including Native256
 workflows that reuse legacy-size maps or building layouts. TileZed asks for
 confirmation before a map resize crops existing content.
@@ -52,6 +72,18 @@ jumbo rules apply in both formats, including native 256x256 export. Enable it
 to retain authored trees in either format. Source maps and in-game tree behavior
 are unchanged. Applying export settings also retains the biome map.
 
+Generate Lots can also write editable `.lotheader.source`, `.lotpack.source`
+and `chunkdata_*.bin.source` text files alongside the game-ready LOT files.
+The option is saved per PZW project and is off by default. The Generate Lots
+dialog can import these three source files from the selected lots directory
+to rebuild the matching binary files. Import replaces matching binaries after
+confirmation. Keep a copy of the original binaries before editing source
+files. The command-line options `--export-lot-sources=<directory>` and
+`--import-lot-sources=<directory>` convert all complete cell triplets in a
+directory.
+LOT export removes the `.png` suffix from tilesheet names regardless of its
+letter case, so `.png` and `.PNG` sheets produce the same sprite names.
+
 TileSetZ is available directly in TileZed's Tools menu and a tile's context
 menu. It creates and edits PNG tilesheets and precuts textures at the wall-face
 size into consecutive isometric tiles, with an assembly check and TMX export,
@@ -85,6 +117,7 @@ Materials refresh on the first mode or floor change, custom furniture groups
 appear when opened, and edited keyboard shortcuts are saved immediately.
 Building Tiles removes exact duplicate material definitions when loading or
 saving a catalogue. Different orientations, offsets and categories are kept.
+Clearing outside the current furniture dimensions leaves its tile grid intact.
 BuildingEd copies room layouts only with All Layers selected. Copying tiles
 from the current layer and level pastes onto the destination layer without
 creating or replacing rooms. Extended window shapes retain wall grime.
@@ -252,6 +285,10 @@ Important additions include:
   tiles exclusively as paths. Generated road masks close isolated one-tile
   breaks, fill small enclosed holes, discard short internal fragments, and
   retain long or cell-crossing sections before polygon conversion
+- InGameMap roads and water trace tile boundaries before simplification,
+  keeping interior holes separate from exterior outlines in both 300x300
+  and 256x256 projects. Existing generated features need to be regenerated
+  and exported to use the corrected contours.
 - Feature Generation preferences provide editable exact-tile catalogues for
   trees and primary, secondary, and tertiary roads. The Tree defaults include
   classic vegetation trees, `jumbo_tree_01_0`, and the Build 42 Jumbo, XL, and
@@ -312,16 +349,21 @@ Important additions include:
   `.tiles.txt` file that defines it, opens that file in the TileDefs editor,
   and selects the exact tileset and tile index
 - Fast pack extraction for individual tiles, tilesets, and multi-tile objects
+- The Create .pack dialog remembers up to 20 output paths in an editable list.
+  Apply saves the current path without creating a pack.
 - Optional orphan-pixel cleanup during extraction
 - Lua mapping tools with transactional Undo
 - BuildingEd actions and TBX opening launch the standalone `BuildingEd`
   process. TileZed does not host a second embedded editor.
 - Narrow Tilesets docks retain every command through the toolbar overflow
   menu.
-- Layer and level visibility thresholds are restored from the portable INI.
-- The Layers and Levels visibility sliders stay synchronized, clamp stored
-  values to the open map, and provide **Check All** and **Uncheck All** from
-  the Layers list context menu.
+- Maps open with all layers visible and both visibility sliders at the
+  rightmost position. Visibility changes remain local to each open map and
+  are retained when switching tabs, without restoring an old global cutoff.
+- The Layers and Levels visibility sliders stay synchronized as layers are
+  added or removed. New layers remain visible when all layers are shown.
+  **Check All** and **Uncheck All** are available from the Layers list
+  context menu.
 - Bracket-key shortcuts are stored without being mistaken for configuration
   lists. Older shortcut files that lost the default **Decrease BMP Brush
   Size** `[` binding restore it automatically.
@@ -590,7 +632,9 @@ with the TMX when moving or sharing the source project. A map without an
 enabled sidecar retains conventional whole-cell behavior.
 
 While Partial Chunks is enabled, Hole Detection and automatic hole filling
-are disabled for that cell. Generate Lots writes selected chunks normally and
+are disabled for that cell. Overwrite SpawnMap also respects the saved chunk
+selection and keeps excluded chunks at zero zombie intensity.
+Generate Lots writes selected chunks normally and
 encodes omitted chunks as absent LOT data and null navigation chunks. RoomDefs,
 room objects, used-tile headers, and zombie intensity are limited to the
 selected chunks. A selected chunk may be empty by design. An omitted chunk is
@@ -659,6 +703,16 @@ centered using their actual size and maximize when the desktop is too small
 for that minimum.
 
 ## World-map XML overlays
+
+**InGameMap > Read Features XML** replaces the editable features in the open
+world with those from the selected XML. Repeating the command can switch
+between separate feature files. The feature replacement is undoable. If an XML
+cannot be read, WorldEd shows the error and keeps the current features and
+selected XML file.
+WorldEd also converts feature coordinates when XML cells use 256 squares and
+the open project uses 300-square cells, or the reverse. XML without a
+`cellSize` attribute follows the open project's grid for compatibility with
+older feature files.
 
 Open **View > World Map Overlays** to load `worldmap.xml` or
 `worldmap-forest.xml` over the World view without importing their features

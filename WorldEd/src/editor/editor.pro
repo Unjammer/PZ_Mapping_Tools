@@ -33,7 +33,9 @@ DEFINES += QT_NO_CAST_FROM_ASCII \
 DEFINES += PZTOOLS_APP_ISSUE_NOTIFIER
 
 INCLUDEPATH += ../../../shared
+INCLUDEPATH += ../../../shared/buildingcatalogue $$PWD/BuildingEditor
 HEADERS += ../../../shared/pztoolspaths.h
+HEADERS += ../../../shared/windowtrimvalidation.h
 HEADERS += ../../../shared/tilesetimageloader.h
 HEADERS += ../../../shared/loadingdialog.h
 HEADERS += ../../../shared/startupwindowgeometry.h
@@ -72,14 +74,15 @@ SOURCES += main.cpp\
     worldgenpreviewdialog.cpp \
     tilesetcleanupdialog.cpp \
     vehiclemeshpreview.cpp \
-    BuildingEditor/buildingfurniturefile.cpp \
-    BuildingEditor/buildingtilesfile.cpp \
+    ../../../shared/buildingcatalogue/buildingfurniturefile.cpp \
+    ../../../shared/buildingcatalogue/buildingtilesfile.cpp \
     exportlotsprogressdialog.cpp \
     environmentpreviewitem.cpp \
     expectedpropertiesdialog.cpp \
     generatelotsfailuredialog.cpp \
     loadthumbnailsdialog.cpp \
     lotfilesmanager256.cpp \
+    lotsourcefiles.cpp \
     luatable.cpp \
         mainwindow.cpp \
     InGameMap/clipper.cpp \
@@ -224,8 +227,8 @@ HEADERS  += mainwindow.h \
     worldgenpreviewdialog.h \
     tilesetcleanupdialog.h \
     vehiclemeshpreview.h \
-    BuildingEditor/buildingfurniturefile.h \
-    BuildingEditor/buildingtilesfile.h \
+    ../../../shared/buildingcatalogue/buildingfurniturefile.h \
+    ../../../shared/buildingcatalogue/buildingtilesfile.h \
     exportlotsprogressdialog.h \
     environmentpreviewitem.h \
     expectedpropertiesdialog.h \
@@ -246,6 +249,7 @@ HEADERS  += mainwindow.h \
     InGameMap/worldmapannotationsdialog.h \
     loadthumbnailsdialog.h \
     lotfilesmanager256.h \
+    lotsourcefiles.h \
     luatable.h \
     navigation/chunkdatafile256.h \
     navigation/isochunk256.h \

@@ -119,6 +119,7 @@
     <addaction name="actionProceduralLootEditor"/>
     <addaction name="actionTemplates"/>
     <addaction name="actionTiles"/>
+    <addaction name="actionRemoveTilesetReferences"/>
     <addaction name="separator"/>
     <addaction name="menuBasement_Access"/>
     <addaction name="actionTemplateFromBuilding"/>
@@ -370,6 +371,11 @@
   <action name="actionTiles">
    <property name="text">
     <string>Tiles...</string>
+   </property>
+  </action>
+  <action name="actionRemoveTilesetReferences">
+   <property name="text">
+    <string>Remove Tilesheet from Building...</string>
    </property>
   </action>
   <action name="actionTemplateFromBuilding">

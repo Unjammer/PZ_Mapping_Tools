@@ -738,6 +738,11 @@ private:
                         xml.attributes().value(QLatin1String("enabled"))
                         == QLatin1String("true");
                 xml.skipCurrentElement();
+            } else if (xml.name() == QLatin1String("textSources")) {
+                settings.exportTextSources =
+                        xml.attributes().value(QLatin1String("enabled"))
+                        == QLatin1String("true");
+                xml.skipCurrentElement();
             } else
                 readUnknownElement();
         }

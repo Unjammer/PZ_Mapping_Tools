@@ -18,7 +18,6 @@
 #ifndef BUILDINGEDITORWINDOW_H
 #define BUILDINGEDITORWINDOW_H
 
-#include "BuildingEditor/exportbasementsdialog.h"
 #include <QItemSelection>
 #include <QMainWindow>
 #include <QMap>
@@ -46,7 +45,6 @@ class Map;
 class Tile;
 class Tileset;
 namespace Internal {
-class TileDefFile;
 class TileSelectionScope;
 class Zoomable;
 }
@@ -76,7 +74,6 @@ class BuildingOrthoScene;
 class BuildingOrthoView;
 class CategoryDock;
 class Door;
-class ExportBasementsDialog;
 class FurnitureGroup;
 class FurnitureTile;
 class IMode;
@@ -205,6 +202,8 @@ public:
     BuildingDocument *currentDocument() const
     { return mCurrentDocument; }
 
+    static void removeTilesetReferences(BuildingDocument *document, const QString &sheetName);
+
     Building *currentBuilding() const;
 
     BuildingFloor *currentFloor() const;
@@ -257,10 +256,6 @@ private:
     void captureTileClipboard(bool cut);
 
     void cropBuilding(const QRect &bounds);
-
-    void exportNewBinaryFile(ExportBasementsDialog *dialog, const QString& tbxFilePath, QSet<QString> &northStairTiles, QSet<QString> &westStairTiles, QString &luaCode);
-    void getTopStaircaseTiles(QSet<QString>& northStairTiles, QSet<QString> &westStairTiles);
-    bool getBasementStaircase(Tiled::Map* map, QSet<QString>& northStairTiles, QSet<QString>& westStairTiles, int &stairx, int &stairy, QString& stairDir, bool isBasementAccess);
 
     void initActionManager();
 
@@ -335,6 +330,7 @@ public slots:
     void roomsDialog();
     void proceduralLootEditor();
     void tilesDialog();
+    void removeTilesetReferences();
     void templateFromBuilding();
 
 private slots:

@@ -12,6 +12,18 @@ It exists because this repository combines two independent source histories
 into one source tree. The combined repository is therefore not represented by
 GitHub as a conventional fork of either upstream repository.
 
+## October 24, 2026 additions
+
+WorldEd includes Tim Baker's west-wall trim correction from
+[`d73466bf`](https://github.com/timbaker/pzworlded/commit/d73466bf66c02337fc0520400c24fda211f6aea6).
+TileZed's recent `.pack` output paths adapt
+[`9ef277c1`](https://github.com/timbaker/tiled/commit/9ef277c19e10e9798a2a041302615e35434ace15)
+with a bounded list and case-insensitive path matching.
+
+Tanimal contributed additional building material and furniture definitions.
+These additions retain the existing catalogue definitions, extended window
+frames and ceiling materials.
+
 ## Initial integration baselines
 
 The current `WorldEd/` and `TileZed/` trees were reconstructed on local

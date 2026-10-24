@@ -22,6 +22,7 @@
 #include "pztoolsbuild.h"
 
 #include "attributeeditmode.h"
+#include "basementexporter.h"
 #include "building.h"
 #include "buildingdocument.h"
 #include "buildingdocumentmgr.h"
@@ -34,7 +35,6 @@
 #include "buildingpreferences.h"
 #include "buildingpreferencesdialog.h"
 #include "buildingpropertiesdialog.h"
-#include "buildingreader.h"
 #include "buildingundoredo.h"
 #include "buildingtransform.h"
 #include "tileselectionscope.h"
@@ -48,6 +48,7 @@
 #include "buildingtmx.h"
 #include "buildingtools.h"
 #include "choosebuildingtiledialog.h"
+#include "exportbasementsdialog.h"
 #include "furnituregroups.h"
 #include "listofstringsdialog.h"
 #include "newbuildingdialog.h"
@@ -56,7 +57,6 @@
 #include "roomsdialog.h"
 #include "templatefrombuildingdialog.h"
 #include "tileeditmode.h"
-#include "tiledeffile.h"
 #include "lootdistributiondialog.h"
 #include "welcomemode.h"
 
@@ -75,7 +75,6 @@
 #include "zoomable.h"
 #include "zprogress.h"
 #include "../../portablesettings.h"
-#include "maplevel.h"
 #include "maprenderer.h"
 #include "tile.h"
 #include "tileset.h"
@@ -91,6 +90,7 @@
 #include <QFileInfo>
 #include <QGraphicsView>
 #include <QHash>
+#include <QInputDialog>
 #include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
@@ -630,6 +630,8 @@ BuildingEditorWindow::BuildingEditorWindow(QWidget *parent) :
             this, &BuildingEditorWindow::proceduralLootEditor);
     connect(ui->actionTemplates, &QAction::triggered, this, &BuildingEditorWindow::templatesDialog);
     connect(ui->actionTiles, &QAction::triggered, this, &BuildingEditorWindow::tilesDialog);
+    connect(ui->actionRemoveTilesetReferences, &QAction::triggered,
+            this, [this]() { removeTilesetReferences(); });
     connect(ui->actionTemplateFromBuilding, &QAction::triggered,
             this, &BuildingEditorWindow::templateFromBuilding);
     connect(ui->actionBasementAccessNone, &QAction::triggered, this, &BuildingEditorWindow::setBasementAccessNone);
@@ -1430,11 +1432,6 @@ void BuildingEditorWindow::exportTMX()
                        QFileInfo(fileName).absolutePath());
 }
 
-#include "exportbasementsdialog.h"
-#include "mapcomposite.h"
-#include "mapmanager.h"
-#include "newmapbinaryfile.h"
-
 void BuildingEditorWindow::exportNewBinary()
 {
     ExportBasementsDialog dialog(this);
@@ -1449,17 +1446,39 @@ void BuildingEditorWindow::exportNewBinary()
         return;
     }
 
-    QSet<QString> northStairTiles;
-    QSet<QString> westStairTiles;
-    getTopStaircaseTiles(northStairTiles, westStairTiles);
-
+    TileDefWatcher *watcher = getTileDefWatcher();
+    watcher->check();
+    QList<TileDefFile *> definitions;
+    for (TileDefWatcherFile *file : qAsConst(watcher->mFiles))
+        definitions.append(file->mTileDefFile);
+    BasementExportRequest request;
+    request.outputDirectory = dialog.exportDirectory();
+    request.stairTiles = BasementExporter::staircaseTiles(definitions);
     QString luaCode;
+    QStringList errors;
+    int written = 0;
     for (const QString& fileName : qAsConst(fileNames)) {
-        exportNewBinaryFile(&dialog, fileName, northStairTiles, westStairTiles, luaCode);
+        request.sourceFile = fileName;
+        const BasementExportResult exported = BasementExporter::exportFile(request);
+        if (exported.written) {
+            ++written;
+            luaCode += exported.luaCode;
+        } else {
+            errors.append(tr("%1\n%2").arg(fileName, exported.error));
+        }
     }
-
-    QApplication::clipboard()->setText(luaCode);
-    QMessageBox::information(this, tr("Export Basements"), tr("basements.lua code was copied to the system clipboard."));
+    if (written > 0)
+        QApplication::clipboard()->setText(luaCode);
+    if (errors.isEmpty()) {
+        QMessageBox::information(this, tr("Export Basements"), tr("basements.lua code was copied to the system clipboard."));
+    } else {
+        QString message = tr("%1 of %2 basement files were exported.").arg(written).arg(fileNames.size());
+        if (written > 0)
+            message += tr("\nThe available basements.lua code was copied to the system clipboard.");
+        QMessageBox warning(QMessageBox::Warning, tr("Export Basements"), message, QMessageBox::Ok, this);
+        warning.setDetailedText(errors.join(QStringLiteral("\n\n")));
+        warning.exec();
+    }
 }
 
 void BuildingEditorWindow::editCut()
@@ -2201,133 +2220,6 @@ void BuildingEditorWindow::cropBuilding(const QRect &bounds)
     }
 }
 
-void BuildingEditorWindow::exportNewBinaryFile(ExportBasementsDialog *dialog, const QString &tbxFilePath, QSet<QString> &northStairTiles, QSet<QString> &westStairTiles, QString& luaCode)
-{
-    BuildingReader reader;
-    Building *building = reader.read(tbxFilePath);
-    if (building == nullptr) {
-        return;
-    }
-    reader.fix(building);
-    BuildingMap bmap(building);
-    Map *map = bmap.mergedMap();
-
-
-    for (BuildingFloor *floor : building->floors()) {
-
-        bmap.addRoomDefObjects(map, floor);
-    }
-
-    MapInfo* mapInfo = MapManager::instance()->newFromMap(map);
-    MapComposite mapComposite(mapInfo);
-
-    QPoint offset;
-    MapComposite* mapCompositeCropped = mapComposite.cropToMinimum(offset);
-    MapComposite* mapCompositeToWrite = mapCompositeCropped ? mapCompositeCropped : &mapComposite;
-
-    QVector<Tiled::PropertiesGrid*> attributesGrids;
-    for (BuildingFloor *floor : building->floors()) {
-        attributesGrids += floor->squarePropertiesGrid()->clone(QRect(offset, mapCompositeToWrite->map()->size()));
-    }
-
-    BasementAccess ba = building->basementAccess();
-
-    delete building;
-
-    int SquaresPerChunk = 8;
-    NewMapBinaryFile file(SquaresPerChunk);
-    QFileInfo fileInfo(tbxFilePath);
-    QString fileName = QDir(dialog->exportDirectory()).filePath(fileInfo.completeBaseName() + QStringLiteral(".pzby"));
-    bool isBasementAccess = fileInfo.fileName().startsWith(QStringLiteral("ba_"));
-    MapLevel *mapLevel = isBasementAccess ? map->minMapLevel() : map->maxMapLevel();
-    if (file.write(mapCompositeToWrite, attributesGrids, fileName) && (mapLevel != nullptr)) {
-        Map* mapToWrite = mapCompositeToWrite->map();
-        MapInfo *mapInfo1 = mapCompositeToWrite->mapInfo();
-        if (ba.isValid()) {
-            luaCode += QStringLiteral("%1 = { width=%2, height=%3, stairx=%4, stairy=%5, stairDir=\"%6\" },")
-                    .arg(fileInfo.completeBaseName())
-                    .arg(mapInfo1->width())
-                    .arg(mapInfo1->height())
-                    .arg(ba.mX - offset.x())
-                    .arg(ba.mY - offset.y())
-                    .arg(ba.dirString());
-            luaCode += QStringLiteral("\n");
-        } else {
-            int stairx = 0;
-            int stairy = 0;
-            QString stairDir = QStringLiteral("N");
-            if (getBasementStaircase(mapToWrite, northStairTiles, westStairTiles, stairx, stairy, stairDir, isBasementAccess)) {
-                luaCode += QStringLiteral("%1 = { width=%2, height=%3, stairx=%4, stairy=%5, stairDir=\"%6\" },")
-                        .arg(fileInfo.completeBaseName())
-                        .arg(mapInfo1->width())
-                        .arg(mapInfo1->height())
-                        .arg(stairx)
-                        .arg(stairy)
-                        .arg(stairDir);
-                luaCode += QStringLiteral("\n");
-            }
-        }
-    }
-
-    TilesetManager::instance()->removeReferences(map->tilesets());
-
-    if (mapCompositeCropped) {
-        delete mapCompositeCropped->mapInfo();
-        delete mapCompositeCropped->map();
-        delete mapCompositeCropped;
-    }
-
-    delete mapInfo;
-    delete map;
-    qDeleteAll(attributesGrids);
-}
-
-void BuildingEditorWindow::getTopStaircaseTiles(QSet<QString> &northStairTiles, QSet<QString> &westStairTiles)
-{
-    TileDefWatcher *tileDefWatcher = getTileDefWatcher();
-    tileDefWatcher->check();
-    for (TileDefWatcherFile *watcherFile : qAsConst(tileDefWatcher->mFiles)) {
-        for (TileDefTileset* tdts : watcherFile->mTileDefFile->tilesets()) {
-            for (TileDefTile* tdt : qAsConst(tdts->mTiles)) {
-                if (tdt->mProperties.contains(QStringLiteral("stairsTN"))) {
-                    northStairTiles += BuildingTilesMgr::nameForTile(tdt->tileset()->mName, tdt->id());
-                }
-                else if (tdt->mProperties.contains(QStringLiteral("stairsTW"))) {
-                    westStairTiles += BuildingTilesMgr::nameForTile(tdt->tileset()->mName, tdt->id());
-                }
-            }
-        }
-    }
-}
-
-bool BuildingEditorWindow::getBasementStaircase(Tiled::Map *map, QSet<QString> &northStairTiles, QSet<QString> &westStairTiles, int &stairx, int &stairy, QString &stairDir, bool isBasementAccess)
-{
-    MapLevel* mapLevel = isBasementAccess ? map->minMapLevel() : map->maxMapLevel();
-    for (TileLayer* tileLayer : mapLevel->tileLayers()) {
-        for (int y = 0; y < tileLayer->height(); y++) {
-            for (int x = 0; x < tileLayer->width(); x++) {
-                const Cell& cell = tileLayer->cellAt(x, y);
-                if (cell.isEmpty()) {
-                    continue;
-                }
-                QString tileName = BuildingEditor::BuildingTilesMgr::instance()->nameForTile(cell.tile);
-                if (northStairTiles.contains(tileName)) {
-                    stairx = x;
-                    stairy = y;
-                    stairDir = QStringLiteral("N");
-                    return true;
-                }
-                if (westStairTiles.contains(tileName)) {
-                    stairx = x;
-                    stairy = y;
-                    stairDir = QStringLiteral("W");
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
 
 void BuildingEditorWindow::resizeBuilding()
 {
@@ -2622,6 +2514,8 @@ void BuildingEditorWindow::initActionManager()
     actionManager->registerAction(ui->actionProceduralLootEditor, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.ProceduralLootEditor"));
     actionManager->registerAction(ui->actionTemplates, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.Templates"));
     actionManager->registerAction(ui->actionTiles, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.Tiles"));
+    actionManager->registerAction(ui->actionRemoveTilesetReferences, CONTEXT_MENU,
+                                  CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.RemoveTilesetReferences"));
     actionManager->registerAction(ui->actionTemplateFromBuilding, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.TemplateFrom"));
     actionManager->registerAction(mRunLuaScriptAction, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.RunLuaScript"));
     actionManager->registerAction(mLuaConsoleAction, CONTEXT_MENU, CATEGORY_MENU_BUILDING, QStringLiteral("Menu.Building.LuaConsole"));
@@ -2680,6 +2574,248 @@ void BuildingEditorWindow::tilesDialog()
     BuildingTilesDialog *dialog = BuildingTilesDialog::instance();
     dialog->reparent(this);
     dialog->exec();
+}
+
+void BuildingEditorWindow::removeTilesetReferences()
+{
+    if (!mCurrentDocument)
+        return;
+
+    Building *building = mCurrentDocument->building();
+    QStringList sheetNames = building->tilesetNames();
+    sheetNames.sort(Qt::CaseInsensitive);
+    if (sheetNames.isEmpty()) {
+        QMessageBox::information(this, tr("Remove Tilesheet"),
+                                 tr("This building does not reference any tilesheets."));
+        return;
+    }
+
+    bool accepted = false;
+    const QString sheetName = QInputDialog::getItem(
+                this, tr("Remove Tilesheet from Building"),
+                tr("Tilesheet to remove from the current building:"),
+                sheetNames, 0, false, &accepted);
+    if (!accepted || sheetName.isEmpty())
+        return;
+
+    const QString prompt = tr("Remove every reference to %1 from this building, including room materials, objects, furniture and painted tiles?\n\nThis change can be undone.")
+            .arg(sheetName);
+    if (QMessageBox::question(this, tr("Remove Tilesheet"), prompt,
+                              QMessageBox::Yes | QMessageBox::No,
+                              QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    mCurrentDocumentStuff->beginAtomicEdit();
+    removeTilesetReferences(mCurrentDocument, sheetName);
+    mCurrentDocumentStuff->endAtomicEdit();
+}
+
+void BuildingEditorWindow::removeTilesetReferences(BuildingDocument *document,
+                                                   const QString &sheetName)
+{
+    if (!document || sheetName.isEmpty())
+        return;
+
+    Building *building = document->building();
+    BuildingTilesMgr *tilesManager = BuildingTilesMgr::instance();
+    QUndoStack *undoStack = document->undoStack();
+    const QList<BuildingTileEntry*> oldUsedTiles = building->usedTiles();
+    const QList<FurnitureTiles*> oldUsedFurniture = building->usedFurniture();
+    QHash<BuildingTileEntry*, BuildingTileEntry*> entryReplacements;
+    QHash<FurnitureTiles*, FurnitureTiles*> furnitureReplacements;
+
+    auto entryUsesSheet = [&sheetName](BuildingTileEntry *entry) {
+        if (!entry || entry->isNone())
+            return false;
+        foreach (BuildingTile *tile, entry->mTiles) {
+            if (tile && !tile->isNone() && tile->mTilesetName == sheetName)
+                return true;
+        }
+        return false;
+    };
+    auto entryHasOtherTiles = [&sheetName](BuildingTileEntry *entry) {
+        if (!entry || entry->isNone())
+            return false;
+        foreach (BuildingTile *tile, entry->mTiles) {
+            if (tile && !tile->isNone() && tile->mTilesetName != sheetName)
+                return true;
+        }
+        return false;
+    };
+    auto filteredEntry = [&](BuildingTileEntry *entry) {
+        if (!entryUsesSheet(entry))
+            return entry;
+        if (entryReplacements.contains(entry))
+            return entryReplacements.value(entry);
+        BuildingTileEntry *replacement = entry->createCopy(entry->category());
+        for (int index = 0; index < replacement->tileCount(); ++index) {
+            BuildingTile *tile = replacement->tile(index);
+            if (tile && !tile->isNone() && tile->mTilesetName == sheetName)
+                replacement->setTile(index, tilesManager->noneTile());
+        }
+        building->retainTileEntries(QList<BuildingTileEntry*>() << replacement);
+        entryReplacements.insert(entry, replacement);
+        return replacement;
+    };
+    auto furnitureUsesSheet = [&sheetName](FurnitureTiles *furniture) {
+        foreach (FurnitureTile *orientation, furniture->tiles()) {
+            if (!orientation)
+                continue;
+            foreach (BuildingTile *tile, orientation->tiles()) {
+                if (tile && !tile->isNone() && tile->mTilesetName == sheetName)
+                    return true;
+            }
+        }
+        return false;
+    };
+    auto furnitureHasTiles = [](FurnitureTile *orientation) {
+        if (!orientation)
+            return false;
+        foreach (BuildingTile *tile, orientation->tiles()) {
+            if (tile && !tile->isNone())
+                return true;
+        }
+        return false;
+    };
+    auto filteredFurniture = [&](FurnitureTiles *furniture) {
+        if (!furnitureUsesSheet(furniture))
+            return furniture;
+        if (furnitureReplacements.contains(furniture))
+            return furnitureReplacements.value(furniture);
+        FurnitureTiles *replacement = new FurnitureTiles(furniture->hasCorners());
+        replacement->setLayer(furniture->layer());
+        replacement->setGroup(furniture->group());
+        for (int index = 0; index < FurnitureTile::OrientCount; ++index) {
+            FurnitureTile *source = furniture->tile(index);
+            FurnitureTile *target = replacement->tile(index);
+            target->setAllowGrime(source->allowGrime());
+            for (int y = 0; y < source->height(); ++y) {
+                for (int x = 0; x < source->width(); ++x) {
+                    BuildingTile *tile = source->tile(x, y);
+                    if (tile && !tile->isNone() && tile->mTilesetName != sheetName)
+                        target->setTile(x, y, tile);
+                }
+            }
+        }
+        building->retainFurnitureTiles(replacement);
+        furnitureReplacements.insert(furniture, replacement);
+        return replacement;
+    };
+
+    undoStack->beginMacro(tr("Remove Tilesheet %1 from Building").arg(sheetName));
+
+    for (int index = 0; index < Building::TileCount; ++index) {
+        BuildingTileEntry *entry = building->tile(index);
+        if (entryUsesSheet(entry))
+            undoStack->push(new ChangeBuildingTile(document, index, filteredEntry(entry), false));
+    }
+    foreach (Room *room, building->rooms()) {
+        for (int index = 0; index < Room::TileCount; ++index) {
+            BuildingTileEntry *entry = room->tile(index);
+            if (entryUsesSheet(entry))
+                undoStack->push(new ChangeRoomTile(document, room, index, filteredEntry(entry), false));
+        }
+    }
+
+    foreach (BuildingFloor *floor, building->floors()) {
+        for (int objectIndex = floor->objects().size() - 1; objectIndex >= 0; --objectIndex) {
+            BuildingObject *object = floor->objects().at(objectIndex);
+            if (FurnitureObject *placedFurniture = object->asFurniture()) {
+                FurnitureTile *source = placedFurniture->furnitureTile();
+                FurnitureTiles *owner = source->owner();
+                if (!furnitureUsesSheet(owner))
+                    continue;
+                FurnitureTiles *replacement = filteredFurniture(owner);
+                FurnitureTile *orientation = replacement->tile(source->orient());
+                if (!furnitureHasTiles(orientation->resolved()))
+                    undoStack->push(new RemoveObject(document, floor, objectIndex));
+                else
+                    undoStack->push(new ChangeFurnitureObjectTile(document,
+                                                                 placedFurniture, orientation));
+                continue;
+            }
+
+            const QList<BuildingTileEntry*> entries = object->tiles();
+            bool usesSheet = false;
+            bool hasOtherTiles = false;
+            foreach (BuildingTileEntry *entry, entries) {
+                usesSheet |= entryUsesSheet(entry);
+                hasOtherTiles |= entryHasOtherTiles(entry);
+            }
+            if (!usesSheet)
+                continue;
+            if (!hasOtherTiles) {
+                undoStack->push(new RemoveObject(document, floor, objectIndex));
+                continue;
+            }
+            for (int index = 0; index < entries.size(); ++index) {
+                if (entryUsesSheet(entries.at(index)))
+                    undoStack->push(new ChangeObjectTile(document, object,
+                                                         filteredEntry(entries.at(index)),
+                                                         false, index));
+            }
+        }
+
+        foreach (const QString &layerName, floor->grimeLayers()) {
+            FloorTileGrid *grid = floor->grime().value(layerName);
+            if (!grid)
+                continue;
+            QRegion affected;
+            for (int y = 0; y < grid->height(); ++y) {
+                int runStart = -1;
+                for (int x = 0; x <= grid->width(); ++x) {
+                    bool matches = false;
+                    if (x < grid->width()) {
+                        QString tileSheet;
+                        int tileIndex = 0;
+                        matches = tilesManager->parseTileName(grid->at(x, y), tileSheet, tileIndex)
+                                && tileSheet == sheetName;
+                    }
+                    if (matches && runStart < 0)
+                        runStart = x;
+                    else if (!matches && runStart >= 0) {
+                        affected += QRect(runStart, y, x - runStart, 1);
+                        runStart = -1;
+                    }
+                }
+            }
+            if (!affected.isEmpty()) {
+                const QRect bounds = affected.boundingRect();
+                undoStack->push(new PaintFloorTiles(document, floor, layerName,
+                                                   affected, bounds.topLeft(),
+                                                   new FloorTileGrid(bounds.width(), bounds.height()),
+                                                   "Remove Tilesheet Tiles"));
+            }
+        }
+    }
+
+    QList<BuildingTileEntry*> usedTiles;
+    foreach (BuildingTileEntry *entry, oldUsedTiles) {
+        if (!entryUsesSheet(entry))
+            usedTiles += entry;
+        else if (entryHasOtherTiles(entry))
+            usedTiles += filteredEntry(entry);
+    }
+    if (building->usedTiles() != usedTiles)
+        undoStack->push(new ChangeUsedTiles(document, usedTiles));
+
+    QList<FurnitureTiles*> usedFurniture;
+    foreach (FurnitureTiles *furniture, oldUsedFurniture) {
+        if (!furnitureUsesSheet(furniture)) {
+            usedFurniture += furniture;
+            continue;
+        }
+        FurnitureTiles *replacement = filteredFurniture(furniture);
+        bool hasTiles = false;
+        foreach (FurnitureTile *orientation, replacement->tiles())
+            hasTiles |= furnitureHasTiles(orientation);
+        if (hasTiles)
+            usedFurniture += replacement;
+    }
+    if (building->usedFurniture() != usedFurniture)
+        undoStack->push(new ChangeUsedFurniture(document, usedFurniture));
+
+    undoStack->endMacro();
 }
 
 void BuildingEditorWindow::templateFromBuilding()
@@ -2833,6 +2969,7 @@ void BuildingEditorWindow::updateActions()
     ui->actionGrime->setEnabled(hasDoc);
     ui->actionRooms->setEnabled(hasDoc);
     ui->actionTemplateFromBuilding->setEnabled(hasDoc);
+    ui->actionRemoveTilesetReferences->setEnabled(hasDoc);
 
     ui->actionCropToMinimum->setEnabled(hasDoc);
     ui->actionCropToSelection->setEnabled(hasDoc &&

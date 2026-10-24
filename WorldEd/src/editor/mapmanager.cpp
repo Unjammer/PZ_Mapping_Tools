@@ -19,6 +19,7 @@
 
 #include "../portablesettings.h"
 #include "mapcomposite.h"
+#include "mapimagemanager.h"
 #include "preferences.h"
 #include "progress.h"
 #include "tilemetainfomgr.h"
@@ -39,6 +40,7 @@
 using namespace SharedTools;
 
 #include "BuildingEditor/building.h"
+#include "BuildingEditor/buildingfloor.h"
 #include "BuildingEditor/buildingreader.h"
 #include "BuildingEditor/buildingmap.h"
 #include "BuildingEditor/buildingobjects.h"
@@ -46,9 +48,13 @@ using namespace SharedTools;
 #include "BuildingEditor/furnituregroups.h"
 
 #include <QDebug>
+#include <QCryptographicHash>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QScopeGuard>
+#include <QTemporaryDir>
 #include <QWriteLocker>
 
 #ifdef QT_NO_DEBUG
@@ -77,6 +83,178 @@ void MapManager::deleteInstance()
 {
     delete mInstance;
     mInstance = nullptr;
+}
+
+bool MapManager::validateBuildingImport(QString *error, const QString &stairFixtureDirectory)
+{
+    const auto fail = [error](const QString &message) {
+        if (error)
+            *error = message;
+        return false;
+    };
+    QTemporaryDir directory;
+    if (!directory.isValid() || !Preferences::instance()->thumbnailsDirectory().isEmpty())
+        return fail(QStringLiteral("Building import validation requires a temporary directory and the default thumbnail cache"));
+    const QString entries = QStringLiteral(
+                "<tile_entry category=\"floors\"><tile enum=\"Floor\" tile=\"floors_interior_tilesandwood_01_0\" offset=\"0,0\"/></tile_entry>"
+                "<tile_entry category=\"stairs\">"
+                "<tile enum=\"West1\" tile=\"fixtures_stairs_01_0\" offset=\"0,0\"/>"
+                "<tile enum=\"West2\" tile=\"fixtures_stairs_01_1\" offset=\"0,0\"/>"
+                "<tile enum=\"West3\" tile=\"fixtures_stairs_01_2\" offset=\"0,0\"/>"
+                "<tile enum=\"North1\" tile=\"fixtures_stairs_01_8\" offset=\"0,0\"/>"
+                "<tile enum=\"North2\" tile=\"fixtures_stairs_01_9\" offset=\"0,0\"/>"
+                "<tile enum=\"North3\" tile=\"fixtures_stairs_01_10\" offset=\"0,0\"/>"
+                "</tile_entry><tile_entry category=\"stairs\"/>");
+    const QStringList references = {
+        QString(), QStringLiteral("0"), QStringLiteral("-1"),
+        QStringLiteral("999"), QStringLiteral("invalid"),
+        QStringLiteral("1"), QStringLiteral("2"), QStringLiteral("3")
+    };
+    MapManager *manager = instance();
+    const auto importAndRender = [&](const QString &path, int expectedTiles, bool checkUpperFloor) {
+        QFile source(path);
+        if (!source.open(QIODevice::ReadOnly))
+            return fail(QStringLiteral("Cannot read building import input: %1").arg(path));
+        const QByteArray originalHash = QCryptographicHash::hash(source.readAll(), QCryptographicHash::Sha256);
+        source.close();
+        QObject loadOwner;
+        MapInfo *retained = nullptr;
+        QObject::connect(manager, &MapManager::mapLoaded, &loadOwner,
+                         [&](MapInfo *loaded) {
+            if (loaded->path() == QFileInfo(path).canonicalFilePath() && !retained) {
+                manager->addReferenceToMap(loaded);
+                retained = loaded;
+            }
+        });
+        const auto releaseMap = qScopeGuard([&]() {
+            if (retained)
+                manager->removeReferenceToMap(retained);
+        });
+        MapInfo *info = manager->loadMap(path);
+        if (!info || !info->map() || retained != info)
+            return fail(QStringLiteral("Building conversion failed: %1").arg(manager->errorString()));
+        int stairTiles = 0;
+        int upperFloorTiles = 0;
+        for (Layer *layer : info->map()->layers()) {
+            TileLayer *tiles = layer->asTileLayer();
+            if (!tiles)
+                continue;
+            for (int y = 0; y < tiles->height(); ++y) {
+                for (int x = 0; x < tiles->width(); ++x) {
+                    Tile *tile = tiles->cellAt(x, y).tile;
+                    if (tile && tile->tileset()->name() == QStringLiteral("fixtures_stairs_01"))
+                        ++stairTiles;
+                    if (tile && tiles->level() == 1
+                            && tile->tileset()->name() == QStringLiteral("floors_interior_tilesandwood_01"))
+                        ++upperFloorTiles;
+                }
+            }
+        }
+        if (stairTiles != expectedTiles)
+            return fail(QStringLiteral("Stair tile count %1 differs from %2 for %3")
+                        .arg(stairTiles).arg(expectedTiles).arg(path));
+        if (checkUpperFloor && upperFloorTiles != 61)
+            return fail(QStringLiteral("Ortho stair import changed the upper-floor opening: %1 floor tiles")
+                        .arg(upperFloorTiles));
+        QObject imageOwner;
+        bool imageFailed = false;
+        MapImageManager *images = MapImageManager::instance();
+        QObject::connect(images, &MapImageManager::mapImageFailedToLoad, &imageOwner,
+                         [&imageFailed](MapImage *) { imageFailed = true; });
+        MapImage *image = images->getMapImage(path, QString(), &imageOwner);
+        if (!image)
+            return fail(images->errorString());
+        QElapsedTimer timer;
+        timer.start();
+        while (!image->isLoaded() && !imageFailed && timer.elapsed() < 30000) {
+            QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 20);
+            QThread::msleep(1);
+        }
+        if (imageFailed || !image->isLoaded() || image->image().isNull())
+            return fail(QStringLiteral("Building thumbnail did not render for %1").arg(path));
+        bool visible = false;
+        for (int y = 0; y < image->image().height() && !visible; ++y) {
+            for (int x = 0; x < image->image().width(); ++x) {
+                if (qAlpha(image->image().pixel(x, y)) != 0) {
+                    visible = true;
+                    break;
+                }
+            }
+        }
+        if (!visible)
+            return fail(QStringLiteral("Building thumbnail lost its visible tiles"));
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        if (!source.open(QIODevice::ReadOnly)
+                || QCryptographicHash::hash(source.readAll(), QCryptographicHash::Sha256) != originalHash)
+            return fail(QStringLiteral("Building import modified the source file"));
+        return true;
+    };
+    int checked = 0;
+    for (const QString &direction : {QStringLiteral("N"), QStringLiteral("W")}) {
+        for (const QString &reference : references) {
+            const QString attribute = reference.isEmpty() ? QString()
+                    : QStringLiteral(" Tile=\"%1\"").arg(reference);
+            const QByteArray xml = QStringLiteral(
+                        "<building version=\"7\" width=\"8\" height=\"8\">%1<floor>"
+                        "<object type=\"stairs\" x=\"1\" y=\"1\" dir=\"%2\"%3/>"
+                        "<object type=\"stairs\" x=\"4\" y=\"4\" dir=\"%2\" Tile=\"2\"/>"
+                        "</floor><floor/></building>").arg(entries, direction, attribute).toUtf8();
+            const QString path = directory.filePath(QStringLiteral("stairs-%1.tbx").arg(checked));
+            QFile file(path);
+            if (!file.open(QIODevice::WriteOnly) || file.write(xml) != xml.size())
+                return fail(QStringLiteral("Cannot write building import input"));
+            file.close();
+            {
+                BuildingReader reader;
+                QScopedPointer<Building> building(reader.read(path));
+                if (!building)
+                    return fail(reader.errorString());
+                reader.fix(building.data());
+                if (building->floorCount() != 2 || building->floor(0)->objectCount() != 2)
+                    return fail(QStringLiteral("Building import changed the floor or object count"));
+                Stairs *stairs = building->floor(0)->objects().first()->asStairs();
+                const bool validEntry = reference == QStringLiteral("2") || reference == QStringLiteral("3");
+                if (!stairs || (stairs->tile() != nullptr) != validEntry)
+                    return fail(QStringLiteral("Unexpected stair tile reference after reading %1").arg(reference));
+            }
+            const int expectedTiles = reference == QStringLiteral("2") ? 6 : 3;
+            if (!importAndRender(path, expectedTiles, false))
+                return false;
+            ++checked;
+        }
+    }
+    qInfo() << "Building import validation passed:" << checked
+            << "stair references, both directions, conversion, thumbnails and unchanged sources";
+    if (!stairFixtureDirectory.isEmpty()) {
+        QDir fixtures(stairFixtureDirectory);
+        if (!fixtures.exists())
+            return fail(QStringLiteral("Ortho stair fixture directory does not exist"));
+        int orthoChecked = 0;
+        for (const QString &direction : {QStringLiteral("N"), QStringLiteral("W")}) {
+            for (bool validTiles : {true, false}) {
+                const QString path = fixtures.filePath(QStringLiteral("ortho-stairs-%1-%2.tbx")
+                      .arg(direction, validTiles ? QStringLiteral("valid") : QStringLiteral("missing")));
+                BuildingReader reader;
+                QScopedPointer<Building> building(reader.read(path));
+                if (!building)
+                    return fail(reader.errorString());
+                reader.fix(building.data());
+                if (building->floorCount() != 2 || building->floor(0)->objectCount() != 1)
+                    return fail(QStringLiteral("Ortho stair fixture has unexpected floors or objects"));
+                Stairs *stairs = building->floor(0)->object(0)->asStairs();
+                if (!stairs || stairs->pos() != QPoint(1, 1)
+                        || stairs->dir() != BuildingObject::dirFromString(direction)
+                        || (stairs->tile() != nullptr) != validTiles)
+                    return fail(QStringLiteral("Ortho stair fixture changed its position, direction or graphics"));
+                if (!importAndRender(path, validTiles ? 3 : 0, true))
+                    return false;
+                ++orthoChecked;
+            }
+        }
+        qInfo() << "BuildingEd-to-WorldEd Ortho stair validation passed:" << orthoChecked
+                << "saved TBX files, conversion, floor openings, thumbnails and unchanged sources";
+    }
+    return true;
 }
 
 MapManager::MapManager() :

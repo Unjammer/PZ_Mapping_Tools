@@ -244,7 +244,8 @@ bool LotPlugin::handleTileset(QFile& file, const Tiled::Tileset *tileset, uint f
     QString name = tileset->imageSource();
     if (name.contains(QLatin1String("/")))
         name = name.mid(name.lastIndexOf(QLatin1String("/")) + 1);
-    name.replace(".png", "");
+    if (name.endsWith(QLatin1String(".png"), Qt::CaseInsensitive))
+        name.chop(4);
 
     for (int i = 0; i < tileset->tileCount(); ++i) {
         int localID = i;

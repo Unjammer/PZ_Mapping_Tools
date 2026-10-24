@@ -343,6 +343,7 @@ static void ReplaceRoofSlope(RoofObject *ro, const QRect &r,
                              RoofObject::RoofTile tile)
 {
     if (r.isEmpty()) return;
+    if (tile == RoofObject::TileCount) return;
     int offset = ro->getOffset(tile);
     QPoint tileOffset = ro->slopeTiles()->offset(offset);
     QRect bounds(0, 0, squares.size(), squares[0].size());
@@ -761,19 +762,21 @@ void BuildingFloor::LayoutToSquares()
             ReplaceWindow(window, squares);
         }
         if (Stairs *stairs = object->asStairs()) {
-            // Stair objects are 5 tiles long but only have 3 tiles.
-            if (stairs->isN()) {
-                for (int i = 1; i <= 3; i++)
-                    ReplaceFurniture(x, y + i, squares,
-                                     stairs->tile()->tile(stairs->getOffset(x, y + i)),
-                                     Square::SectionFurniture,
-                                     Square::SectionFurniture4);
-            } else {
-                for (int i = 1; i <= 3; i++)
-                    ReplaceFurniture(x + i, y, squares,
-                                     stairs->tile()->tile(stairs->getOffset(x + i, y)),
-                                     Square::SectionFurniture,
-                                     Square::SectionFurniture4);
+            if (BuildingTileEntry *entry = stairs->tile()) {
+                // Stair objects are 5 tiles long but only have 3 tiles.
+                if (stairs->isN()) {
+                    for (int i = 1; i <= 3; i++)
+                        ReplaceFurniture(x, y + i, squares,
+                                         entry->tile(stairs->getOffset(x, y + i)),
+                                         Square::SectionFurniture,
+                                         Square::SectionFurniture4);
+                } else {
+                    for (int i = 1; i <= 3; i++)
+                        ReplaceFurniture(x + i, y, squares,
+                                         entry->tile(stairs->getOffset(x + i, y)),
+                                         Square::SectionFurniture,
+                                         Square::SectionFurniture4);
+                }
             }
             mStairs += stairs;
         }
@@ -2177,9 +2180,7 @@ void BuildingFloor::Square::ReplaceWallTrim()
 
     // SectionWall could be a west, north, or north-west wall
     if (wallTile1) {
-        if (mEntryEnum[SectionWall] == BTC_Walls::West ||
-                mEntryEnum[SectionWall] == BTC_Walls::WestDoor ||
-                mEntryEnum[SectionWall] == BTC_Walls::WestWindow ||
+        if (wallTile1->isWest(mEntryEnum[SectionWall]) ||
                 mEntryEnum[SectionWall] == BTC_Walls::NorthWest) {
             enumW = mEntryEnum[SectionWall];
             if (enumW == BTC_Walls::NorthWest) {
@@ -2197,9 +2198,7 @@ void BuildingFloor::Square::ReplaceWallTrim()
 
     // 2 different wall tiles forming north-west corner
     if (wallTile2) {
-        if (mEntryEnum[SectionWall2] == BTC_Walls::West ||
-                mEntryEnum[SectionWall2] == BTC_Walls::WestDoor ||
-                mEntryEnum[SectionWall2] == BTC_Walls::WestWindow) {
+        if (wallTile2->isWest(mEntryEnum[SectionWall2])) {
             enumW = mEntryEnum[SectionWall2];
         } else {
             enumN = mEntryEnum[SectionWall2];

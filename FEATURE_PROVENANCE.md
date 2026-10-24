@@ -370,6 +370,8 @@ decision. Every user-facing or correctness change is listed separately below.
 
 | Tim Baker commit | Date | Subject | Equivalent already in Unjammer? | Action | Provenance |
 |---|---|---|---|---|---|
+| WorldEd [`d73466bf`](https://github.com/timbaker/pzworlded/commit/d73466bf66c02337fc0520400c24fda211f6aea6) | 2026-08-18 | West-wall trim for extended window shapes | TileZed already contained the corresponding correction | Ported to WorldEd | `TIM_FIX_PORTED` |
+| TileZed [`9ef277c1`](https://github.com/timbaker/tiled/commit/9ef277c19e10e9798a2a041302615e35434ace15) | 2026-10-15 | Recent output paths in CreatePackDialog | No output-path history | Adapted with a bounded, case-insensitive recent-path list | `TIM_UPSTREAM_PORT` |
 | WorldEd `54b21a88`, `93f4b2fd` | 2026-07-27 to 07-29 | Docker and macOS Qt 6 builds | Windows Qt 5 line differs | Not applicable | Tim upstream only |
 | WorldEd [`f492c5cd`](https://github.com/timbaker/pzworlded/commit/f492c5cde209e1ef907af5d84f93c89cea4b1927) | 2026-07-29 | LotPackViewer invalid z | No | Ported | `TIM_FIX_PORTED` |
 | WorldEd `d9d2cd69` | 2026-07-29 | `std::as_const` migration | Qt 5 line retains compatible APIs | Not applicable | Tim upstream only |
@@ -453,6 +455,3 @@ histories, historical WorldEd and TileZed forks, reconstruction branches, and
 combined repository. It also reviewed all 58 Tim Baker commits after the two
 recorded reconstruction baselines through the 2026-08-11 upstream heads.
 
-Future Tim Baker synchronization must update the review table and record whether
-each applicable change was ported, adapted, already implemented, already fixed,
-not applicable, or still pending review.

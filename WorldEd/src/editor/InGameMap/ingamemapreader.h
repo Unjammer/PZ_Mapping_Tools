@@ -21,6 +21,7 @@
 #include <QString>
 
 class World;
+class WorldDocument;
 
 class QIODevice;
 
@@ -34,6 +35,7 @@ public:
 
     World *readWorld(QIODevice *device, const QString &path, World *world);
     World *readWorld(const QString &fileName, World* world);
+    bool replaceWorld(const QString &fileName, WorldDocument *document);
 
     QString errorString() const;
 

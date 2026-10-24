@@ -2257,6 +2257,7 @@ void MapComposite::setSuppressRegion(const QRegion &rgn, int level)
 
 MapComposite *MapComposite::cropToMinimum(QPoint &offset)
 {
+    offset = QPoint();
     QVector<const Tiled::Cell *> cells(40);
     OrderedCellsTemporaries vars;
     MapInfo *mapInfo = this->mapInfo();
@@ -2285,6 +2286,8 @@ MapComposite *MapComposite::cropToMinimum(QPoint &offset)
             }
         }
     }
+    if (maxX < minX || maxY < minY)
+        return nullptr;
     if (maxX - minX + 1 == mapWidth && maxY - minY + 1 == mapHeight) {
         return nullptr;
     }

@@ -43,6 +43,7 @@ private slots:
     void modRootBrowse();
     void posterBrowse();
     void modExportToggled(bool enabled);
+    void importSources();
     void accept();
     void apply();
 

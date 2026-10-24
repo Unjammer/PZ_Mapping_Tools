@@ -51,6 +51,7 @@ Building::~Building()
     qDeleteAll(mFloors);
     qDeleteAll(mRooms);
     qDeleteAll(mRetainedTileEntries);
+    qDeleteAll(mRetainedFurnitureTiles);
     delete mBasementAccess;
 }
 
@@ -179,12 +180,27 @@ QStringList Building::tilesetNames() const
     QSet<QString> ret;
 
     foreach (BuildingFloor *floor, floors()) {
-        foreach (BuildingObject *object, floor->objects())
+        foreach (BuildingObject *object, floor->objects()) {
             btiles |= object->buildingTiles();
+            if (FurnitureObject *furniture = object->asFurniture()) {
+                FurnitureTiles *owner = furniture->furnitureTile()->owner();
+                foreach (FurnitureTile *orientation, owner->tiles()) {
+                    if (!orientation)
+                        continue;
+                    foreach (BuildingTile *tile, orientation->tiles()) {
+                        if (tile && !tile->isNone() && !tile->mTilesetName.isEmpty())
+                            btiles += tile;
+                    }
+                }
+            }
+        }
         foreach (QString layerName, floor->grimeLayers()) {
-            for (int y = 0; y < floor->height(); y++) {
-                for (int x = 0; x < floor->width(); x++) {
-                    QString tileName = floor->grime()[layerName]->at(x, y);
+            FloorTileGrid *grid = floor->grime().value(layerName);
+            if (!grid)
+                continue;
+            for (int y = 0; y < grid->height(); y++) {
+                for (int x = 0; x < grid->width(); x++) {
+                    QString tileName = grid->at(x, y);
                     if (tileName.isEmpty())
                         continue;
                     QString tilesetName;

@@ -19,13 +19,18 @@
 
 #include "world.h"
 #include "worldcell.h"
+#include "worlddocument.h"
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
+#include <QUndoStack>
 #include <QXmlStreamReader>
+
+#include <cmath>
 
 class InGameMapReaderPrivate
 {
@@ -67,15 +72,26 @@ public:
     {
         mError.clear();
         mPath = path;
+        xml.clear();
 
         xml.setDevice(device);
 
         if (xml.readNextStartElement() && xml.name() == QLatin1String("world")) {
-            world = readWorld(world);
-        } else {
+            readWorld(world);
+        } else if (!xml.hasError()) {
             xml.raiseError(tr("Missing 'world' element."));
         }
 
+        if (xml.hasError()) {
+            for (const auto &features : mReadFeatures)
+                qDeleteAll(features);
+            mReadFeatures.clear();
+            return nullptr;
+        }
+
+        for (auto it = mReadFeatures.cbegin(); it != mReadFeatures.cend(); ++it)
+            it.key()->inGameMap().mFeatures.append(it.value());
+        mReadFeatures.clear();
         return world;
     }
 
@@ -89,6 +105,17 @@ private:
 //        const int height = atts.value(QLatin1String("height")).toString().toInt();
 
         mWorld = world;
+        mSourceCellSize = world->cellSize();
+        const QString cellSize = atts.value(QLatin1String("cellSize")).toString();
+        if (!cellSize.isEmpty()) {
+            bool valid = false;
+            const int declaredSize = cellSize.toInt(&valid);
+            if (!valid || (declaredSize != 256 && declaredSize != 300)) {
+                xml.raiseError(tr("Unsupported cellSize: %1").arg(cellSize));
+                return nullptr;
+            }
+            mSourceCellSize = declaredSize;
+        }
 /*
         for (int y = 0; y < world->height(); y++) {
             for (int x = 0; x < world->width(); x++) {
@@ -120,29 +147,29 @@ private:
         const QPoint& worldOrigin = mWorld->getGenerateLotsSettings().worldOrigin;
 
         const QXmlStreamAttributes atts = xml.attributes();
-        const int x = atts.value(QLatin1String("x")).toString().toInt() - worldOrigin.x();
-        const int y = atts.value(QLatin1String("y")).toString().toInt() - worldOrigin.y();
+        const int sourceX = atts.value(QLatin1String("x")).toString().toInt();
+        const int sourceY = atts.value(QLatin1String("y")).toString().toInt();
+        if (mSourceCellSize == mWorld->cellSize()
+                && !mWorld->contains(sourceX - worldOrigin.x(),
+                                     sourceY - worldOrigin.y())) {
+            xml.raiseError(tr("Invalid cell coordinates %1,%2")
+                           .arg(sourceX).arg(sourceY));
+            return;
+        }
 
-        if (!mWorld->contains(x, y))
-            xml.raiseError(tr("Invalid cell coordinates %1,%2").arg(x).arg(y));
-        else {
-            WorldCell *cell = mWorld->cellAt(x, y);
-
-            while (xml.readNextStartElement()) {
-                if (xml.name() == QLatin1String("feature"))
-                    readFeature(cell);
-                else
-                    readUnknownElement();
-            }
-
+        while (xml.readNextStartElement()) {
+            if (xml.name() == QLatin1String("feature"))
+                readFeature(sourceX, sourceY);
+            else
+                readUnknownElement();
         }
     }
 
-    void readFeature(WorldCell* cell)
+    void readFeature(int sourceX, int sourceY)
     {
         Q_ASSERT(xml.isStartElement() && xml.name() == QLatin1String("feature"));
 
-        InGameMapFeature* feature = new InGameMapFeature(&cell->inGameMap());
+        InGameMapFeature* feature = new InGameMapFeature(nullptr);
 
         while (xml.readNextStartElement()) {
             if (xml.name() == QLatin1String("geometry"))
@@ -153,12 +180,73 @@ private:
                 readUnknownElement();
         }
 
+        if (xml.hasError()) {
+            delete feature;
+            return;
+        }
+
 //        if (feature->properties().contains(QStringLiteral("natural"), QStringLiteral("forest"))) {
 //            delete feature;
 //            return;
 //        }
 
-        cell->inGameMap().mFeatures += feature;
+        const QPoint &worldOrigin = mWorld->getGenerateLotsSettings().worldOrigin;
+        const int targetCellSize = mWorld->cellSize();
+        int targetX = sourceX;
+        int targetY = sourceY;
+        if (mSourceCellSize != targetCellSize) {
+            bool foundCell = false;
+            for (const InGameMapCoordinates &coordinates
+                 : feature->mGeometry.mCoordinates) {
+                for (const InGameMapPoint &point : coordinates) {
+                    const double squareX =
+                            double(sourceX) * mSourceCellSize + point.x;
+                    const double squareY =
+                            double(sourceY) * mSourceCellSize + point.y;
+                    const int candidateX = int(std::floor(squareX / targetCellSize));
+                    const int candidateY = int(std::floor(squareY / targetCellSize));
+                    if (!mWorld->contains(candidateX - worldOrigin.x(),
+                                          candidateY - worldOrigin.y()))
+                        continue;
+                    targetX = candidateX;
+                    targetY = candidateY;
+                    foundCell = true;
+                    break;
+                }
+                if (foundCell)
+                    break;
+            }
+            if (!foundCell) {
+                targetX = int(std::floor(double(sourceX) * mSourceCellSize
+                                         / targetCellSize));
+                targetY = int(std::floor(double(sourceY) * mSourceCellSize
+                                         / targetCellSize));
+            }
+        }
+        const int localX = targetX - worldOrigin.x();
+        const int localY = targetY - worldOrigin.y();
+        if (!mWorld->contains(localX, localY)) {
+            xml.raiseError(tr("Feature outside the current world at %1,%2")
+                           .arg(sourceX).arg(sourceY));
+            delete feature;
+            return;
+        }
+
+        WorldCell *cell = mWorld->cellAt(localX, localY);
+        feature->mOwner = &cell->inGameMap();
+        if (mSourceCellSize != targetCellSize) {
+            const double offsetX = double(sourceX) * mSourceCellSize
+                    - double(targetX) * targetCellSize;
+            const double offsetY = double(sourceY) * mSourceCellSize
+                    - double(targetY) * targetCellSize;
+            for (InGameMapCoordinates &coordinates : feature->mGeometry.mCoordinates) {
+                for (InGameMapPoint &point : coordinates) {
+                    point.x += offsetX;
+                    point.y += offsetY;
+                }
+            }
+        }
+        mReadFeatures[cell].append(feature);
     }
 
     void readFeatureGeometry(InGameMapFeature& feature)
@@ -264,6 +352,8 @@ private:
     QString mPath;
     World *mWorld;
     QString mError;
+    int mSourceCellSize = 0;
+    QHash<WorldCell*, QList<InGameMapFeature*>> mReadFeatures;
     QXmlStreamReader xml;
 };
 
@@ -291,6 +381,35 @@ World *InGameMapReader::readWorld(const QString &fileName, World* world)
         return nullptr;
 
     return readWorld(&file, QFileInfo(fileName).absolutePath(), world);
+}
+
+bool InGameMapReader::replaceWorld(const QString &fileName, WorldDocument *document)
+{
+    World *world = document->world();
+    const auto &cells = world->cells();
+    QVector<int> previousCounts;
+    previousCounts.reserve(cells.size());
+    for (WorldCell *cell : cells)
+        previousCounts.append(cell->inGameMap().features().size());
+
+    if (!readWorld(fileName, world))
+        return false;
+
+    document->undoStack()->beginMacro(
+                QCoreApplication::translate("InGameMapReader", "Read InGameMap XML"));
+    for (int cellIndex = 0; cellIndex < cells.size(); ++cellIndex) {
+        WorldCell *cell = cells.at(cellIndex);
+        InGameMapFeatures &features = cell->inGameMap().features();
+        const int previousCount = previousCounts.at(cellIndex);
+        const QList<InGameMapFeature*> imported = features.mid(previousCount);
+        features.erase(features.begin() + previousCount, features.end());
+        for (int i = previousCount - 1; i >= 0; --i)
+            document->removeInGameMapFeature(cell, i);
+        for (int i = 0; i < imported.size(); ++i)
+            document->addInGameMapFeature(cell, i, imported.at(i));
+    }
+    document->undoStack()->endMacro();
+    return true;
 }
 
 QString InGameMapReader::errorString() const

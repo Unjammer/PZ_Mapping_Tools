@@ -274,26 +274,62 @@ RoadMaskCleanup normalizeRoadMask(RoadMask &mask, const RoadMaskRules &rules)
     return cleanup;
 }
 
-void addRoadMaskToClipper(const RoadMask &mask, ClipperLib::Clipper &clipper)
+bool addMaskBoundariesToClipper(const RoadMask &mask, ClipperLib::Clipper &clipper)
 {
+    const int stride = mask.size().width() + 1;
+    QVector<quint8> edges(stride * (mask.size().height() + 1), 0);
     for (int y = 0; y < mask.size().height(); ++y) {
-        int x = 0;
-        while (x < mask.size().width()) {
-            while (x < mask.size().width() && !mask.value(x, y))
-                ++x;
-            const int start = x;
-            while (x < mask.size().width() && mask.value(x, y))
-                ++x;
-            if (start == x)
+        for (int x = 0; x < mask.size().width(); ++x) {
+            if (!mask.value(x, y))
                 continue;
+            if (!mask.value(x, y - 1))
+                edges[y * stride + x] |= 1;
+            if (!mask.value(x + 1, y))
+                edges[y * stride + x + 1] |= 2;
+            if (!mask.value(x, y + 1))
+                edges[(y + 1) * stride + x + 1] |= 4;
+            if (!mask.value(x - 1, y))
+                edges[(y + 1) * stride + x] |= 8;
+        }
+    }
+    const QPoint directions[] = {
+        QPoint(1, 0), QPoint(0, 1), QPoint(-1, 0), QPoint(0, -1)
+    };
+    clipper.StrictlySimple(true);
+    for (int start = 0; start < edges.size(); ++start) {
+        while (edges.at(start)) {
+            int direction = 0;
+            while (!(edges.at(start) & (1 << direction)))
+                ++direction;
+            int current = start;
             ClipperLib::Path path;
-            path << ClipperLib::IntPoint(start, y)
-                 << ClipperLib::IntPoint(x, y)
-                 << ClipperLib::IntPoint(x, y + 1)
-                 << ClipperLib::IntPoint(start, y + 1);
+            do {
+                const QPoint point(current % stride, current / stride);
+                path.push_back({point.x(), point.y()});
+                edges[current] &= ~(1 << direction);
+                const QPoint next = point + directions[direction];
+                current = next.y() * stride + next.x();
+                if (current == start)
+                    break;
+                if (current < 0 || current >= edges.size() || !edges.at(current))
+                    return false;
+                bool found = false;
+                for (int turn : {1, 0, 3, 2}) {
+                    const int candidate = (direction + turn) % 4;
+                    if (edges.at(current) & (1 << candidate)) {
+                        direction = candidate;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                    return false;
+            } while (current != start);
+            ClipperLib::CleanPolygon(path, 0.1);
             clipper.AddPath(path, ClipperLib::ptSubject, true);
         }
     }
+    return true;
 }
 
 int PIXELS_PER_CELL = 48;
@@ -353,6 +389,114 @@ InGameMapFeatureGenerator::InGameMapFeatureGenerator(QObject *parent) :
 
 static void simplifyRoadPolygon(ClipperLib::Path &nodes, int cellSize,
                                 double tolerance, int maximumPointSpacing);
+static void simplifyPolygon(ClipperLib::Path &nodes, int cellSize);
+
+static bool validateSurfaceMaskBoundaries(QString *error)
+{
+    int cases = 0;
+    for (int cellSize : {256, 300}) {
+        for (int fixture = 0; fixture < 36; ++fixture) {
+            RoadMask mask(QSize(cellSize, cellSize));
+            for (int y = 0; y < cellSize; ++y) {
+                for (int x = 0; x < cellSize; ++x) {
+                    bool occupied = false;
+                    if (fixture == 0)
+                        occupied = true;
+                    else if (fixture == 1)
+                        occupied = x >= 4 && x < cellSize - 4 && y >= 4 && y < cellSize - 4
+                                && !(x >= 20 && x < 28 && y >= 20 && y < 28);
+                    else if (fixture == 2)
+                        occupied = (x == 0 && y == 0) || (x == 1 && y == 1)
+                                || (x == cellSize - 1 && y == cellSize - 1);
+                    else if (fixture >= 4 && x >= 4 && x < 60 && y >= 4 && y < 60) {
+                        const int pattern = fixture - 4;
+                        const bool inside = pattern % 3 == 0 ? (y > 12 && y < 42)
+                                : pattern % 3 == 1 ? (x - 32) * (x - 32) + (y - 32) * (y - 32) < 27 * 27
+                                                  : (x < 25 || y > 29);
+                        const bool hole = pattern < 4 ? (x > 20 && x < 25 && y > 20 && y < 25)
+                                                       : ((x * 31 + y * 17 + pattern * 13) % 101 < pattern);
+                        occupied = inside && !hole;
+                    }
+                    mask.setValue(x, y, occupied);
+                }
+            }
+            ClipperLib::Clipper clipper;
+            ClipperLib::PolyTree tree;
+            if (!addMaskBoundariesToClipper(mask, clipper)
+                    || (!clipper.Execute(ClipperLib::ctUnion, tree,
+                                          ClipperLib::pftNonZero, ClipperLib::pftNonZero)
+                        && mask.tileCount() != 0)) {
+                *error = QStringLiteral("Surface boundary tracing failed");
+                return false;
+            }
+            int expectedEdges = 0;
+            for (int y = 0; y < cellSize; ++y) {
+                for (int x = 0; x < cellSize; ++x) {
+                    if (mask.value(x, y))
+                        expectedEdges += !mask.value(x - 1, y) + !mask.value(x + 1, y)
+                                + !mask.value(x, y - 1) + !mask.value(x, y + 1);
+                }
+            }
+            QSet<quint64> boundaryEdges;
+            double area = 0.0;
+            int outerCount = 0;
+            int holeCount = 0;
+            for (ClipperLib::PolyNode *node = tree.GetFirst(); node; node = node->GetNext()) {
+                ClipperLib::Path path = node->Contour;
+                ClipperLib::CleanPolygon(path, 0.1);
+                area += ClipperLib::Area(path);
+                outerCount += !node->IsHole();
+                holeCount += node->IsHole();
+                QSet<quint64> vertices;
+                for (size_t index = 0; index < path.size(); ++index) {
+                    const auto &a = path[index];
+                    const auto &b = path[(index + 1) % path.size()];
+                    const quint64 vertex = quint64(a.Y * (cellSize + 1) + a.X);
+                    if (vertices.contains(vertex) || (a.X != b.X && a.Y != b.Y)) {
+                        *error = QStringLiteral("Surface contour contains a bridge or a non-grid edge");
+                        return false;
+                    }
+                    vertices.insert(vertex);
+                    const int dx = (b.X > a.X) - (b.X < a.X);
+                    const int dy = (b.Y > a.Y) - (b.Y < a.Y);
+                    const int direction = dx > 0 ? 0 : dy > 0 ? 1 : dx < 0 ? 2 : 3;
+                    for (int x = int(a.X), y = int(a.Y); x != b.X || y != b.Y; x += dx, y += dy) {
+                        const bool valid = direction == 0 ? mask.value(x, y) && !mask.value(x, y - 1)
+                                : direction == 1 ? mask.value(x - 1, y) && !mask.value(x, y)
+                                : direction == 2 ? mask.value(x - 1, y - 1) && !mask.value(x - 1, y)
+                                                 : mask.value(x, y - 1) && !mask.value(x - 1, y - 1);
+                        const quint64 edge = (quint64(y * (cellSize + 1) + x) << 2) | direction;
+                        if (!valid || boundaryEdges.contains(edge)) {
+                            *error = QStringLiteral("Surface contour changed a tile boundary");
+                            return false;
+                        }
+                        boundaryEdges.insert(edge);
+                    }
+                }
+                if (fixture <= 1) {
+                    ClipperLib::Path water = path;
+                    ClipperLib::Path road = path;
+                    simplifyPolygon(water, cellSize);
+                    simplifyRoadPolygon(road, cellSize, 2.0, 40);
+                    if (qAbs(ClipperLib::Area(water)) != qAbs(ClipperLib::Area(path))
+                            || qAbs(ClipperLib::Area(road)) != qAbs(ClipperLib::Area(path))) {
+                        *error = QStringLiteral("Surface simplification changed a rectangular bank or hole");
+                        return false;
+                    }
+                }
+            }
+            if (area != mask.tileCount() || boundaryEdges.size() != expectedEdges
+                    || (fixture == 1 && (outerCount != 1 || holeCount != 1))) {
+                *error = QStringLiteral("Surface mask topology mismatch for %1-cell fixture %2")
+                        .arg(cellSize).arg(fixture);
+                return false;
+            }
+            ++cases;
+        }
+    }
+    qInfo() << "InGameMap surface-boundary validation:" << cases << "cases passed";
+    return true;
+}
 
 bool InGameMapFeatureGenerator::validateRoadMaskProcessing(QString *summary,
                                                            QString *error)
@@ -362,6 +506,10 @@ bool InGameMapFeatureGenerator::validateRoadMaskProcessing(QString *summary,
             *error = message;
         return false;
     };
+
+    QString boundaryError;
+    if (!validateSurfaceMaskBoundaries(&boundaryError))
+        return fail(boundaryError);
 
     ClipperLib::Path angled = {{100, 100}, {100, 102}, {102, 100}, {102, 98}};
     const double angledArea = ClipperLib::Area(angled);
@@ -403,7 +551,8 @@ bool InGameMapFeatureGenerator::validateRoadMaskProcessing(QString *summary,
         return fail(QStringLiteral("a four-tile enclosed road hole was not filled"));
 
     ClipperLib::Clipper clipper;
-    addRoadMaskToClipper(trail, clipper);
+    if (!addMaskBoundariesToClipper(trail, clipper))
+        return fail(QStringLiteral("the trail mask has an open boundary"));
     ClipperLib::PolyTree tree;
     if (!clipper.Execute(ClipperLib::ctUnion, tree,
                          ClipperLib::pftNonZero, ClipperLib::pftNonZero))
@@ -974,10 +1123,12 @@ bool InGameMapFeatureGenerator::doWater(WorldCell *cell, MapInfo *mapInfo)
     const QRect bounds(QPoint(), mapInfo->map()->size());
 
     auto* layerGroup = mapComposite->layerGroupForLevel(0);
+    if (!layerGroup)
+        return true;
     layerGroup->prepareDrawing2();
 
     ClipperLib::Clipper clipper;
-    ClipperLib::Path path;
+    RoadMask waterMask(bounds.size());
 
     static QVector<const Tiled::Cell*> cells(40);
     OrderedCellsTemporaries vars;
@@ -997,25 +1148,19 @@ bool InGameMapFeatureGenerator::doWater(WorldCell *cell, MapInfo *mapInfo)
 
     for (int y = 0; y < bounds.height(); y++) {
         for (int x = 0; x < bounds.width(); x++) {
-            if (isWaterAt(x, y)) {
-                int end = x + 1;
-                for (; end < bounds.width(); end++) {
-                    if (isWaterAt(end, y) == false)
-                        break;
-                }
-                path.clear();
-                path << ClipperLib::IntPoint(x, y);
-                path << ClipperLib::IntPoint(end, y);
-                path << ClipperLib::IntPoint(end, y + 1);
-                path << ClipperLib::IntPoint(x, y + 1);
-                clipper.AddPath(path, ClipperLib::ptSubject, true);
-                x = end - 1;
-            }
+            if (isWaterAt(x, y))
+                waterMask.setValue(x, y);
         }
+    }
+    if (!addMaskBoundariesToClipper(waterMask, clipper)) {
+        mError = tr("Could not trace the water boundaries in cell %1,%2.")
+                .arg(cell->x()).arg(cell->y());
+        return false;
     }
 
     ClipperLib::PolyTree polyTree;
-    if (clipper.Execute(ClipperLib::ctDifference, polyTree, ClipperLib::PolyFillType::pftPositive) == false) {
+    if (!clipper.Execute(ClipperLib::ctUnion, polyTree,
+                         ClipperLib::pftNonZero, ClipperLib::pftNonZero)) {
         return true;
     }
 
@@ -1035,6 +1180,7 @@ bool InGameMapFeatureGenerator::doWater(WorldCell *cell, MapInfo *mapInfo)
 
     for (pzPolygon *poly : allPolygons) {
         ClipperLib::Path simple = poly->outer;
+        ClipperLib::CleanPolygon(simple, 0.1);
         simplifyPolygon(simple, bounds.width());
         if (!validateGeneratedPolygon(simple, cell, QStringLiteral("water"),
                                       QStringLiteral("outer"),
@@ -1052,6 +1198,7 @@ bool InGameMapFeatureGenerator::doWater(WorldCell *cell, MapInfo *mapInfo)
         if (poly->inner.empty() == false) {
             for (auto& hole : poly->inner) {
                 simple = hole;
+                ClipperLib::CleanPolygon(simple, 0.1);
                 simplifyPolygon(simple, bounds.width());
                 if (!validateGeneratedPolygon(simple, cell,
                                               QStringLiteral("water"),
@@ -1192,7 +1339,11 @@ bool InGameMapFeatureGenerator::doRoads(WorldCell *worldCell, MapInfo *mapInfo)
                            const QString &type, ClipperLib::Clipper &clipper) {
         const int originalTiles = mask.tileCount();
         const RoadMaskCleanup cleanup = normalizeRoadMask(mask, rules);
-        addRoadMaskToClipper(mask, clipper);
+        if (!addMaskBoundariesToClipper(mask, clipper)) {
+            mError = tr("Could not trace the %1 boundaries in cell %2,%3.")
+                    .arg(type).arg(worldCell->x()).arg(worldCell->y());
+            return false;
+        }
         if (cleanup.bridgedTiles || cleanup.filledHoleTiles ||
                 cleanup.removedComponents) {
             qInfo().noquote()
@@ -1205,18 +1356,19 @@ bool InGameMapFeatureGenerator::doRoads(WorldCell *worldCell, MapInfo *mapInfo)
                        .arg(cleanup.removedComponents)
                        .arg(cleanup.removedTiles);
         }
+        return true;
     };
-    prepareMask(primaryMask, highwayRoadMaskRules,
-                QStringLiteral("primary"), primary);
-    prepareMask(secondaryMask, highwayRoadMaskRules,
-                QStringLiteral("secondary"), secondary);
-    prepareMask(tertiaryMask, highwayRoadMaskRules,
-                QStringLiteral("tertiary"), tertiary);
-    if (generateTrails)
-        prepareMask(trailMask, trailRoadMaskRules,
-                    QStringLiteral("trail"), trail);
-    prepareMask(railwayMask, railwayRoadMaskRules,
-                QStringLiteral("railway"), railway);
+    if (!prepareMask(primaryMask, highwayRoadMaskRules,
+                     QStringLiteral("primary"), primary)
+            || !prepareMask(secondaryMask, highwayRoadMaskRules,
+                            QStringLiteral("secondary"), secondary)
+            || !prepareMask(tertiaryMask, highwayRoadMaskRules,
+                            QStringLiteral("tertiary"), tertiary)
+            || (generateTrails && !prepareMask(trailMask, trailRoadMaskRules,
+                                               QStringLiteral("trail"), trail))
+            || !prepareMask(railwayMask, railwayRoadMaskRules,
+                            QStringLiteral("railway"), railway))
+        return false;
     auto createFeatures = [&](ClipperLib::Clipper &clipper,
                               const QString &key, const QString &value,
                               double simplificationTolerance,
@@ -1240,6 +1392,7 @@ bool InGameMapFeatureGenerator::doRoads(WorldCell *worldCell, MapInfo *mapInfo)
         }
         for (pzPolygon *polygon : qAsConst(polygons)) {
             ClipperLib::Path outer = polygon->outer;
+            ClipperLib::CleanPolygon(outer, 0.1);
             simplifyRoadPolygon(outer, mapSize.width(),
                                 simplificationTolerance, maximumPointSpacing);
             if (!validateGeneratedPolygon(outer, worldCell,
@@ -1256,6 +1409,7 @@ bool InGameMapFeatureGenerator::doRoads(WorldCell *worldCell, MapInfo *mapInfo)
                 coordinates += InGameMapPoint(point.X, point.Y);
             feature->mGeometry.mCoordinates += coordinates;
             for (ClipperLib::Path hole : polygon->inner) {
+                ClipperLib::CleanPolygon(hole, 0.1);
                 simplifyRoadPolygon(hole, mapSize.width(),
                                     simplificationTolerance, maximumPointSpacing);
                 if (!validateGeneratedPolygon(hole, worldCell,

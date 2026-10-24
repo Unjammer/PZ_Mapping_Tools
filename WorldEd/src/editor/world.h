@@ -140,6 +140,7 @@ public:
     QPoint worldOrigin;
     int numberOfThreads = 1;
     bool preservePlacedTrees = false;
+    bool exportTextSources = false;
 
     bool operator == (const GenerateLotsSettings &other)
     {
@@ -149,7 +150,8 @@ public:
                 tileDefFolder == other.tileDefFolder &&
                 worldOrigin == other.worldOrigin &&
                 numberOfThreads == other.numberOfThreads &&
-                preservePlacedTrees == other.preservePlacedTrees;
+                preservePlacedTrees == other.preservePlacedTrees &&
+                exportTextSources == other.exportTextSources;
     }
 
     bool operator != (const GenerateLotsSettings &other)

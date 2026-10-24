@@ -1,5 +1,6 @@
 #ifndef BUILDINGCATALOGVALIDATION_H
 #define BUILDINGCATALOGVALIDATION_H
+#include "windowtrimvalidation.h"
 
 #include "buildingtilesfile.h"
 #include "buildingtiles.h"
@@ -8,10 +9,16 @@
 #include "buildingdocument.h"
 #include "buildingeditorwindow.h"
 #include "buildingfloor.h"
+#include "buildingobjects.h"
+#include "buildingreader.h"
+#include "buildingtemplates.h"
+#include "buildingwriter.h"
 #include "buildingisoview.h"
+#include "buildinglayersdock.h"
 #include "buildingpreferences.h"
 #include "buildingtilesdialog.h"
 #include "furnitureview.h"
+#include "furnituregroups.h"
 #include "mapcomposite.h"
 #include "preferences.h"
 #include "shortcut/actionmanager.h"
@@ -21,6 +28,7 @@
 #include <QDebug>
 #include <QListWidget>
 #include <QPainter>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <algorithm>
 
@@ -107,6 +115,19 @@ inline bool validateBuildingEditorWorkflows(BuildingEditorWindow *window, QStrin
         if (!valid)
             failures.append(name);
     };
+    FurnitureTiles emptyFurniture(false);
+    FurnitureTile *emptyWest = emptyFurniture.tile(FurnitureTile::FurnitureW);
+    check(emptyFurniture.isEmpty(), QStringLiteral("New furniture is empty"));
+    emptyWest->setTile(2, 2, nullptr);
+    check(emptyWest->size() == QSize(1, 1) && emptyWest->tile(0, 0) == nullptr,
+          QStringLiteral("Clearing outside furniture bounds leaves its grid intact"));
+    emptyWest->setTile(2, 2, BuildingTilesMgr::instance()->get(
+                           QStringLiteral("blends_natural_01_0")));
+    check(!emptyFurniture.isEmpty() && emptyWest->size() == QSize(3, 3),
+          QStringLiteral("Furniture detects a tile beyond the initial grid"));
+    emptyWest->setTile(2, 2, nullptr);
+    check(emptyFurniture.isEmpty() && emptyWest->size() == QSize(1, 1),
+          QStringLiteral("Furniture becomes empty after removing its last tile"));
     BTC_Walls wallCategory(QStringLiteral("exterior_walls"), QStringLiteral("Walls"));
     BTC_GrimeWall grimeCategory(QStringLiteral("Grime"));
     BuildingTileEntry walls(&wallCategory);
@@ -131,7 +152,40 @@ inline bool validateBuildingEditorWorkflows(BuildingEditorWindow *window, QStrin
                   QStringLiteral("Extended window grime %1/%2").arg(frame).arg(second));
         }
     }
+    QString trimError;
+    check(validateWindowTrim(&trimError),
+          QStringLiteral("Extended window trim: %1").arg(trimError));
     BuildingPreferences *prefs = BuildingPreferences::instance();
+    QSettings &settings = prefs->settings();
+    const QString visibilityKey = QStringLiteral("Layers/Visibility");
+    const bool hadVisibility = settings.contains(visibilityKey);
+    const QVariant previousVisibility = settings.value(visibilityKey);
+    settings.setValue(visibilityKey, 0);
+    {
+        auto *building = new Building(4, 4, nullptr);
+        building->insertFloor(0, new BuildingFloor(building, 0));
+        building->insertFloor(1, new BuildingFloor(building, 1));
+        BuildingDocument document(building, QString());
+        BuildingLayersDock dock;
+        check(QMetaObject::invokeMethod(
+                  &dock, "currentDocumentChanged", Qt::DirectConnection,
+                  Q_ARG(BuildingEditor::BuildingDocument *, &document)),
+              QStringLiteral("Building layers dock accepts the document"));
+        document.setCurrentFloor(building->floor(1));
+        check(building->floor(1)->layerVisibility(QStringLiteral("RoofTop")),
+              QStringLiteral("Switching floors keeps RoofTop visible despite an old global cutoff"));
+        document.setLayerVisibility(building->floor(0), QStringLiteral("RoofTop"), false);
+        document.setCurrentFloor(building->floor(0));
+        check(!building->floor(0)->layerVisibility(QStringLiteral("RoofTop")),
+              QStringLiteral("The first floor retains its hidden RoofTop"));
+        document.setCurrentFloor(building->floor(1));
+        check(building->floor(1)->layerVisibility(QStringLiteral("RoofTop")),
+              QStringLiteral("The second floor retains its visible RoofTop"));
+    }
+    if (hadVisibility)
+        settings.setValue(visibilityKey, previousVisibility);
+    else
+        settings.remove(visibilityKey);
     const bool highlight = prefs->highlightFloor();
     const bool lower = prefs->showLowerFloors();
     const bool onlyFloors = prefs->showOnlyFloors();
@@ -194,6 +248,108 @@ inline bool validateBuildingEditorWorkflows(BuildingEditorWindow *window, QStrin
     prefs->setHighlightFloor(highlight);
     prefs->setShowLowerFloors(lower);
     prefs->setShowOnlyFloors(onlyFloors);
+
+    {
+        const QString removedSheet = QStringLiteral("blends_natural_01");
+        const QString keptSheet = QStringLiteral("location_restaurant_bar_01");
+        BuildingTilesMgr *manager = BuildingTilesMgr::instance();
+        auto *building = new Building(4, 4, nullptr);
+        auto *floor = new BuildingFloor(building, 0);
+        building->insertFloor(0, floor);
+        auto *wallEntry = new BuildingTileEntry(manager->catEWalls());
+        wallEntry->setTile(BTC_Walls::West, manager->get(removedSheet + QStringLiteral("_0")));
+        wallEntry->setTile(BTC_Walls::North, manager->get(keptSheet + QStringLiteral("_0")));
+        auto *roomEntry = new BuildingTileEntry(manager->catIWalls());
+        roomEntry->setTile(BTC_Walls::West, manager->get(removedSheet + QStringLiteral("_4")));
+        roomEntry->setTile(BTC_Walls::North, manager->get(keptSheet + QStringLiteral("_4")));
+        auto *onlyRemovedEntry = new BuildingTileEntry(manager->catEWalls());
+        onlyRemovedEntry->setTile(BTC_Walls::West,
+                                  manager->get(removedSheet + QStringLiteral("_5")));
+        building->retainTileEntries(QList<BuildingTileEntry*>()
+                                    << wallEntry << roomEntry << onlyRemovedEntry);
+        building->setTile(Building::ExteriorWall, wallEntry);
+        building->setUsedTiles(QList<BuildingTileEntry*>() << wallEntry << roomEntry);
+        auto *room = new Room;
+        room->Name = QStringLiteral("Removal test");
+        room->internalName = QStringLiteral("removal_test");
+        room->Color = qRgb(120, 120, 120);
+        room->setTile(Room::InteriorWall, roomEntry);
+        building->insertRoom(0, room);
+        auto *wall = new WallObject(floor, 2, 2, BuildingObject::W, 1);
+        wall->setTile(wallEntry);
+        floor->insertObject(0, wall);
+        auto *onlyRemovedWall = new WallObject(floor, 3, 2, BuildingObject::W, 1);
+        onlyRemovedWall->setTile(onlyRemovedEntry);
+        floor->insertObject(1, onlyRemovedWall);
+        auto *furniture = new FurnitureTiles(false);
+        furniture->tile(FurnitureTile::FurnitureW)->setTile(
+                    0, 0, manager->get(removedSheet + QStringLiteral("_1")));
+        furniture->tile(FurnitureTile::FurnitureW)->setTile(
+                    1, 0, manager->get(keptSheet + QStringLiteral("_1")));
+        building->retainFurnitureTiles(furniture);
+        auto *onlyRemovedFurniture = new FurnitureTiles(false);
+        onlyRemovedFurniture->tile(FurnitureTile::FurnitureW)->setTile(
+                    0, 0, manager->get(removedSheet + QStringLiteral("_6")));
+        building->retainFurnitureTiles(onlyRemovedFurniture);
+        building->setUsedFurniture(QList<FurnitureTiles*>()
+                                   << furniture << onlyRemovedFurniture);
+        auto *placedFurniture = new FurnitureObject(floor, 1, 1);
+        placedFurniture->setFurnitureTile(furniture->tile(FurnitureTile::FurnitureW));
+        floor->insertObject(2, placedFurniture);
+        auto *onlyRemovedPlacedFurniture = new FurnitureObject(floor, 3, 3);
+        onlyRemovedPlacedFurniture->setFurnitureTile(
+                    onlyRemovedFurniture->tile(FurnitureTile::FurnitureW));
+        floor->insertObject(3, onlyRemovedPlacedFurniture);
+        floor->setGrime(QStringLiteral("Furniture"), 0, 0,
+                        removedSheet + QStringLiteral("_2"));
+        floor->setGrime(QStringLiteral("Furniture"), 4, 4,
+                        removedSheet + QStringLiteral("_3"));
+        floor->setGrime(QStringLiteral("Furniture"), 0, 1,
+                        keptSheet + QStringLiteral("_2"));
+        BuildingDocument document(building, QString());
+        check(building->tilesetNames().contains(removedSheet),
+              QStringLiteral("Tilesheet removal fixture includes the selected sheet"));
+        BuildingEditorWindow::removeTilesetReferences(&document, removedSheet);
+        check(!building->tilesetNames().contains(removedSheet),
+              QStringLiteral("Tilesheet removal clears all building references"));
+        check(building->tilesetNames().contains(keptSheet)
+              && floor->objectCount() == 2,
+              QStringLiteral("Tilesheet removal keeps other placed tiles"));
+        check(room->tile(Room::InteriorWall)->tile(BTC_Walls::West)->isNone()
+              && room->tile(Room::InteriorWall)->tile(BTC_Walls::North)->mTilesetName
+                    == keptSheet,
+              QStringLiteral("Tilesheet removal filters mixed room materials"));
+        check(floor->grimeAt(QStringLiteral("Furniture"), 4, 4).isEmpty()
+              && floor->grimeAt(QStringLiteral("Furniture"), 0, 1)
+                    == keptSheet + QStringLiteral("_2"),
+              QStringLiteral("Tilesheet removal clears boundary paint and keeps other paint"));
+        check(wallEntry->tile(BTC_Walls::West)->mTilesetName == removedSheet
+              && furniture->tile(FurnitureTile::FurnitureW)->tile(0, 0)->mTilesetName
+                    == removedSheet,
+              QStringLiteral("Tilesheet removal does not edit shared definitions"));
+        document.undoStack()->undo();
+        check(building->tilesetNames().contains(removedSheet)
+              && floor->objectCount() == 4
+              && floor->grimeAt(QStringLiteral("Furniture"), 4, 4)
+                    == removedSheet + QStringLiteral("_3"),
+              QStringLiteral("Tilesheet removal undo restores all references"));
+        document.undoStack()->redo();
+        check(!building->tilesetNames().contains(removedSheet),
+              QStringLiteral("Tilesheet removal redo clears the sheet again"));
+        QTemporaryDir roundTripDirectory;
+        const QString tbxPath = roundTripDirectory.filePath(QStringLiteral("tilesheet-removal.tbx"));
+        BuildingWriter writer;
+        const bool saved = roundTripDirectory.isValid() && writer.write(building, tbxPath);
+        check(saved, QStringLiteral("Tilesheet removal TBX saves: ") + writer.errorString());
+        if (saved) {
+            BuildingReader reader;
+            Building *loaded = reader.read(tbxPath);
+            check(loaded && !loaded->tilesetNames().contains(removedSheet)
+                  && loaded->tilesetNames().contains(keptSheet),
+                  QStringLiteral("Tilesheet removal TBX reopens without the selected sheet"));
+            delete loaded;
+        }
+    }
 
     BuildingTilesDialog *dialog = BuildingTilesDialog::instance();
     FurnitureGroups *groups = FurnitureGroups::instance();

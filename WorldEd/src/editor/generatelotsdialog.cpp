@@ -3,6 +3,7 @@
 
 #include "../portablesettings.h"
 #include "preferences.h"
+#include "lotsourcefiles.h"
 #include "BuildingEditor/buildingtiles.h"
 #include "tilemetainfomgr.h"
 #include "tileset.h"
@@ -84,6 +85,9 @@ GenerateLotsDialog::GenerateLotsDialog(WorldDocument *worldDoc, QWidget *parent)
 
     const GenerateLotsSettings &settings = mWorldDoc->world()->getGenerateLotsSettings();
     ui->preservePlacedTrees->setChecked(settings.preservePlacedTrees);
+    ui->exportTextSources->setChecked(settings.exportTextSources);
+    connect(ui->importTextSources, &QPushButton::clicked,
+            this, &GenerateLotsDialog::importSources);
 
     QSettings qSettings;
     QStringList directories = qSettings.value(KEY_EXPORT_DIRECTORIES).toStringList();
@@ -421,6 +425,35 @@ void GenerateLotsDialog::modExportToggled(bool enabled)
     ui->groupBox->setEnabled(!enabled);
 }
 
+void GenerateLotsDialog::importSources()
+{
+    const QDir directory(mExportDir);
+    if (mExportDir.isEmpty() || !directory.exists()) {
+        QMessageBox::warning(this, tr("Import LOT Sources"),
+                             tr("Choose an existing lots directory first."));
+        return;
+    }
+    if (directory.entryList(QStringList(QStringLiteral("*.lotheader.source")),
+                            QDir::Files).isEmpty()) {
+        QMessageBox::warning(this, tr("Import LOT Sources"),
+                             tr("No .lotheader.source files were found in the lots directory."));
+        return;
+    }
+    if (QMessageBox::question(this, tr("Import LOT Sources"),
+                              tr("Rebuild LOT binary files from all .source files in this directory? Existing matching binary files will be replaced."))
+            != QMessageBox::Yes)
+        return;
+    QString error;
+    int cells = 0;
+    if (!LotSourceFiles::processDirectory(mExportDir, true,
+                                          &cells, &error)) {
+        QMessageBox::warning(this, tr("Import LOT Sources"), error);
+        return;
+    }
+    QMessageBox::information(this, tr("Import LOT Sources"),
+                             tr("Imported %1 LOT cell(s).").arg(cells));
+}
+
 void GenerateLotsDialog::accept()
 {
     if (!validate())
@@ -488,6 +521,7 @@ GenerateLotsSettings GenerateLotsDialog::editedSettings() const
     settings.worldOrigin = QPoint(ui->xOrigin->value(), ui->yOrigin->value());
     settings.numberOfThreads = ui->numThreadsSlider->value();
     settings.preservePlacedTrees = ui->preservePlacedTrees->isChecked();
+    settings.exportTextSources = ui->exportTextSources->isChecked();
     return settings;
 }
 

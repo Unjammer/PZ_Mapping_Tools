@@ -113,6 +113,9 @@ public:
     void retainTileEntries(const QList<BuildingTileEntry*> &entries)
     { mRetainedTileEntries += entries; }
 
+    void retainFurnitureTiles(FurnitureTiles *tiles)
+    { mRetainedFurnitureTiles += tiles; }
+
     void setUsedFurniture(const QList<FurnitureTiles*> &tiles)
     { mUsedFurniture = tiles; }
 
@@ -211,6 +214,7 @@ private:
     QVector<BuildingTileEntry*> mTiles;
     QList<BuildingTileEntry*> mUsedTiles;
     QList<BuildingTileEntry*> mRetainedTileEntries;
+    QList<FurnitureTiles*> mRetainedFurnitureTiles;
     QList<FurnitureTiles*> mUsedFurniture;
     Tiled::Properties mProperties;
     BasementAccess *mBasementAccess = nullptr;

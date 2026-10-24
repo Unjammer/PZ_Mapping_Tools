@@ -26,6 +26,7 @@
 #include <QTimer>
 #include <QTemporaryDir>
 #include <QThread>
+#include <QUndoStack>
 #include <QXmlStreamReader>
 #include <limits>
 #include "mainwindow.h"
@@ -59,6 +60,7 @@
 #include "mapimagemanager.h"
 #include "mapmanager.h"
 #include "lotfilesmanager256.h"
+#include "lotsourcefiles.h"
 #include "luawriter.h"
 #include "progress.h"
 #include "tilemetainfomgr.h"
@@ -71,11 +73,13 @@
 #include "InGameMap/ingamemapwriter.h"
 #include "InGameMap/ingamemapwriterbinary.h"
 #include "world.h"
+#include "worldcell.h"
 #include "worlddocument.h"
 #include "worldreader.h"
 #include "worldwriter.h"
 #include "worldobjectvalidation.h"
 #include "worldscene.h"
+#include "windowtrimvalidation.h"
 #include "worldview.h"
 #include "zlevelrenderer.h"
 #include "worldgenpreviewdialog.h"
@@ -106,6 +110,20 @@ int main(int argc, char *argv[])
 
 
     const QStringList commandLineArguments = a.arguments().mid(1);
+    if (commandLineArguments.contains(QStringLiteral("--validate-window-trim"))) {
+        QString error;
+        const bool valid = BuildingEditor::validateWindowTrim(&error);
+        qInfo().noquote() << "Window trim validation:"
+                         << (valid ? QStringLiteral("PASS: 76 cases") : error);
+        return valid ? 0 : 1;
+    }
+    if (commandLineArguments.contains(QStringLiteral("--validate-heatmap-overwrite"))) {
+        QString error;
+        const bool valid = LotFilesManager256::validateHeatmapOverwrite(&error);
+        qInfo().noquote() << "Heatmap overwrite validation:"
+                         << (valid ? QStringLiteral("PASS") : error);
+        return valid ? 0 : 1;
+    }
     if (commandLineArguments.contains(QStringLiteral("--validate-jumbo-export"))) {
         QString error;
         const bool valid = LotFilesManager256::validateJumboExport(&error);
@@ -711,6 +729,135 @@ int main(int argc, char *argv[])
         }
         const QString inGameMapValidationPrefix =
                 QLatin1String("--validate-ingamemap=");
+        const QString inGameMapImportValidationPrefix =
+                QLatin1String("--validate-ingamemap-xml-import=");
+        if (argument.startsWith(inGameMapImportValidationPrefix)) {
+            const QString paths = argument.mid(inGameMapImportValidationPrefix.size());
+            const int separator = paths.indexOf(QLatin1String("::"));
+            if (separator < 1 || separator + 2 >= paths.size())
+                return 62;
+            WorldReader worldReader;
+            World *world = worldReader.readWorld(paths.left(separator));
+            if (!world) {
+                qCritical() << "InGameMap XML import validation could not read world:"
+                            << worldReader.errorString();
+                return 62;
+            }
+            WorldDocument document(world);
+            InGameMapReader reader;
+            if (!reader.replaceWorld(paths.mid(separator + 2), &document)) {
+                qCritical() << "InGameMap XML import validation failed:"
+                            << reader.errorString();
+                return 62;
+            }
+            int featureCount = 0;
+            for (WorldCell *cell : world->cells())
+                featureCount += cell->inGameMap().features().size();
+            qInfo() << "InGameMap XML import validation passed:"
+                    << featureCount << "features";
+            return 0;
+        }
+        if (argument == QLatin1String("--validate-ingamemap-xml-switch")) {
+            QTemporaryDir directory;
+            if (!directory.isValid())
+                return 61;
+
+            const auto writeXml = [&directory](const QString &name,
+                                               const QByteArray &content) {
+                QFile file(directory.filePath(name));
+                return file.open(QIODevice::WriteOnly)
+                        && file.write(content) == content.size();
+            };
+            const QByteArray firstXml =
+                    "<world><cell x=\"0\" y=\"0\"><feature>"
+                    "<geometry type=\"Point\"><coordinates><point x=\"10\" y=\"20\"/>"
+                    "</coordinates></geometry><properties>"
+                    "<property name=\"name\" value=\"first\"/>"
+                    "</properties></feature></cell></world>";
+            const QByteArray secondXml =
+                    "<world><cell x=\"0\" y=\"0\"><feature>"
+                    "<geometry type=\"Point\"><coordinates><point x=\"30\" y=\"40\"/>"
+                    "</coordinates></geometry><properties>"
+                    "<property name=\"name\" value=\"second\"/>"
+                    "</properties></feature></cell></world>";
+            if (!writeXml(QStringLiteral("first.xml"), firstXml)
+                    || !writeXml(QStringLiteral("second.xml"), secondXml)
+                    || !writeXml(QStringLiteral("broken.xml"),
+                                 QByteArray("<world><cell x=\"0\" y=\"0\"><feature>"))
+                    || !writeXml(QStringLiteral("wrong-root.xml"),
+                                 QByteArray("<invalid/>"))
+                    || !writeXml(QStringLiteral("cross-grid.xml"),
+                                 QByteArray(
+                                     "<world cellSize=\"256\"><cell x=\"41\" y=\"45\">"
+                                     "<feature><geometry type=\"Point\"><coordinates>"
+                                     "<point x=\"95\" y=\"256\"/></coordinates></geometry>"
+                                     "</feature></cell></world>")))
+                return 61;
+
+            WorldDocument document(new World(1, 1, WorldGridFormat::Native256));
+            WorldCell *cell = document.world()->cellAt(0, 0);
+            const auto featureName = [cell]() {
+                const auto &features = cell->inGameMap().features();
+                if (features.size() != 1 || features.first()->properties().size() != 1)
+                    return QString();
+                return features.first()->properties().first().mValue;
+            };
+            InGameMapReader reader;
+            if (!reader.replaceWorld(directory.filePath(QStringLiteral("first.xml")),
+                                     &document)
+                    || featureName() != QLatin1String("first")
+                    || !reader.replaceWorld(
+                        directory.filePath(QStringLiteral("second.xml")), &document)
+                    || featureName() != QLatin1String("second")) {
+                qCritical() << "InGameMap XML switch validation failed to replace features:"
+                            << reader.errorString();
+                return 61;
+            }
+
+            const int undoCount = document.undoStack()->count();
+            if (reader.replaceWorld(directory.filePath(QStringLiteral("broken.xml")),
+                                    &document)
+                    || featureName() != QLatin1String("second")
+                    || document.undoStack()->count() != undoCount
+                    || reader.replaceWorld(
+                        directory.filePath(QStringLiteral("wrong-root.xml")), &document)
+                    || featureName() != QLatin1String("second")
+                    || document.undoStack()->count() != undoCount) {
+                qCritical() << "InGameMap XML switch validation accepted invalid XML";
+                return 61;
+            }
+
+            document.undoStack()->undo();
+            if (featureName() != QLatin1String("first"))
+                return 61;
+            document.undoStack()->redo();
+            if (featureName() != QLatin1String("second"))
+                return 61;
+
+            World *legacyWorld = new World(1, 1, WorldGridFormat::Legacy300);
+            GenerateLotsSettings settings;
+            settings.worldOrigin = QPoint(35, 39);
+            legacyWorld->setGenerateLotsSettings(settings);
+            WorldDocument legacyDocument(legacyWorld);
+            if (!reader.replaceWorld(
+                        directory.filePath(QStringLiteral("cross-grid.xml")),
+                        &legacyDocument)) {
+                qCritical() << "InGameMap cross-grid XML import failed:"
+                            << reader.errorString();
+                return 61;
+            }
+            const auto &legacyFeatures =
+                    legacyWorld->cellAt(0, 0)->inGameMap().features();
+            if (legacyFeatures.size() != 1
+                    || legacyFeatures.first()->mGeometry.mCoordinates.size() != 1
+                    || legacyFeatures.first()->mGeometry.mCoordinates.first().size() != 1
+                    || legacyFeatures.first()->mGeometry.mCoordinates.first().first()
+                    != InGameMapPoint(91, 76))
+                return 61;
+
+            qInfo() << "InGameMap XML switch validation passed";
+            return 0;
+        }
         if (argument.startsWith(inGameMapValidationPrefix)) {
             const QString fileName =
                     argument.mid(inGameMapValidationPrefix.size());
@@ -822,6 +969,28 @@ int main(int argc, char *argv[])
         }
         const QString vehicleMeshPreviewPrefix =
                 QLatin1String("--validate-vehicle-mesh-preview=");
+        const QString exportLotSourcesPrefix =
+                QLatin1String("--export-lot-sources=");
+        const QString importLotSourcesPrefix =
+                QLatin1String("--import-lot-sources=");
+        if (argument.startsWith(exportLotSourcesPrefix)
+                || argument.startsWith(importLotSourcesPrefix)) {
+            const bool importing = argument.startsWith(importLotSourcesPrefix);
+            const QString directory = argument.mid(importing
+                    ? importLotSourcesPrefix.size()
+                    : exportLotSourcesPrefix.size());
+            int cells = 0;
+            QString error;
+            if (!LotSourceFiles::processDirectory(directory, importing,
+                                                  &cells, &error)) {
+                qCritical().noquote() << "LOT source conversion failed:"
+                                      << error;
+                return 58;
+            }
+            qInfo().noquote() << "LOT source conversion completed:"
+                              << cells << "cell(s)";
+            return 0;
+        }
         if (argument.startsWith(vehicleMeshPreviewPrefix)) {
             QString summary;
             QString error;
@@ -924,7 +1093,9 @@ int main(int argc, char *argv[])
     validateIssueWorkflows = commandLineArguments.contains(QStringLiteral("--validate-editor-workflows"));
     const bool validateDisplay = commandLineArguments.contains(
                 QStringLiteral("--validate-display-scaling"));
-    const bool configuredCommand = validateDisplay || validateIssueWorkflows ||
+    const bool validateBuildingImport = commandLineArguments.contains(
+                QStringLiteral("--validate-building-import"));
+    const bool configuredCommand = validateDisplay || validateIssueWorkflows || validateBuildingImport ||
             !renderWorldGenPreviewRoot.isEmpty()
             || !renderWorldGenPrefabRoot.isEmpty()
             || !renderWorldGenPrefabWindowRoot.isEmpty()
@@ -941,6 +1112,25 @@ int main(int argc, char *argv[])
             || validateCellMoveCoordinates;
     if (configuredCommand && !w.InitConfigFiles())
         return 0;
+
+    if (validateBuildingImport) {
+        QString error;
+        QString stairFixtureDirectory;
+        const int fixtureOption = commandLineArguments.indexOf(QStringLiteral("--building-stair-fixtures"));
+        if (fixtureOption >= 0) {
+            if (fixtureOption + 1 >= commandLineArguments.size()
+                    || commandLineArguments.at(fixtureOption + 1).startsWith(QLatin1String("--"))) {
+                qCritical() << "Building import validation requires a directory after --building-stair-fixtures";
+                return 62;
+            }
+            stairFixtureDirectory = commandLineArguments.at(fixtureOption + 1);
+        }
+        if (!MapManager::validateBuildingImport(&error, stairFixtureDirectory)) {
+            qCritical().noquote() << "Building import validation failed:" << error;
+            return 62;
+        }
+        return 0;
+    }
 
     if (validateDisplay) {
         QString error;

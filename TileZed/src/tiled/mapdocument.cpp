@@ -88,6 +88,9 @@ MapDocument::MapDocument(Map *map, const QString &fileName):
     mUndoStack(new QUndoStack(this))
 {
 #ifdef ZOMBOID
+    for (Layer *layer : mMap->layers())
+        layer->setVisible(true);
+
     QElapsedTimer setupTimer;
     setupTimer.start();
     qint64 previousSetupMs = 0;
@@ -1028,6 +1031,13 @@ void MapDocument::onObjectsRemoved(const QList<MapObject*> &objects)
 
 void MapDocument::onLayerAdded(int index)
 {
+#ifdef ZOMBOID
+    const int previousCount = mMap->layerCount() - 1;
+    const bool showAll = mMaxVisibleLayer >= previousCount;
+    const bool insertedAtOrBelowCutoff = index <= mMaxVisibleLayer;
+    setMaxVisibleLayer(showAll ? mMap->layerCount()
+                             : mMaxVisibleLayer + int(insertedAtOrBelowCutoff));
+#endif
     emit layerAdded(index);
 #ifdef ZOMBOID
     mMapComposite->layerAdded(index);
@@ -1051,6 +1061,9 @@ void MapDocument::onLayerAboutToBeRemoved(int index)
 
 void MapDocument::onLayerRemoved(int index)
 {
+#ifdef ZOMBOID
+    setMaxVisibleLayer(mMaxVisibleLayer - int(index < mMaxVisibleLayer));
+#endif
     // Bring the current layer index to safety
     bool currentLayerRemoved = mCurrentLayerIndex == mMap->layerCount();
     if (currentLayerRemoved)

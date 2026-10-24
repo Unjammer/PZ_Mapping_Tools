@@ -33,6 +33,7 @@
 #include "minimap.h"
 #include "packcompare.h"
 #include "packextractdialog.h"
+#include "createpackdialog.h"
 #include "languagemanager.h"
 #include "preferences.h"
 #include "pztoolsbuild.h"
@@ -51,6 +52,10 @@
 #include "BuildingEditor/building.h"
 #include "BuildingEditor/roomhighlightvalidation.h"
 #include "BuildingEditor/buildingcatalogvalidation.h"
+#include "BuildingEditor/buildingstairvalidation.h"
+#include "BuildingEditor/basementexportvalidation.h"
+#include "BuildingEditor/basementexporter.h"
+#include "BuildingEditor/exportbasementsdialog.h"
 #include "tileworkflowvalidation.h"
 #include "BuildingEditor/buildingdocument.h"
 #include "BuildingEditor/buildingdocumentmgr.h"
@@ -79,6 +84,7 @@
 #include "BuildingEditor/furnituregroups.h"
 #include "BuildingEditor/newbuildingdialog.h"
 #include "tilemetainfomgr.h"
+#include "windowtrimvalidation.h"
 #include "tiletoolpreviewcache.h"
 #include "tiledeffile.h"
 #include "tilesetmanager.h"
@@ -1936,6 +1942,7 @@ public:
     bool showedVersion;
     bool disableOpenGL;
     bool validateBuildingCategories;
+    bool buildingStairFixtures = false;
     bool validateRoomHighlight = false;
     bool validateBuildingClipboard;
     bool buildingDebugKeys;
@@ -1957,6 +1964,7 @@ private:
     void justQuit();
     void setDisableOpenGL();
     void setValidateBuildingCategories();
+    void setBuildingStairFixtures() { buildingStairFixtures = true; }
     void setValidateBuildingClipboard();
     void setBuildingDebugKeys();
     void setValidateBrushPerformance();
@@ -2027,6 +2035,9 @@ CommandLineHandler::CommandLineHandler()
                 QChar(),
                 QLatin1String("--validate-building-categories"),
                 QLatin1String("Load and validate every BuildingEd tile category"));
+    option<&CommandLineHandler::setBuildingStairFixtures>(
+                QChar(), QLatin1String("--building-stair-fixtures"),
+                QLatin1String("Keep Ortho stair validation TBX files in the first positional directory"));
     option<&CommandLineHandler::setValidateBuildingClipboard>(
                 QChar(),
                 QLatin1String("--validate-building-clipboard"),
@@ -2324,11 +2335,12 @@ int main(int argc, char *argv[])
         const bool extractValid =
                 PackExtractDialog::runSelfTest(
                     &extractSummary, &error);
-        const bool valid = compareValid && extractValid;
+        const bool historyValid = extractValid && CreatePackDialog::validateRecentPacks(&error);
+        const bool valid = compareValid && extractValid && historyValid;
         qInfo().noquote()
                 << "TileZed pack-tools validation:"
                 << (valid
-                    ? QStringLiteral("PASS: %1; %2")
+                    ? QStringLiteral("PASS: %1; %2; recent pack paths")
                       .arg(compareSummary, extractSummary)
                     : QStringLiteral("FAIL: %1").arg(error));
         return valid ? 0 : 1;
@@ -2632,7 +2644,7 @@ int main(int argc, char *argv[])
                 QString fixtureFloorError;
                 const QStringList validationFiles =
                         commandLine.filesToOpen();
-                if (!validationFiles.isEmpty()) {
+                if (!commandLine.buildingStairFixtures && !validationFiles.isEmpty()) {
                     fixtureFloorValid = validateRoomFloorsInFixture(
                                 validationFiles.first(),
                                 &fixtureFloorError);
@@ -2726,7 +2738,7 @@ int main(int argc, char *argv[])
                             : QStringLiteral("FAIL: %1")
                               .arg(clipboardError));
                 bool fixtureClipboardValid = true;
-                if (!commandLine.filesToOpen().isEmpty()) {
+                if (!commandLine.buildingStairFixtures && !commandLine.filesToOpen().isEmpty()) {
                     QString fixtureClipboardError;
                     fixtureClipboardValid = validateBuildingClipboardFixture(
                                 &buildingEditor,
@@ -2743,8 +2755,30 @@ int main(int argc, char *argv[])
                 const bool workflowsValid = BuildingEditor::validateBuildingEditorWorkflows(&buildingEditor, &workflowError);
                 if (!workflowsValid)
                     qWarning().noquote() << workflowError;
+                QString stairError;
+                const bool stairsValid = (!commandLine.buildingStairFixtures || !commandLine.filesToOpen().isEmpty())
+                        && BuildingEditor::validateBuildingStairs(&buildingEditor,
+                            commandLine.buildingStairFixtures ? commandLine.filesToOpen().first() : QString(), &stairError);
+                if (!stairsValid)
+                    qWarning().noquote() << "BuildingEd Ortho stair validation failed:" << stairError;
+                QString basementError;
+                const bool basementsValid = BuildingEditor::validateBasementExport(
+                            [](const QString &path, const QString &outputDirectory,
+                            const QSet<QString> &north, const QSet<QString> &west, QString *lua, QString *error) {
+                    BuildingEditor::BasementExportRequest request;
+                    request.sourceFile = path;
+                    request.outputDirectory = outputDirectory;
+                    request.stairTiles.north = north;
+                    request.stairTiles.west = west;
+                    const auto result = BuildingEditor::BasementExporter::exportFile(request);
+                    *lua = result.luaCode;
+                    *error = result.error;
+                    return result.written;
+                }, &basementError, true);
+                if (!basementsValid)
+                    qWarning().noquote() << basementError;
                 const bool allValid = valid && luaFurnitureValid && catalogIdentityValid
-                        && clipboardValid && fixtureClipboardValid && workflowsValid;
+                        && clipboardValid && fixtureClipboardValid && workflowsValid && stairsValid && basementsValid;
                 qInfo() << "BuildingEd category validation result:"
                         << (allValid ? "PASS" : "FAIL");
                 BuildingEditor::BuildingDocumentMgr::instance()

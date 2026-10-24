@@ -5359,7 +5359,6 @@ void MainWindow::removeInGameMapPoint()
 void MainWindow::readInGameMapFeaturesXML()
 {
     WorldDocument* worldDoc = currentWorldDocument();
-    World* world = worldDoc->world();
 
     QString filter = tr("All Files (*)");
     filter += QLatin1String(";;");
@@ -5374,32 +5373,20 @@ void MainWindow::readInGameMapFeaturesXML()
         return;
     }
 
-    QString absolutePath = QFileInfo(fileName).absoluteFilePath();
+    PROGRESS progress(QStringLiteral("Reading InGameMap XML"), this);
+    InGameMapReader reader;
+    if (!reader.replaceWorld(fileName, worldDoc)) {
+        progress.release();
+        QMessageBox::critical(this, tr("Unable to Read Features XML"),
+                              tr("Could not load %1.\n\n%2")
+                              .arg(QDir::toNativeSeparators(fileName),
+                                   reader.errorString()));
+        return;
+    }
+
+    const QString absolutePath = QFileInfo(fileName).absoluteFilePath();
     worldDoc->setInGameMapXMLFileName(absolutePath);
     Preferences::instance()->setWorldMapXMLFile(absolutePath);
-
-    PROGRESS progress(QStringLiteral("Reading InGameMap XML"), this);
-
-    worldDoc->undoStack()->beginMacro(tr("Read InGameMap XML"));
-    for (auto* cell : world->cells()) {
-        for (int i = cell->inGameMap().features().size() - 1; i >= 0; i--) {
-            worldDoc->removeInGameMapFeature(cell, i);
-        }
-    }
-
-    InGameMapReader mbreader;
-    mbreader.readWorld(fileName, world);
-
-    for (auto* cell : world->cells()) {
-        InGameMapFeatures features = cell->inGameMap().features();
-        cell->inGameMap().mFeatures.clear();
-        for (int i = 0, n = features.size(); i < n; i++) {
-            worldDoc->addInGameMapFeature(cell, i, features.at(i));
-        }
-        features.clear();
-    }
-
-    worldDoc->undoStack()->endMacro();
 
     bool bFeatureToolActive = dynamic_cast<BaseInGameMapFeatureTool*>(ToolManager::instance()->selectedTool()) != nullptr;
     if (bFeatureToolActive == false && EditInGameMapFeatureTool::instance().isEnabled()) {

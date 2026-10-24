@@ -34,7 +34,12 @@ greaterThan(QT_MAJOR_VERSION, 5) {
 QT += svg
 
 INCLUDEPATH += $$top_srcdir/../shared
+INCLUDEPATH += $$top_srcdir/../shared/buildingcatalogue $$PWD/BuildingEditor
+SOURCES += BuildingEditor/basementexporter.cpp
+HEADERS += BuildingEditor/basementexporter.h
+HEADERS += BuildingEditor/basementexportvalidation.h BuildingEditor/buildingstairvalidation.h
 HEADERS += ../../../shared/pztoolspaths.h
+HEADERS += ../../../shared/windowtrimvalidation.h
 HEADERS += ../../../shared/tilesetimageloader.h
 HEADERS += ../../../shared/loadingdialog.h
 HEADERS += ../../../shared/startupwindowgeometry.h
@@ -64,9 +69,9 @@ SOURCES += ../../../shared/appissuenotifier.cpp \
     BuildingEditor/attributeeditmode.cpp \
     BuildingEditor/attributeeditmode_p.cpp \
     BuildingEditor/buildingattributesdock.cpp \
-    BuildingEditor/buildingfurniturefile.cpp \
+    ../../../shared/buildingcatalogue/buildingfurniturefile.cpp \
     BuildingEditor/buildingkeyvaluesdialog.cpp \
-    BuildingEditor/buildingtilesfile.cpp \
+    ../../../shared/buildingcatalogue/buildingtilesfile.cpp \
     BuildingEditor/exportbasementsdialog.cpp \
     BuildingEditor/templatedocument.cpp \
     BuildingEditor/templateroomsdialog.cpp \
@@ -317,9 +322,9 @@ HEADERS += ../../../shared/settingsvalue.h \
     BuildingEditor/attributeeditmode.h \
     BuildingEditor/attributeeditmode_p.h \
     BuildingEditor/buildingattributesdock.h \
-    BuildingEditor/buildingfurniturefile.h \
+    ../../../shared/buildingcatalogue/buildingfurniturefile.h \
     BuildingEditor/buildingkeyvaluesdialog.h \
-    BuildingEditor/buildingtilesfile.h \
+    ../../../shared/buildingcatalogue/buildingtilesfile.h \
     BuildingEditor/exportbasementsdialog.h \
     BuildingEditor/templatedocument.h \
     BuildingEditor/templateroomsdialog.h \

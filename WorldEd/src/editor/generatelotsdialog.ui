@@ -14,7 +14,7 @@
    <string>Generate Lots</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
-   <item row="8" column="0">
+   <item row="9" column="0">
     <spacer name="verticalSpacer">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
@@ -171,7 +171,7 @@
      </layout>
     </widget>
    </item>
-   <item row="9" column="0">
+   <item row="10" column="0">
     <widget class="QDialogButtonBox" name="buttonBox">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
@@ -181,7 +181,7 @@
      </property>
    </widget>
   </item>
-  <item row="7" column="0">
+  <item row="8" column="0">
    <widget class="QGroupBox" name="exportModGroup">
     <property name="title">
      <string>Export as a complete Project Zomboid mod</string>
@@ -282,6 +282,29 @@
        </property>
        <property name="wordWrap">
         <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+  </item>
+  <item row="7" column="0">
+   <widget class="QGroupBox" name="textSourceGroup">
+    <property name="title">
+     <string>Editable LOT sources</string>
+    </property>
+    <layout class="QVBoxLayout" name="textSourceLayout">
+     <item>
+      <widget class="QCheckBox" name="exportTextSources">
+       <property name="text">
+        <string>Export .source text files alongside generated LOT files</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="importTextSources">
+       <property name="text">
+        <string>Import .source files from lots directory</string>
        </property>
       </widget>
      </item>

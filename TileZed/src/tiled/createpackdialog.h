@@ -23,6 +23,8 @@
 #include <QCoreApplication>
 #include <QDialog>
 
+class QComboBox;
+
 namespace Ui {
 class CreatePackDialog;
 }
@@ -59,11 +61,14 @@ public:
     explicit CreatePackDialog(QWidget *parent = 0);
     ~CreatePackDialog();
 
+    static bool validateRecentPacks(QString *error);
+
 private:
     void settingsToUI(const TexturePackSettings &settings);
     void settingsFromUI(TexturePackSettings &settings);
     void readSettings();
     void writeSettings();
+    void rememberPackFile(const QString &path);
 
 private slots:
     void savePackAs();
@@ -79,7 +84,8 @@ private slots:
     void saveSettings();
     void saveSettingsAs();
 
-    void accept();
+    void accept() override;
+    void apply();
 
 private:
     Ui::CreatePackDialog *ui;

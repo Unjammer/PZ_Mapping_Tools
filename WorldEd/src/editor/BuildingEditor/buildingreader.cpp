@@ -910,6 +910,13 @@ BuildingObject *BuildingReaderPrivate::readObject(BuildingFloor *floor)
     } else if (type == QLatin1String("stairs")) {
         object = new Stairs(floor, x, y, dir);
         object->setTile(getEntry(tile)->asStairs());
+        if (!object->tile()) {
+            const QFile *file = qobject_cast<QFile *>(xml.device());
+            const QString source = file ? file->fileName() : mPath;
+            qWarning().noquote() << tr("Missing or incompatible stair tile entry '%1' in %2, line %3, floor %4 at (%5,%6). Stair tiles will not be drawn.")
+                                   .arg(tile, source).arg(xml.lineNumber())
+                                   .arg(floor->level()).arg(x).arg(y);
+        }
     } else if (type == QLatin1String("window")) {
         object = new Window(floor, x, y, dir);
         object->setTile(getEntry(tile)->asWindow());

@@ -334,6 +334,8 @@ void FurnitureTile::setTile(int x, int y, BuildingTile *btile)
     if (x < 0 || x >= MAX_BUILDING_DIMENSION ||
             y < 0 || y >= MAX_BUILDING_DIMENSION)
         return;
+    if (!btile && (x >= mSize.width() || y >= mSize.height()))
+        return;
 
     // Get larger if needed
     if ((btile != 0) && (x >= mSize.width() || y >= mSize.height())) {
@@ -468,8 +470,8 @@ FurnitureTiles::~FurnitureTiles()
 
 bool FurnitureTiles::isEmpty() const
 {
-    for (int i = 0; i < mTiles.size(); i++)
-        if (!mTiles.isEmpty())
+    for (FurnitureTile *tile : mTiles)
+        if (tile && !tile->isEmpty())
             return false;
     return true;
 }

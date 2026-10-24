@@ -512,6 +512,10 @@ public:
         w.writeAttribute(QLatin1String("enabled"), settings.preservePlacedTrees
                          ? QLatin1String("true") : QLatin1String("false"));
         w.writeEndElement();
+        w.writeStartElement(QLatin1String("textSources"));
+        w.writeAttribute(QLatin1String("enabled"), settings.exportTextSources
+                         ? QLatin1String("true") : QLatin1String("false"));
+        w.writeEndElement();
         w.writeEndElement(); // </GenerateLots>
     }
 

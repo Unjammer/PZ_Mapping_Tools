@@ -512,7 +512,8 @@ QString NewMapBinaryFile::nameOfTileset(const Tileset *tileset)
     if (name.contains(QLatin1String("/"))) {
         name = name.mid(name.lastIndexOf(QLatin1String("/")) + 1);
     }
-    name.replace(QLatin1String(".png"), QLatin1String(""));
+    if (name.endsWith(QLatin1String(".png"), Qt::CaseInsensitive))
+        name.chop(4);
     return name;
 }
 
