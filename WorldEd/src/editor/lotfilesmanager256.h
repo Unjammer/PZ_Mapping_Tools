@@ -26,6 +26,7 @@
 
 #include <QAtomicInteger>
 #include <QTimer>
+#include <QImage>
 
 #define CELL_SIZE_256 256
 #define CHUNKS_PER_CELL_256 32
@@ -145,6 +146,8 @@ private:
     QVector<QPoint> mHoleInFloor;
     QString mError;
     PZTools::PartialChunkSelection mPartialChunks;
+    QByteArray mSourceNavigationBaseline;
+    QImage mSourceNavigationOverrides;
 
     friend class LotFilesManager256;
 };

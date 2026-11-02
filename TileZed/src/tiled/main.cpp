@@ -2229,6 +2229,20 @@ int main(int argc, char *argv[])
     PortableSettings::installLogging();
     qInfo().noquote() << "Application" << PZToolsBuild::label();
     PortableSettings::prepareVersionedSettings();
+    for (const QString &argument : a.arguments()) {
+        const QString prefix = QStringLiteral("--validate-window-frames=");
+        if (!argument.startsWith(prefix))
+            continue;
+        QStringList definitions;
+        for (const QString &option : a.arguments()) {
+            if (option.startsWith(QStringLiteral("--frame-tiledef=")))
+                definitions += option.mid(QStringLiteral("--frame-tiledef=").size());
+        }
+        QString error;
+        const bool valid = BuildingEditor::validateWindowFrameBuilding(argument.mid(prefix.size()), definitions, &error);
+        qInfo().noquote() << "Window frame validation:" << (valid ? QStringLiteral("PASS") : error);
+        return valid ? 0 : 1;
+    }
 #ifdef BUILD_INFO_VERSION
     a.setApplicationVersion(QLatin1String(AS_STRING(BUILD_INFO_VERSION)));
 #else

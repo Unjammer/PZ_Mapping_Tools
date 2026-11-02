@@ -4,17 +4,23 @@
 #include "../portablesettings.h"
 #include "preferences.h"
 #include "lotsourcefiles.h"
+#include "../../../shared/tiledefinitionpaths.h"
 #include "BuildingEditor/buildingtiles.h"
 #include "tilemetainfomgr.h"
 #include "tileset.h"
 #include "world.h"
 #include "worlddocument.h"
+#include "worldcell.h"
 #include "displayscalingvalidation.h"
 
 #include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
+#include <QEventLoop>
+#include <QFutureWatcher>
+#include <QProgressDialog>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QImageReader>
 #include <QMessageBox>
 #include <QPushButton>
@@ -116,16 +122,16 @@ GenerateLotsDialog::GenerateLotsDialog(WorldDocument *worldDoc, QWidget *parent)
     connect(ui->spawnBrowse, &QAbstractButton::clicked, this, &GenerateLotsDialog::spawnBrowse);
 
     // TileDef folder
-    mTileDefFolder = QDir::toNativeSeparators(settings.tileDefFolder);
+    mTileDefFolder = QDir::toNativeSeparators(
+                TileDefinitionPaths::directory(settings.tileDefFolder));
     if (mTileDefFolder.isEmpty()) {
         const QString gameRoot =
                 Preferences::instance()->projectZomboidDirectory();
-        if (!gameRoot.isEmpty()
-                && QFileInfo(QDir(gameRoot).filePath(
-                    QLatin1String("media/newtiledefinitions.tiles"))).isFile()) {
+        const QString definitions = TileDefinitionPaths::gameFile(
+                    gameRoot, QStringLiteral("newtiledefinitions.tiles"));
+        if (!definitions.isEmpty())
             mTileDefFolder = QDir::toNativeSeparators(
-                        QDir(gameRoot).filePath(QLatin1String("media")));
-        }
+                        QFileInfo(definitions).absolutePath());
     }
     if (mTileDefFolder.isEmpty() == false) {
         selectComboItem(ui->tiledefEdit, mTileDefFolder);
@@ -368,7 +374,7 @@ void GenerateLotsDialog::spawnChanged(const QString &text)
 
 void GenerateLotsDialog::tileDefChanged(const QString &text)
 {
-    mTileDefFolder = text;
+    mTileDefFolder = TileDefinitionPaths::directory(text);
 }
 
 void GenerateLotsDialog::spawnBrowse()
@@ -440,13 +446,59 @@ void GenerateLotsDialog::importSources()
         return;
     }
     if (QMessageBox::question(this, tr("Import LOT Sources"),
-                              tr("Rebuild LOT binary files from all .source files in this directory? Existing matching binary files will be replaced."))
+                              ui->rebuildSourceNavigation->isChecked()
+                              ? tr("Recalculate navigation and import LOT sources? Matching binary files, navigation source files and navigation reference/correction files will be updated.")
+                              : tr("Rebuild LOT binary files from all .source files in this directory? Existing matching binary files will be replaced."))
             != QMessageBox::Yes)
         return;
     QString error;
     int cells = 0;
-    if (!LotSourceFiles::processDirectory(mExportDir, true,
-                                          &cells, &error)) {
+    LotSourceFiles::NavigationOptions navigation;
+    const bool rebuildNavigation = ui->rebuildSourceNavigation->isChecked();
+    if (rebuildNavigation) {
+        if (!mTileDefFolder.isEmpty())
+            navigation.tileDefinitions.append(mTileDefFolder);
+        for (const QString &path : Preferences::instance()->tilePropertiesFiles()) {
+            if (!mTileDefFolder.isEmpty()
+                    && TileDefinitionPaths::runtimeNames().contains(
+                        TileDefinitionPaths::logicalName(path), Qt::CaseInsensitive)
+                    && QFileInfo(path).canonicalPath().compare(
+                        QDir(TileDefinitionPaths::directory(mTileDefFolder)).canonicalPath(),
+                        Qt::CaseInsensitive) != 0)
+                continue;
+            navigation.tileDefinitions.append(path);
+        }
+        if (mWorldDoc->world()->gridFormat() == WorldGridFormat::Native256) {
+            const QPoint origin(ui->xOrigin->value(), ui->yOrigin->value());
+            for (WorldCell *cell : mWorldDoc->world()->cells()) {
+                if (!cell->chunkDataOverrideFilePath().isEmpty()) {
+                    const QPoint output = cell->pos() + origin;
+                    navigation.overrides.insert(QStringLiteral("%1_%2.lotheader")
+                        .arg(output.x()).arg(output.y()), cell->chunkDataOverrideFilePath());
+                }
+            }
+        }
+    }
+    QProgressDialog progress(rebuildNavigation ? tr("Recalculating navigation and importing LOT sources...")
+                                              : tr("Importing LOT sources..."),
+                             QString(), 0, 0, this);
+    progress.setCancelButton(nullptr);
+    progress.setWindowFlags(Qt::Dialog | Qt::CustomizeWindowHint | Qt::WindowTitleHint);
+    progress.setWindowModality(Qt::ApplicationModal);
+    progress.setMinimumDuration(0);
+    progress.show();
+    QFutureWatcher<bool> watcher;
+    QEventLoop loop;
+    connect(&watcher, &QFutureWatcher<bool>::finished, &loop, &QEventLoop::quit);
+    watcher.setFuture(QtConcurrent::run([directory = mExportDir, navigation,
+                                         rebuildNavigation, &cells, &error]() {
+        return LotSourceFiles::processDirectory(directory, true, &cells, &error, false,
+                                                rebuildNavigation ? &navigation : nullptr);
+    }));
+    if (!watcher.isFinished())
+        loop.exec();
+    progress.close();
+    if (!watcher.result()) {
         QMessageBox::warning(this, tr("Import LOT Sources"), error);
         return;
     }
@@ -671,9 +723,10 @@ bool GenerateLotsDialog::validate()
     }
     QDir dir2(mTileDefFolder);
     if (mTileDefFolder.isEmpty() || !dir2.exists() ||
-            !QFileInfo(mTileDefFolder + QLatin1String("/newtiledefinitions.tiles")).exists()) {
+            TileDefinitionPaths::existingFile(QDir(mTileDefFolder).filePath(
+                QLatin1String("newtiledefinitions.tiles"))).isEmpty()) {
         QMessageBox::warning(this, tr("Lot Generation Error"),
-                             tr("Please choose the directory containing newtiledefinitions.tiles."));
+                             tr("Please choose the tile-definitions directory containing newtiledefinitions.tiles or newtiledefinitions.tiles.txt."));
         return false;
     }
 

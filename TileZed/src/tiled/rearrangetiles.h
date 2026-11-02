@@ -13,6 +13,7 @@ class RearrangeTiles;
 }
 
 namespace BuildingEditor {
+class Building;
 class BuildingTile;
 class FloorTileGrid;
 }
@@ -278,6 +279,7 @@ public:
 
     void fixBuilding(const QString &filePath, int x, int y, int z, QMainWindow *parent);
     void fixBuilding(const QString &filePath, const QVector<int> &xyz, QMainWindow *parent);
+    bool fixBuilding(BuildingEditor::Building *building, const QVector<int> &xyz);
 
 protected:
     void closeEvent(QCloseEvent *event);

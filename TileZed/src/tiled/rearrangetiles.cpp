@@ -527,23 +527,7 @@ void RearrangeTiles::fixBuilding(const QString &filePath, const QVector<int> &xy
     BuildingReader reader;
     if (Building *building = reader.read(filePath)) {
         reader.fix(building);
-        bool fixed = false;
-        for (int i = 0; i < xyz.size(); i += 3) {
-            int x = xyz[i];
-            int y = xyz[i+1];
-            int z = xyz[i+2];
-            if (BuildingFloor *floor = building->floor(z)) {
-                const auto tileGrids = floor->grime().values();
-                for (FloorTileGrid *tileGrid : tileGrids) {
-                    for (const RearrangeGrid *grid : std::as_const(mGrids)) {
-                        if (tileGrid->matches(x, y, *grid->mOld)) {
-                            tileGrid->replace({x, y}, grid->mNew);
-                            fixed = true;
-                        }
-                    }
-                }
-            }
-        }
+        const bool fixed = fixBuilding(building, xyz);
         if (fixed) {
             BuildingWriter w;
             if (!w.write(building, filePath)) {
@@ -553,6 +537,28 @@ void RearrangeTiles::fixBuilding(const QString &filePath, const QVector<int> &xy
         }
         delete building;
     }
+}
+
+bool RearrangeTiles::fixBuilding(Building *building, const QVector<int> &xyz)
+{
+    bool fixed = false;
+    for (int i = 0; i + 2 < xyz.size(); i += 3) {
+        const int x = xyz[i];
+        const int y = xyz[i + 1];
+        const int z = xyz[i + 2];
+        if (BuildingFloor *floor = building->floor(z)) {
+            const auto tileGrids = floor->grime().values();
+            for (FloorTileGrid *tileGrid : tileGrids) {
+                for (const RearrangeGrid *grid : std::as_const(mGrids)) {
+                    if (tileGrid->matches(x, y, *grid->mOld)) {
+                        tileGrid->replace({x, y}, grid->mNew);
+                        fixed = true;
+                    }
+                }
+            }
+        }
+    }
+    return fixed;
 }
 
 void RearrangeTiles::browse1x()

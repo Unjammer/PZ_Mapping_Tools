@@ -16,6 +16,7 @@
  */
 
 #include "lootwindow.h"
+#include "../../../shared/tiledefinitionpaths.h"
 #include "ui_lootwindow.h"
 
 #include "celldocument.h"
@@ -78,7 +79,7 @@ LootWindow::LootWindow(QWidget *parent) :
             this, &LootWindow::setDocument);
 
     if (QFileInfo(d).exists()) {
-        readTileProperties(QDir(d).filePath(QLatin1String("media/newtiledefinitions.tiles")));
+        readTileProperties(TileDefinitionPaths::gameFile(d, QStringLiteral("newtiledefinitions.tiles")));
         readLuaDistributions(QDir(d).filePath(QLatin1String("media/lua/server/Items/Distributions.lua")));
     }
 
@@ -112,7 +113,8 @@ void LootWindow::setDocument(Document *doc)
 
 bool LootWindow::readTileProperties(const QString &fileName)
 {
-    return mTileDefFile.read(fileName);
+    TileDefFileReader reader;
+    return reader.read(fileName, mTileDefFile);
 }
 
 extern "C" {
@@ -293,7 +295,7 @@ void LootWindow::chooseGameDirectory()
 
     ui->gameDirectory->setText(QDir::toNativeSeparators(f));
 
-    readTileProperties(QDir(f).filePath(QLatin1String("media/newtiledefinitions.tiles")));
+    readTileProperties(TileDefinitionPaths::gameFile(f, QStringLiteral("newtiledefinitions.tiles")));
     readLuaDistributions(QDir(f).filePath(QLatin1String("media/lua/server/Items/Distributions.lua")));
 }
 

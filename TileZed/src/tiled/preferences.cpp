@@ -19,6 +19,7 @@
  */
 
 #include "preferences.h"
+#include "../../../shared/tiledefinitionpaths.h"
 
 #include "documentmanager.h"
 #include "languagemanager.h"
@@ -368,59 +369,14 @@ Preferences::Preferences()
     mWorldEdFiles = mSettings->value(QLatin1String("WorldEd/ProjectFile")).toStringList();
     mTilePropertiesFiles = mSettings->value(QLatin1String("TilePropertiesFiles")).toStringList();
 
-    const QStringList builtInTileDefs = {
-        QStringLiteral("newtiledefinitions.tiles"),
-        QStringLiteral("tiledefinitions_erosion.tiles"),
-        QStringLiteral("tiledefinitions_overlays.tiles"),
-        QStringLiteral("tiledefinitions_b42chunkcaching.tiles"),
-        QStringLiteral("tiledefinitions_noiseworks.patch.tiles"),
-        QStringLiteral("jumbo_trees_big.tiles"),
-        QStringLiteral("jumbo_trees.tiles")
-    };
-    QStringList orderedTileDefs;
-    for (const QString &builtInName : builtInTileDefs) {
-        QString path;
-        for (const QString &configuredPath : qAsConst(mTilePropertiesFiles)) {
-            if (QFileInfo(configuredPath).fileName().compare(
-                        builtInName, Qt::CaseInsensitive) == 0) {
-                path = configuredPath;
-                break;
-            }
-        }
-        if (path.isEmpty() && !mProjectZomboidDirectory.isEmpty()) {
-            const QFileInfo candidate(QDir(mProjectZomboidDirectory)
-                                      .filePath(QStringLiteral("media/") +
-                                                builtInName));
-            if (candidate.exists() && candidate.isFile())
-                path = candidate.canonicalFilePath();
-        }
-        if (path.isEmpty() && !mTilesDirectory.isEmpty()) {
-            const QFileInfo candidate(QDir(mTilesDirectory).filePath(
-                                          builtInName));
-            if (candidate.exists())
-                path = candidate.canonicalFilePath();
-        }
-        if (!path.isEmpty())
-            orderedTileDefs += QDir::toNativeSeparators(path);
-    }
-    for (const QString &configuredPath : qAsConst(mTilePropertiesFiles)) {
-        bool isBuiltIn = false;
-        for (const QString &builtInName : builtInTileDefs) {
-            if (QFileInfo(configuredPath).fileName().compare(
-                        builtInName, Qt::CaseInsensitive) == 0) {
-                isBuiltIn = true;
-                break;
-            }
-        }
-        if (!isBuiltIn && !configuredPath.isEmpty()
-                && !orderedTileDefs.contains(configuredPath))
-            orderedTileDefs += configuredPath;
-    }
+    const QStringList orderedTileDefs = TileDefinitionPaths::configuredFiles(
+                mTilePropertiesFiles, mProjectZomboidDirectory, mTilesDirectory);
     if (mTilePropertiesFiles != orderedTileDefs) {
         mTilePropertiesFiles = orderedTileDefs;
         mSettings->setValue(QLatin1String("TilePropertiesFiles"),
                             mTilePropertiesFiles);
     }
+
 #endif
 #ifndef ZOMBOID // do this in TilesetManager constructor to avoid infinite loop
     TilesetManager *tilesetManager = TilesetManager::instance();

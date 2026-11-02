@@ -1,48 +1,51 @@
-# PZ Mapping Tools - Build 20261024
+# PZ Mapping Tools - Build 20261030
 
-_Changes since [Build 20260930b](https://github.com/Unjammer/PZ_Mapping_Tools/releases/tag/43.00B260930),
-published on 2026-10-01._
+_Changes since [Build 20261024](https://github.com/Unjammer/PZ_Mapping_Tools/releases/tag/43.00B261024),
+published on 2026-10-24._
 
 ## Changes
 
-- WorldEd preserves west-wall trim for the 19 extended window shapes when
-  importing buildings and exporting lots.
-- Overwrite SpawnMap preserves zero zombie intensity in excluded Partial
-  Chunks. An unreadable chunk selection leaves the affected lotheader unchanged.
-- TileZed's Create .pack dialog remembers up to 20 output paths. Its editable
-  history supports reusing an earlier path, and Apply saves the current path
-  without creating a pack.
-- Additional building materials and furniture contributed by Tanimal extend
-  the catalogues while retaining existing definitions, extended window frames
-  and ceilings.
-- BuildingEd and WorldEd ignore attempts to clear furniture tiles outside the
-  current furniture dimensions. Furniture definitions report their empty state
-  from their actual orientation tiles.
-- WorldEd can switch between InGameMap feature XML files without losing the
-  current features when a selected XML cannot be read. A failed import reports
-  its XML error and keeps the previous file selected.
-  Feature coordinates are converted between 256-square XML cells and
-  300-square projects when their grids differ.
-- BuildingEd can remove one tilesheet from the open building through Building >
-  Remove Tilesheet from Building. The undoable command clears matching room
-  materials, object and furniture tiles, painted tiles, and saved used tile
-  references. Other tiles in mixed definitions remain available. Shared tile
-  and furniture catalogues are unchanged.
-- BuildingEd keeps each floor's layer visibility when switching floors. A
-  previously saved global visibility cutoff no longer disables `RoofTop` or
-  other layers on the newly selected floor.
-- LOT export removes uppercase or lowercase `.png` suffixes from tilesheet
-  filenames when writing sprite names.
-- Generate Lots can export editable LOT, lotpack and chunkdata `.source` text
-  files alongside the binary output. The same dialog imports complete source
-  triplets and rebuilds matching binary files after overwrite confirmation.
-  Command-line conversion is also available for a lots directory.
-- WorldEd's vehicle preview applies FBX node scaling. Horsebox and livestock
-  trailers now render at their intended size, and existing vehicle atlases
-  are rebuilt for the corrected geometry.
-- WorldEd accepts indexed PNG tilesheets when creating a tile atlas. WorldEd,
-  TileZed and BuildingEd skip invalid roof-slope tile indices. WorldEd also
-  uses the corrected default cap directions for 30-degree peaked roofs.
+- The TileDef guide documents Build 42.22 ladder directions, upper landings,
+  material sounds, door/window forcing and moveable weights with CustomItem.
+
+- BuildingEd adds View > Show Walls, with Ctrl+Shift+W, to hide walls and their
+  attached details temporarily while placing furniture in isometric views.
+  Existing per-floor layer visibility is retained.
+- BuildingEd can pin a room highlight through its right-click menu or
+  Ctrl+Shift+H. The highlight remains fixed while the pointer moves and is
+  shared between Iso, Tiles and Attributes modes of the same document.
+  Right-click object dragging remains available. Delete Object is in the menu.
+- Window-frame selection loads pending TileDefs before reading WindowShape,
+  preventing a cold lookup from falling back to the standard frame.
+
+- LOT source import can optionally recalculate ground-level navigation using
+  neighboring room headers and base-game/mod TileDefs. It preserves manual
+  corrections and partial coverage, saves navigation references for subsequent
+  source-only imports, and supports a command-line check without output writes.
+- Generate Lots and source navigation rebuilding share stair, water, tree and
+  hoppable collision rules, including explicit north/west collision properties.
+  Import uses a progress window while the application remains responsive.
+
+- Tile definition discovery supports the Build 42.22 `media/tile_definitions`
+  directory and the older `media` layout. Missing binary definitions can use
+  their `.tiles.txt` companions. Generate Lots, Loot and Create .pack read
+  text definitions, and text property patches merge with their base files.
+  Automatic discovery loads each binary/text pair only once.
+- The existing Ladder direction control writes `ladderN`, `ladderS`,
+  `ladderE` and `ladderW`, matching Build 42.22 climbing properties.
+- Importing LOT `.source` files preserves leading and trailing spaces in room
+  names, including files saved with Windows line endings.
+- LOT source directory conversion validates all cells before replacing outputs,
+  reports missing companion files and text error locations, and preserves
+  identical output files. `--check-lot-sources=<directory>` checks source text
+  without replacing binary files.
+- TMX saving omits the cached `invisible` tile property while preserving other
+  authored tile properties and the loaded tileset declarations.
+- Check Buildings safely refreshes selected results after a building changes
+  and updates the Fix Selected button for the refreshed selection.
+- Check Buildings applies selected Kids Bedroom and Rearrange Grid fixes in
+  one read and write per TBX. Parent and child selections are not processed
+  twice, and rooms already converted to Kids Bedroom are left unchanged.
 
 ## Credits and special thanks
 

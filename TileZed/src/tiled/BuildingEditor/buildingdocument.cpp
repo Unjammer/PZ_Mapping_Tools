@@ -87,6 +87,12 @@ BuildingDocument::BuildingDocument(Building *building, const QString &fileName) 
     }
 
     setCurrentFloor(building->floor(0));
+    connect(this, &BuildingDocument::buildingResized, this, [this]() {
+        setPinnedRoomHighlight(QPoint(-1, -1));
+    });
+    connect(this, &BuildingDocument::buildingRotated, this, [this]() {
+        setPinnedRoomHighlight(QPoint(-1, -1));
+    });
     setCurrentRoom(building->roomCount() ? building->room(0) : 0);
     QStringList layerNames = BuildingMap::layerNames(currentLevel());
     if (layerNames.size())
@@ -162,7 +168,18 @@ void BuildingDocument::setCurrentFloor(BuildingFloor *floor)
     if (!floor || mCurrentFloor == floor || !mBuilding->floors().contains(floor))
         return;
     mCurrentFloor = floor;
+    setPinnedRoomHighlight(QPoint(-1, -1));
     emit currentFloorChanged();
+}
+
+void BuildingDocument::setPinnedRoomHighlight(const QPoint &position)
+{
+    const QPoint valid = mCurrentFloor && mCurrentFloor->GetRoomAt(position)
+            ? position : QPoint(-1, -1);
+    if (mPinnedRoomHighlight == valid)
+        return;
+    mPinnedRoomHighlight = valid;
+    emit pinnedRoomHighlightChanged();
 }
 
 int BuildingDocument::currentLevel() const
@@ -261,6 +278,8 @@ Room *BuildingDocument::changeRoomAtPosition(BuildingFloor *floor, const QPoint 
 {
     Room *old = floor->GetRoomAt(pos);
     floor->SetRoomAt(pos, room);
+    if (floor == mCurrentFloor && pos == mPinnedRoomHighlight && room != old)
+        setPinnedRoomHighlight(QPoint(-1, -1));
     emit roomAtPositionChanged(floor, pos);
     return old;
 }

@@ -81,6 +81,8 @@
     <addaction name="actionShowGrid"/>
     <addaction name="actionHighlightFloor"/>
     <addaction name="actionHighlightRoom"/>
+    <addaction name="actionPinRoomHighlight"/>
+    <addaction name="actionShowWalls"/>
     <addaction name="actionShowLowerFloors"/>
     <addaction name="actionShowOnlyFloors"/>
     <addaction name="actionShowObjects"/>
@@ -637,6 +639,28 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
+   </property>
+  </action>
+  <action name="actionPinRoomHighlight">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Pin Room Highlight</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+H</string>
+   </property>
+  </action>
+  <action name="actionShowWalls">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Walls</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+W</string>
    </property>
   </action>
   <action name="actionBuildingProperties">

@@ -61,6 +61,7 @@
 #include "mapmanager.h"
 #include "lotfilesmanager256.h"
 #include "lotsourcefiles.h"
+#include <QRegularExpression>
 #include "luawriter.h"
 #include "progress.h"
 #include "tilemetainfomgr.h"
@@ -110,6 +111,33 @@ int main(int argc, char *argv[])
 
 
     const QStringList commandLineArguments = a.arguments().mid(1);
+    for (const QString &argument : commandLineArguments) {
+        const QString prefix = QStringLiteral("--validate-window-frames=");
+        if (!argument.startsWith(prefix))
+            continue;
+        QStringList definitions;
+        for (const QString &option : commandLineArguments) {
+            if (option.startsWith(QStringLiteral("--frame-tiledef=")))
+                definitions += option.mid(QStringLiteral("--frame-tiledef=").size());
+        }
+        QString error;
+        const bool valid = BuildingEditor::validateWindowFrameBuilding(argument.mid(prefix.size()), definitions, &error);
+        qInfo().noquote() << "Window frame validation:" << (valid ? QStringLiteral("PASS") : error);
+        return valid ? 0 : 1;
+    }
+    if (commandLineArguments.contains(QStringLiteral("--validate-lot-source-navigation"))) {
+        QString error;
+        const bool valid = LotSourceFiles::validateNavigation(&error);
+        qInfo().noquote() << "LOT source navigation validation:" << (valid ? QStringLiteral("PASS") : error);
+        return valid ? 0 : 58;
+    }
+    if (commandLineArguments.contains(QStringLiteral("--validate-lot-sources"))) {
+        QString error;
+        const bool valid = LotSourceFiles::validate(&error);
+        qInfo().noquote() << "LOT source validation:"
+                         << (valid ? QStringLiteral("PASS") : error);
+        return valid ? 0 : 1;
+    }
     if (commandLineArguments.contains(QStringLiteral("--validate-window-trim"))) {
         QString error;
         const bool valid = BuildingEditor::validateWindowTrim(&error);
@@ -973,21 +1001,62 @@ int main(int argc, char *argv[])
                 QLatin1String("--export-lot-sources=");
         const QString importLotSourcesPrefix =
                 QLatin1String("--import-lot-sources=");
+        const QString checkLotSourcesPrefix =
+                QLatin1String("--check-lot-sources=");
+        const QString rebuildLotSourcesPrefix =
+                QLatin1String("--rebuild-lot-source-navigation=");
         if (argument.startsWith(exportLotSourcesPrefix)
-                || argument.startsWith(importLotSourcesPrefix)) {
-            const bool importing = argument.startsWith(importLotSourcesPrefix);
-            const QString directory = argument.mid(importing
+                || argument.startsWith(importLotSourcesPrefix)
+                || argument.startsWith(checkLotSourcesPrefix)
+                || argument.startsWith(rebuildLotSourcesPrefix)) {
+            const bool checkOnly = argument.startsWith(checkLotSourcesPrefix);
+            const bool rebuilding = argument.startsWith(rebuildLotSourcesPrefix)
+                    || commandLineArguments.contains(QStringLiteral("--rebuild-source-navigation"));
+            if (rebuilding && argument.startsWith(exportLotSourcesPrefix)) {
+                qCritical() << "Navigation rebuilding requires source import or checking";
+                return 58;
+            }
+            const bool importing = checkOnly || rebuilding || argument.startsWith(importLotSourcesPrefix);
+            const QString directory = argument.mid(argument.startsWith(rebuildLotSourcesPrefix)
+                    ? rebuildLotSourcesPrefix.size() : checkOnly ? checkLotSourcesPrefix.size() : importing
                     ? importLotSourcesPrefix.size()
                     : exportLotSourcesPrefix.size());
             int cells = 0;
             QString error;
+            LotSourceFiles::NavigationOptions navigation;
+            if (rebuilding) {
+                const QString definitionsPrefix = QStringLiteral("--source-tiledef=");
+                const QString overridePrefix = QStringLiteral("--source-override=");
+                for (const QString &option : commandLineArguments) {
+                    if (option.startsWith(definitionsPrefix))
+                        navigation.tileDefinitions.append(option.mid(definitionsPrefix.size()));
+                    if (option.startsWith(overridePrefix)) {
+                        const QString value = option.mid(overridePrefix.size());
+                        const int separator = value.indexOf(QStringLiteral("::"));
+                        const auto match = QRegularExpression(
+                            QStringLiteral("^(-?\\d+),(-?\\d+)$")).match(value.left(separator));
+                        bool validX = false, validY = false;
+                        const int x = match.captured(1).toInt(&validX);
+                        const int y = match.captured(2).toInt(&validY);
+                        if (separator < 0 || !match.hasMatch() || !validX || !validY
+                                || value.mid(separator + 2).isEmpty()) {
+                            qCritical() << "Use --source-override=x,y::path.png";
+                            return 58;
+                        }
+                        navigation.overrides.insert(QStringLiteral("%1_%2.lotheader").arg(x).arg(y),
+                                                    value.mid(separator + 2));
+                    }
+                }
+            }
             if (!LotSourceFiles::processDirectory(directory, importing,
-                                                  &cells, &error)) {
+                                                  &cells, &error, checkOnly,
+                                                  rebuilding ? &navigation : nullptr)) {
                 qCritical().noquote() << "LOT source conversion failed:"
                                       << error;
                 return 58;
             }
-            qInfo().noquote() << "LOT source conversion completed:"
+            qInfo().noquote() << (checkOnly ? "LOT source check completed:"
+                                          : "LOT source conversion completed:")
                               << cells << "cell(s)";
             return 0;
         }

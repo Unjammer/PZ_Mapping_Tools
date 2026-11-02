@@ -23,6 +23,7 @@
 
 #include "isochunk256.h"
 #include "isogridsquare256.h"
+#include "navigationflags.h"
 
 #include <QDataStream>
 #include <QFile>
@@ -34,7 +35,7 @@ ChunkDataFile256::ChunkDataFile256()
 
 }
 
-bool ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *mapComposite, const LotFile::RectLookup<LotFile::RoomRect> &roomRectLookup, const GenerateLotsSettings &settings, const QImage &overrideImage, QString *error, const QBitArray *selectedChunks)
+bool ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *mapComposite, const LotFile::RectLookup<LotFile::RoomRect> &roomRectLookup, const GenerateLotsSettings &settings, const QImage &overrideImage, QString *error, const QBitArray *selectedChunks, QByteArray *automaticNavigation)
 {
     QString lotsDirectory = settings.exportDir;
     QFile file(lotsDirectory + QString::fromLatin1("/chunkdata_%1_%2.bin")
@@ -49,6 +50,9 @@ bool ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *map
 
     int FILE_VERSION = 1;
     out << qint16(FILE_VERSION);
+    QByteArray baseline;
+    QDataStream automaticOut(&baseline, QIODevice::WriteOnly);
+    automaticOut << qint16(FILE_VERSION);
 
     int BIT_SOLID = 1 << 0;
     int BIT_WALLN = 1 << 1;
@@ -65,6 +69,9 @@ bool ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *map
     int NULL_CHUNK = 5;
 
     quint8 *bitsArray = new quint8[CHUNK_SIZE_256 * CHUNK_SIZE_256];
+    for (int level = qMin(0, mapComposite->minLevel());
+         level <= qMax(0, mapComposite->maxLevel()); ++level)
+        mapComposite->layerGroupForLevel(level)->prepareDrawing2();
 
     const int cellMinX256 = combinedMaps.mCell256X * CELL_SIZE_256
             - combinedMaps.mMinSourceCellX * combinedMaps.mSourceCellSize;
@@ -79,6 +86,8 @@ bool ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *map
                     && !selectedChunks->testBit(
                         xx + yy * CHUNKS_PER_CELL_256)) {
                 out << quint8(NULL_CHUNK);
+                if (automaticNavigation)
+                    automaticOut << quint8(NULL_CHUNK);
                 continue;
             }
             QRect chunkRect(cellMinX256 + xx * CHUNK_SIZE_256, cellMinY256 + yy * CHUNK_SIZE_256, CHUNK_SIZE_256, CHUNK_SIZE_256);
@@ -86,6 +95,9 @@ bool ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *map
             roomRectLookup.overlapping(QRect(xx * CHUNK_SIZE_256, yy * CHUNK_SIZE_256, CHUNK_SIZE_256, CHUNK_SIZE_256), roomRects);
             IsoChunk256 *chunk = new IsoChunk256(xx, yy, chunkRect.x(), chunkRect.y(), mapComposite, roomRects, vars);
             int empty = 0, solid = 0, water = 0, room = 0, null = 0;
+            QVector<quint8> automaticBits;
+            if (automaticNavigation)
+                automaticBits.reserve(64);
             for (int y = 0; y < CHUNK_SIZE_256; y++) {
                 for (int x = 0; x < CHUNK_SIZE_256; x++) {
                     IsoGridSquare256 *sq = chunk->getGridSquare(x, y, 0);
@@ -102,6 +114,8 @@ bool ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *map
                         bits |= BIT_ROOM;
                     if (isPositionNull(mapComposite, chunkRect.x() + x, chunkRect.y() + y))
                         bits |= BIT_NULL;
+                    if (automaticNavigation)
+                        automaticBits.append(bits);
                     bits = ChunkDataOverride::mergedBits(
                                 overrideImage,
                                 xx * CHUNK_SIZE_256 + x,
@@ -122,6 +136,8 @@ bool ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *map
                 }
             }
             delete chunk;
+            if (automaticNavigation)
+                NavigationFlags::writeChunk(automaticOut, automaticBits);
             if (empty == CHUNK_SIZE_256 * CHUNK_SIZE_256)
                 out << quint8(EMPTY_CHUNK);
             else if (solid == CHUNK_SIZE_256 * CHUNK_SIZE_256)
@@ -144,6 +160,8 @@ bool ChunkDataFile256::fromMap(CombinedCellMaps &combinedMaps, MapComposite *map
     delete[] bitsArray;
 
     file.close();
+    if (automaticNavigation)
+        *automaticNavigation = baseline;
     if (out.status() != QDataStream::Ok) {
         if (error)
             *error = file.errorString();

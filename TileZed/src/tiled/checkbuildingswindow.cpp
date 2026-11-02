@@ -28,7 +28,9 @@
 #include <QDebug>
 #include <QDir>
 #include <QFileDialog>
+#include <QFile>
 #include <QMessageBox>
+#include <QTemporaryDir>
 
 using namespace BuildingEditor;
 using namespace Tiled;
@@ -142,41 +144,71 @@ void CheckBuildingsWindow::fixSelected()
     const auto selected = ui->treeWidget->selectedItems();
     if (selected.isEmpty())
         return;
-    QList<FixSelected> fixList;
+    QMap<QString, QList<Issue>> fixes;
     for (QTreeWidgetItem *item : selected) {
         if (item->parent() == nullptr) {
             int rowFile = ui->treeWidget->indexOfTopLevelItem(item);
             IssueFile *file = mFiles[rowFile];
             for (const Issue &issue : file->issues) {
-                fixList += FixSelected(file->path, issue);
+                fixes[file->path].append(issue);
             }
             continue;
         }
+        if (item->parent()->isSelected())
+            continue;
         int rowFile = ui->treeWidget->indexOfTopLevelItem(item->parent());
         int rowIssue = item->parent()->indexOfChild(item);
         const Issue &issue = mFiles[rowFile]->issues[rowIssue];
-        fixList += FixSelected(mFiles[rowFile]->path, issue);
+        fixes[mFiles[rowFile]->path].append(issue);
     }
-    QMap<QString, QVector<int>> rearrangeGrid;
-    for (const FixSelected& fix : fixList) {
-        switch (fix.issue.type) {
-        case Issue::Type::RearrangeGrid:
-            rearrangeGrid[fix.path] << fix.issue.x << fix.issue.y << fix.issue.z;
-            break;
-        case Issue::Type::KidsBedroom:
-            fixKidsBedroom(fix.path, fix.issue.roomRegion, fix.issue.z);
-            break;
-        default:
-            break;
-        }
+    for (auto it = fixes.cbegin(); it != fixes.cend(); ++it) {
+        QString error;
+        if (!fixFile(it.key(), it.value(), &error))
+            QMessageBox::warning(this, tr("Error fixing building"), error);
     }
-    for (const QString& filePath : rearrangeGrid.keys()) {
-        RearrangeTiles::instance()->fixBuilding(filePath, rearrangeGrid[filePath], this);
+}
+
+bool CheckBuildingsWindow::fixFile(const QString &path, const QList<Issue> &issues,
+                                  QString *error)
+{
+    bool hasFix = false;
+    for (const Issue &issue : issues)
+        hasFix |= issue.type == Issue::KidsBedroom || issue.type == Issue::RearrangeGrid;
+    if (!hasFix)
+        return true;
+    BuildingReader reader;
+    Building *building = reader.read(path);
+    if (!building) {
+        *error = reader.errorString();
+        return false;
     }
+    reader.fix(building);
+    bool changed = false;
+    QVector<int> rearrangeGrid;
+    for (const Issue &issue : issues) {
+        if (issue.type == Issue::KidsBedroom)
+            changed |= fixKidsBedroom(building, issue.roomRegion, issue.z);
+        else if (issue.type == Issue::RearrangeGrid)
+            rearrangeGrid << issue.x << issue.y << issue.z;
+    }
+    if (!rearrangeGrid.isEmpty())
+        changed |= RearrangeTiles::instance()->fixBuilding(building, rearrangeGrid);
+    bool saved = true;
+    if (changed) {
+        BuildingWriter writer;
+        saved = writer.write(building, path);
+        if (!saved)
+            *error = writer.errorString();
+    }
+    delete building;
+    return saved;
 }
 
 void CheckBuildingsWindow::selectionChanged(const QItemSelection &selected, const QItemSelection &deselected)
 {
+    if (mIgnoreSelectionChange)
+        return;
+
     Q_UNUSED(selected)
     Q_UNUSED(deselected)
 
@@ -319,23 +351,14 @@ bool CheckBuildingsWindow::isKidsBedroomTile(Tiled::Tile *tile)
     return mKidsBedroomTiles.contains(tile->tileset()->name() + QStringLiteral("_%1").arg(tile->id()));
 }
 
-void CheckBuildingsWindow::fixKidsBedroom(const QString &tbxPath, const QRegion &roomRegion, int z)
+bool CheckBuildingsWindow::fixKidsBedroom(Building *building, const QRegion &roomRegion, int z)
 {
-    // read tbx
-    // create kidsbedroom duplicate of bedroom
-    // assign kidsbedroom to each square in the room region
-    // write tbx
-    BuildingReader reader;
-    Building *building = reader.read(tbxPath);
-    if (building == nullptr) {
-        QString error = reader.errorString();
-        QMessageBox::warning(this, tr("Error reading building"), error);
-        return;
-    }
-    reader.fix(building);
-
     BuildingFloor *floor = building->floor(z);
+    if (!floor || roomRegion.isEmpty())
+        return false;
     Room *roomOld = floor->GetRoomAt(roomRegion.cbegin()->topLeft());
+    if (!roomOld || roomOld->internalName != QLatin1String("bedroom"))
+        return false;
     Room *roomNew = findExistingKidsBedroom(building, roomOld);
     if (roomNew == nullptr) {
         roomNew = new Room(roomOld);
@@ -350,12 +373,7 @@ void CheckBuildingsWindow::fixKidsBedroom(const QString &tbxPath, const QRegion 
             }
         }
     }
-    BuildingWriter w;
-    if (!w.write(building, tbxPath)) {
-        QString error = w.errorString();
-        QMessageBox::warning(this, tr("Error saving building"), error);
-    }
-    delete building;
+    return true;
 }
 
 Room *CheckBuildingsWindow::findExistingKidsBedroom(Building *building, BuildingEditor::Room *roomOld)
@@ -624,6 +642,7 @@ void CheckBuildingsWindow::issue(Issue::Type type, const QRegion &roomRegion, in
 
 void CheckBuildingsWindow::updateList(CheckBuildingsWindow::IssueFile *file)
 {
+    mIgnoreSelectionChange = true;
     QTreeWidgetItem *fileItem = ui->treeWidget->topLevelItem(mFiles.indexOf(file));
     if (fileItem == nullptr) {
         fileItem = new QTreeWidgetItem(QStringList() << QFileInfo(file->path).fileName());
@@ -636,6 +655,93 @@ void CheckBuildingsWindow::updateList(CheckBuildingsWindow::IssueFile *file)
         QTreeWidgetItem *issueItem = new QTreeWidgetItem(QStringList() << file->issues[j].toString());
         fileItem->addChild(issueItem);
     }
+    mIgnoreSelectionChange = false;
+    selectionChanged(QItemSelection(), QItemSelection());
+}
+
+bool CheckBuildingsWindow::validateSelectionRefresh(QString *error)
+{
+    CheckBuildingsWindow window;
+    IssueFile *file = new IssueFile(QStringLiteral("selection.tbx"));
+    window.mFiles.append(file);
+    for (int index = 0; index < 3; ++index)
+        file->issues.append(Issue(file, Issue::KidsBedroom, QString(), index, 0, 0));
+    window.updateList(file);
+    QTreeWidgetItem *item = window.ui->treeWidget->topLevelItem(0);
+    window.ui->treeWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    item->child(1)->setSelected(true);
+    item->child(2)->setSelected(true);
+    if (!window.ui->buttonFixSelected->isEnabled()) {
+        *error = QStringLiteral("Selected building fixes were not enabled");
+        return false;
+    }
+    file->issues.clear();
+    file->issues.append(Issue(file, Issue::RoomLight, QString(), 0, 0, 0));
+    window.updateList(file);
+    const bool valid = item->childCount() == 1
+            && !window.ui->buttonFixSelected->isEnabled();
+    window.ui->treeWidget->clear();
+    window.mFiles.clear();
+    delete file;
+    if (!valid)
+        *error = QStringLiteral("Building result refresh retained stale selection state");
+    return valid;
+}
+
+bool CheckBuildingsWindow::validateFixBatch(QString *error)
+{
+    QTemporaryDir directory;
+    if (!directory.isValid())
+        return false;
+    const QString path = QDir(directory.path()).filePath(QStringLiteral("batch.tbx"));
+    Building building(8, 8);
+    Room *room = new Room;
+    room->Name = QStringLiteral("Bedroom");
+    room->internalName = QStringLiteral("bedroom");
+    room->Color = qRgb(0, 0, 255);
+    building.insertRoom(0, room);
+    BuildingFloor *floor = new BuildingFloor(&building, 0);
+    building.insertFloor(0, floor);
+    floor->SetRoomAt(0, 0, room);
+    floor->SetRoomAt(3, 0, room);
+    BuildingWriter writer;
+    if (!writer.write(&building, path)) {
+        *error = writer.errorString();
+        return false;
+    }
+    CheckBuildingsWindow window;
+    IssueFile file(path);
+    const Issue first(&file, Issue::KidsBedroom, QRegion(0, 0, 1, 1), 0);
+    const Issue second(&file, Issue::KidsBedroom, QRegion(3, 0, 1, 1), 0);
+    const QList<Issue> fixes = {first, second, first};
+    if (!window.fixFile(path, fixes, error))
+        return false;
+    BuildingReader reader;
+    Building *result = reader.read(path);
+    if (!result) {
+        *error = reader.errorString();
+        return false;
+    }
+    BuildingFloor *resultFloor = result->floor(0);
+    Room *firstRoom = resultFloor ? resultFloor->GetRoomAt(0, 0) : nullptr;
+    Room *secondRoom = resultFloor ? resultFloor->GetRoomAt(3, 0) : nullptr;
+    const bool valid = result->roomCount() == 2 && firstRoom && firstRoom == secondRoom
+            && firstRoom->internalName == QStringLiteral("kidsbedroom")
+            && firstRoom->Name == QStringLiteral("Kids Bedroom");
+    delete result;
+    QFile saved(path);
+    if (!valid || !saved.open(QIODevice::ReadOnly)) {
+        *error = QStringLiteral("Grouped building fixes changed room identity or lost a region");
+        return false;
+    }
+    const QByteArray bytes = saved.readAll();
+    saved.close();
+    if (!window.fixFile(path, fixes, error)
+            || !saved.open(QIODevice::ReadOnly) || saved.readAll() != bytes) {
+        *error = QStringLiteral("Repeated building fixes changed an already-fixed room");
+        return false;
+    }
+    return true;
 }
 
 void CheckBuildingsWindow::fileChanged(const QString &path)

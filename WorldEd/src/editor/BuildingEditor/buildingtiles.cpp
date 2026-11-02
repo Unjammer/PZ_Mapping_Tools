@@ -1126,6 +1126,7 @@ int BTC_Windows::wallEnum(const BuildingTileEntry *entry, int e) const
         return defaultWallEnum(entry, e);
     }
     TileDefWatcher *tileDefWatcher = getTileDefWatcher();
+    tileDefWatcher->check();
     TileDefTileset *tdTileset = tileDefWatcher->tileset(tile->mTilesetName);
     if (tdTileset == nullptr) {
         return defaultWallEnum(entry, e);
@@ -1152,6 +1153,7 @@ bool BTC_Windows::shadowHack(const BuildingTileEntry *entry, int e, QPoint &p) c
         return false;
     }
     TileDefWatcher *tileDefWatcher = getTileDefWatcher();
+    tileDefWatcher->check();
     TileDefTileset *tdTileset = tileDefWatcher->tileset(tile->mTilesetName);
     if (tdTileset == nullptr) {
         return false;

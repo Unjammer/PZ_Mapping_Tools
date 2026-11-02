@@ -40,6 +40,9 @@ public:
     explicit CheckBuildingsWindow(QWidget *parent = 0);
     ~CheckBuildingsWindow();
 
+    static bool validateSelectionRefresh(QString *error);
+    static bool validateFixBatch(QString *error);
+
 private slots:
     void browse();
     void check();
@@ -125,19 +128,6 @@ private:
         QList<Issue> issues;
     };
 
-    struct FixSelected
-    {
-        QString path;
-        CheckBuildingsWindow::Issue issue;
-
-        FixSelected(const QString &path, const CheckBuildingsWindow::Issue &issue) :
-            path(path),
-            issue(issue)
-        {
-
-        }
-    };
-
     void check(const QString &filePath);
     void check(BuildingEditor::BuildingMap *bmap, BuildingEditor::Building *building, Tiled::Map *map, const QString &fileName);
     void issue(Issue::Type type, const QString &detail, int x, int y, int z);
@@ -151,7 +141,8 @@ private:
     bool isKidsBedroomRegion(CompositeLayerGroup *layers, const QRegion &roomRegion);
     bool isKidsBedroomRect(CompositeLayerGroup *layers, const QRect &roomRect);
     bool isKidsBedroomTile(Tiled::Tile *tile);
-    void fixKidsBedroom(const QString &tbxPath, const QRegion &roomRegion, int z);
+    bool fixFile(const QString &path, const QList<Issue> &issues, QString *error);
+    bool fixKidsBedroom(BuildingEditor::Building *building, const QRegion &roomRegion, int z);
     BuildingEditor::Room *findExistingKidsBedroom(BuildingEditor::Building *building, BuildingEditor::Room *roomOld);
     QString kidsBedroomName(BuildingEditor::Room *roomOld);
 
@@ -159,6 +150,7 @@ private:
     Ui::CheckBuildingsWindow *ui;
     QList<IssueFile*> mFiles;
     IssueFile *mCurrentIssueFile;
+    bool mIgnoreSelectionChange = false;
 
     Tiled::Internal::FileSystemWatcher *mFileSystemWatcher;
     QList<QString> mWatchedFiles;

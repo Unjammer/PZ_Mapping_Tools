@@ -545,6 +545,21 @@ BuildingEditorWindow::BuildingEditorWindow(QWidget *parent) :
             ui->actionHighlightFloor, &QAction::setChecked);
 
     ui->actionHighlightRoom->setChecked(prefs->highlightRoom());
+    connect(ui->actionPinRoomHighlight, &QAction::triggered, this, [this, prefs](bool pin) {
+        auto *scene = qobject_cast<BuildingIsoScene*>(ToolManager::instance()->currentEditor());
+        if (!scene || !mCurrentDocument)
+            return;
+        if (pin)
+            prefs->setHighlightRoom(true);
+        mCurrentDocument->setPinnedRoomHighlight(
+                    pin ? scene->roomHighlightPosition() : QPoint(-1, -1));
+        updateActions();
+    });
+    ui->actionShowWalls->setChecked(prefs->showWalls());
+    connect(ui->actionShowWalls, &QAction::toggled,
+            prefs, &BuildingPreferences::setShowWalls);
+    connect(prefs, &BuildingPreferences::showWallsChanged,
+            ui->actionShowWalls, &QAction::setChecked);
     connect(ui->actionHighlightRoom, &QAction::toggled,
             prefs, &BuildingPreferences::setHighlightRoom);
     connect(prefs, &BuildingPreferences::highlightRoomChanged,
@@ -1323,6 +1338,8 @@ void BuildingEditorWindow::currentDocumentChanged(BuildingDocument *doc)
         connect(mCurrentDocument, &BuildingDocument::floorRemoved,
                 this, &BuildingEditorWindow::updateActions);
         connect(mCurrentDocument, &BuildingDocument::currentFloorChanged,
+                this, &BuildingEditorWindow::updateActions);
+        connect(mCurrentDocument, &BuildingDocument::pinnedRoomHighlightChanged,
                 this, &BuildingEditorWindow::updateActions);
 
         connect(mCurrentDocument, &BuildingDocument::currentLayerChanged,
@@ -2492,6 +2509,8 @@ void BuildingEditorWindow::initActionManager()
     actionManager->registerAction(ui->actionShowGrid, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowGrid"));
     actionManager->registerAction(ui->actionHighlightFloor, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.HighlightCurrentFloor"));
     actionManager->registerAction(ui->actionHighlightRoom, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.HighlightRoom"));
+    actionManager->registerAction(ui->actionPinRoomHighlight, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.PinRoomHighlight"));
+    actionManager->registerAction(ui->actionShowWalls, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowWalls"));
     actionManager->registerAction(ui->actionShowLowerFloors, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowLowerFloors"));
     actionManager->registerAction(ui->actionShowOnlyFloors, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowOnlyFloors"));
     actionManager->registerAction(ui->actionShowObjects, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowObjectShapes"));
@@ -2926,6 +2945,11 @@ void BuildingEditorWindow::updateActions()
     bool attributeMode = hasDoc && mCurrentDocumentStuff->isAttribute();
 
     bool hasEditor = ToolManager::instance()->currentEditor() != 0;
+    auto *isoScene = qobject_cast<BuildingIsoScene*>(ToolManager::instance()->currentEditor());
+    const bool pinned = hasDoc && mCurrentDocument->hasPinnedRoomHighlight();
+    ui->actionPinRoomHighlight->setChecked(pinned);
+    ui->actionPinRoomHighlight->setEnabled(hasDoc && isoScene);
+    ui->actionShowWalls->setEnabled(hasDoc && isoScene);
     PencilTool::instance()->setEnabled(hasEditor && objectMode && currentRoom() != 0);
     WallTool::instance()->setEnabled(hasEditor && objectMode && showObjects);
     SelectMoveRoomsTool::instance()->setEnabled(hasEditor && objectMode);

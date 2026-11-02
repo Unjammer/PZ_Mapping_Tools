@@ -16,6 +16,7 @@
  */
 
 #include "preferences.h"
+#include "../../../shared/tiledefinitionpaths.h"
 #include "../portablesettings.h"
 
 #include <QApplication>
@@ -495,34 +496,12 @@ Preferences::Preferences()
 
     QSettings settings(QLatin1String("TheIndieStone"), QLatin1String("TileZed"));
     mTilePropertiesFiles = settings.value(QLatin1String("TilePropertiesFiles")).toStringList();
-    if (!mProjectZomboidDirectory.isEmpty()) {
-        const QStringList builtInTileDefs = {
-            QStringLiteral("newtiledefinitions.tiles"),
-            QStringLiteral("tiledefinitions_erosion.tiles"),
-            QStringLiteral("tiledefinitions_overlays.tiles"),
-            QStringLiteral("tiledefinitions_b42chunkcaching.tiles"),
-            QStringLiteral("tiledefinitions_noiseworks.patch.tiles"),
-            QStringLiteral("jumbo_trees_big.tiles"),
-            QStringLiteral("jumbo_trees.tiles")
-        };
-        for (const QString &fileName : builtInTileDefs) {
-            bool alreadyConfigured = false;
-            for (const QString &configured : qAsConst(mTilePropertiesFiles)) {
-                if (QFileInfo(configured).fileName().compare(
-                            fileName, Qt::CaseInsensitive) == 0) {
-                    alreadyConfigured = true;
-                    break;
-                }
-            }
-            if (alreadyConfigured)
-                continue;
-            const QFileInfo candidate(QDir(mProjectZomboidDirectory)
-                                      .filePath(QStringLiteral("media/") +
-                                                fileName));
-            if (candidate.exists() && candidate.isFile())
-                mTilePropertiesFiles.append(candidate.canonicalFilePath());
-        }
+    const QStringList orderedTileDefs = TileDefinitionPaths::configuredFiles(
+                mTilePropertiesFiles, mProjectZomboidDirectory, mTilesDirectory);
+    if (mTilePropertiesFiles != orderedTileDefs) {
+        mTilePropertiesFiles = orderedTileDefs;
     }
+
 
     mOpenFileDirectory = mSettings->value(QLatin1String("OpenFileDirectory")).toString();
     mWorldMapXMLFile = mSettings->value(QLatin1String("WorldMapXMLFile")).toString();

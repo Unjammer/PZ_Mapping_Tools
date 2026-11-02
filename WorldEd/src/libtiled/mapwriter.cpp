@@ -310,7 +310,10 @@ void MapWriterPrivate::writeTileset(QXmlStreamWriter &w, const Tileset *tileset,
     // Write the properties for those tiles that have them
     for (int i = 0; i < tileset->tileCount(); ++i) {
         const Tile *tile = tileset->tileAt(i);
-        const Properties properties = tile->properties();
+        Properties properties = tile->properties();
+#ifdef ZOMBOID
+        properties.remove(QStringLiteral("invisible"));
+#endif
         if (!properties.isEmpty()) {
             w.writeStartElement(QLatin1String("tile"));
             w.writeAttribute(QLatin1String("id"), QString::number(i));

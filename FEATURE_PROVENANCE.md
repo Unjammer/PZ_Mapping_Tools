@@ -60,6 +60,11 @@ The precise combined-tree baselines and branch relationships are documented in
 
 ## Master feature provenance table
 
+Optional LOT source navigation recalculation in Build 20261027c is an
+Alree / Unjammer addition. It retains the inherited map navigation foundation
+and adds neighboring-header lookup, mod definitions and persistent manual
+corrections. Its classification is `UNJAMMER_ORIGINAL`.
+
 | Feature | Earliest verified Unjammer evidence | Tim Baker equivalent | Current status | Classification |
 |---|---|---|---|---|
 | Original WorldEd architecture and mapping workflow | Inherited | Original source | Retained and extensively maintained | `UPSTREAM_FOUNDATION` |
@@ -364,12 +369,23 @@ authorship.
 
 ## Tim Baker Upstream Review
 
-The two post-baseline ranges contain 67 commits. Platform-only packaging commits
+The October 30 review found no new commits after TileZed ec9b004f and
+WorldEd 8475bbc4. The selective integration decisions below remain applicable.
+
+The original post-baseline audit covered 67 commits. Later selective reviews
+are recorded alongside those results. Platform-only packaging commits
 were inspected as part of the range audit and grouped where they have the same
 decision. Every user-facing or correctness change is listed separately below.
 
 | Tim Baker commit | Date | Subject | Equivalent already in Unjammer? | Action | Provenance |
 |---|---|---|---|---|---|
+| TileZed [`ec9b004f`](https://github.com/timbaker/tiled/commit/ec9b004fc368292be2e7ffd10807f424aa8b3733) | 2026-10-26 | Omit cached invisible tile properties from TMX | Both maintained TMX writers serialized the cache | Adapted to TileZed and WorldEd without modifying cached properties | `TIM_FIX_PORTED` |
+| TileZed [`c83f2321`](https://github.com/timbaker/tiled/commit/c83f2321215195223a0ef00cebe601585c486d1b) | 2026-10-25 | Check Buildings selection refresh crash | Result refresh could index the replaced issue list | Adapted with selection suppression and a refreshed button state | `TIM_FIX_PORTED` |
+| TileZed [`bb4014ba`](https://github.com/timbaker/tiled/commit/bb4014bae03c1cdcfecb60293c1faa2fd994cb01) | 2026-10-26 | Remove duplicate TMX tilesets | Complete ordered tileset declarations are retained intentionally | Not ported | Tim upstream only |
+| TileZed [`7c64214c`](https://github.com/timbaker/tiled/commit/7c64214c2fa4991ee221279c394caf892322f931) | 2026-10-25 | Batch Check Buildings fixes into one TBX write | Maintained fixes still used separate file operations | Adapted to Kids Bedroom and Rearrange Grid with duplicate-selection and already-fixed-room protection | `TIM_UPSTREAM_PORT` |
+| TileZed [`eaf74e52`](https://github.com/timbaker/tiled/commit/eaf74e520ae7cf18b7a04d032077c318a7c50438), [`2d5ac3a8`](https://github.com/timbaker/tiled/commit/2d5ac3a875c6836beab694abc7b0828b33941712) | 2026-10-19 to 10-24 | Replace Room results and removal of Rename Room dialog | Maintained Check Buildings does not expose these dialogs | Not applicable | Tim upstream only |
+| WorldEd [`8475bbc4`](https://github.com/timbaker/pzworlded/commit/8475bbc46b4a3bdd45b9952a168c1e711e547848) | 2026-10-24 | Linux deployment script | Separate Windows Qt 5 deployment | Not applicable | Tim upstream only |
+| TileZed [`7d004f22`](https://github.com/timbaker/tiled/commit/7d004f22d9b44dc81d1bfdeea2699ce6842d6e15) | 2026-10-24 | Ladder property names for climbing | An existing Ladder direction control used uppercase keys | Adapted the existing control to the lowercase runtime keys | `TIM_UPSTREAM_PORT` |
 | WorldEd [`d73466bf`](https://github.com/timbaker/pzworlded/commit/d73466bf66c02337fc0520400c24fda211f6aea6) | 2026-08-18 | West-wall trim for extended window shapes | TileZed already contained the corresponding correction | Ported to WorldEd | `TIM_FIX_PORTED` |
 | TileZed [`9ef277c1`](https://github.com/timbaker/tiled/commit/9ef277c19e10e9798a2a041302615e35434ace15) | 2026-10-15 | Recent output paths in CreatePackDialog | No output-path history | Adapted with a bounded, case-insensitive recent-path list | `TIM_UPSTREAM_PORT` |
 | WorldEd `54b21a88`, `93f4b2fd` | 2026-07-27 to 07-29 | Docker and macOS Qt 6 builds | Windows Qt 5 line differs | Not applicable | Tim upstream only |
@@ -429,6 +445,14 @@ maintained Unjammer tree** where the table uses `NOT_PORTED_ALREADY_FIXED`.
   native C++/Qt importer is an Unjammer implementation.
 
 ## Ideas, testing and community contributions
+
+SocialMean1 requested temporary wall visibility while placing furniture.
+lulie requested a room highlight that remains fixed after the pointer moves.
+Build 20261030 connects the inherited Show Walls preference to isometric layer
+visibility and adds document-scoped room pinning. Alree / Unjammer implemented
+these controls. The requests are classified as `IDEA_OR_FEEDBACK`.
+The cold TileDef lookup correction for window frames is a maintained
+Alree / Unjammer fix prompted by shisan-233's window reports.
 
 Community reports, screenshots, projects, and workflow suggestions are credited
 as `IDEA_OR_FEEDBACK`, not software authorship, unless a traceable code

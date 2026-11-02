@@ -33,7 +33,7 @@ class ChunkDataFile256
 {
 public:
     ChunkDataFile256();
-    bool fromMap(CombinedCellMaps& combinedMaps, MapComposite *mapComposite, const LotFile::RectLookup<LotFile::RoomRect> &roomRectLookup, const GenerateLotsSettings &settings, const QImage &overrideImage, QString *error, const QBitArray *selectedChunks = nullptr);
+    bool fromMap(CombinedCellMaps& combinedMaps, MapComposite *mapComposite, const LotFile::RectLookup<LotFile::RoomRect> &roomRectLookup, const GenerateLotsSettings &settings, const QImage &overrideImage, QString *error, const QBitArray *selectedChunks = nullptr, QByteArray *automaticNavigation = nullptr);
     bool isPositionNull(MapComposite *mapComposite, int squareX, int squareY);
 };
 

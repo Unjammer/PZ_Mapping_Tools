@@ -1230,7 +1230,7 @@ bool TileDefFileReader::read(const QString &fileName, Tiled::Internal::TileDefFi
 {
     qDeleteAll(defFile.takeTilesets());
 
-    if (fileName.endsWith(QLatin1String(".txt"))) {
+    if (fileName.endsWith(QLatin1String(".txt"), Qt::CaseInsensitive)) {
         TileDefTextFile textFile;
         if (textFile.read(fileName) == false) {
             defFile.setErrorString(textFile.errorString());

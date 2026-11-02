@@ -14,12 +14,14 @@
 #include "buildingtemplates.h"
 #include "buildingwriter.h"
 #include "buildingisoview.h"
+#include "buildingmap.h"
 #include "buildinglayersdock.h"
 #include "buildingpreferences.h"
 #include "buildingtilesdialog.h"
 #include "furnitureview.h"
 #include "furnituregroups.h"
 #include "mapcomposite.h"
+#include "tilelayer.h"
 #include "preferences.h"
 #include "shortcut/actionmanager.h"
 
@@ -27,9 +29,14 @@
 #include <QApplication>
 #include <QDebug>
 #include <QListWidget>
+#include <QGraphicsSceneContextMenuEvent>
+#include <QGraphicsSceneMouseEvent>
+#include <QKeyEvent>
+#include <QMenu>
 #include <QPainter>
 #include <QSettings>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <algorithm>
 
 namespace BuildingEditor {
@@ -248,6 +255,134 @@ inline bool validateBuildingEditorWorkflows(BuildingEditorWindow *window, QStrin
     prefs->setHighlightFloor(highlight);
     prefs->setShowLowerFloors(lower);
     prefs->setShowOnlyFloors(onlyFloors);
+
+    {
+        const bool showWalls = prefs->showWalls();
+        const bool highlightRoom = prefs->highlightRoom();
+        prefs->setHighlightRoom(true);
+        prefs->setShowWalls(true);
+        auto *building = new Building(4, 4, nullptr);
+        auto *room = new Room;
+        room->Name = QStringLiteral("Preview");
+        room->internalName = QStringLiteral("preview");
+        room->Color = qRgb(120, 120, 120);
+        building->insertRoom(0, room);
+        for (int level = 0; level < 2; ++level) {
+            auto *floor = new BuildingFloor(building, level);
+            floor->SetRoomAt(1, 1, room);
+            floor->SetRoomAt(2, 1, room);
+            floor->setGrime(QStringLiteral("Walls"), 1, 1, QStringLiteral("blends_natural_01_0"));
+            floor->setGrime(QStringLiteral("Furniture"), 1, 1, QStringLiteral("blends_natural_01_1"));
+            building->insertFloor(level, floor);
+        }
+        BuildingDocument document(building, QString());
+        BuildingIsoScene scene;
+        QGraphicsView view(&scene);
+        view.setAttribute(Qt::WA_DontShowOnScreen);
+        view.show();
+        scene.setDocument(&document);
+        const auto visible = [&](const QString &name) {
+            auto *group = scene.buildingMap()->mapComposite()->layerGroupForLevel(document.currentLevel());
+            for (auto *layer : group->layers()) {
+                if (MapComposite::layerNameWithoutPrefix(layer) == name)
+                    return group->isLayerVisible(layer);
+            }
+            return false;
+        };
+        const int undoCount = document.undoStack()->count();
+        const auto contextAction = [&](const QPoint &position, const QString &label) {
+            const QPointF scenePosition = scene.tileToScene(position, document.currentLevel())
+                    + QPointF(0, 8);
+            QGraphicsSceneMouseEvent press(QEvent::GraphicsSceneMousePress);
+            press.setButton(Qt::RightButton);
+            press.setButtons(Qt::RightButton);
+            press.setScenePos(scenePosition);
+            press.setScreenPos(QPoint(100, 100));
+            scene.mousePressEvent(&press);
+            QGraphicsSceneMouseEvent release(QEvent::GraphicsSceneMouseRelease);
+            release.setButton(Qt::RightButton);
+            release.setScenePos(scenePosition);
+            scene.mouseReleaseEvent(&release);
+            bool selected = false;
+            QTimer::singleShot(0, [&]() {
+                auto *menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+                if (!menu)
+                    return;
+                for (QAction *action : menu->actions()) {
+                    if (action->text() != label || !action->isEnabled())
+                        continue;
+                    selected = true;
+                    menu->setActiveAction(action);
+                    QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+                    QApplication::sendEvent(menu, &enter);
+                    return;
+                }
+                menu->close();
+            });
+            QGraphicsSceneContextMenuEvent context(QEvent::GraphicsSceneContextMenu);
+            context.setReason(QGraphicsSceneContextMenuEvent::Mouse);
+            context.setScenePos(scenePosition);
+            context.setScreenPos(QPoint(100, 100));
+            scene.contextMenuEvent(&context);
+            return selected;
+        };
+        check(contextAction(QPoint(1, 1), QStringLiteral("Pin Room Highlight"))
+              && document.hasPinnedRoomHighlight(), QStringLiteral("Right-click menu pins a room"));
+        scene.setCursorPosition(QPoint(3, 3));
+        check(document.pinnedRoomHighlight() == QPoint(1, 1),
+              QStringLiteral("Context pin survives pointer leaving the room"));
+        check(contextAction(QPoint(3, 3), QStringLiteral("Release Room Highlight"))
+              && !document.hasPinnedRoomHighlight(), QStringLiteral("Right-click outside the room releases it"));
+        check(contextAction(QPoint(3, 3), QStringLiteral("Show Walls"))
+              && !prefs->showWalls() && visible(QStringLiteral("Furniture")),
+              QStringLiteral("Context wall toggle preserves furniture"));
+        prefs->setShowWalls(true);
+        for (bool tileMode : {false, true}) {
+            scene.setEditingTiles(tileMode);
+            prefs->setShowWalls(false);
+            check(!visible(QStringLiteral("Walls")) && !visible(QStringLiteral("Walls2"))
+                  && !visible(QStringLiteral("Windows")) && visible(QStringLiteral("Furniture")),
+                  QStringLiteral("Hidden walls retain visible furniture in mode %1").arg(tileMode));
+            check(document.currentFloor()->layerVisibility(QStringLiteral("Walls")),
+                  QStringLiteral("Wall preview preserves authored layer visibility"));
+            document.setLayerVisibility(document.currentFloor(), QStringLiteral("Walls2"), false);
+            prefs->setShowWalls(true);
+            check(visible(QStringLiteral("Walls")) && !visible(QStringLiteral("Walls2")),
+                  QStringLiteral("Showing walls preserves independently hidden layers"));
+            scene.setCursorPosition(QPoint(1, 1));
+            document.setPinnedRoomHighlight(QPoint(1, 1));
+            scene.setCursorPosition(QPoint(3, 3));
+            check(scene.roomHighlightPosition() == QPoint(1, 1),
+                  QStringLiteral("Pinned room survives pointer movement"));
+            scene.setHighlightRoomLock(true);
+            scene.setHighlightRoomLock(false);
+            check(document.hasPinnedRoomHighlight(),
+                  QStringLiteral("Placement lock does not release a pinned room"));
+            document.setPinnedRoomHighlight(QPoint(-1, -1));
+            check(scene.roomHighlightPosition() == QPoint(3, 3),
+                  QStringLiteral("Releasing room returns to pointer highlight"));
+        }
+        document.setPinnedRoomHighlight(QPoint(1, 1));
+        BuildingIsoScene secondScene;
+        secondScene.setEditingTiles(true);
+        secondScene.setDocument(&document);
+        check(secondScene.roomHighlightPosition() == QPoint(1, 1),
+              QStringLiteral("Pinned room is shared between document modes"));
+        secondScene.clearDocument();
+        document.changeRoomAtPosition(document.currentFloor(), QPoint(1, 1), nullptr);
+        check(!document.hasPinnedRoomHighlight(), QStringLiteral("Removing pinned room square releases it"));
+        document.setPinnedRoomHighlight(QPoint(2, 1));
+        document.setCurrentFloor(building->floor(1));
+        check(!document.hasPinnedRoomHighlight(), QStringLiteral("Floor change releases room highlight"));
+        document.setPinnedRoomHighlight(QPoint(1, 1));
+        document.emitBuildingRotated();
+        check(!document.hasPinnedRoomHighlight(), QStringLiteral("Rotation releases room highlight"));
+        check(document.undoStack()->count() == undoCount,
+              QStringLiteral("Preview actions do not add building edits"));
+        scene.clearDocument();
+        prefs->setShowWalls(showWalls);
+        prefs->setHighlightRoom(highlightRoom);
+    }
 
     {
         const QString removedSheet = QStringLiteral("blends_natural_01");

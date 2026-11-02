@@ -16,6 +16,7 @@
  */
 
 #include "texturepacker.h"
+#include "../../../shared/tiledefinitionpaths.h"
 
 #include "texturepackfile.h"
 #include "preferences.h"
@@ -83,10 +84,11 @@ bool TexturePacker::pack(const TexturePackSettings &settings)
 
     QList<QSharedPointer<TileDefFile>> tileDefFiles;
     for (const QString &fileName : mSettings.mTileDefFiles) {
-        QFileInfo fileInfo(fileName);
+        QFileInfo fileInfo(TileDefinitionPaths::existingFile(fileName));
         if (fileInfo.exists()) {
             QSharedPointer<TileDefFile> tileDefFile(new TileDefFile());
-            if (tileDefFile->read(fileInfo.absoluteFilePath())) {
+            TileDefFileReader reader;
+            if (reader.read(fileInfo.absoluteFilePath(), *tileDefFile)) {
                 tileDefFiles += tileDefFile;
             }
         }

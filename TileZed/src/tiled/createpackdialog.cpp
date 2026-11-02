@@ -16,6 +16,7 @@
  */
 
 #include "createpackdialog.h"
+#include "../../../shared/tiledefinitionpaths.h"
 #include "ui_createpackdialog.h"
 
 #include "texturepacker.h"
@@ -191,7 +192,7 @@ void CreatePackDialog::addTileDef()
     QString path = QFileDialog::getOpenFileName(
                 this, tr("Choose .tiles file"),
                 Tiled::Internal::Preferences::instance()->gameMediaPath(),
-                QStringLiteral("*.tiles"));
+                QStringLiteral("Tile definitions (*.tiles *.tiles.txt)"));
     if (path.isEmpty())
         return;
 
@@ -502,13 +503,16 @@ bool PackSettingsFile::read(const QString &fileName)
 
     bool contains = false;
     for (const QString &filePath : mSettings.mTileDefFiles) {
-        if (filePath.endsWith(QStringLiteral("newtiledefinitions.tiles"))) {
+        if (TileDefinitionPaths::logicalName(filePath).compare(
+                    QStringLiteral("newtiledefinitions.tiles"), Qt::CaseInsensitive) == 0) {
             contains = true;
             break;
         }
     }
     if (contains == false) {
-        QFileInfo fileInfo(Tiled::Internal::Preferences::instance()->tilesDirectory() + QString::fromLatin1("/newtiledefinitions.tiles"));
+        QFileInfo fileInfo(TileDefinitionPaths::existingFile(
+                    Tiled::Internal::Preferences::instance()->tilesDirectory()
+                    + QString::fromLatin1("/newtiledefinitions.tiles")));
         if (fileInfo.exists()) {
             mSettings.mTileDefFiles += fileInfo.absoluteFilePath();
         }

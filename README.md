@@ -81,6 +81,89 @@ confirmation. Keep a copy of the original binaries before editing source
 files. The command-line options `--export-lot-sources=<directory>` and
 `--import-lot-sources=<directory>` convert all complete cell triplets in a
 directory.
+`--check-lot-sources=<directory>` validates source files without replacing
+binary files. Directory conversion checks every cell and prepares its output
+before replacing destination files. Missing companion files and malformed
+UTF-8 are reported, and text syntax errors identify the file and line.
+Re-importing a source that produces identical binary data preserves the
+existing binary file and its modification time.
+
+The three LOT source files contain room and building metadata, sprite placement,
+and navigation data. Normal import rebuilds the binary triplet without
+recalculating navigation. Import does not rebuild the TMX, TBX or PZW project.
+Room names retain their leading and trailing spaces when importing source
+text, including text saved with Windows line endings.
+
+Enable **Recalculate navigation when importing .source files** in Generate
+Lots to derive ground-level collision data from edited placements and room
+rectangles. This option is off by default. It uses the selected TileDef
+directory and additional TileDef files registered in Preferences, including
+mod definitions and property patches. Missing definitions stop the operation
+before destination files are replaced. Rooms are collected from every header
+whose rectangles intersect an output cell, including buildings owned several
+cells away. Neighboring text headers take precedence over binary headers.
+Header-only neighbors provide room context without becoming import targets.
+Relevant binary-only neighbors are retained as .lotheader.source.context files
+so later recalculations keep their rooms after the binary headers are removed.
+Keep these context files with the sources and navigation references.
+The .source.dependencies reference records required neighboring headers.
+A missing required header stops recalculation before output replacement.
+The import runs with a progress window while the application remains responsive.
+
+Text exports also retain automatic navigation in
+`chunkdata_X_Y.bin.source.baseline`, the previous exported navigation in
+`chunkdata_X_Y.bin.source.previous`, and manual corrections in
+`chunkdata_X_Y.override.png`. Keep these files alongside the sources. They
+allow recalculation after the original binaries have been removed. Original
+binary triplets are required when upgrading older exports without these
+references. Use the definitions that match the original export for this
+upgrade. Differences from the original automatic collision rules are retained
+as manual corrections.
+
+Navigation-text edits and opaque correction pixels remain explicit overrides,
+including zero values that match an earlier automatic result. Project masks
+take precedence at their opaque pixels. Partial export coverage is preserved.
+Recalculation updates the navigation binary, its source, both references and
+the saved correction mask. The automatic result treats stairs as solid,
+respects water/tree exceptions and hoppable edges, and recognizes explicit
+`collideN` and `collideW` properties. Generate Lots uses the same collision rules.
+This data describes initial ground-level collision, not a complete 3D path graph.
+
+For command-line use, supply the base-game definitions and any mod definitions
+in load order. Inputs may be files or directories, and `.tiles.txt` is supported:
+
+~~~powershell
+.\PZWorldEd.exe --rebuild-lot-source-navigation="C:\Maps\Lots" --source-tiledef="C:\Game\media\tile_definitions" --source-tiledef="C:\Mods\Tiles\42\media\custom.tiles.txt"
+~~~
+
+Add `--rebuild-source-navigation` to `--check-lot-sources=<directory>` to check
+the full recalculation without writing outputs. An additional project mask
+can be supplied with `--source-override=x,y::path.png`. This option is repeatable
+for different cells. Explicit text selection takes precedence over its binary
+companion. Regular definitions and patches follow the supplied load order.
+
+Check Buildings groups selected Kids Bedroom and Rearrange Grid repairs by
+building and saves each changed TBX once. Selecting both a building and one
+of its issues does not apply that issue twice.
+
+Tile definitions can be loaded from binary `.tiles` files or their editable
+`.tiles.txt` companions. TileDefs opens either format and saves the binary
+file together with its text companion. Generate Lots, building tile properties,
+Loot and Create .pack also accept text definitions. Text `.patch.tiles.txt`
+files apply after their base definitions. Automatic discovery loads each
+binary/text pair once, using the binary when both are present. An explicitly
+configured text file remains selected.
+
+Game tile definitions are detected in `media/tile_definitions` and in the
+older `media` layout. Generate Lots also accepts the game root or either
+media directory and resolves the tile-definitions folder. Mod definitions
+retain their configured locations. Ladder direction uses the Build 42.22
+property names `ladderN`, `ladderS`, `ladderE` and `ladderW`.
+
+The [Build 42.22 property reference](docs/PZ-TileDef-Comparator-and-Snow-Editor.md#build-4222-property-reference)
+explains ladder directions and landings, the `Material` sound choice,
+door/window forcing properties, and `PickUpWeight` with `CustomItem`.
+
 LOT export removes the `.png` suffix from tilesheet names regardless of its
 letter case, so `.png` and `.PNG` sheets produce the same sprite names.
 
@@ -384,6 +467,19 @@ buildings and all placed tiles directly without retaining separate TBX files.
 
 Important additions include:
 
+- In Iso, Tiles and Attributes modes, **View > Show Walls** temporarily hides
+  walls, trims, wall overlays/grime, roof caps, frames, doors, windows and
+  curtains. Furniture remains visible. Toggle it with **Ctrl+Shift+W**.
+  Each floor's individual layer visibility is retained when walls are shown
+  again. This preview setting does not alter the building or exported map.
+- Right-click a room and choose **Pin Room Highlight** to keep that room
+  visible while moving the pointer elsewhere. Choose **Release Room Highlight**
+  to resume the pointer highlight. **View > Pin Room Highlight**, or
+  **Ctrl+Shift+H**, toggles the same state. The pin follows the document across
+  Iso, Tiles and Attributes modes. Changing floors, resizing or rotating the
+  building releases it. Both shortcuts can be changed in Keyboard Shortcuts.
+  Right-dragging an object still moves it. Use **Delete Object** in the
+  context menu to remove the object under the pointer.
 - Complete tileset discovery shared with TileZed and WorldEd
 - Layer-aware and floor-aware tile selection
 - Copy and cut preserve RoomDefs and room layouts together with selected tile
@@ -869,7 +965,7 @@ You're welcome. It was my pleasure.
 - [WorldGen editor](docs/PZ-B42.20-WorldGen-Editor-and-Prefabs.md)
 - [Procedural loot editor](docs/PZ-B42.20-Procedural-Loot-Editor.md)
 - [Pack comparator and extractor](docs/PZ-Pack-Comparator-and-Extractor.md)
-- [TileDef tools](docs/PZ-TileDef-Comparator-and-Snow-Editor.md)
+- [TileDef tools and Build 42.22 properties](docs/PZ-TileDef-Comparator-and-Snow-Editor.md)
 - [Logs and issue reports](docs/Diagnostics-and-Logs.md)
 - [Feature provenance](FEATURE_PROVENANCE.md)
 - [Upstream history](UPSTREAM-HISTORY.md)

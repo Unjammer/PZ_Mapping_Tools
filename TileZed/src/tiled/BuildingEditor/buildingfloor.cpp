@@ -16,6 +16,7 @@
  */
 
 #include "buildingfloor.h"
+#include "../../../../shared/tiledefinitionpaths.h"
 
 #include "building.h"
 #include "buildingobjects.h"
@@ -1737,7 +1738,7 @@ void TileDefWatcher::check()
     }
     for (int i = 0; i < mFiles.size(); ++i) {
         TileDefWatcherFile *patch = mFiles.at(i);
-        if (!patch->mFilePath.endsWith(QLatin1String(".patch.tiles"),
+        if (!TileDefinitionPaths::logicalName(patch->mFilePath).endsWith(QLatin1String(".patch.tiles"),
                                        Qt::CaseInsensitive))
             continue;
         for (int j = 0; j < i; ++j)

@@ -12,6 +12,39 @@ It exists because this repository combines two independent source histories
 into one source tree. The combined repository is therefore not represented by
 GitHub as a conventional fork of either upstream repository.
 
+## October 30, 2026 additions
+
+Alree / Unjammer connected BuildingEd's inherited wall-preview preference to
+the isometric views and added document-scoped pinned room highlights, following
+feedback from SocialMean1 and lulie. Window-frame selection now checks pending
+TileDefs before reading WindowShape. These changes do not port a new Tim Baker
+commit.
+
+## October 27, 2026 additions
+
+The Ladder direction control adapts Tim Baker's lowercase property names from
+[`7d004f22`](https://github.com/timbaker/tiled/commit/7d004f22d9b44dc81d1bfdeea2699ce6842d6e15)
+while retaining the existing control. Text TileDef readers retain the upstream
+`.tiles.txt` format. Shared path resolution and text loading in LOT generation,
+Loot and pack creation extend the maintained implementation.
+
+TileZed and WorldEd adapt Tim Baker's transient `invisible` tile-property
+serialization correction from
+[`ec9b004f`](https://github.com/timbaker/tiled/commit/ec9b004fc368292be2e7ffd10807f424aa8b3733).
+Check Buildings adapts the selection refresh protection from
+[`c83f2321`](https://github.com/timbaker/tiled/commit/c83f2321215195223a0ef00cebe601585c486d1b)
+and refreshes the Fix Selected button after rebuilding results.
+Selected building repairs also adapt the single-read and single-write grouping
+from [`7c64214c`](https://github.com/timbaker/tiled/commit/7c64214c2fa4991ee221279c394caf892322f931)
+to the maintained Kids Bedroom and Rearrange Grid operations.
+LOT source checking, directory-wide preparation and unchanged-output
+preservation extend the maintained import and export implementation.
+
+Alree / Unjammer added optional LOT source navigation recalculation with
+cross-cell room lookup, mod TileDef loading and persistent manual corrections.
+The maintained map exporter and source recalculation share the corrected
+collision rules, including stairs.
+
 ## October 24, 2026 additions
 
 WorldEd includes Tim Baker's west-wall trim correction from

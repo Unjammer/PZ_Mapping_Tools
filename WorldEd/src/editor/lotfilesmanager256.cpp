@@ -1532,9 +1532,30 @@ bool LotFilesWorker256::generateCell()
         return false;
     }
 
+    QStringList navigationDependencies;
+    if (lotSettings.exportTextSources) {
+        for (LotFile::Building *building : qAsConst(mRemovedBuildingList)) {
+            bool intersects = false;
+            for (LotFile::Room *room : qAsConst(building->RoomList)) {
+                if (room->floor == 0) {
+                    for (LotFile::RoomRect *rect : qAsConst(room->rects))
+                        intersects |= rect->bounds().intersects(QRect(0, 0, CELL_SIZE_256, CELL_SIZE_256));
+                }
+            }
+            if (!intersects)
+                continue;
+            const QRect bounds = building->calculateBounds();
+            const qint64 ownerX = qint64(cell256X) + qint64(std::floor(double(bounds.x()) / CELL_SIZE_256));
+            const qint64 ownerY = qint64(cell256Y) + qint64(std::floor(double(bounds.y()) / CELL_SIZE_256));
+            navigationDependencies.append(QStringLiteral("%1_%2.lotheader").arg(ownerX).arg(ownerY));
+        }
+    }
     if (lotSettings.exportTextSources
             && !LotSourceFiles::exportCell(lotsDirectory, cell256X,
-                                           cell256Y, &mError)) {
+                                             cell256Y, &mError,
+                                             mSourceNavigationBaseline,
+                                             mSourceNavigationOverrides,
+                                             navigationDependencies)) {
         mCombinedCellMaps->moveToThread(
                     mCombinedCellMaps->mMapComposite, qApp->thread());
         setStatus(Status::Error);
@@ -2541,13 +2562,16 @@ bool LotFilesWorker256::generateChunkData()
                 << mCell->chunkDataOverrideFilePath();
     }
     Navigate::ChunkDataFile256 cdf;
+    mSourceNavigationBaseline.clear();
+    mSourceNavigationOverrides = overrideImage;
     const QBitArray *selectedChunks = mPartialChunks.enabled()
             ? &mPartialChunks.selectedChunks() : nullptr;
     QString writeError;
     if (!cdf.fromMap(*mCombinedCellMaps,
                      mCombinedCellMaps->mMapComposite,
                      mRoomRectLookup, lotSettings, overrideImage,
-                     &writeError, selectedChunks)) {
+                     &writeError, selectedChunks,
+                     lotSettings.exportTextSources ? &mSourceNavigationBaseline : nullptr)) {
         mError = tr("Could not write chunk data for cell %1,%2:\n%3")
                 .arg(mCombinedCellMaps->mCell256X)
                 .arg(mCombinedCellMaps->mCell256Y)

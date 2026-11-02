@@ -36,6 +36,7 @@ INCLUDEPATH += ../../../shared
 INCLUDEPATH += ../../../shared/buildingcatalogue $$PWD/BuildingEditor
 HEADERS += ../../../shared/pztoolspaths.h
 HEADERS += ../../../shared/windowtrimvalidation.h
+HEADERS += ../../../shared/tiledefinitionpaths.h
 HEADERS += ../../../shared/tilesetimageloader.h
 HEADERS += ../../../shared/loadingdialog.h
 HEADERS += ../../../shared/startupwindowgeometry.h
@@ -254,6 +255,7 @@ HEADERS  += mainwindow.h \
     navigation/chunkdatafile256.h \
     navigation/isochunk256.h \
     navigation/isogridsquare256.h \
+    navigation/navigationflags.h \
     pngzonesdialog.h \
     shortcut/actionmanager.h \
     shortcut/keyboardshortcutfile.h \

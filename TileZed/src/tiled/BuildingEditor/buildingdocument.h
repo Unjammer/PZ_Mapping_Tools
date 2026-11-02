@@ -113,6 +113,12 @@ public:
     const QRegion &roomSelection() const
     { return mRoomSelection; }
 
+    QPoint pinnedRoomHighlight() const
+    { return mPinnedRoomHighlight; }
+    bool hasPinnedRoomHighlight() const
+    { return mPinnedRoomHighlight.x() >= 0; }
+    void setPinnedRoomHighlight(const QPoint &position);
+
     const QRegion &tileSelection() const
     { return mTileSelection; }
 
@@ -237,6 +243,7 @@ signals:
     void currentFloorChanged();
     void currentRoomChanged();
     void currentLayerChanged();
+    void pinnedRoomHighlightChanged();
 
     void roomAtPositionChanged(BuildingEditor::BuildingFloor *floor, const QPoint &pos);
     void roomDefinitionChanged();
@@ -307,6 +314,7 @@ private:
     QString mCurrentLayerName;
     QSet<BuildingObject*> mSelectedObjects;
     QRegion mRoomSelection;
+    QPoint mPinnedRoomHighlight = QPoint(-1, -1);
     QRegion mTileSelection;
     FloorTileGrid *mClipboardTiles;
     QRegion mClipboardTilesRgn;

@@ -195,6 +195,8 @@ public:
     void mouseMoveEvent(QGraphicsSceneMouseEvent *event);
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event);
 
+    void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) override;
+
     void setDocument(BuildingDocument *doc);
     void clearDocument();
 
@@ -237,6 +239,8 @@ public:
     bool editingAttributes() const { return mEditingAttributes; }
 
     void setCursorPosition(const QPoint &pos);
+    QPoint roomHighlightPosition() const;
+    void updateRoomHighlight();
 
     void calculateUnlitRoomMask();
     void applyDeferredUpdates();
@@ -289,6 +293,7 @@ private slots:
 
     void highlightFloorChanged(bool highlight);
     void highlightRoomChanged(bool highlight);
+    void showWallsChanged(bool show);
     void showLowerFloorsChanged(bool show);
 
     void showOnlyFloorsChanged(bool show);
@@ -337,6 +342,10 @@ private:
     QSet<BuildingFloor*> mDeferredWholeFloorTileUpdates;
     QMap<BuildingFloor*,QMap<QString,QRegion> > mDeferredFloorTileUpdates;
     QSet<BuildingFloor*> mPendingLayerVisibilityFloors;
+    QPointF mRightPressPosition;
+    QPointF mRightPressScenePosition;
+    bool mRightPressActive = false;
+    bool mRightPressDragged = false;
 };
 
 class BuildingIsoView : public QGraphicsView

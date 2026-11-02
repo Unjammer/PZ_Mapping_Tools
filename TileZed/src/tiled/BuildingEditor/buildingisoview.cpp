@@ -29,6 +29,7 @@
 #include "buildingtiles.h"
 #include "buildingtiletools.h"
 #include "buildingtools.h"
+#include "buildingundoredo.h"
 
 #include "mapcomposite.h"
 #include "mapmanager.h"
@@ -51,10 +52,12 @@
 #include <QApplication>
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QGraphicsSceneContextMenuEvent>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineF>
 #include <QLocale>
+#include <QMenu>
 #include <QScrollBar>
 #include <QSettings>
 #include <QStyleOptionGraphicsItem>
@@ -410,6 +413,8 @@ BuildingIsoScene::BuildingIsoScene(QObject *parent) :
             this, &BuildingIsoScene::highlightFloorChanged);
     connect(prefs(), &BuildingPreferences::highlightRoomChanged,
             this, &BuildingIsoScene::highlightRoomChanged);
+    connect(prefs(), &BuildingPreferences::showWallsChanged,
+            this, &BuildingIsoScene::showWallsChanged);
     connect(prefs(), &BuildingPreferences::showLowerFloorsChanged,
             this, &BuildingIsoScene::showLowerFloorsChanged);
     connect(prefs(), &BuildingPreferences::showOnlyFloorsChanged,
@@ -431,20 +436,89 @@ MapRenderer *BuildingIsoScene::mapRenderer() const
 
 void BuildingIsoScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (event->button() == Qt::RightButton) {
+        mRightPressPosition = event->screenPos();
+        mRightPressScenePosition = event->scenePos();
+        mRightPressActive = event->buttons() == Qt::RightButton;
+        mRightPressDragged = false;
+        if (mRightPressActive) {
+            event->accept();
+            return;
+        }
+    }
     if (mCurrentTool)
         mCurrentTool->mousePressEvent(event);
 }
 
 void BuildingIsoScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (!(event->buttons() & Qt::RightButton))
+        mRightPressActive = false;
+    if (mRightPressActive && (event->buttons() & Qt::RightButton)
+            && (event->screenPos() - mRightPressPosition).manhattanLength()
+            >= QApplication::startDragDistance() && !mRightPressDragged) {
+        mRightPressDragged = true;
+        QGraphicsSceneMouseEvent press(QEvent::GraphicsSceneMousePress);
+        press.setButton(Qt::RightButton);
+        press.setButtons(Qt::RightButton);
+        press.setScenePos(mRightPressScenePosition);
+        press.setScreenPos(mRightPressPosition.toPoint());
+        press.setModifiers(event->modifiers());
+        if (mCurrentTool)
+            mCurrentTool->mousePressEvent(&press);
+    }
+    if (mRightPressActive && !mRightPressDragged) {
+        event->accept();
+        return;
+    }
     if (mCurrentTool)
         mCurrentTool->mouseMoveEvent(event);
 }
 
 void BuildingIsoScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (event->button() == Qt::RightButton && mRightPressActive && !mRightPressDragged) {
+        event->accept();
+        return;
+    }
     if (mCurrentTool)
         mCurrentTool->mouseReleaseEvent(event);
+}
+
+void BuildingIsoScene::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
+{
+    if (!currentFloor() || (event->reason() == QGraphicsSceneContextMenuEvent::Mouse
+            && (!mRightPressActive || mRightPressDragged))) {
+        event->ignore();
+        return;
+    }
+    mRightPressActive = false;
+    const QPoint position = sceneToTile(event->scenePos(), currentLevel());
+    QMenu menu;
+    QAction *pin = menu.addAction(tr("Pin Room Highlight"));
+    pin->setEnabled(currentFloor()->GetRoomAt(position) != nullptr);
+    QAction *release = menu.addAction(tr("Release Room Highlight"));
+    release->setEnabled(mDocument->hasPinnedRoomHighlight());
+    BuildingObject *object = editingTiles() || editingAttributes()
+            ? nullptr : topmostObjectAt(event->scenePos());
+    QAction *remove = object ? menu.addAction(tr("Delete Object")) : nullptr;
+    menu.addSeparator();
+    QAction *walls = menu.addAction(tr("Show Walls"));
+    walls->setCheckable(true);
+    walls->setChecked(prefs()->showWalls());
+    QAction *selected = menu.exec(event->screenPos());
+    if (selected == pin) {
+        prefs()->setHighlightRoom(true);
+        mDocument->setPinnedRoomHighlight(position);
+    } else if (selected == release) {
+        mDocument->setPinnedRoomHighlight(QPoint(-1, -1));
+    } else if (selected == walls) {
+        prefs()->setShowWalls(walls->isChecked());
+    } else if (remove && selected == remove) {
+        mDocument->undoStack()->push(new RemoveObject(
+                    mDocument, currentFloor(), object->index()));
+    }
+    event->accept();
 }
 
 void BuildingIsoScene::setDocument(BuildingDocument *doc)
@@ -468,6 +542,9 @@ void BuildingIsoScene::setDocument(BuildingDocument *doc)
     mDeferredWholeFloorTileUpdates.clear();
     mDeferredFloorTileUpdates.clear();
     mPendingLayerVisibilityFloors.clear();
+    mHighlightRoomLock = false;
+    mHighlightRoomPos = QPoint(-1, -1);
+    mRightPressActive = false;
 
     qDeleteAll(mFloorItems);
     mFloorItems.clear();
@@ -519,6 +596,8 @@ void BuildingIsoScene::setDocument(BuildingDocument *doc)
             this, &BuildingIsoScene::currentFloorChanged);
     connect(mDocument, &BuildingDocument::currentLayerChanged,
             this, &BuildingIsoScene::currentLayerChanged);
+    connect(mDocument, &BuildingDocument::pinnedRoomHighlightChanged,
+            this, &BuildingIsoScene::updateRoomHighlight);
 
     connect(mDocument, &BuildingDocument::roomTilesChanged,
             this, &BuildingIsoScene::roomChanged);
@@ -927,8 +1006,20 @@ void BuildingIsoScene::setCursorPosition(const QPoint &pos)
     if (mHighlightRoomLock)
         return;
     mHighlightRoomPos = pos;
+    updateRoomHighlight();
+}
+
+QPoint BuildingIsoScene::roomHighlightPosition() const
+{
+    return mDocument && mDocument->hasPinnedRoomHighlight()
+            ? mDocument->pinnedRoomHighlight() : mHighlightRoomPos;
+}
+
+void BuildingIsoScene::updateRoomHighlight()
+{
     if (!currentFloor())
         return;
+    const QPoint pos = roomHighlightPosition();
     Room *room = prefs()->highlightRoom() ? currentFloor()->GetRoomAt(pos) : 0;
     if (room) {
         QRegion roomRegion;
@@ -1037,6 +1128,8 @@ void BuildingIsoScene::BuildingToMap()
 
     setSceneRect(mBuildingMap->mapComposite()->boundingRect(mBuildingMap->mapRenderer()));
     mDarkRectangle->setRect(sceneRect());
+    showWallsChanged(prefs()->showWalls());
+    updateRoomHighlight();
 }
 
 CompositeLayerGroupItem *BuildingIsoScene::itemForFloor(BuildingFloor *floor)
@@ -1160,8 +1253,19 @@ void BuildingIsoScene::applyPendingLayerVisibilityChanges()
         bool changed = false;
         for (TileLayer *layer : layerGroup->layers()) {
             const QString layerName = MapComposite::layerNameWithoutPrefix(layer);
+            const bool wallLayer = layerName == QLatin1String("Walls")
+                    || layerName == QLatin1String("Walls2")
+                    || layerName.startsWith(QLatin1String("WallTrim"))
+                    || layerName.startsWith(QLatin1String("WallOverlay"))
+                    || layerName.startsWith(QLatin1String("WallGrime"))
+                    || layerName.startsWith(QLatin1String("RoofCap"))
+                    || layerName == QLatin1String("Frames")
+                    || layerName == QLatin1String("Doors")
+                    || layerName == QLatin1String("Windows")
+                    || layerName.startsWith(QLatin1String("Curtains"));
             changed |= layerGroup->setLayerVisibility(
-                        layer, floor->layerVisibility(layerName));
+                        layer, floor->layerVisibility(layerName)
+                        && (prefs()->showWalls() || !wallLayer));
         }
         if (changed) {
             item->synchWithTileLayers();
@@ -1238,6 +1342,7 @@ void BuildingIsoScene::currentFloorChanged()
     if (BuildingFloor *floor = building()->floor(mCurrentLevel))
         mBuildingMap->suppressTiles(floor, QRegion());
     mCurrentLevel = currentLevel();
+    updateRoomHighlight();
 
     if ((mLoading == false) && prefs()->showOnlyFloors()) {
         showOnlyFloorsChanged(true);
@@ -1289,6 +1394,7 @@ void BuildingIsoScene::roomAtPositionChanged(BuildingFloor *floor, const QPoint 
     if (deferStructuralMapUpdate())
         return;
     mBuildingMap->roomAtPositionChanged(floor, pos);
+    updateRoomHighlight();
 }
 
 void BuildingIsoScene::roomDefinitionChanged()
@@ -1437,7 +1543,17 @@ void BuildingIsoScene::highlightFloorChanged(bool highlight)
 void BuildingIsoScene::highlightRoomChanged(bool highlight)
 {
     Q_UNUSED(highlight)
-    setCursorPosition(mHighlightRoomPos);
+    updateRoomHighlight();
+}
+
+void BuildingIsoScene::showWallsChanged(bool show)
+{
+    Q_UNUSED(show)
+    if (!mDocument || !mBuildingMap)
+        return;
+    for (BuildingFloor *floor : mDocument->building()->floors())
+        mPendingLayerVisibilityFloors.insert(floor);
+    applyPendingLayerVisibilityChanges();
 }
 
 void BuildingIsoScene::showLowerFloorsChanged(bool show)
@@ -1552,6 +1668,8 @@ void BuildingIsoScene::layersRecreated()
     addItem(mGridItem);
 
     highlightFloorChanged(prefs()->highlightFloor());
+    showWallsChanged(prefs()->showWalls());
+    updateRoomHighlight();
 }
 
 void BuildingIsoScene::mapResized()

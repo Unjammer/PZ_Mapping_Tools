@@ -2,6 +2,7 @@
 #define TILEWORKFLOWVALIDATION_H
 
 #include "clipboardmanager.h"
+#include "checkbuildingswindow.h"
 #include "curbtool.h"
 #include "erasetiles.h"
 #include "mapcomposite.h"
@@ -36,6 +37,9 @@ namespace Internal {
 
 inline bool validateLayerVisibility(QString *error)
 {
+    if (!CheckBuildingsWindow::validateSelectionRefresh(error)
+            || !CheckBuildingsWindow::validateFixBatch(error))
+        return false;
     QStringList failures;
     int checks = 0;
     const auto check = [&](bool valid, const QString &name) {

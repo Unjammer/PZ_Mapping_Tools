@@ -308,6 +308,16 @@
        </property>
       </widget>
      </item>
+     <item>
+      <widget class="QCheckBox" name="rebuildSourceNavigation">
+       <property name="text">
+        <string>Recalculate navigation when importing .source files</string>
+       </property>
+       <property name="toolTip">
+        <string>Uses neighboring room headers, the TileDef directory above and additional TileDef files registered in Preferences. Preserves navigation corrections and excluded areas.</string>
+       </property>
+      </widget>
+     </item>
     </layout>
    </widget>
   </item>

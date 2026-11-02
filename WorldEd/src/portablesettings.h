@@ -257,7 +257,13 @@ inline QString normalizedGamePath(const QString &candidate)
     if (!media.exists())
         return QString();
     const bool hasTileDefinitions = QFileInfo(media.filePath(
-                QLatin1String("newtiledefinitions.tiles"))).isFile();
+                QLatin1String("newtiledefinitions.tiles"))).isFile()
+            || QFileInfo(media.filePath(QLatin1String(
+                "tile_definitions/newtiledefinitions.tiles"))).isFile()
+            || QFileInfo(media.filePath(QLatin1String(
+                "tile_definitions/newtiledefinitions.tiles.txt"))).isFile()
+            || QFileInfo(media.filePath(QLatin1String(
+                "newtiledefinitions.tiles.txt"))).isFile();
     const bool hasLua = QDir(media.filePath(
                 QLatin1String("lua"))).exists();
     const bool hasPacks = QDir(media.filePath(

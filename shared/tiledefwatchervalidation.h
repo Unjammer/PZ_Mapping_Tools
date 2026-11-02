@@ -3,17 +3,165 @@
 
 #include "BuildingEditor/buildingfloor.h"
 #include "tiledeffile.h"
+#include "tiledefinitionpaths.h"
+#include "map.h"
+#include "mapwriter.h"
+#include "tile.h"
+#include "tileset.h"
+#ifdef WORLDED
+#include "navigation/isogridsquare256.h"
+#include "world.h"
+#endif
 
 #include <QElapsedTimer>
+#include <QBuffer>
 #include <QDataStream>
 #include <QFile>
 #include <QTemporaryDir>
 
 namespace TileDefWatcherValidation {
 
+inline bool validateMapProperties(QString *error)
+{
+    Tiled::Tileset tiles(QStringLiteral("property_validation"), 64, 128);
+    QImage image(64, 128, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    if (!tiles.loadFromImage(image, QStringLiteral("property_validation.png")))
+        return false;
+    Tiled::Tile *tile = tiles.tileAt(0);
+    tile->setProperty(QStringLiteral("invisible"), QString());
+    tile->setProperty(QStringLiteral("custom"), QStringLiteral("retained"));
+    Tiled::Map map(Tiled::Map::Isometric, 1, 1, 64, 128);
+    map.addTileset(&tiles);
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    Tiled::MapWriter writer;
+    writer.writeMap(&map, &buffer);
+    const QByteArray xml = buffer.data();
+    if (xml.contains("name=\"invisible\"")
+            || !xml.contains("name=\"custom\"")
+            || !tile->properties().contains(QStringLiteral("invisible"))) {
+        *error = QStringLiteral("TMX serialization changed persistent or cached tile properties");
+        return false;
+    }
+    return true;
+}
+
+inline bool validateTextDefinitions(QString *error)
+{
+    using namespace Tiled::Internal;
+#ifndef WORLDED
+    if (TilePropertyMgr::instance()->properties().mProperties.isEmpty()
+            && !TilePropertyMgr::instance()->readTxt()) {
+        *error = TilePropertyMgr::instance()->errorString();
+        return false;
+    }
+#endif
+    QTemporaryDir directory;
+    if (!directory.isValid())
+        return false;
+    const QString game = directory.filePath(QStringLiteral("game"));
+    const QString media = game + QStringLiteral("/media");
+    const QString definitions = media + QStringLiteral("/tile_definitions");
+    if (!QDir().mkpath(definitions))
+        return false;
+    const QString primary = definitions + QStringLiteral("/newtiledefinitions.tiles.txt");
+    const QString patch = definitions + QStringLiteral("/tiledefinitions_noiseworks.patch.tiles.txt");
+    const auto writeText = [&](const QString &path, const QString &value) {
+        QFile file(path);
+        const QByteArray data = QStringLiteral(
+                    "version = 1\ntileset\n{\n file = walls_validation_text\n"
+                    " size = 8,8\n id = 1\n tile\n {\n xy = 0,0\n"
+                    " GrimeType = %1\n ladderN = true\n }\n}\n")
+                .arg(value).toUtf8();
+        return file.open(QIODevice::WriteOnly)
+                && file.write(data) == data.size() && file.flush();
+    };
+    if (!writeText(primary, QStringLiteral("base"))
+            || !writeText(patch, QStringLiteral("patch")))
+        return false;
+    const QString name = QStringLiteral("newtiledefinitions.tiles");
+    const QString selected = TileDefinitionPaths::gameFile(game, name);
+    const QStringList files = TileDefinitionPaths::files(game);
+    if (selected != QFileInfo(primary).canonicalFilePath()
+            || TileDefinitionPaths::directory(media) != QFileInfo(definitions).canonicalFilePath()
+            || files.size() != 2 || files.first() != name + QStringLiteral(".txt")) {
+        *error = QStringLiteral("Text-only game definitions were not discovered in runtime order");
+        return false;
+    }
+    const QStringList configured = TileDefinitionPaths::configuredFiles(
+                {media + QLatin1Char('/') + name}, game, QString());
+    if (configured.size() != 2
+            || QDir::fromNativeSeparators(configured.first()) != selected) {
+        *error = QStringLiteral("Missing legacy definition paths were not resolved to text");
+        return false;
+    }
+    TileDefWatcher watcher;
+    watcher.preferencesChanged({primary, patch});
+    watcher.check();
+    TileDefTile *tile = watcher.tile(QStringLiteral("walls_validation_text"), 0);
+    if (!tile || tile->mProperties.value(QStringLiteral("GrimeType")) != QStringLiteral("patch")
+            || !tile->mProperties.contains(QStringLiteral("ladderN"))) {
+        *error = QStringLiteral("Text tile-property patches were not applied");
+        return false;
+    }
+#ifndef WORLDED
+    bool ladderKeys = false;
+    for (TileDefProperty *property : TilePropertyMgr::instance()->properties().mProperties) {
+        if (property->mName == QStringLiteral("Ladder direction")) {
+            EnumTileDefProperty *ladder = property->asEnum();
+            ladderKeys = ladder && ladder->mShortEnums.contains(QStringLiteral("ladderN"))
+                    && ladder->mShortEnums.contains(QStringLiteral("ladderS"))
+                    && ladder->mShortEnums.contains(QStringLiteral("ladderE"))
+                    && ladder->mShortEnums.contains(QStringLiteral("ladderW"));
+        }
+    }
+    if (!ladderKeys) {
+        *error = QStringLiteral("Ladder controls do not use the runtime property names");
+        return false;
+    }
+#endif
+#ifdef WORLDED
+    const auto previous = Navigate::IsoGridSquare256::mTileDefFiles;
+    Navigate::IsoGridSquare256::mTileDefFiles.clear();
+    GenerateLotsSettings settings;
+    settings.tileDefFolder = media;
+    const bool loaded = Navigate::IsoGridSquare256::loadTileDefFiles(settings, *error);
+    const auto loadedFiles = Navigate::IsoGridSquare256::mTileDefFiles;
+    bool exportedPatch = loaded && loadedFiles.size() == 1;
+    if (exportedPatch) {
+        TileDefTileset *sheet = loadedFiles.first()->tileset(QStringLiteral("walls_validation_text"));
+        exportedPatch = sheet && sheet->tileAt(0)->mProperties.value(
+                    QStringLiteral("GrimeType")) == QStringLiteral("patch");
+    }
+    qDeleteAll(loadedFiles);
+    Navigate::IsoGridSquare256::mTileDefFiles = previous;
+    if (!exportedPatch) {
+        if (error->isEmpty())
+            *error = QStringLiteral("Generate Lots did not load and merge text definitions");
+        return false;
+    }
+#else
+    TileDefFile decoded;
+    TileDefFileReader reader;
+    if (!reader.read(primary, decoded) || !decoded.write(definitions + QLatin1Char('/') + name)) {
+        *error = decoded.errorString();
+        return false;
+    }
+    if (TileDefinitionPaths::files(game).size() != 2
+            || TileDefinitionPaths::gameFile(game, name).endsWith(QStringLiteral(".txt"))) {
+        *error = QStringLiteral("Binary and text companions were loaded twice");
+        return false;
+    }
+#endif
+    return true;
+}
+
 inline bool run(QString *summary, QString *error)
 {
     using namespace Tiled::Internal;
+    if (!validateTextDefinitions(error) || !validateMapProperties(error))
+        return false;
     QTemporaryDir directory;
     if (!directory.isValid()) {
         *error = QStringLiteral("Could not create tile-property validation directory");
@@ -148,7 +296,7 @@ inline bool run(QString *summary, QString *error)
         }
     }
     const double repeatedMs = timer.nsecsElapsed() / 1000000.0;
-    *summary = QStringLiteral("overlay order, unchanged checks, edits, deletion, removal and base reload passed. "
+    *summary = QStringLiteral("text definitions, paths, patches, ladder keys, overlay order, unchanged checks, edits, deletion, removal and base reload passed. "
                               "Configured files %1, cached 10000 checks %2 ms, repeated 100 merges %3 ms, merged tiles %4")
             .arg(configured.mFiles.size()).arg(cachedMs, 0, 'f', 3)
             .arg(repeatedMs, 0, 'f', 3).arg(mergedTiles);

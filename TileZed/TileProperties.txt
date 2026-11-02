@@ -1506,14 +1506,14 @@ property
     Enums
     {
         None =
-        South = LadderS
-        East = LadderE
-        North = LadderN
-        West = LadderW
+        South = ladderS
+        East = ladderE
+        North = ladderN
+        West = ladderW
     }
     Default = None
     ValueAsPropertyName = true
-    ToolTip = <p><b>Engine keys:</b> LadderS, LadderE, LadderN and LadderW.</p><p>Directional ladder flags present in the official Build 42 tile definitions. The game registers these properties dynamically from the .tiles files.</p>
+    ToolTip = <p>Defines the direction of a climbable ladder using ladderN, ladderS, ladderE or ladderW.</p>
 }
 separator
 {

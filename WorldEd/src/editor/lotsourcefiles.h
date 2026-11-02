@@ -11,16 +11,32 @@
 #define LOTSOURCEFILES_H
 
 #include <QString>
+#include <QMap>
+#include <QStringList>
+#include <QImage>
 
 class LotSourceFiles
 {
 public:
+    struct NavigationOptions
+    {
+        QStringList tileDefinitions;
+        QMap<QString, QString> overrides;
+    };
+
     static bool exportCell(const QString &directory, int cellX, int cellY,
-                           QString *error);
+                           QString *error,
+                           const QByteArray &automaticNavigation = QByteArray(),
+                           const QImage &overrides = QImage(),
+                           const QStringList &roomDependencies = QStringList());
     static bool importCell(const QString &directory, int cellX, int cellY,
                            QString *error);
     static bool processDirectory(const QString &directory, bool import,
-                                 int *cellCount, QString *error);
+                                 int *cellCount, QString *error,
+                                 bool checkOnly = false,
+                                 const NavigationOptions *navigation = nullptr);
+    static bool validate(QString *error);
+    static bool validateNavigation(QString *error);
 };
 
 #endif
