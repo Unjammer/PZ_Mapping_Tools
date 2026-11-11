@@ -2,6 +2,7 @@
 #define TILESETIMAGELOADERVALIDATION_H
 
 #include "tilesetimageloader.h"
+#include "tilesetimagepaths.h"
 #include "tile.h"
 
 #include <QCoreApplication>
@@ -11,6 +12,67 @@
 
 namespace TilesetImageLoaderValidation {
 
+inline bool validatePaths(const QTemporaryDir &directory, QString *error)
+{
+    const QString root = directory.path();
+    const QString doubled = directory.filePath(QStringLiteral("2x"));
+    const QString game = doubled + QStringLiteral("/Tiles2x.pack");
+    const QString overlays = doubled + QStringLiteral("/Overlays2x.pack");
+    const QString custom = root + QStringLiteral("/custom");
+    for (const QString &path : {game, overlays, custom}) {
+        if (!QDir().mkpath(path)) {
+            *error = QStringLiteral("Cannot create a tileset resolution fixture directory");
+            return false;
+        }
+    }
+    const QString name = QStringLiteral("fixtures_overlay_counters_01");
+    const QString filename = name + QStringLiteral(".png");
+    const QString original = game + QLatin1Char('/') + filename;
+    const QString secondary = overlays + QLatin1Char('/') + filename;
+    const QString loose = doubled + QLatin1Char('/') + filename;
+    const QString single = custom + QLatin1Char('/') + filename;
+    QImage image(128, 256, QImage::Format_ARGB32);
+    image.fill(Qt::red);
+    if (!image.save(original) || !image.save(secondary) || !image.save(single)) {
+        *error = QStringLiteral("Cannot write tileset resolution fixtures");
+        return false;
+    }
+
+    TilesetImagePaths paths;
+    const auto resolves = [&](const QString &expected, int expectedScale) {
+        QString path1x, path2x;
+        int scale = 0;
+        return paths.find(root, doubled, name, path1x, path2x, &scale)
+                && scale == expectedScale && (scale == 2 ? path2x : path1x) == expected;
+    };
+    if (!resolves(original, 2) || !image.save(loose)) {
+        *error = QStringLiteral("Duplicate stock sheets did not follow the game pack order");
+        return false;
+    }
+    paths.clear();
+    if (!resolves(loose, 2) || !QFile::remove(loose)) {
+        *error = QStringLiteral("A loose 2x sheet did not override the extracted packs");
+        return false;
+    }
+    QFile corrupt(original);
+    if (!corrupt.open(QIODevice::WriteOnly) || corrupt.write("invalid image") != 13) {
+        *error = QStringLiteral("Cannot create the unreadable 2x fixture");
+        return false;
+    }
+    corrupt.close();
+    paths.clear();
+    if (!resolves(secondary, 2) || !QFile::remove(secondary)) {
+        *error = QStringLiteral("A readable duplicate did not replace the unreadable primary sheet");
+        return false;
+    }
+    paths.clear();
+    if (!resolves(single, 1)) {
+        *error = QStringLiteral("The nested 1x fallback was not resolved after removing the 2x sheets");
+        return false;
+    }
+    return true;
+}
+
 inline bool run(QString *summary, QString *error)
 {
     QTemporaryDir directory;
@@ -18,6 +80,8 @@ inline bool run(QString *summary, QString *error)
         *error = QStringLiteral("Cannot create image validation directory");
         return false;
     }
+    if (!validatePaths(directory, error))
+        return false;
     QImage png(259, 263, QImage::Format_ARGB32);
     for (int y = 0; y < png.height(); ++y) {
         for (int x = 0; x < png.width(); ++x) {
@@ -133,7 +197,7 @@ inline bool run(QString *summary, QString *error)
         *error = QStringLiteral("Image pixels, geometry, completion thread or shutdown differed");
         return false;
     }
-    *summary = QStringLiteral("48 image and cache comparisons, completion progress, queued completion, input isolation, shutdown, %1 workers")
+    *summary = QStringLiteral("Pack order, loose overrides, 1x fallback, 48 image and cache comparisons, completion progress, queued completion, input isolation, shutdown, %1 workers")
             .arg(loader.workerCount());
     return true;
 }

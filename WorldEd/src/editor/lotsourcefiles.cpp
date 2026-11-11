@@ -999,71 +999,14 @@ bool sourceText(const QByteArray &bytes, const QString &path, QString *text, QSt
 class NavigationDefinitions
 {
 public:
-    ~NavigationDefinitions() { qDeleteAll(mFiles); }
-
     bool load(const QStringList &paths, QString *error)
     {
-        QStringList files;
-        QMap<QString, int> pairs;
-        QSet<QString> explicitPairs;
-        const auto append = [&](const QString &path, bool explicitFile) {
-            const QString pair = QFileInfo(path).canonicalPath().toLower() + QLatin1Char('/')
-                    + TileDefinitionPaths::logicalName(path).toLower();
-            if (pairs.contains(pair)) {
-                if (explicitFile || !explicitPairs.contains(pair))
-                    files[pairs.value(pair)] = path;
-            } else {
-                pairs.insert(pair, files.size());
-                files.append(path);
-            }
-            if (explicitFile)
-                explicitPairs.insert(pair);
-        };
-        for (const QString &path : paths) {
-            if (QFileInfo(path).isDir()) {
-                const QDir directory(TileDefinitionPaths::directory(path));
-                const QStringList discovered = TileDefinitionPaths::files(path);
-                for (bool patch : {false, true}) {
-                    for (const QString &name : discovered) {
-                        if (TileDefinitionPaths::logicalName(name).endsWith(
-                                    QStringLiteral(".patch.tiles"), Qt::CaseInsensitive) == patch)
-                            append(directory.filePath(name), false);
-                    }
-                }
-            } else {
-                const QString resolved = TileDefinitionPaths::existingFile(path);
-                if (resolved.isEmpty()) {
-                    *error = QStringLiteral("Tile definition file not found: %1").arg(path);
-                    return false;
-                }
-                append(resolved, true);
-            }
-        }
-        QSet<QString> seen;
-        for (const QString &path : files) {
-            const QString canonical = QFileInfo(path).canonicalFilePath();
-            if (seen.contains(canonical.toLower()))
-                continue;
-            seen.insert(canonical.toLower());
-            std::unique_ptr<TileDefFile> file(new TileDefFile);
-            TileDefFileReader reader;
-            if (!reader.read(path, *file)) {
-                *error = file->errorString();
-                return false;
-            }
-            if (TileDefinitionPaths::logicalName(path).endsWith(
-                        QStringLiteral(".patch.tiles"), Qt::CaseInsensitive)) {
-                for (TileDefFile *base : mFiles)
-                    base->mergePropertiesFrom(*file);
-            } else {
-                mFiles.append(file.release());
-            }
-        }
-        if (mFiles.isEmpty()) {
-            *error = QStringLiteral("Choose base-game and mod tile definitions before rebuilding navigation");
+        if (!mDefinitions.load(paths, *error))
             return false;
-        }
-        return true;
+        if (!mDefinitions.sheets().isEmpty())
+            return true;
+        *error = QStringLiteral("Choose base-game and mod tile definitions before rebuilding navigation");
+        return false;
     }
 
     const QMap<QString, QString> *properties(const QString &name, QString *error) const
@@ -1078,15 +1021,9 @@ public:
         bool valid = false;
         const int index = name.mid(split + 1).toInt(&valid);
         if (split > 0 && valid && index >= 0) {
-            for (auto it = mFiles.crbegin(); it != mFiles.crend(); ++it) {
-                TileDefFile *file = *it;
-                if (TileDefTileset *sheet = file->tileset(name.left(split))) {
-                    if (TileDefTile *tile = sheet->tileAt(index)) {
-                        mProperties.insert(name, &tile->mProperties);
-                        return &tile->mProperties;
-                    }
-                    break;
-                }
+            if (const auto *tile = mDefinitions.tile(name.left(split), index)) {
+                mProperties.insert(name, &tile->mProperties);
+                return &tile->mProperties;
             }
         }
         *error = QStringLiteral("Missing tile definition for sprite %1. Add its mod TileDefs.").arg(name);
@@ -1094,7 +1031,7 @@ public:
     }
 
 private:
-    QList<TileDefFile *> mFiles;
+    Navigate::IsoGridSquare256::Definitions mDefinitions;
     mutable QHash<QString, const QMap<QString, QString> *> mProperties;
 };
 
@@ -1242,8 +1179,8 @@ bool calculateNavigation(const Header &header, const QVector<Chunk> &chunks,
             for (auto square = chunks.at(chunk).cbegin(); square != chunks.at(chunk).cend(); ++square) {
                 if (header.minLevel + square.key() / 64 != 0)
                     continue;
-                const int x = (chunk % 32) * 8 + (square.key() / 8) % 8;
-                const int y = (chunk / 32) * 8 + square.key() % 8;
+                const int x = (chunk / CellSide) * ChunkSide + (square.key() / ChunkSide) % ChunkSide;
+                const int y = (chunk % CellSide) * ChunkSide + square.key() % ChunkSide;
                 const int position = x + y * 256;
                 if (coverage.at(position) & 32)
                     continue;
@@ -1672,11 +1609,12 @@ bool LotSourceFiles::validateNavigation(QString *error)
         sheet->resize(1, 1);
         sheet->tileAt(0)->mProperties.insert(QStringLiteral("stairsTN"), QString());
         definitions.insertTileset(0, sheet);
-        const auto saved = Navigate::IsoGridSquare256::mTileDefFiles;
+        const auto saved = Navigate::IsoGridSquare256::mTileDefinitions;
         const auto restore = qScopeGuard([&]() {
-            Navigate::IsoGridSquare256::mTileDefFiles = saved;
+            Navigate::IsoGridSquare256::mTileDefinitions = saved;
         });
-        Navigate::IsoGridSquare256::mTileDefFiles = {&definitions};
+        Navigate::IsoGridSquare256::mTileDefinitions = {};
+        Navigate::IsoGridSquare256::mTileDefinitions.add(definitions);
         Tiled::Tileset tiles(QStringLiteral("export_stairs"), 64, 128);
         tiles.loadFromNothing(QSize(64, 128), QStringLiteral("export_stairs"));
         Tiled::Map map(Tiled::Map::LevelIsometric, 8, 8, 64, 32);
@@ -1791,7 +1729,9 @@ bool LotSourceFiles::validateNavigation(QString *error)
         Square square;
         square.roomId = -1;
         square.tileIds = tiles;
-        (*target)[x / 8 + (y / 8) * 32].insert(z * 64 + (x % 8) * 8 + y % 8, square);
+        const int chunk = (x / ChunkSide) * CellSide + y / ChunkSide;
+        const int position = z * ChunkSide * ChunkSide + (x % ChunkSide) * ChunkSide + y % ChunkSide;
+        (*target)[chunk].insert(position, square);
     };
     for (int x = 0; x < 9; ++x)
         place(&chunks, x, 0, {x == 5 ? 1 : 0});
@@ -1825,6 +1765,8 @@ bool LotSourceFiles::validateNavigation(QString *error)
         place(&chunks, x, 0, {1});
     place(&chunks, 6, 0, {3});
     place(&chunks, 7, 0, {2, 4});
+    place(&chunks, 8, 1, {3});
+    place(&chunks, 1, 8, {0});
     QVector<quint8> edited = previous;
     edited[4] = 16;
     edited[8] = 0;
@@ -1865,6 +1807,10 @@ bool LotSourceFiles::validateNavigation(QString *error)
             || result[4] != 16 || result[5] != 1 || result[6] != 5
             || result[7] != 0 || result[8] != 0 || result[255 + 255 * 256] != 32) {
         *error = QStringLiteral("Navigation lost stairs, mod patches, manual values or partial coverage");
+        return false;
+    }
+    if (result[8 + 256] != 5 || result[1 + 8 * 256] != 0) {
+        *error = QStringLiteral("Navigation transposed the chunk coordinates from LOT source");
         return false;
     }
     for (int x = 0; x < 12; ++x) {

@@ -1,6 +1,14 @@
 #include "biomemapimageprocessor.h"
 #include <QHash>
 #include <QStringList>
+#include <array>
+
+static QImage packedPixels(const QImage &image)
+{
+    if (image.format() == QImage::Format_RGB32 || image.format() == QImage::Format_ARGB32)
+        return image;
+    return image.convertToFormat(QImage::Format_ARGB32);
+}
 const QList<BiomeMapImageProcessor::PaletteEntry> &
 BiomeMapImageProcessor::palette()
 {
@@ -101,6 +109,20 @@ QColor BiomeMapImageProcessor::displayColor(int value)
         return entry->color;
     return QColor(value, value, value);
 }
+
+int BiomeMapImageProcessor::zoneValueForName(const QString &name)
+{
+    static const QHash<QString, int> values = [] {
+        QHash<QString, int> result;
+        for (const auto &entry : palette()) {
+            const QString zone = entry.zone.toLower();
+            if (!result.contains(zone) || entry.value == 255)
+                result.insert(zone, entry.value);
+        }
+        return result;
+    }();
+    return values.value(name.toLower(), -1);
+}
 const QSet<int> &BiomeMapImageProcessor::knownValues()
 {
     static const QSet<int> values = [] {
@@ -124,44 +146,50 @@ const QSet<int> &BiomeMapImageProcessor::overrideValues()
     return values;
 }
 QImage BiomeMapImageProcessor::createBiomeLayer(const QImage &mainImage,
-                                                const QImage &vegetationImage,
-                                                QSet<QRgb> *unknownColors)
+                                               const QImage &vegetationImage,
+                                               QSet<QRgb> *unknownColors,
+                                               bool useVegitationOverride)
 {
     if (mainImage.isNull() || vegetationImage.isNull() ||
             mainImage.size() != vegetationImage.size())
         return QImage();
-    static const QHash<QRgb, int> biomeForColor = {
-        {qRgb(0, 138, 255), 0},
-        {qRgb(100, 100, 100), 64},
-        {qRgb(120, 120, 120), 115},
-        {qRgb(165, 160, 140), 115},
-        {qRgb(145, 135, 60), 171},
-        {qRgb(145, 135, 61), 171},
-        {qRgb(90, 100, 35), 171},
-        {qRgb(117, 117, 47), 171},
-        {qRgb(120, 70, 20), 141},
-        {qRgb(0, 255, 0), 204},
-        {qRgb(64, 0, 0), 153},
-        {qRgb(255, 0, 0), 153},
-        {qRgb(127, 0, 0), 255},
-        {qRgb(255, 0, 255), 192},
-        {qRgb(210, 200, 160), 102},
-        {qRgb(140, 70, 15), 102},
-        {qRgb(255, 128, 0), 128},
-        {qRgb(220, 100, 0), 128}
-    };
+    static const QHash<QRgb, int> biomeForColor = [] {
+        QHash<QRgb, int> result = {
+            {qRgb(0, 0, 0), 0},
+            {qRgb(120, 120, 120), 115},
+            {qRgb(145, 135, 61), 171},
+            {qRgb(90, 100, 35), 171},
+            {qRgb(117, 117, 47), 171},
+            {qRgb(80, 55, 20), 64},
+            {qRgb(110, 100, 100), 64},
+            {qRgb(130, 120, 120), 64},
+            {qRgb(255, 0, 0), 153},
+            {qRgb(140, 70, 15), 102},
+            {qRgb(220, 100, 0), 128}
+        };
+        for (const auto &entry : palette())
+            result.insert(entry.color.rgb(), entry.value);
+        return result;
+    }();
     if (unknownColors)
         unknownColors->clear();
+    const QImage ground = packedPixels(mainImage);
+    const QImage plants = packedPixels(vegetationImage);
     QImage result(mainImage.size(), QImage::Format_ARGB32);
+    if (ground.isNull() || plants.isNull() || result.isNull())
+        return {};
     for (int y = 0; y < result.height(); ++y) {
+        const auto *groundLine = reinterpret_cast<const QRgb *>(ground.constScanLine(y));
+        const auto *plantsLine = reinterpret_cast<const QRgb *>(plants.constScanLine(y));
         QRgb *output = reinterpret_cast<QRgb*>(result.scanLine(y));
         for (int x = 0; x < result.width(); ++x) {
-            const QRgb vegetation = vegetationImage.pixel(x, y);
-            const QRgb source = qRed(vegetation) == 0 && qGreen(vegetation) == 0 &&
-                    qBlue(vegetation) == 0 ? mainImage.pixel(x, y) : vegetation;
-            const QRgb rgb = qRgb(qRed(source), qGreen(source), qBlue(source));
+            const QRgb vegetation = plantsLine[x];
+            const QRgb source = qAlpha(vegetation) == 0 || (vegetation & 0x00ffffff) == 0
+                    ? groundLine[x] : vegetation;
+            const QRgb rgb = source | 0xff000000;
             const auto it = biomeForColor.constFind(rgb);
-            const int value = it == biomeForColor.constEnd() ? qRed(rgb) : it.value();
+            const int mapped = it == biomeForColor.constEnd() ? 64 : it.value();
+            const int value = mapped == 171 && !useVegitationOverride ? 64 : mapped;
             if (it == biomeForColor.constEnd() && unknownColors)
                 unknownColors->insert(rgb);
             output[x] = qRgb(value, value, value);
@@ -177,28 +205,49 @@ QImage BiomeMapImageProcessor::process(const QImage &biomeLayer,
         return QImage();
     }
     QImage result(biomeLayer.size(), QImage::Format_ARGB32);
+    const QImage biomes = packedPixels(biomeLayer);
+    const QImage zones = packedPixels(zoneLayer);
+    if (biomes.isNull() || zones.isNull() || result.isNull())
+        return {};
     for (int y = 0; y < result.height(); ++y) {
+        const auto *red = reinterpret_cast<const QRgb *>(biomes.constScanLine(y));
+        const auto *green = reinterpret_cast<const QRgb *>(zones.constScanLine(y));
         QRgb *output = reinterpret_cast<QRgb *>(result.scanLine(y));
         for (int x = 0; x < result.width(); ++x) {
-            const int biome = qRed(biomeLayer.pixel(x, y));
-            const int zone = qGreen(zoneLayer.pixel(x, y));
+            const int biome = qRed(red[x]);
+            const int zone = qGreen(green[x]);
             output[x] = qRgba(biome, zone, 0, 255);
         }
     }
     return result;
 }
 BiomeMapImageProcessor::Analysis BiomeMapImageProcessor::analyze(
-        const QImage &biomeLayer, const QImage &zoneLayer, int chunkSize)
+        const QImage &biomeLayer, const QImage &zoneLayer,
+        const QPoint &worldOrigin, int chunkSize)
 {
     Analysis result;
     if (biomeLayer.isNull() || zoneLayer.isNull() ||
             biomeLayer.size() != zoneLayer.size() || chunkSize <= 0)
         return result;
-    for (int y = 0; y < biomeLayer.height(); ++y) {
+    const QImage biomes = packedPixels(biomeLayer);
+    const QImage zones = packedPixels(zoneLayer);
+    if (biomes.isNull() || zones.isNull())
+        return result;
+    std::array<bool, 256> usedBiomes{};
+    std::array<bool, 256> usedZones{};
+    for (int y = 0; y < biomes.height(); ++y) {
+        const auto *red = reinterpret_cast<const QRgb *>(biomes.constScanLine(y));
+        const auto *green = reinterpret_cast<const QRgb *>(zones.constScanLine(y));
         for (int x = 0; x < biomeLayer.width(); ++x) {
-            result.biomeValues.insert(qRed(biomeLayer.pixel(x, y)));
-            result.zoneValues.insert(qGreen(zoneLayer.pixel(x, y)));
+            usedBiomes[qRed(red[x])] = true;
+            usedZones[qGreen(green[x])] = true;
         }
+    }
+    for (int value = 0; value < 256; ++value) {
+        if (usedBiomes[value])
+            result.biomeValues.insert(value);
+        if (usedZones[value])
+            result.zoneValues.insert(value);
     }
     result.unknownBiomeValues = result.biomeValues - knownValues();
     result.unknownZoneValues = result.zoneValues - knownValues();
@@ -210,13 +259,23 @@ BiomeMapImageProcessor::Analysis BiomeMapImageProcessor::analyze(
     }
     result.valuesRequiringOverride =
             (result.biomeValues | result.zoneValues) & overrideValues();
-    for (int y = 0; y < zoneLayer.height(); y += chunkSize) {
-        for (int x = 0; x < zoneLayer.width(); x += chunkSize) {
-            const int first = qGreen(zoneLayer.pixel(x, y));
+    const auto firstChunk = [chunkSize](int coordinate) {
+        return -((coordinate % chunkSize + chunkSize) % chunkSize);
+    };
+    const int firstColumn = firstChunk(worldOrigin.x());
+    for (int top = firstChunk(worldOrigin.y()); top < zones.height(); top += chunkSize) {
+        const int y = qMax(0, top);
+        const int bottom = qMin(top + chunkSize, zones.height());
+        const auto *firstRow = reinterpret_cast<const QRgb *>(zones.constScanLine(y));
+        for (int left = firstColumn; left < zones.width(); left += chunkSize) {
+            const int x = qMax(0, left);
+            const int right = qMin(left + chunkSize, zones.width());
+            const int first = qGreen(firstRow[x]);
             bool mixed = false;
-            for (int yy = y; yy < qMin(y + chunkSize, zoneLayer.height()) && !mixed; ++yy) {
-                for (int xx = x; xx < qMin(x + chunkSize, zoneLayer.width()); ++xx) {
-                    if (qGreen(zoneLayer.pixel(xx, yy)) != first) {
+            for (int yy = y; yy < bottom && !mixed; ++yy) {
+                const auto *row = reinterpret_cast<const QRgb *>(zones.constScanLine(yy));
+                for (int xx = x; xx < right; ++xx) {
+                    if (qGreen(row[xx]) != first) {
                         mixed = true;
                         break;
                     }
@@ -275,7 +334,7 @@ bool BiomeMapImageProcessor::validateConfiguration(QString *errorString)
         if (errorString) {
             *errorString = QStringLiteral(
                         "The embedded BiomeMapConfig mapping does not match "
-                        "the verified Build 42.20 table.");
+                        "the verified Build 42.22.2 table.");
         }
         return false;
     }
@@ -302,7 +361,7 @@ bool BiomeMapImageProcessor::validateConfiguration(QString *errorString)
     biome.setPixel(1, 0, qRgb(171, 171, 171));
     zone.setPixel(0, 0, qRgb(64, 64, 64));
     zone.setPixel(1, 0, qRgb(171, 171, 171));
-    const Analysis analysis = analyze(biome, zone, 8);
+    const Analysis analysis = analyze(biome, zone);
     if (!analysis.unknownBiomeValues.isEmpty() ||
             !analysis.unknownZoneValues.isEmpty() ||
             analysis.biomeValuesWithoutEffect.contains(254) ||
@@ -312,6 +371,58 @@ bool BiomeMapImageProcessor::validateConfiguration(QString *errorString)
                         "BiomeMap configuration analysis did not preserve "
                         "active, neutral, and override-only semantics.");
         }
+        return false;
+    }
+
+    QImage colors(palette().size() + 3, 1, QImage::Format_ARGB32);
+    QImage vegetation(colors.size(), QImage::Format_ARGB32);
+    vegetation.fill(Qt::transparent);
+    for (int x = 0; x < palette().size(); ++x)
+        colors.setPixel(x, 0, palette().at(x).color.rgb());
+    const int extra = palette().size();
+    colors.setPixel(extra, 0, qRgb(179, 2, 1));
+    colors.setPixel(extra + 1, 0, qRgb(90, 100, 35));
+    colors.setPixel(extra + 2, 0, qRgb(0, 138, 255));
+    vegetation.setPixel(extra + 2, 0, qRgba(255, 0, 0, 0));
+    QSet<QRgb> unknown;
+    const QImage vanilla = createBiomeLayer(colors, vegetation, &unknown);
+    const QImage modded = createBiomeLayer(colors, vegetation, nullptr, true);
+    for (int x = 0; x < palette().size(); ++x) {
+        const auto &entry = palette().at(x);
+        if (qRed(vanilla.pixel(x, 0)) != (entry.enabledByDefault ? entry.value : 64)
+                || qRed(modded.pixel(x, 0)) != entry.value
+                || zoneValueForName(entry.zone) < 0) {
+            if (errorString)
+                *errorString = QStringLiteral("Palette color or zone name did not resolve for ID %1.").arg(entry.value);
+            return false;
+        }
+    }
+    if (unknown != QSet<QRgb>{qRgb(179, 2, 1)} || qRed(vanilla.pixel(extra, 0)) != 64
+            || qRed(vanilla.pixel(extra + 1, 0)) != 64 || qRed(modded.pixel(extra + 1, 0)) != 171
+            || qRed(vanilla.pixel(extra + 2, 0)) != 0) {
+        if (errorString)
+            *errorString = QStringLiteral("Unknown, legacy grass or transparent source colors resolved incorrectly.");
+        return false;
+    }
+    QImage encodedZones(12, 8, QImage::Format_Indexed8);
+    encodedZones.setColorTable({qRgb(153, 230, 243), qRgb(64, 217, 0)});
+    encodedZones.fill(0);
+    QImage encodedBiomes(encodedZones.size(), QImage::Format_ARGB32);
+    encodedBiomes.fill(qRgb(179, 64, 0));
+    for (int y = 0; y < encodedZones.height(); ++y) {
+        for (int x = 4; x < encodedZones.width(); ++x)
+            encodedZones.setPixel(x, y, 1);
+    }
+    const QImage combined = process(encodedBiomes, encodedZones);
+    if (combined.pixel(3, 7) != qRgb(179, 230, 0) || combined.pixel(4, 7) != qRgb(179, 217, 0)
+            || analyze(encodedBiomes, encodedZones).mixedZoneChunks != 1
+            || analyze(encodedBiomes, encodedZones, QPoint(-4, 0)).mixedZoneChunks != 0
+            || zoneValueForName(QStringLiteral("DeepForest")) != 255
+            || zoneValueForName(QStringLiteral("FOREST")) != 59
+            || zoneValueForName(QStringLiteral("foragingnav")) != 64
+            || zoneValueForName(QStringLiteral("ParkingStall")) != -1) {
+        if (errorString)
+            *errorString = QStringLiteral("Indexed PNG channels or world-aligned green chunks did not round-trip.");
         return false;
     }
     if (errorString)

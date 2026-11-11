@@ -871,7 +871,7 @@ tileset
 }
 tileset
 {
-    file = Overlays2x.pack/fixtures_overlay_counters_01
+    file = Tiles2x.pack/fixtures_overlay_counters_01
     size = 8,8
 }
 tileset

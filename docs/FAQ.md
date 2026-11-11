@@ -406,7 +406,7 @@ not disable LOT generation.
 | `Invalid Biomemap Size` | Dimensions are not exact multiples of the project cell size. | Use multiples of 256 for Native256 or the project cell size shown by the message. | Do not crop a layer independently. |
 | `Biomemap Size Does Not Match Project` | WorldEd zone rasterization requires complete project coverage. | Supply images matching the full project width and height. | Create full-project layers before selecting WorldEd zones as the source. |
 | `Invalid Zone Layer` | The zone image is missing or does not match `Map.png`. | Select the correct zone PNG or rasterize zones from the project. | Keep the zone layer aligned with the other images. |
-| `Invalid Foraging Zone IDs` | The green channel contains values not mapped to a zone. | Repaint those values with supported zone IDs. | Use the generator's green-channel mode and the Build 42.20 Biomemap reference. |
+| `Invalid Foraging Zone IDs` | The green channel contains values not mapped to a zone. | Repaint those values with supported zone IDs. | Use the generator's green-channel mode and the Build 42.22.2 BiomeMap reference. |
 | `Biomemap Validation Warnings` | Red values are unknown, have no effect, require an override, or green chunks contain mixed IDs. | Review every listed value before choosing Continue. Correct unintended values instead of accepting them. | Paint with supported IDs and keep one green zone ID per 8 x 8 chunk. |
 | `Output Error`, `Generation Failed`, or `Save Failed` | The destination cannot be created, processed, or written. | Select a writable output folder with sufficient free space. | Generate outside protected and synchronized directories. |
 

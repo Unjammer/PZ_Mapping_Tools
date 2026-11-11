@@ -16,7 +16,7 @@
  */
 
 #include "texturepacker.h"
-#include "../../../shared/tiledefinitionpaths.h"
+#include "../../../shared/tiledefinitionindex.h"
 
 #include "texturepackfile.h"
 #include "preferences.h"
@@ -29,6 +29,7 @@
 #include <QImage>
 #include <QImageReader>
 #include <QRegularExpression>
+#include <QTemporaryDir>
 #include <QTextStream>
 
 #if defined(Q_OS_WIN) && (_MSC_VER >= 1600)
@@ -82,16 +83,15 @@ bool TexturePacker::pack(const TexturePackSettings &settings)
 
     PROGRESS progress(tr("Reading image files"));
 
-    QList<QSharedPointer<TileDefFile>> tileDefFiles;
-    for (const QString &fileName : mSettings.mTileDefFiles) {
-        QFileInfo fileInfo(TileDefinitionPaths::existingFile(fileName));
-        if (fileInfo.exists()) {
-            QSharedPointer<TileDefFile> tileDefFile(new TileDefFile());
-            TileDefFileReader reader;
-            if (reader.read(fileInfo.absoluteFilePath(), *tileDefFile)) {
-                tileDefFiles += tileDefFile;
-            }
-        }
+    TileDefinitionIndex<TileDefFile, TileDefFileReader, TileDefTile> definitions;
+    if (!mImageIsTilesheet.isEmpty()) {
+        const auto *preferences = Preferences::instance();
+        const QStringList paths = mSettings.mTileDefFiles.isEmpty()
+                ? preferences->tilePropertiesFiles()
+                : TileDefinitionPaths::configuredFiles(mSettings.mTileDefFiles,
+                        preferences->projectZomboidDirectory(), preferences->tilesDirectory());
+        if (!definitions.load(paths, mError, TileDefFileReader(false)))
+            return false;
     }
 
     QStringList toPack, toPackFloor;
@@ -106,13 +106,7 @@ bool TexturePacker::pack(const TexturePackSettings &settings)
         if (mImageIsTilesheet.contains(str)) {
             const int TILE_WIDTH = mImageTileSize[str].width() * (mSettings.mScale50 ? 0.5f : 1);
             const int TILE_HEIGHT = mImageTileSize[str].height() * (mSettings.mScale50 ? 0.5f : 1);
-            QList<TileDefTileset*> tileDefTilesets;
-            QString tilesetName = QFileInfo(str).baseName();
-            for (const QSharedPointer<TileDefFile> &tileDefFile : std::as_const(tileDefFiles)) {
-                if (TileDefTileset *tdts = tileDefFile->tileset(tilesetName)) {
-                    tileDefTilesets += tdts;
-                }
-            }
+            const auto &tiles = definitions.tiles(QFileInfo(str).baseName());
             if (image.width() % TILE_WIDTH || image.height() % TILE_HEIGHT) {
                 imageTranslation[str] = WorkOutTranslation(image);
                 toPack += str;
@@ -132,7 +126,8 @@ bool TexturePacker::pack(const TexturePackSettings &settings)
                         if (!tln.size.isEmpty()) {
                             QString key = QString::fromLatin1("%1_INDEX_%2").arg(x + y * cols).arg(str);
                             imageTranslation[key] = tln;
-                            if (isSolidFloor(tileDefTilesets, x + y * cols)) {
+                            const int index = x + y * cols;
+                            if (index < tiles.size() && isSolidFloor(tiles.at(index))) {
                                 toPackFloor += key;
                             } else {
                                 toPack += key;
@@ -223,13 +218,12 @@ bool TexturePacker::pack(const TexturePackSettings &settings)
         pageNum++;
     }
 
-    if (pageNum > 0) {
-        QFileInfo fileInfo(mSettings.mPackFileName);
-        progress.update(tr("Saving %1").arg(fileInfo.fileName()));
-        if (!packFileFloor.write(
-                fileInfo.absolutePath() + QLatin1String("/") +
-                fileInfo.baseName() + QLatin1String(".floor.") +
-                fileInfo.suffix())) {
+    const QFileInfo output(mSettings.mPackFileName);
+    const QString floorPath = QDir(output.absolutePath()).filePath(
+                output.baseName() + QStringLiteral(".floor.") + output.suffix());
+    if (pageNum > 0 || QFileInfo::exists(floorPath)) {
+        progress.update(tr("Saving %1").arg(QFileInfo(floorPath).fileName()));
+        if (!packFileFloor.write(floorPath)) {
             mError = packFileFloor.errorString();
             return false;
         }
@@ -529,18 +523,66 @@ bool TexturePacker::LoadTileNamesFile(QString imageName, int columns)
     return true;
 }
 
-bool TexturePacker::isSolidFloor(const QList<TileDefTileset *> &tilesets, int tileID) const
+bool TexturePacker::isSolidFloor(const TileDefTile *tile) const
 {
     static const QString FloorOverlay = QStringLiteral("FloorOverlay");
     static const QString solidfloor = QStringLiteral("solidfloor");
-    for (TileDefTileset *tdts : tilesets) {
-        if (TileDefTile *tdt = tdts->tileAt(tileID)) {
-            if (tdt->mProperties.contains(FloorOverlay) || tdt->mProperties.contains(solidfloor)) {
-                return true;
-            }
+    return tile->mProperties.contains(FloorOverlay) || tile->mProperties.contains(solidfloor);
+}
+
+bool TexturePacker::validateTileDefinitions(QString *error)
+{
+    QTemporaryDir directory;
+    if (!directory.isValid() || !QDir().mkpath(directory.filePath(QStringLiteral("images")))) {
+        *error = QStringLiteral("Could not create texture pack validation directory");
+        return false;
+    }
+    const QString images = directory.filePath(QStringLiteral("images"));
+    const QString sheet = QStringLiteral("pack_order_validation");
+    QImage image(8, 4, QImage::Format_ARGB32);
+    image.fill(Qt::red);
+    const QString base = directory.filePath(QStringLiteral("base.tiles.txt"));
+    const QString patch = directory.filePath(QStringLiteral("base.patch.tiles.txt"));
+    const QString replace = directory.filePath(QStringLiteral("replace.tiles.txt"));
+    const auto write = [&](const QString &path, const QByteArray &properties) {
+        QFile file(path);
+        const QByteArray text = "version = 1\ntileset\n{\n file = " + sheet.toUtf8()
+                + "\n size = 2,1\n id = 1\n tile\n {\n xy = 0,0\n"
+                + properties + "\n }\n}\n";
+        return file.open(QIODevice::WriteOnly) && file.write(text) == text.size();
+    };
+    if (!image.save(QDir(images).filePath(sheet + QStringLiteral(".png")))
+            || !write(base, " solidfloor = true") || !write(patch, " FloorOverlay = true")
+            || !write(replace, " solid = true")) {
+        *error = QStringLiteral("Could not write texture pack validation inputs");
+        return false;
+    }
+    for (const bool patched : {true, false}) {
+        TexturePackSettings settings{};
+        settings.mPackFileName = directory.filePath(QStringLiteral("order.pack"));
+        settings.mOutputImageSize = QSize(64, 64);
+        settings.mInputImageDirectories.append({images, true, QSize(4, 4)});
+        settings.mTileDefFiles = patched ? QStringList{base, replace, patch}
+                                         : QStringList{base, patch, replace};
+        TexturePacker packer;
+        if (!packer.pack(settings)) {
+            *error = packer.errorString();
+            return false;
+        }
+        PackFile regular;
+        if (!regular.read(settings.mPackFileName) || regular.textureCount() != (patched ? 1 : 2)) {
+            *error = QStringLiteral("Regular texture pack contains the wrong sprites after TileDef resolution");
+            return false;
+        }
+        PackFile floor;
+        if (!floor.read(directory.filePath(QStringLiteral("order.floor.pack")))
+                || floor.textureCount() != (patched ? 1 : 0)
+                || (patched && floor.pages().first().subTextures().first().name != sheet + QStringLiteral("_0"))) {
+            *error = QStringLiteral("The floor texture pack does not match the final TileDef order");
+            return false;
         }
     }
-    return false;
+    return true;
 }
 
 TexturePacker::Translation TexturePacker::WorkOutTranslation(QImage image)

@@ -31,6 +31,7 @@
 #include <QString>
 #include <QSet>
 #include <QTimer>
+#include "tilesetimagepaths.h"
 
 class QImage;
 class TilesetImageLoader;
@@ -139,7 +140,8 @@ public:
 #ifdef ZOMBOID
     void tilesetDirectoryChanged();
 
-    bool getTilesetFileName(const QString &tilesetName, QString &path1x, QString &path2x);
+    bool getTilesetFileName(const QString &tilesetName, QString &path1x, QString &path2x,
+                            int *scale = nullptr);
 
     void changeTilesetSource(Tileset *tileset, const QString &source, bool missing);
 
@@ -167,7 +169,7 @@ public:
     void waitForTilesets(const QList<Tileset *> &tilesets = QList<Tileset*>(),
                         PROGRESS *progress = nullptr);
 
-    void cachePZProperties(Tileset *cached);
+    void cachePZProperties(Tileset *cached, bool refresh = false);
     void copyPZProperties(Tileset *src, Tileset *dst);
     QString cacheMemorySummary() const;
 #endif
@@ -211,6 +213,7 @@ private:
     TilesetImageCache *mTilesetImageCache;
     TilesetImageLoader *mImageLoader;
     QSet<Tileset *> mPendingImages;
+    TilesetImagePaths mImagePaths;
     void queueImage(Tileset *tileset);
 
     Tileset *mInvisibleTileset;

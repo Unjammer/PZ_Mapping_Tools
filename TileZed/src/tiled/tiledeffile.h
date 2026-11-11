@@ -855,6 +855,7 @@ public:
     int mColumns;
     int mRows;
     QVector<TileDefTile*> mTiles;
+    int mDeclaredTileCount = -1;
     int mID;
 };
 
@@ -884,7 +885,7 @@ public:
     void setFileName(const QString &fileName)
     { mFileName = fileName; }
 
-    bool read(const QString &fileName);
+    bool read(const QString &fileName, bool buildEditorProperties = true);
     bool write(const QString &fileName);
     bool write(const QString &fileName, TargetFormat target);
     bool writeModSeries(const QString &fileName,
@@ -908,7 +909,6 @@ public:
 
     QList<TileDefTileset*> takeTilesets();
 
-    int mergePropertiesFrom(const TileDefFile &overlay);
 
     QStringList tilesetNames() const
     { return mTilesetByName.keys(); }
@@ -984,7 +984,13 @@ private:
 class TileDefFileReader
 {
 public:
+    explicit TileDefFileReader(bool buildEditorProperties = true)
+        : mBuildEditorProperties(buildEditorProperties) {}
+
     bool read(const QString &fileName, Tiled::Internal::TileDefFile &tileDefFile);
+
+private:
+    bool mBuildEditorProperties;
 };
 
 } // namespace Internal

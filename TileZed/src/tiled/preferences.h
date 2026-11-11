@@ -150,6 +150,7 @@ public:
 
     QStringList tilePropertiesFiles() const
     { return mTilePropertiesFiles; }
+    QStringList configuredTilePropertiesFiles() const { return mConfiguredTilePropertiesFiles; }
 
     bool highlightRoomUnderPointer() const
     { return mHighlightRoomUnderPointer; }
@@ -294,6 +295,8 @@ private:
     int mAutoSaveIntervalMinutes;
     QStringList mWorldEdFiles;
     QStringList mTilePropertiesFiles;
+    QStringList mConfiguredTilePropertiesFiles;
+    void refreshTilePropertiesFiles();
     bool mHighlightRoomUnderPointer;
     int mEraserBrushSize;
     QColor mTilesetBackgroundColor;

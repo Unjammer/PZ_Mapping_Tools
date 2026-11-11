@@ -393,7 +393,7 @@ int main(int argc, char *argv[])
             }
             qInfo().noquote() << "BiomeMapConfig validation passed:"
                               << BiomeMapImageProcessor::palette().size()
-                              << "entries,"
+                              << "entries, source colors, indexed PNG channels, world-aligned analysis,"
                               << fallbackSummary
                               << ", red and green channel painting preserved "
                                  "the other bytes, and green strokes remained "

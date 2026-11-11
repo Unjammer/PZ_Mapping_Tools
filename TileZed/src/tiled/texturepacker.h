@@ -27,7 +27,7 @@
 
 namespace Tiled {
 namespace Internal {
-class TileDefTileset;
+class TileDefTile;
 }
 }
 
@@ -90,6 +90,7 @@ public:
     TexturePacker();
 
     bool pack(const TexturePackSettings &settings);
+    static bool validateTileDefinitions(QString *error);
     QString errorString() { return mError; }
 
 private:
@@ -101,7 +102,7 @@ private:
     QImage CreateOutputImage(const QStringList &toPack);
     bool LoadTileNamesFile(QString imageName, int columns);
 
-    bool isSolidFloor(const QList<Tiled::Internal::TileDefTileset*>& tilesets, int tileID) const;
+    bool isSolidFloor(const Tiled::Internal::TileDefTile *tile) const;
 
 private:
     QString mError;

@@ -1464,13 +1464,9 @@ void BuildingEditorWindow::exportNewBinary()
     }
 
     TileDefWatcher *watcher = getTileDefWatcher();
-    watcher->check();
-    QList<TileDefFile *> definitions;
-    for (TileDefWatcherFile *file : qAsConst(watcher->mFiles))
-        definitions.append(file->mTileDefFile);
     BasementExportRequest request;
     request.outputDirectory = dialog.exportDirectory();
-    request.stairTiles = BasementExporter::staircaseTiles(definitions);
+    request.stairTiles = BasementExporter::staircaseTiles(*watcher);
     QString luaCode;
     QStringList errors;
     int written = 0;

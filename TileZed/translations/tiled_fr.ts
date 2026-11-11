@@ -158,6 +158,14 @@
 <context>
     <name>MainWindow</name>
     <message>
+        <source>Procedural Loot Viewer / Editor...</source>
+        <translation>Consultation et édition du butin procédural…</translation>
+    </message>
+    <message>
+        <source>Inspect game RoomDef/container loot and edit project-owned procedural distributions</source>
+        <translation>Consulter le butin des pièces et conteneurs du jeu et modifier les distributions procédurales du projet</translation>
+    </message>
+    <message>
         <location filename="../src/tiled/mainwindow.ui" line="+17"/>
         <source>Tiled</source>
         <translation>Tiled</translation>
@@ -2901,6 +2909,861 @@ Le précédent snapshot ne sera pas conservé dans le TMX sauvegardé. Reload n�
         <location filename="../src/tiled/utils.cpp" line="+31"/>
         <source>Image files</source>
         <translation>Fichiers image</translation>
+    </message>
+</context>
+<context>
+    <name>Tiled::Internal::LootDistributionDialog</name>
+    <message>
+        <source>Could not read %1: %2</source>
+        <translation>Impossible de lire %1 (%2)</translation>
+    </message>
+    <message>
+        <source>Could not save %1: %2</source>
+        <translation>Impossible d’enregistrer %1 (%2)</translation>
+    </message>
+    <message>
+        <source>%1
+
+%2</source>
+        <translation>%1
+
+%2</translation>
+    </message>
+    <message>
+        <source>Select the Project Zomboid game directory or its media/lua/server/Items directory.</source>
+        <translation>Sélectionnez le dossier de Project Zomboid ou son dossier media/lua/server/Items.</translation>
+    </message>
+    <message>
+        <source>Could not create the isolated Lua state.</source>
+        <translation>Impossible de créer l’environnement Lua isolé.</translation>
+    </message>
+    <message>
+        <source>The game loot registries were loaded but no room or procedural definitions were found.</source>
+        <translation>Les données de butin du jeu ont été chargées, mais aucune définition de pièce ou de distribution procédurale n’a été trouvée.</translation>
+    </message>
+    <message>
+        <source>Invalid loot-editor manifest %1: %2</source>
+        <translation>Le manifeste de l’éditeur de butin %1 est invalide (%2)</translation>
+    </message>
+    <message>
+        <source>Unsupported loot-editor manifest schema in %1.</source>
+        <translation>Le format du manifeste de l’éditeur de butin dans %1 n’est pas pris en charge.</translation>
+    </message>
+    <message>
+        <source>Could not create the Lua syntax checker.</source>
+        <translation>Impossible de créer le vérificateur de syntaxe Lua.</translation>
+    </message>
+    <message>
+        <source>Generated Lua is invalid: %1</source>
+        <translation>Le Lua généré est invalide (%1)</translation>
+    </message>
+    <message>
+        <source>Select a project/mod root first.</source>
+        <translation>Sélectionnez d’abord le dossier racine du projet ou du mod.</translation>
+    </message>
+    <message>
+        <source>The project/mod root must be outside the Project Zomboid game directory. Game files remain read-only.</source>
+        <translation>Le dossier racine du projet ou du mod doit se trouver en dehors du dossier de Project Zomboid. Les fichiers du jeu restent en lecture seule.</translation>
+    </message>
+    <message>
+        <source>Could not create %1.</source>
+        <translation>Impossible de créer %1.</translation>
+    </message>
+    <message>
+        <source>Item row %1 has a chance but no item name.</source>
+        <translation>La ligne d’objet %1 contient une probabilité sans nom d’objet.</translation>
+    </message>
+    <message>
+        <source>Item row %1 needs a non-negative numeric chance per roll.</source>
+        <translation>La probabilité par tirage de la ligne d’objet %1 doit être un nombre positif ou nul.</translation>
+    </message>
+    <message>
+        <source>Add row</source>
+        <translation>Ajouter une ligne</translation>
+    </message>
+    <message>
+        <source>Remove selected rows</source>
+        <translation>Supprimer les lignes sélectionnées</translation>
+    </message>
+    <message>
+        <source>Item</source>
+        <translation>Objet</translation>
+    </message>
+    <message>
+        <source>Chance / roll</source>
+        <translation>Probabilité par tirage</translation>
+    </message>
+    <message>
+        <source>New procedural distribution</source>
+        <translation>Nouvelle distribution procédurale</translation>
+    </message>
+    <message>
+        <source>Edit procedural distribution</source>
+        <translation>Modifier la distribution procédurale</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Rolls</source>
+        <translation>Tirages</translation>
+    </message>
+    <message>
+        <source>Items - each chance is tested on every roll</source>
+        <translation>Objets (chaque probabilité est évaluée à chaque tirage)</translation>
+    </message>
+    <message>
+        <source>Junk - sandbox loot rarity does not reduce it</source>
+        <translation>Rebuts (la rareté du bac à sable ne réduit pas leur probabilité)</translation>
+    </message>
+    <message>
+        <source>Junk rolls</source>
+        <translation>Tirages de rebuts</translation>
+    </message>
+    <message>
+        <source>Missing name</source>
+        <translation>Nom manquant</translation>
+    </message>
+    <message>
+        <source>Enter a procedural-distribution name.</source>
+        <translation>Saisissez un nom de distribution procédurale.</translation>
+    </message>
+    <message>
+        <source>Invalid item chance</source>
+        <translation>Probabilité d’objet invalide</translation>
+    </message>
+    <message>
+        <source>New room/container distribution</source>
+        <translation>Nouvelle distribution de pièce ou de conteneur</translation>
+    </message>
+    <message>
+        <source>Edit room/container distribution</source>
+        <translation>Modifier la distribution de pièce ou de conteneur</translation>
+    </message>
+    <message>
+        <source>Procedural</source>
+        <translation>Procédurale</translation>
+    </message>
+    <message>
+        <source>Direct item rolls</source>
+        <translation>Tirages directs d’objets</translation>
+    </message>
+    <message>
+        <source>RoomDef name</source>
+        <translation>Nom du RoomDef</translation>
+    </message>
+    <message>
+        <source>Container type</source>
+        <translation>Type de conteneur</translation>
+    </message>
+    <message>
+        <source>Mode</source>
+        <translation>Mode</translation>
+    </message>
+    <message>
+        <source>Weight is relative among eligible rows. min/max count containers already assigned in the RoomDef. A force* selector takes priority when it matches.</source>
+        <translation>Le poids est relatif aux autres règles admissibles. Les valeurs min/max comptent les conteneurs déjà affectés dans le RoomDef. Un sélecteur force* s’applique en priorité si ses conditions sont remplies.</translation>
+    </message>
+    <message>
+        <source>Distribution</source>
+        <translation>Distribution</translation>
+    </message>
+    <message>
+        <source>Weight</source>
+        <translation>Poids</translation>
+    </message>
+    <message>
+        <source>Min</source>
+        <translation>Min.</translation>
+    </message>
+    <message>
+        <source>Max</source>
+        <translation>Max.</translation>
+    </message>
+    <message>
+        <source>Force items</source>
+        <translation>Forcer selon les objets</translation>
+    </message>
+    <message>
+        <source>Force zones</source>
+        <translation>Forcer selon les zones</translation>
+    </message>
+    <message>
+        <source>Force tiles</source>
+        <translation>Forcer selon les tuiles</translation>
+    </message>
+    <message>
+        <source>Force rooms</source>
+        <translation>Forcer selon les pièces</translation>
+    </message>
+    <message>
+        <source>Editor notes</source>
+        <translation>Notes d’édition</translation>
+    </message>
+    <message>
+        <source>Add procedural rule</source>
+        <translation>Ajouter une règle procédurale</translation>
+    </message>
+    <message>
+        <source>Ignore zombie-density bonus</source>
+        <translation>Ignorer le bonus de densité de zombies</translation>
+    </message>
+    <message>
+        <source>Trash container</source>
+        <translation>Conteneur à déchets</translation>
+    </message>
+    <message>
+        <source>fillRand (0 = unset)</source>
+        <translation>fillRand (0 = non défini)</translation>
+    </message>
+    <message>
+        <source>Items</source>
+        <translation>Objets</translation>
+    </message>
+    <message>
+        <source>Junk</source>
+        <translation>Rebuts</translation>
+    </message>
+    <message>
+        <source>Missing identity</source>
+        <translation>Identifiant manquant</translation>
+    </message>
+    <message>
+        <source>Enter both a RoomDef name and a container type.</source>
+        <translation>Saisissez un nom de RoomDef et un type de conteneur.</translation>
+    </message>
+    <message>
+        <source>Empty procedural mapping</source>
+        <translation>Association procédurale vide</translation>
+    </message>
+    <message>
+        <source>Add at least one procedural-distribution rule.</source>
+        <translation>Ajoutez au moins une règle de distribution procédurale.</translation>
+    </message>
+    <message>
+        <source>Invalid procedural rule</source>
+        <translation>Règle procédurale invalide</translation>
+    </message>
+    <message>
+        <source>Procedural rule %1 needs a distribution name.</source>
+        <translation>La règle procédurale %1 doit indiquer un nom de distribution.</translation>
+    </message>
+    <message>
+        <source>Missing distribution</source>
+        <translation>Distribution manquante</translation>
+    </message>
+    <message>
+        <source>Rule %1 references "%2", which is not present in the effective procedural-distribution registry.</source>
+        <translation>La règle %1 fait référence à « %2 », qui ne figure pas dans les distributions procédurales actives.</translation>
+    </message>
+    <message>
+        <source>Rule %1 has a non-integer weight, min, or max value.</source>
+        <translation>La règle %1 contient une valeur de poids, de minimum ou de maximum qui n’est pas entière.</translation>
+    </message>
+    <message>
+        <source>Select the read-only game definitions.</source>
+        <translation>Sélectionnez les définitions du jeu en lecture seule.</translation>
+    </message>
+    <message>
+        <source>Procedural Loot Viewer / Editor</source>
+        <translation>Consultation et édition du butin procédural</translation>
+    </message>
+    <message>
+        <source>Definition sources</source>
+        <translation>Sources des définitions</translation>
+    </message>
+    <message>
+        <source>Project Zomboid game directory (read-only)</source>
+        <translation>Dossier de Project Zomboid (lecture seule)</translation>
+    </message>
+    <message>
+        <source>Browse...</source>
+        <translation>Parcourir…</translation>
+    </message>
+    <message>
+        <source>Game definitions (read-only)</source>
+        <translation>Définitions du jeu (lecture seule)</translation>
+    </message>
+    <message>
+        <source>Map project or mod root (editable)</source>
+        <translation>Dossier racine du projet de carte ou du mod (modifiable)</translation>
+    </message>
+    <message>
+        <source>Project / mod root (editable)</source>
+        <translation>Dossier racine du projet ou du mod (modifiable)</translation>
+    </message>
+    <message>
+        <source>Reload</source>
+        <translation>Recharger</translation>
+    </message>
+    <message>
+        <source>Open generated location</source>
+        <translation>Ouvrir le dossier des fichiers générés</translation>
+    </message>
+    <message>
+        <source>Filter RoomDef, translation or container type...</source>
+        <translation>Filtrer par RoomDef, traduction ou type de conteneur…</translation>
+    </message>
+    <message>
+        <source>Room / container</source>
+        <translation>Pièce / conteneur</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Source</translation>
+    </message>
+    <message>
+        <source>Translation</source>
+        <translation>Traduction</translation>
+    </message>
+    <message>
+        <source>New room/container...</source>
+        <translation>Nouvelle pièce ou nouveau conteneur…</translation>
+    </message>
+    <message>
+        <source>Clone / edit in project...</source>
+        <translation>Copier ou modifier dans le projet…</translation>
+    </message>
+    <message>
+        <source>Remove project override</source>
+        <translation>Supprimer la surcharge du projet</translation>
+    </message>
+    <message>
+        <source>Edit room translations...</source>
+        <translation>Modifier les traductions des pièces…</translation>
+    </message>
+    <message>
+        <source>Rooms &amp;&amp; containers</source>
+        <translation>Pièces et conteneurs</translation>
+    </message>
+    <message>
+        <source>Room translations</source>
+        <translation>Traductions des pièces</translation>
+    </message>
+    <message>
+        <source>Enter one RoomDef ID=translation per line.
+Example: library=Library</source>
+        <translation>Saisissez une paire identifiant RoomDef=traduction par ligne.
+Par exemple, library=Bibliothèque</translation>
+    </message>
+    <message>
+        <source>Line %1 must contain a RoomDef ID and a translation separated by =.</source>
+        <translation>La ligne %1 doit contenir un identifiant RoomDef et une traduction séparés par =.</translation>
+    </message>
+    <message>
+        <source>Filter procedural distribution or item...</source>
+        <translation>Filtrer par distribution procédurale ou par objet…</translation>
+    </message>
+    <message>
+        <source>Procedural distribution</source>
+        <translation>Distribution procédurale</translation>
+    </message>
+    <message>
+        <source>New distribution...</source>
+        <translation>Nouvelle distribution…</translation>
+    </message>
+    <message>
+        <source>Procedural distributions</source>
+        <translation>Distributions procédurales</translation>
+    </message>
+    <message>
+        <source>Choose Project Zomboid game directory</source>
+        <translation>Choisir le dossier de Project Zomboid</translation>
+    </message>
+    <message>
+        <source>Choose map project or mod root</source>
+        <translation>Choisir le dossier racine du projet de carte ou du mod</translation>
+    </message>
+    <message>
+        <source>Unsafe project location</source>
+        <translation>Emplacement du projet non autorisé</translation>
+    </message>
+    <message>
+        <source>Choose a project/mod root outside the Project Zomboid installation. The editor never writes into the game directory.</source>
+        <translation>Choisissez un dossier racine de projet ou de mod situé en dehors de l’installation de Project Zomboid. L’éditeur n’écrit jamais dans le dossier du jeu.</translation>
+    </message>
+    <message>
+        <source>Could not load loot definitions</source>
+        <translation>Impossible de charger les définitions de butin</translation>
+    </message>
+    <message>
+        <source>Could not load project loot</source>
+        <translation>Impossible de charger le butin du projet</translation>
+    </message>
+    <message>
+        <source>Loaded %1 rooms, %2 procedural distributions; %3 project room/container overrides and %4 project procedural overrides. Game files remain read-only. %5 unresolved references are marked in the mapping table.</source>
+        <translation>Chargement de %1 pièces et %2 distributions procédurales. Le projet surcharge %3 associations de pièces et conteneurs et %4 distributions procédurales. Les fichiers du jeu restent en lecture seule. Les %5 références non résolues sont signalées dans le tableau des associations.</translation>
+    </message>
+    <message>
+        <source>Project</source>
+        <translation>Projet</translation>
+    </message>
+    <message>
+        <source>Game</source>
+        <translation>Jeu</translation>
+    </message>
+    <message>
+        <source>Game + project</source>
+        <translation>Jeu et projet</translation>
+    </message>
+    <message>
+        <source>Select a container below this RoomDef.</source>
+        <translation>Sélectionnez un conteneur sous ce RoomDef.</translation>
+    </message>
+    <message>
+        <source>Procedural selector. Share is normalized only among non-forced rows shown here; force* constraints and min/max can change which rows are eligible at runtime.</source>
+        <translation>Sélecteur procédural. La part est calculée uniquement parmi les règles non forcées affichées. Les contraintes force* et les valeurs min/max peuvent changer les règles admissibles en jeu.</translation>
+    </message>
+    <message>
+        <source>Direct distribution: %1 rolls. Chance / roll is the Lua value before sandbox rarity, zombie density, time decay and container-capacity effects.</source>
+        <translation>Distribution directe avec %1 tirages. La probabilité par tirage est la valeur Lua brute, avant les effets de la rareté du bac à sable, de la densité de zombies, de la diminution au fil du temps et de la capacité du conteneur.</translation>
+    </message>
+    <message>
+        <source>Neutral share</source>
+        <translation>Part de base</translation>
+    </message>
+    <message>
+        <source>Forced by</source>
+        <translation>Forcé par</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>État</translation>
+    </message>
+    <message>
+        <source>items</source>
+        <translation>objets</translation>
+    </message>
+    <message>
+        <source>zones</source>
+        <translation>zones</translation>
+    </message>
+    <message>
+        <source>tiles</source>
+        <translation>tuiles</translation>
+    </message>
+    <message>
+        <source>rooms</source>
+        <translation>pièces</translation>
+    </message>
+    <message>
+        <source>N/A</source>
+        <translation>Sans objet</translation>
+    </message>
+    <message>
+        <source>(missing = 0)</source>
+        <translation>(absent = 0)</translation>
+    </message>
+    <message>
+        <source>Resolved</source>
+        <translation>Résolue</translation>
+    </message>
+    <message>
+        <source>Group</source>
+        <translation>Groupe</translation>
+    </message>
+    <message>
+        <source>Neutral cumulative</source>
+        <translation>Probabilité cumulée de base</translation>
+    </message>
+    <message>
+        <source>Notes</source>
+        <translation>Notes</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>Normal</translation>
+    </message>
+    <message>
+        <source>Junk modifier rules</source>
+        <translation>Modificateurs des rebuts</translation>
+    </message>
+    <message>
+        <source>%1 normal rolls and %2 junk rolls. The cumulative column is a neutral mathematical preview, not an exact in-game result: sandbox category multipliers, zombie density, time decay and capacity still apply.</source>
+        <translation>%1 tirages normaux et %2 tirages de rebuts. La colonne de probabilité cumulée donne une estimation de base. En jeu, les multiplicateurs des catégories du bac à sable, la densité de zombies, la diminution au fil du temps et la capacité s’appliquent toujours.</translation>
+    </message>
+    <message>
+        <source>Duplicate entries</source>
+        <translation>Entrées répétées</translation>
+    </message>
+    <message>
+        <source>%1 independent entries</source>
+        <translation>%1 entrées indépendantes</translation>
+    </message>
+    <message>
+        <source>Replace existing definition</source>
+        <translation>Remplacer la définition existante</translation>
+    </message>
+    <message>
+        <source>A distribution named "%1" already exists. Create a project override for it?</source>
+        <translation>Une distribution nommée « %1 » existe déjà. Créer une surcharge dans le projet ?</translation>
+    </message>
+    <message>
+        <source>Remove the project definition "%1"? The read-only game definition, if any, will become visible again.</source>
+        <translation>Supprimer la définition « %1 » du projet ? La définition du jeu en lecture seule, si elle existe, redeviendra visible.</translation>
+    </message>
+    <message>
+        <source>Replace existing mapping</source>
+        <translation>Remplacer l’association existante</translation>
+    </message>
+    <message>
+        <source>The mapping %1 -&gt; %2 already exists. Create a project override for it?</source>
+        <translation>L’association %1 → %2 existe déjà. Créer une surcharge dans le projet ?</translation>
+    </message>
+    <message>
+        <source>Remove the project mapping %1 -&gt; %2? The read-only game mapping, if any, will become visible again.</source>
+        <translation>Supprimer l’association %1 → %2 du projet ? L’association du jeu en lecture seule, si elle existe, redeviendra visible.</translation>
+    </message>
+    <message>
+        <source>Could not save project loot</source>
+        <translation>Impossible d’enregistrer le butin du projet</translation>
+    </message>
+    <message>
+        <source>Saved %1 and generated %2. Game files were not modified.</source>
+        <translation>%1 a été enregistré et %2 a été généré. Les fichiers du jeu n’ont pas été modifiés.</translation>
+    </message>
+    <message>
+        <source>The project/mod root is inside the read-only game directory.</source>
+        <translation>Le dossier racine du projet ou du mod se trouve dans le dossier du jeu en lecture seule.</translation>
+    </message>
+    <message>
+        <source>Unresolved project procedural references:
+%1</source>
+        <translation>Références procédurales non résolues dans le projet.
+%1</translation>
+    </message>
+    <message>
+        <source>%1 rooms, %2 containers (%3 procedural, %4 direct), %5 procedural distributions, %6 project overrides, %7 unresolved read-only game references</source>
+        <translation>%1 pièces, %2 conteneurs (%3 procéduraux et %4 directs), %5 distributions procédurales, %6 surcharges du projet et %7 références du jeu en lecture seule non résolues</translation>
+    </message>
+    <message>
+        <source>Could not create screenshot directory %1.</source>
+        <translation>Impossible de créer le dossier de captures d’écran %1.</translation>
+    </message>
+    <message>
+        <source>Could not save loot-editor screenshot %1.</source>
+        <translation>Impossible d’enregistrer la capture d’écran de l’éditeur de butin %1.</translation>
+    </message>
+    <message>
+        <source>Loot localization validation failed.</source>
+        <translation>La validation de la localisation du butin a échoué.</translation>
+    </message>
+    <message>
+        <source>. Loot localization checks passed.</source>
+        <translation>. La localisation du butin a été vérifiée.</translation>
+    </message>
+</context>
+<context>
+    <name>BuildingEditor::BuildingPreferencesDialog</name>
+    <message>
+        <source>Interface language:</source>
+        <translation>Langue de l’interface</translation>
+    </message>
+    <message>
+        <source>System default</source>
+        <translation>Langue du système</translation>
+    </message>
+</context>
+<context>
+    <name>BuildingEditorWindow</name>
+    <message>
+        <source>Procedural Loot Viewer / Editor...</source>
+        <translation>Consultation et édition du butin procédural…</translation>
+    </message>
+    <message>
+        <source>Inspect loot for RoomDefs and edit project-owned procedural distributions</source>
+        <translation>Consulter le butin des RoomDefs et modifier les distributions procédurales du projet</translation>
+    </message>
+</context>
+<context>
+    <name>QPlatformTheme</name>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>Enregistrer</translation>
+    </message>
+    <message>
+        <source>&amp;Yes</source>
+        <translation>&amp;Oui</translation>
+    </message>
+    <message>
+        <source>&amp;No</source>
+        <translation>&amp;Non</translation>
+    </message>
+</context>
+<context>
+    <name>QFileDialog</name>
+    <message>
+        <source>Look in:</source>
+        <translation>Regarder dans</translation>
+    </message>
+    <message>
+        <source>Back</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Go back</source>
+        <translation>Revenir au dossier précédent</translation>
+    </message>
+    <message>
+        <source>Forward</source>
+        <translation>Suivant</translation>
+    </message>
+    <message>
+        <source>Go forward</source>
+        <translation>Aller au dossier suivant</translation>
+    </message>
+    <message>
+        <source>Parent Directory</source>
+        <translation>Dossier parent</translation>
+    </message>
+    <message>
+        <source>Go to the parent directory</source>
+        <translation>Aller au dossier parent</translation>
+    </message>
+    <message>
+        <source>Create New Folder</source>
+        <translation>Créer un dossier</translation>
+    </message>
+    <message>
+        <source>Create a New Folder</source>
+        <translation>Créer un dossier</translation>
+    </message>
+    <message>
+        <source>List View</source>
+        <translation>Liste</translation>
+    </message>
+    <message>
+        <source>Change to list view mode</source>
+        <translation>Afficher en liste</translation>
+    </message>
+    <message>
+        <source>Detail View</source>
+        <translation>Détails</translation>
+    </message>
+    <message>
+        <source>Change to detail view mode</source>
+        <translation>Afficher les détails</translation>
+    </message>
+    <message>
+        <source>Sidebar</source>
+        <translation>Barre latérale</translation>
+    </message>
+    <message>
+        <source>List of places and bookmarks</source>
+        <translation>Liste des emplacements et favoris</translation>
+    </message>
+    <message>
+        <source>Files</source>
+        <translation>Fichiers</translation>
+    </message>
+    <message>
+        <source>Files of type:</source>
+        <translation>Type de fichier</translation>
+    </message>
+    <message>
+        <source>Directory:</source>
+        <translation>Dossier</translation>
+    </message>
+    <message>
+        <source>File &amp;name:</source>
+        <translation>&amp;Nom du fichier</translation>
+    </message>
+    <message>
+        <source>Find Directory</source>
+        <translation>Rechercher un dossier</translation>
+    </message>
+    <message>
+        <source>Directories</source>
+        <translation>Dossiers</translation>
+    </message>
+    <message>
+        <source>&amp;Open</source>
+        <translation>&amp;Ouvrir</translation>
+    </message>
+    <message>
+        <source>&amp;Choose</source>
+        <translation>&amp;Choisir</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Ouvrir</translation>
+    </message>
+    <message>
+        <source>&amp;New Folder</source>
+        <translation>&amp;Nouveau dossier</translation>
+    </message>
+    <message>
+        <source>New Folder</source>
+        <translation>Nouveau dossier</translation>
+    </message>
+    <message>
+        <source>&amp;Rename</source>
+        <translation>&amp;Renommer</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
+    </message>
+    <message>
+        <source>&amp;Delete</source>
+        <translation>&amp;Supprimer</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>Retirer</translation>
+    </message>
+    <message>
+        <source>Show &amp;hidden files</source>
+        <translation>Afficher les fichiers cac&amp;hés</translation>
+    </message>
+    <message>
+        <source>Show </source>
+        <translation>Afficher </translation>
+    </message>
+    <message>
+        <source>Recent Places</source>
+        <translation>Emplacements récents</translation>
+    </message>
+    <message>
+        <source>All files (*)</source>
+        <translation>Tous les fichiers (*)</translation>
+    </message>
+    <message>
+        <source>%1
+Directory not found.
+Please verify the correct directory name was given.</source>
+        <translation>%1
+Dossier introuvable.
+Vérifiez le nom du dossier.</translation>
+    </message>
+    <message>
+        <source>%1
+File not found.
+Please verify the correct file name was given.</source>
+        <translation>%1
+Fichier introuvable.
+Vérifiez le nom du fichier.</translation>
+    </message>
+    <message>
+        <source>'%1' is write protected.
+Do you want to delete it anyway?</source>
+        <translation>« %1 » est protégé en écriture.
+Le supprimer quand même ?</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete '%1'?</source>
+        <translation>Supprimer « %1 » ?</translation>
+    </message>
+    <message>
+        <source>Could not delete directory.</source>
+        <translation>Impossible de supprimer le dossier.</translation>
+    </message>
+</context>
+<context>
+    <name>QFileSystemModel</name>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <comment>All other platforms</comment>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Date Modified</source>
+        <translation>Date de modification</translation>
+    </message>
+    <message>
+        <source>Computer</source>
+        <translation>Ordinateur</translation>
+    </message>
+    <message>
+        <source>My Computer</source>
+        <translation>Ce PC</translation>
+    </message>
+    <message>
+        <source>Invalid filename</source>
+        <translation>Nom de fichier invalide</translation>
+    </message>
+</context>
+<context>
+    <name>QWidgetTextControl</name>
+    <message>
+        <source>&amp;Undo</source>
+        <translation>Ann&amp;uler</translation>
+    </message>
+    <message>
+        <source>&amp;Redo</source>
+        <translation>&amp;Rétablir</translation>
+    </message>
+    <message>
+        <source>Cu&amp;t</source>
+        <translation>Cou&amp;per</translation>
+    </message>
+    <message>
+        <source>&amp;Copy</source>
+        <translation>&amp;Copier</translation>
+    </message>
+    <message>
+        <source>&amp;Paste</source>
+        <translation>Co&amp;ller</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation>Tout sélectionner</translation>
+    </message>
+</context>
+<context>
+    <name>QLineEdit</name>
+    <message>
+        <source>&amp;Undo</source>
+        <translation>Ann&amp;uler</translation>
+    </message>
+    <message>
+        <source>&amp;Redo</source>
+        <translation>&amp;Rétablir</translation>
+    </message>
+    <message>
+        <source>Cu&amp;t</source>
+        <translation>Cou&amp;per</translation>
+    </message>
+    <message>
+        <source>&amp;Copy</source>
+        <translation>&amp;Copier</translation>
+    </message>
+    <message>
+        <source>&amp;Paste</source>
+        <translation>Co&amp;ller</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation>Tout sélectionner</translation>
     </message>
 </context>
 </TS>

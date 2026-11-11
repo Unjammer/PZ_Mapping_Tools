@@ -33,6 +33,7 @@ class LanguageManager
 public:
     static LanguageManager *instance();
     static void deleteInstance();
+    static QString currentLanguage();
 
     /**
      * Installs the translators on the application for Qt and Tiled. Should be

@@ -494,13 +494,7 @@ Preferences::Preferences()
     mProjectZomboidDirectory = PortableSettings::sharedGamePath();
     mSettings->remove(QLatin1String("TilesDirectory"));
 
-    QSettings settings(QLatin1String("TheIndieStone"), QLatin1String("TileZed"));
-    mTilePropertiesFiles = settings.value(QLatin1String("TilePropertiesFiles")).toStringList();
-    const QStringList orderedTileDefs = TileDefinitionPaths::configuredFiles(
-                mTilePropertiesFiles, mProjectZomboidDirectory, mTilesDirectory);
-    if (mTilePropertiesFiles != orderedTileDefs) {
-        mTilePropertiesFiles = orderedTileDefs;
-    }
+    refreshTilePropertiesFiles();
 
 
     mOpenFileDirectory = mSettings->value(QLatin1String("OpenFileDirectory")).toString();
@@ -540,8 +534,9 @@ Preferences::Preferences()
                                            << QStringLiteral("*.tbx")
                                            << QStringLiteral("*.tmx"));
 
-    // Use the same directory as TileZed.
-    mThumbnailsDirectory = settings.value(QLatin1String("Thumbnails/Directory")).toString();
+    QSettings tileZedSettings(QSettings::IniFormat, QSettings::UserScope,
+                              QStringLiteral("TheIndieStone"), QStringLiteral("TileZed"));
+    mThumbnailsDirectory = tileZedSettings.value(QStringLiteral("Thumbnails/Directory")).toString();
 }
 
 Preferences::~Preferences()
@@ -564,14 +559,32 @@ QString Preferences::configPath() const
     return mConfigDirectory;
 }
 
+void Preferences::refreshTilePropertiesFiles()
+{
+    mConfiguredTilePropertiesFiles = TileDefinitionPaths::sharedOverrides(
+                PortableSettings::sharedSettingsFilePath(), mProjectZomboidDirectory, mTilesDirectory);
+    const QStringList files = TileDefinitionPaths::configuredFiles(
+                mConfiguredTilePropertiesFiles, mProjectZomboidDirectory, mTilesDirectory);
+    if (mTilePropertiesFiles == files)
+        return;
+    mTilePropertiesFiles = files;
+    emit tilePropertiesFilesChanged(mTilePropertiesFiles);
+}
+
 void Preferences::reloadSharedPaths()
 {
     const QString configuration = PortableSettings::sharedConfigurationPath();
     const QString tiles = PortableSettings::sharedTilesPath();
+    const QString game = PortableSettings::sharedGamePath();
     const bool configurationChanged = mConfigDirectory != configuration;
     const bool tilesChanged = mTilesDirectory != tiles;
+    const bool gameChanged = mProjectZomboidDirectory != game;
     mConfigDirectory = configuration;
     mTilesDirectory = tiles;
+    mProjectZomboidDirectory = game;
+    refreshTilePropertiesFiles();
+    if (gameChanged)
+        emit projectZomboidDirectoryChanged();
     if (configurationChanged || tilesChanged) {
         qInfo().noquote() << "Synchronized shared paths:"
                          << QDir::toNativeSeparators(mConfigDirectory)
@@ -1129,6 +1142,7 @@ void Preferences::setTilesDirectory(const QString &path)
         return;
     mTilesDirectory = normalizedPath;
     PortableSettings::setSharedTilesPath(normalizedPath);
+    refreshTilePropertiesFiles();
     emit tilesDirectoryChanged();
 }
 
@@ -1149,6 +1163,7 @@ void Preferences::setProjectZomboidDirectory(const QString &path)
         return;
     mProjectZomboidDirectory = normalized;
     PortableSettings::setSharedGamePath(normalized);
+    refreshTilePropertiesFiles();
     emit projectZomboidDirectoryChanged();
 }
 QString Preferences::gameMediaPath(const QString &relativePath) const

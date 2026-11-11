@@ -1695,7 +1695,7 @@ MainWindow::MainWindow(QWidget *parent)
                                      QLatin1String("BiomeMap/ZoneBrushRadius"),
                                      0).toInt());
     biomeTool->setBiomeValue(mSettings.value(
-                                QLatin1String("BiomeMap/BiomeValue"), 171).toInt());
+                                QLatin1String("BiomeMap/BiomeValue"), 64).toInt());
     biomeTool->setZoneValue(mSettings.value(
                                QLatin1String("BiomeMap/ZoneValue"), 64).toInt());
     biomeTool->setPaintChannel(

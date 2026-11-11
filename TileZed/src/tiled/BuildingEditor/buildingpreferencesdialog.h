@@ -55,6 +55,7 @@ private:
     QCheckBox *mErrorsOnlyNotifications;
     QLineEdit *mProjectZomboidDirectory;
     QComboBox *mAutoSaveCombo;
+    QComboBox *mLanguageCombo;
 };
 
 } // BuildingEditor

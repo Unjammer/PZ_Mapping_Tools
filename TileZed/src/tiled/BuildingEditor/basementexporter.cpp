@@ -88,20 +88,17 @@ bool findStaircase(Map *map, const BasementStairTiles &tiles, bool access,
 }
 
 BasementStairTiles BasementExporter::staircaseTiles(
-        const QList<TileDefFile *> &definitions)
+        TileDefWatcher &watcher)
 {
+    watcher.check();
     BasementStairTiles result;
-    for (const TileDefFile *definition : definitions) {
-        if (!definition)
-            continue;
-        for (TileDefTileset *tileset : definition->tilesets()) {
-            for (TileDefTile *tile : qAsConst(tileset->mTiles)) {
-                const QString name = BuildingTilesMgr::nameForTile(tileset->mName, tile->id());
-                if (tile->mProperties.contains(QStringLiteral("stairsTN")))
-                    result.north.insert(name);
-                else if (tile->mProperties.contains(QStringLiteral("stairsTW")))
-                    result.west.insert(name);
-            }
+    const auto &definitions = watcher.definitions().sheets();
+    for (auto sheet = definitions.cbegin(); sheet != definitions.cend(); ++sheet) {
+        for (const auto *tile : sheet.value()) {
+            if (tile->mProperties.contains(QStringLiteral("stairsTN")))
+                result.north.insert(BuildingTilesMgr::nameForTile(sheet.key(), tile->id()));
+            else if (tile->mProperties.contains(QStringLiteral("stairsTW")))
+                result.west.insert(BuildingTilesMgr::nameForTile(sheet.key(), tile->id()));
         }
     }
     return result;

@@ -13,7 +13,6 @@
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
-#include <QHash>
 #include <QHeaderView>
 #include <QImage>
 #include <QLabel>
@@ -22,6 +21,7 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QVBoxLayout>
@@ -51,49 +51,62 @@ static QString colorsText(const QSet<QRgb> &colors)
     return result.join(QLatin1String(", "));
 }
 
-static int zoneId(const QString &type)
-{
-    static const QHash<QString, int> ids = {
-        {QStringLiteral("water"), 0},
-        {QStringLiteral("forest"), 59},
-        {QStringLiteral("trailerpark"), 102}, {QStringLiteral("townzone"), 115},
-        {QStringLiteral("farm"), 128}, {QStringLiteral("farmland"), 141},
-        {QStringLiteral("vegitation"), 171},
-        {QStringLiteral("deepforest"), 255}
-    };
-    return ids.value(type.toLower(), -1);
-}
-
 static void appendUnique(QStringList *values, const QString &value)
 {
     if (values && !values->contains(value, Qt::CaseInsensitive))
         *values += value;
 }
 
-static bool overrideFileEnablesPixel171(const QString &filePath)
+struct Pixel171Override
+{
+    QString path;
+    bool biome = false;
+    bool zone = false;
+};
+
+static Pixel171Override readPixel171Override(const QString &filePath)
 {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        return false;
+        return {};
 
     QString contents = QString::fromUtf8(file.readAll());
-    contents.remove(QRegularExpression(
-                        QStringLiteral("--\\[\\[[\\s\\S]*?\\]\\]")));
-    QStringList activeLines;
-    for (QString line : contents.split(QLatin1Char('\n'))) {
-        const int comment = line.indexOf(QLatin1String("--"));
-        if (comment >= 0)
-            line.truncate(comment);
-        activeLines += line;
+    static const QRegularExpression comments(
+                QStringLiteral("--(?:\\[(=*)\\[[\\s\\S]*?\\]\\1\\]|[^\\r\\n]*)"));
+    static const QRegularExpression declaration(
+                QStringLiteral("\\bbiome_map_config\\s*=\\s*\\{((?:[^{}]|\\{[^{}]*\\})*)\\}"));
+    static const QRegularExpression insertion(
+                QStringLiteral("\\btable\\s*\\.\\s*insert\\s*\\(\\s*biome_map_config\\s*,\\s*(\\{[^{}]*\\})\\s*\\)"));
+    static const QRegularExpression entry(QStringLiteral("\\{([^{}]*)\\}"));
+    static const QRegularExpression pixel(QStringLiteral("\\bpixel\\s*=\\s*171(?=\\s*(?:[,;]|$))"));
+    static const QRegularExpression biome(
+                QStringLiteral("\\bbiome\\s*=\\s*(?:\"vegitation\"|'vegitation')(?=\\s*(?:[,;]|$))"));
+    static const QRegularExpression zone(
+                QStringLiteral("\\bzone\\s*=\\s*(?:\"Vegitation\"|'Vegitation')(?=\\s*(?:[,;]|$))"));
+    contents.replace(comments, QStringLiteral(" "));
+    Pixel171Override result;
+    for (const auto *statement : {&declaration, &insertion}) {
+        auto statements = statement->globalMatch(contents);
+        while (statements.hasNext()) {
+            auto entries = entry.globalMatch(statements.next().captured(1));
+            while (entries.hasNext()) {
+                const QString fields = entries.next().captured(1);
+                if (fields.contains(pixel)) {
+                    result.path = filePath;
+                    result.biome = fields.contains(biome);
+                    result.zone = fields.contains(zone);
+                }
+            }
+        }
     }
-    return activeLines.join(QLatin1Char('\n')).contains(
-                QRegularExpression(
-                    QStringLiteral("\\bpixel\\s*=\\s*171\\b")));
+    return result;
 }
 
-static QString detectedPixel171Override(const QString &projectFilePath,
-                                        const QString &outputDirectory)
+static Pixel171Override detectedPixel171Override(const QString &projectFilePath,
+                                                  const QString &outputDirectory)
 {
+    if (outputDirectory.isEmpty())
+        return {};
     QStringList candidates;
     const QDir outputDir(outputDirectory);
     candidates += outputDir.filePath(QLatin1String("WorldGenOverride.lua"));
@@ -133,10 +146,11 @@ static QString detectedPixel171Override(const QString &projectFilePath,
         if (checked.contains(key))
             continue;
         checked.insert(key);
-        if (overrideFileEnablesPixel171(cleanPath))
-            return cleanPath;
+        const auto detected = readPixel171Override(cleanPath);
+        if (!detected.path.isEmpty())
+            return detected;
     }
-    return QString();
+    return {};
 }
 
 BiomeMapGeneratorDialog::BiomeMapGeneratorDialog(
@@ -248,17 +262,19 @@ void BiomeMapGeneratorDialog::updateZoneSource()
 }
 
 int BiomeMapGeneratorDialog::effectiveUnzonedFallback(
-        QString *overridePath) const
+        QString *overridePath, bool *biomeOverride) const
 {
-    const QString detected = detectedPixel171Override(
+    const auto detected = detectedPixel171Override(
                 mProjectFilePath, ui->outputDirectory->text().trimmed());
     if (overridePath)
-        *overridePath = detected;
+        *overridePath = detected.zone ? detected.path : QString();
+    if (biomeOverride)
+        *biomeOverride = detected.biome;
     if (ui->unzonedFallback->currentIndex() == 1)
         return 64;
     if (ui->unzonedFallback->currentIndex() == 2)
         return 171;
-    return detected.isEmpty() ? 64 : 171;
+    return detected.zone ? 171 : 64;
 }
 
 void BiomeMapGeneratorDialog::updateUnzonedFallback()
@@ -275,19 +291,19 @@ void BiomeMapGeneratorDialog::updateUnzonedFallback()
         if (value == 171) {
             ui->unzonedFallbackStatus->setText(
                         tr("Automatic selected green 171 (Vegitation). "
-                           "An active pixel 171 entry was found in:\n%1")
+                           "A literal pixel 171 zone entry was found in:\n%1")
                         .arg(QDir::toNativeSeparators(overridePath)));
         } else {
             ui->unzonedFallbackStatus->setText(
                         tr("Automatic selected green 64 (ForagingNav). "
-                           "No active pixel 171 WorldGenOverride.lua entry "
+                           "No matching pixel 171 WorldGenOverride.lua zone entry "
                            "was detected for this output."));
         }
     } else if (value == 171 && overridePath.isEmpty()) {
         ui->unzonedFallbackStatus->setText(
                     tr("Green 171 was selected explicitly, but no active "
-                       "pixel 171 WorldGenOverride.lua entry was detected. "
-                       "Vanilla Build 42.20 will not define this zone."));
+                       "pixel 171 WorldGenOverride.lua zone entry was detected. "
+                       "Vanilla Build 42.22.2 leaves this zone undefined."));
     } else if (value == 171) {
         ui->unzonedFallbackStatus->setText(
                     tr("Green 171 (Vegitation) is enabled by:\n%1")
@@ -295,7 +311,7 @@ void BiomeMapGeneratorDialog::updateUnzonedFallback()
     } else {
         ui->unzonedFallbackStatus->setText(
                     tr("Green 64 (ForagingNav) is active in Vanilla Build "
-                       "42.20 and requires no map override."));
+                       "42.22.2 and requires no map override."));
     }
 }
 
@@ -322,7 +338,7 @@ void BiomeMapGeneratorDialog::browseFallbackDirectory()
 void BiomeMapGeneratorDialog::showConfigurationReference()
 {
     QDialog dialog(this);
-    dialog.setWindowTitle(tr("Build 42.20 BiomeMapConfig Reference"));
+    dialog.setWindowTitle(tr("Build 42.22.2 BiomeMapConfig Reference"));
     dialog.resize(980, 610);
 
     QVBoxLayout *layout = new QVBoxLayout(&dialog);
@@ -330,7 +346,7 @@ void BiomeMapGeneratorDialog::showConfigurationReference()
                 tr("<b>Each pixel stores two independent identifiers.</b> "
                    "Red selects the biome and optional ore selector. Green selects "
                    "the foraging zone. Both channels resolve through the "
-                   "same Build 42.20 <tt>biome_map_config</tt> table.<br/>"
+                   "same Build 42.22.2 <tt>biome_map_config</tt> table.<br/>"
                    "<b>map_forest</b> selects procedural surface deposits "
                    "of boulders, limestone, or flint. Ore noise selects the "
                    "density from none through very high. It does not select "
@@ -375,7 +391,7 @@ void BiomeMapGeneratorDialog::showConfigurationReference()
                     row, 5,
                     new QTableWidgetItem(
                         entry.enabledByDefault
-                        ? tr("Vanilla Build 42.20")
+                        ? tr("Vanilla Build 42.22.2")
                         : tr("Map override required")));
     }
     table->horizontalHeader()->setSectionResizeMode(
@@ -454,15 +470,17 @@ void BiomeMapGeneratorDialog::generate()
         return;
     }
 
+    QString overridePath;
+    bool biomeOverride = false;
+    const int unzonedFallback = effectiveUnzonedFallback(&overridePath, &biomeOverride);
+    const bool useVegitationZone = !overridePath.isEmpty() || unzonedFallback == 171;
     QSet<QRgb> unknownColors;
     const QImage biomeLayer = BiomeMapImageProcessor::createBiomeLayer(
-                mainImage, vegetationImage, &unknownColors);
+                mainImage, vegetationImage, &unknownColors, biomeOverride);
     QStringList rasterizedZoneTypes;
     QStringList objectsLuaTypes;
-    QString overridePath;
-    const int unzonedFallback = effectiveUnzonedFallback(&overridePath);
     const QImage zoneLayer = ui->zonesFromWorld->isChecked()
-            ? createZoneLayer(mainImage.size(), unzonedFallback,
+            ? createZoneLayer(mainImage.size(), unzonedFallback, useVegitationZone,
                               &rasterizedZoneTypes, &objectsLuaTypes)
             : QImage(zoneImagePath);
     if (zoneLayer.isNull() || zoneLayer.size() != mainImage.size()) {
@@ -471,30 +489,21 @@ void BiomeMapGeneratorDialog::generate()
         return;
     }
 
+    const QPoint origin(ui->xOrigin->value(), ui->yOrigin->value());
     const BiomeMapImageProcessor::Analysis analysis =
-            BiomeMapImageProcessor::analyze(biomeLayer, zoneLayer);
+            BiomeMapImageProcessor::analyze(biomeLayer, zoneLayer, origin * projectCellSize);
     QStringList warnings;
     if (!unknownColors.isEmpty())
         warnings += tr("These source colors have no biome mapping: %1. "
-                       "WorldEd used each color's red component as a fallback "
-                       "biome ID. Repaint them with a supported terrain or "
-                       "vegetation color to avoid unintended biome IDs.")
+                       "WorldEd used neutral red ID 64 for these pixels.")
                 .arg(colorsText(unknownColors));
     if (!analysis.unknownBiomeValues.isEmpty())
         warnings += tr("Unknown biome IDs in the red layer: %1")
                 .arg(valuesText(analysis.unknownBiomeValues));
-    if (!analysis.biomeValuesWithoutEffect.isEmpty())
-        warnings += tr("Red IDs with no biome or ore effect: %1")
-                .arg(valuesText(analysis.biomeValuesWithoutEffect));
-    QSet<int> unresolvedOverrides = analysis.valuesRequiringOverride;
-    if (!overridePath.isEmpty())
-        unresolvedOverrides.remove(171);
-    if (!unresolvedOverrides.isEmpty()) {
-        warnings += tr("BiomeMap ID(s) requiring a map-specific "
-                       "WorldGenOverride.lua entry: %1. Vanilla Build 42.20 "
-                       "leaves ID 171 disabled, so it has no biome or zone "
-                       "definition unless the map enables it.")
-                .arg(valuesText(unresolvedOverrides));
+    if (analysis.zoneValues.contains(171) && overridePath.isEmpty()) {
+        warnings += tr("Green ID 171 requires a Vegitation zone entry in "
+                       "the map's WorldGenOverride.lua. Vanilla Build 42.22.2 "
+                       "leaves this ID disabled.");
     }
     if (!analysis.unknownZoneValues.isEmpty()) {
         QMessageBox::critical(this, tr("Invalid Foraging Zone IDs"),
@@ -503,12 +512,8 @@ void BiomeMapGeneratorDialog::generate()
                               .arg(valuesText(analysis.unknownZoneValues)));
         return;
     }
-    if (analysis.mixedZoneChunks > 0)
-        warnings += tr("%1 chunk(s) contain more than one green zone ID. "
-                       "Project Zomboid evaluates zones at 8 x 8 chunk granularity, "
-                       "so these zones may overlap.").arg(analysis.mixedZoneChunks);
     if (!warnings.isEmpty()) {
-        warnings += tr("The exact input bytes will be preserved. Continue anyway?");
+        warnings += tr("Continue with these biome and zone values?");
         if (QMessageBox::warning(this, tr("Biomemap Validation Warnings"),
                                  warnings.join(QLatin1String("\n\n")),
                                  QMessageBox::Ok | QMessageBox::Cancel,
@@ -533,7 +538,9 @@ void BiomeMapGeneratorDialog::generate()
 
     const QString biomeMapFile = outputDirectory.filePath(
                 QLatin1String("biome.png"));
-    if (!biomeMap.save(biomeMapFile, "PNG")) {
+    QSaveFile mergedFile(biomeMapFile);
+    if (!mergedFile.open(QIODevice::WriteOnly) || !biomeMap.save(&mergedFile, "PNG")
+            || !mergedFile.commit()) {
         QMessageBox::warning(this, tr("Save Failed"),
                              tr("Could not save %1.")
                              .arg(QDir::toNativeSeparators(biomeMapFile)));
@@ -545,7 +552,7 @@ void BiomeMapGeneratorDialog::generate()
     QStringList neutralFallbackTiles;
     if (!saveTiles(biomeMap, outputDirectory.absolutePath(),
                    ui->fallbackDirectory->text().trimmed(),
-                   QPoint(ui->xOrigin->value(), ui->yOrigin->value()),
+                   origin,
                    projectCellSize, &tileCount, &failedFile,
                    &neutralFallbackTiles)) {
         QMessageBox::warning(this, tr("Save Failed"),
@@ -558,6 +565,11 @@ void BiomeMapGeneratorDialog::generate()
     QString resultMessage = tr("Saved biome.png and %1 complete 256 x 256 map tile(s) in:\n%2")
             .arg(tileCount)
             .arg(QDir::toNativeSeparators(outputDirectory.absolutePath()));
+    if (analysis.mixedZoneChunks > 0) {
+        resultMessage += tr("\n\n%1 world-aligned 8 x 8 chunk(s) contain more than one green ID. "
+                            "The game evaluates each distinct ID in those chunks.")
+                .arg(analysis.mixedZoneChunks);
+    }
     if (ui->zonesFromWorld->isChecked()) {
         resultMessage += tr("\n\nUnzoned terrain uses green %1 (%2).")
                 .arg(unzonedFallback)
@@ -569,6 +581,11 @@ void BiomeMapGeneratorDialog::generate()
                 .arg(rasterizedZoneTypes.isEmpty()
                      ? tr("(none found)")
                      : rasterizedZoneTypes.join(QLatin1String(", ")));
+        if (!useVegitationZone && rasterizedZoneTypes.contains(
+                    QStringLiteral("Vegitation"), Qt::CaseInsensitive)) {
+            resultMessage += tr("\n\nVegitation zones were written as green 64 "
+                                "because no matching zone override was detected.");
+        }
         resultMessage += tr("\n\nVector object types excluded from the image; "
                             "export these through objects.lua:\n%1")
                 .arg(objectsLuaTypes.isEmpty()
@@ -576,10 +593,7 @@ void BiomeMapGeneratorDialog::generate()
                      : objectsLuaTypes.join(QLatin1String(", ")));
     } else {
         resultMessage += tr("\n\nThe selected PNG supplied the green channel. "
-                            "Vegitation, DeepForest, Forest, TownZone, Farm, "
-                            "FarmLand and TrailerPark belong in that image. "
-                            "Export every other vector zone/object type through "
-                            "objects.lua.");
+                            "The BiomeMapConfig reference lists the supported zone IDs.");
     }
     if (!neutralFallbackTiles.isEmpty()) {
         resultMessage += tr("\n\n%1 boundary tile(s) had no full-size base tile. "
@@ -595,7 +609,7 @@ void BiomeMapGeneratorDialog::generate()
 }
 
 QImage BiomeMapGeneratorDialog::createZoneLayer(
-        const QSize &size, int unzonedFallbackId,
+        const QSize &size, int unzonedFallbackId, bool useVegitationZone,
         QStringList *rasterizedTypes, QStringList *objectsLuaTypes) const
 {
     if (!mWorld || size != mWorld->size() * mWorld->cellSize())
@@ -617,12 +631,14 @@ QImage BiomeMapGeneratorDialog::createZoneLayer(
             if (!object->type())
                 continue;
             const QString type = object->type()->name();
-            const int id = zoneId(type);
+            int id = BiomeMapImageProcessor::zoneValueForName(type);
             if (id < 0) {
                 appendUnique(objectsLuaTypes, type);
                 continue;
             }
             appendUnique(rasterizedTypes, type);
+            if (id == 171 && !useVegitationZone)
+                id = 64;
             const QColor color(id, id, id);
             painter.setBrush(color);
             painter.setPen(Qt::NoPen);
@@ -655,7 +671,7 @@ QImage BiomeMapGeneratorDialog::createZoneLayer(
 bool BiomeMapGeneratorDialog::validateFallbackBehavior(QString *summary,
                                                        QString *error)
 {
-    if (zoneId(QStringLiteral("Water")) != 0) {
+    if (BiomeMapImageProcessor::zoneValueForName(QStringLiteral("Water")) != 0) {
         if (error)
             *error = QStringLiteral("Water zones do not map to green-channel value 0.");
         return false;
@@ -691,14 +707,23 @@ bool BiomeMapGeneratorDialog::validateFallbackBehavior(QString *summary,
 
     const QString overrideFile = QDir(mapsPath)
             .filePath(QLatin1String("../WorldGenOverride.lua"));
-    QFile file(overrideFile);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text) ||
-            file.write("biome_map_config = {\n    { pixel = 171, biome = \"vegitation\", zone = \"Vegitation\" },\n}\n") < 0) {
+    const auto writeOverride = [&](const QByteArray &contents) {
+        QFile file(overrideFile);
+        return file.open(QIODevice::WriteOnly | QIODevice::Text) && file.write(contents) == contents.size();
+    };
+    bool biomeOverride = false;
+    if (!writeOverride("--[=[table.insert(biome_map_config, {pixel = 171, zone = 'Vegitation'})]=]\n"
+                       "unrelated = { {pixel = 171, zone = 'Vegitation'} }\n")
+            || dialog.effectiveUnzonedFallback(nullptr, &biomeOverride) != 64 || biomeOverride
+            || !writeOverride("table.insert(biome_map_config, {pixel = 171, biome = 'vegitation'})\n")
+            || dialog.effectiveUnzonedFallback(nullptr, &biomeOverride) != 64 || !biomeOverride
+            || !writeOverride("table.insert(biome_map_config, {pixel = 171, zone = 'Vegitation'})\n")
+            || dialog.effectiveUnzonedFallback(nullptr, &biomeOverride) != 171 || biomeOverride
+            || !writeOverride("biome_map_config = {\n { pixel = 171, biome = 'vegitation', zone = 'Vegitation' },\n}\n")) {
         if (error)
-            *error = QStringLiteral("Could not write the pixel 171 override fixture.");
+            *error = QStringLiteral("BiomeMap did not distinguish literal biome and zone overrides from unrelated or commented entries.");
         return false;
     }
-    file.close();
 
     QString detectedPath;
     if (dialog.effectiveUnzonedFallback(&detectedPath) != 171 ||
@@ -709,10 +734,10 @@ bool BiomeMapGeneratorDialog::validateFallbackBehavior(QString *summary,
     }
 
     const QImage overrideZone = dialog.createZoneLayer(
-                QSize(256, 256), 171, nullptr, nullptr);
+                QSize(256, 256), 171, true, nullptr, nullptr);
     dialog.ui->unzonedFallback->setCurrentIndex(1);
     const QImage vanillaZone = dialog.createZoneLayer(
-                QSize(256, 256), dialog.effectiveUnzonedFallback(),
+                QSize(256, 256), dialog.effectiveUnzonedFallback(), false,
                 nullptr, nullptr);
     if (overrideZone.isNull() || vanillaZone.isNull() ||
             qGreen(overrideZone.pixel(127, 127)) != 171 ||
@@ -722,9 +747,46 @@ bool BiomeMapGeneratorDialog::validateFallbackBehavior(QString *summary,
         return false;
     }
 
+    const QDir fixture(temporary.path());
+    const QString output = fixture.filePath(QStringLiteral("output"));
+    const QString fallback = fixture.filePath(QStringLiteral("fallback"));
+    if (!QDir().mkpath(output) || !QDir().mkpath(fallback))
+        return false;
+    QImage pixels(300, 300, QImage::Format_ARGB32);
+    pixels.fill(qRgb(217, 230, 0));
+    QImage existing(256, 256, QImage::Format_ARGB32);
+    existing.fill(qRgb(153, 179, 43));
+    QImage invalid(4, 4, QImage::Format_ARGB32);
+    invalid.fill(Qt::black);
+    const QString firstTile = QStringLiteral("biomemap_1_1.png");
+    const QString existingPath = QDir(output).filePath(firstTile);
+    const QString fallbackPath = QDir(fallback).filePath(firstTile);
+    QString failedFile;
+    QStringList neutral;
+    int tiles = 0;
+    if (!existing.save(existingPath) || !invalid.save(fallbackPath)
+            || !dialog.saveTiles(pixels, output, fallback, QPoint(1, 1), 300,
+                                 &tiles, &failedFile, &neutral)) {
+        if (error)
+            *error = QStringLiteral("Could not export the legacy boundary fixture %1").arg(failedFile);
+        return false;
+    }
+    const QImage first(existingPath);
+    const QImage last(QDir(output).filePath(QStringLiteral("biomemap_2_2.png")));
+    if (tiles != 4 || neutral.size() != 3 || first.size() != existing.size()
+            || last.size() != existing.size()
+            || first.pixel(43, 44) != existing.pixel(0, 0)
+            || first.pixel(44, 44) != pixels.pixel(0, 0)
+            || last.pixel(87, 87) != pixels.pixel(0, 0)
+            || last.pixel(88, 88) != qRgb(64, 64, 0)) {
+        if (error)
+            *error = QStringLiteral("Legacy export did not preserve valid boundary data and native 256-cell offsets.");
+        return false;
+    }
+
     if (summary) {
         *summary = QStringLiteral(
-                    "Water maps to green 0, automatic fallback selected 64 without an override and 171 with an active map override");
+                    "literal overrides, zone fallback and legacy boundary export");
     }
     if (error)
         error->clear();
@@ -771,41 +833,37 @@ bool BiomeMapGeneratorDialog::saveTiles(const QImage &image,
             const QRect coveredWorldRect =
                     tileWorldRect.intersected(sourceWorldRect);
 
-            QImage tile(tileSize, tileSize, QImage::Format_ARGB32);
-            bool hasBaseTile = false;
-            QString baseFilePath;
-            if (!fallbackDirectory.isEmpty())
-                baseFilePath = fallbackDir.filePath(fileName);
-            if ((baseFilePath.isEmpty() || !QFileInfo::exists(baseFilePath))
-                    && QFileInfo::exists(filePath)) {
-                baseFilePath = filePath;
-            }
-            if (!baseFilePath.isEmpty()) {
-                const QImage baseTile(baseFilePath);
-                if (!baseTile.isNull()
-                        && baseTile.size() == QSize(tileSize, tileSize)) {
-                    tile = baseTile.convertToFormat(QImage::Format_ARGB32);
-                    hasBaseTile = true;
+            const QRect sourceRect = coveredWorldRect.translated(-sourceWorldOrigin);
+            QImage tile;
+            if (coveredWorldRect == tileWorldRect) {
+                tile = image.copy(sourceRect);
+            } else {
+                QStringList basePaths{filePath};
+                if (!fallbackDirectory.isEmpty()) {
+                    const QString fallbackPath = fallbackDir.filePath(fileName);
+                    if (fallbackPath != filePath)
+                        basePaths.prepend(fallbackPath);
                 }
+                for (const QString &basePath : basePaths) {
+                    const QImage base(basePath);
+                    if (base.size() == QSize(tileSize, tileSize)) {
+                        tile = base.convertToFormat(QImage::Format_ARGB32);
+                        break;
+                    }
+                }
+                if (tile.isNull()) {
+                    tile = QImage(tileSize, tileSize, QImage::Format_ARGB32);
+                    tile.fill(qRgba(64, 64, 0, 255));
+                    if (neutralFallbackTiles)
+                        *neutralFallbackTiles += fileName;
+                }
+                QPainter painter(&tile);
+                painter.setCompositionMode(QPainter::CompositionMode_Source);
+                painter.drawImage(coveredWorldRect.topLeft() - tileWorldRect.topLeft(),
+                                  image, sourceRect);
             }
-            if (!hasBaseTile)
-                tile.fill(qRgba(64, 64, 0, 255));
-
-            if (coveredWorldRect != tileWorldRect && !hasBaseTile
-                    && neutralFallbackTiles) {
-                *neutralFallbackTiles += fileName;
-            }
-
-            const QRect sourceRect =
-                    coveredWorldRect.translated(-sourceWorldOrigin);
-            const QPoint destination =
-                    coveredWorldRect.topLeft() - tileWorldRect.topLeft();
-            QPainter painter(&tile);
-            painter.setCompositionMode(QPainter::CompositionMode_Source);
-            painter.drawImage(destination, image, sourceRect);
-            painter.end();
-
-            if (!tile.save(filePath, "PNG")) {
+            QSaveFile file(filePath);
+            if (!file.open(QIODevice::WriteOnly) || !tile.save(&file, "PNG") || !file.commit()) {
                 if (failedFile)
                     *failedFile = filePath;
                 return false;

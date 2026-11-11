@@ -70,6 +70,19 @@ RoomDef name
 └── container type
 ```
 
+Use **Edit room translations...** to fill the **Translation** column. Enter
+one `RoomDef=translation` pair per line, using the exact internal RoomDef
+name. These two lines translate a library and a living room.
+
+```text
+library=图书馆
+livingroom=客厅
+```
+
+TileZed and BuildingEd share the UTF-8 dictionary in
+`settings/LootRoomTranslations.txt`. The room filter matches both the
+original RoomDef names and your translations.
+
 A container mapping is one of two forms:
 
 - **Procedural**: a `procList` selects a named entry from
@@ -78,8 +91,17 @@ A container mapping is one of two forms:
   table directly.
 
 The **Procedural distributions** tab lists the reusable named item tables.
-Filtering matches either the distribution name or an item name. Game entries
-are labelled **Game**; additions and overrides are labelled **Project**.
+Item names use the selected interface language and the game's `ItemName.json`
+under `media/lua/shared/Translate`. For Simplified Chinese, the language
+directory is `CN`. The item ID appears when a translation is unavailable and
+remains available in the tooltip. Filtering matches the distribution name,
+item ID, or displayed item name. Project edits and generated Lua use the
+original item IDs.
+
+Set the interface language in TileZed or BuildingEd Preferences. The loot
+editor interface is available in English, Simplified Chinese and French.
+Game entries are labelled **Game**. Additions and overrides are labelled
+**Project**.
 
 Editing a game entry creates a complete project override. Removing that
 override reveals the read-only game definition again.

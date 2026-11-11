@@ -44,6 +44,37 @@
 
 using namespace Tiled;
 
+#ifdef ZOMBOID
+static QTransform isometricTileTransform(const Cell &cell, int x, int y, int tileWidth)
+{
+    const Tile *tile = cell.tile;
+    const int width = tile->width();
+    const int height = tile->height();
+    qreal scale = 1.0;
+    if (tileWidth == width * 2)
+        scale = 2.0;
+    else if (tileWidth * 2 == width)
+        scale = 0.5;
+
+    const QPoint offset = tile->tileset()->tileOffset();
+    const QPoint crop = tile->offset();
+    const bool transpose = cell.flippedAntiDiagonally;
+    const int drawWidth = transpose ? height : width;
+    const int drawHeight = transpose ? width : height;
+    const int cropX = transpose ? crop.y() : crop.x();
+    const int cropY = transpose ? crop.x() : crop.y();
+    const qreal scaleX = cell.flippedHorizontally ? -scale : scale;
+    const qreal scaleY = cell.flippedVertically ? -scale : scale;
+    const qreal dx = x + offset.x() + cropX * scaleX
+            + (cell.flippedHorizontally ? drawWidth * scale : 0.0);
+    const qreal dy = y + offset.y() + cropY * scaleY
+            - (cell.flippedVertically ? 0.0 : drawHeight * scale);
+    if (transpose)
+        return QTransform(0, scaleY, scaleX, 0, dx, dy);
+    return QTransform(scaleX, 0, 0, scaleY, dx, dy);
+}
+#endif
+
 QSize IsometricRenderer::mapSize() const
 {
     // Map width and height contribute equally in both directions
@@ -272,9 +303,12 @@ void IsometricRenderer::drawTileLayer(QPainter *painter,
                 if (!cell.isEmpty()) {
 #ifdef ZOMBOID
                     const QImage &img = cell.tile->image();
+                    if (!img.isNull()) {
+                        painter->setTransform(isometricTileTransform(cell, x, y, tileWidth) * baseTransform);
+                        painter->drawImage(0, 0, img);
+                    }
 #else
                     const QPixmap &img = cell.tile->image();
-#endif
                     const QPoint offset = cell.tile->tileset()->tileOffset();
 
                     qreal m11 = 1;      // Horizontal scaling factor
@@ -310,9 +344,6 @@ void IsometricRenderer::drawTileLayer(QPainter *painter,
                     const QTransform transform(m11, m12, m21, m22, dx, dy);
                     painter->setTransform(transform * baseTransform);
 
-#ifdef ZOMBOID
-                    painter->drawImage(0, 0, img);
-#else
                     painter->drawPixmap(0, 0, img);
 #endif
                 }
@@ -418,44 +449,11 @@ void IsometricRenderer::drawTileLayerGroup(QPainter *painter, ZTileLayerGroup *l
                     const Cell *cell = cells[i];
                     if (!cell->isEmpty()) {
                         const QImage &img = cell->tile->image();
-                        const QPoint offset = cell->tile->tileset()->tileOffset();
-
-                        qreal m11 = 1;      // Horizontal scaling factor
-                        qreal m12 = 0;      // Vertical shearing factor
-                        qreal m21 = 0;      // Horizontal shearing factor
-                        qreal m22 = 1;      // Vertical scaling factor
-                        qreal dx = offset.x() + x;
-                        qreal dy = offset.y() + y - img.height();
-
-                        if (cell->flippedAntiDiagonally) {
-                            // Use shearing to swap the X/Y axis
-                            m11 = 0;
-                            m12 = 1;
-                            m21 = 1;
-                            m22 = 0;
-
-                            // Compensate for the swap of image dimensions
-                            dy += img.height() - img.width();
+                        if (!img.isNull()) {
+                            painter->setTransform(isometricTileTransform(*cell, x, y, tileWidth) * baseTransform);
+                            painter->setOpacity(opacities[i] * opacity);
+                            painter->drawImage(0, 0, img);
                         }
-                        if (cell->flippedHorizontally) {
-                            m11 = -m11;
-                            m21 = -m21;
-                            dx += cell->flippedAntiDiagonally ? img.height()
-                                                             : img.width();
-                        }
-                        if (cell->flippedVertically) {
-                            m12 = -m12;
-                            m22 = -m22;
-                            dy += cell->flippedAntiDiagonally ? img.width()
-                                                             : img.height();
-                        }
-
-                        const QTransform transform(m11, m12, m21, m22, dx, dy);
-                        painter->setTransform(transform * baseTransform);
-
-                        painter->setOpacity(opacities[i] * opacity);
-
-                        painter->drawImage(0, 0, img);
                     }
                 }
             }

@@ -16,7 +16,6 @@
  */
 
 #include "createpackdialog.h"
-#include "../../../shared/tiledefinitionpaths.h"
 #include "ui_createpackdialog.h"
 
 #include "texturepacker.h"
@@ -47,6 +46,8 @@ CreatePackDialog::CreatePackDialog(QWidget *parent) :
     ui(new Ui::CreatePackDialog)
 {
     ui->setupUi(this);
+    ui->tileDefList->setDragDropMode(QAbstractItemView::InternalMove);
+    ui->tileDefList->setToolTip(tr("Drag to set the load order. Leave the list empty to use the shared TileDef settings."));
 
     QToolBar *tb = new QToolBar(this);
 //    tb->setIconSize(QSize(16, 16));
@@ -498,23 +499,6 @@ bool PackSettingsFile::read(const QString &fileName)
                     .arg(block.lineNumber)
                     .arg(block.name);
             return false;
-        }
-    }
-
-    bool contains = false;
-    for (const QString &filePath : mSettings.mTileDefFiles) {
-        if (TileDefinitionPaths::logicalName(filePath).compare(
-                    QStringLiteral("newtiledefinitions.tiles"), Qt::CaseInsensitive) == 0) {
-            contains = true;
-            break;
-        }
-    }
-    if (contains == false) {
-        QFileInfo fileInfo(TileDefinitionPaths::existingFile(
-                    Tiled::Internal::Preferences::instance()->tilesDirectory()
-                    + QString::fromLatin1("/newtiledefinitions.tiles")));
-        if (fileInfo.exists()) {
-            mSettings.mTileDefFiles += fileInfo.absoluteFilePath();
         }
     }
 

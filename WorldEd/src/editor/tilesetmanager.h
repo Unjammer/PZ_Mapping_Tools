@@ -31,6 +31,7 @@
 #include <QString>
 #include <QSet>
 #include <QTimer>
+#include "tilesetimagepaths.h"
 
 class QImage;
 class TilesetImageLoader;
@@ -62,14 +63,6 @@ struct TilesetSpec
     int tileHeight;
     int tileSpacing;
     int margin;
-};
-
-class TilesetPaths
-{
-public:
-    bool bValid = false;
-    QString path1x;
-    QString path2x;
 };
 
 /**
@@ -146,7 +139,8 @@ public:
 #ifdef ZOMBOID
     void tilesetDirectoryChanged();
 
-    bool getTilesetFileName(const QString &tilesetName, QString &path1x, QString &path2x);
+    bool getTilesetFileName(const QString &tilesetName, QString &path1x, QString &path2x,
+                            int *scale = nullptr);
 
     void changeTilesetSource(Tileset *tileset, const QString &source, bool missing);
 
@@ -175,7 +169,7 @@ public:
                          QWidget *parent = nullptr, int expectedTotal = -1);
     int countLoadingTilesets(const QList<Tileset *> &tilesets) const;
 
-    void cachePZProperties(Tileset *cached);
+    void cachePZProperties(Tileset *cached, bool refresh = false);
     void copyPZProperties(Tileset *src, Tileset *dst);
     QString cacheMemorySummary() const;
 #endif
@@ -219,6 +213,7 @@ private:
     TilesetImageCache *mTilesetImageCache;
     TilesetImageLoader *mImageLoader;
     QSet<Tileset *> mPendingImages;
+    TilesetImagePaths mImagePaths;
     void queueImage(Tileset *tileset);
 
     Tileset *mInvisibleTileset;
@@ -253,7 +248,6 @@ private:
     QStringList mWatchedTilesetDirectories;
     QTimer mChangedFilesTimer;
     bool mReloadTilesetsOnChange;
-    QMap<QString,TilesetPaths> mTilesetPaths;
 };
 
 } // namespace Internal

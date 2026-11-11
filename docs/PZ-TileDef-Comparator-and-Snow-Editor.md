@@ -167,6 +167,28 @@ Runtime references: `ILockableDoor.isForceLocked()`,
 `IsoDoor.isNotValidForForcing()`, `IsoDoor.getBaseForceOpenChance()`,
 `IsoWindow.canOpen()` and `IsoWindow.isNotValidForForcing()`.
 
+### Window supports and wall cutaways
+
+BuildingEd uses the window sprite's `WindowShape` to select the corresponding
+opening from the wall material. The game reads the cutaway shape from the
+supporting wall sprite. For example, `walls_exterior_house_04_34` and
+`walls_exterior_house_04_35` support north-facing shapes 17 and 18.
+
+For Build 42.22.2, the optional [window support patch](../tools/TileDefs/pz42-window-supports.patch.tiles)
+adds shapes 17, 18 and 19 to selected vanilla wall sprites and supplies the
+frame properties for `walls_exterior_house_04_76` through `_79`. Use the
+[editable companion](../tools/TileDefs/pz42-window-supports.patch.tiles.txt)
+to inspect or edit the patch in TileZed.
+
+Copy `pz42-window-supports.patch.tiles` to the map mod's `common/media`
+folder and add `tiledef=pz42-window-supports.patch N` to its active
+`mod.info`. Replace `N` with a number from 100 to 8189 that is unused by
+the active mods. Add the binary patch under **Additional Tile Property
+Files** in TileZed Preferences to use the same properties in the editors.
+List it after any mod definitions that supply those wall sprites. Regenerate
+LOT files from the source building if an earlier export contains standard
+wall openings in place of the shaped supports.
+
 ### Moveable weight and CustomItem
 
 For sprites with `IsMoveAble`, `Moveable.ReadFromWorldSprite()` interprets

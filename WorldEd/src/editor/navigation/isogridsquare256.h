@@ -20,8 +20,11 @@
 
 #include <QStringList>
 
-class GenerateLotsSettings;
+#include "../../../../shared/tiledefinitionindex.h"
+
 class TileDefFile;
+class TileDefFileReader;
+class TileDefTile;
 
 namespace Navigate {
 
@@ -55,8 +58,8 @@ public:
     bool mWater;
     bool mRoom;
 
-    static QList<TileDefFile*> mTileDefFiles;
-    static bool loadTileDefFiles(const GenerateLotsSettings &settings, QString &error);
+    using Definitions = TileDefinitionIndex<TileDefFile, TileDefFileReader, TileDefTile>;
+    static Definitions mTileDefinitions;
 };
 
 } // namespace Navigate

@@ -239,7 +239,7 @@
    <item>
     <widget class="QLabel" name="configurationDescription">
      <property name="text">
-      <string>&lt;b&gt;Build 42.20 configuration:&lt;/b&gt; the red channel selects biome and ore behavior, while the green channel selects the foraging zone. Both use the same pixel-ID table.</string>
+      <string>&lt;b&gt;Build 42.22.2 configuration:&lt;/b&gt; the red channel selects biome and ore behavior, while the green channel selects the foraging zone. Both use the same pixel-ID table.</string>
      </property>
      <property name="wordWrap">
       <bool>true</bool>
@@ -249,7 +249,7 @@
    <item>
     <widget class="QPushButton" name="configurationReferenceButton">
      <property name="text">
-      <string>Show Build 42.20 BiomeMapConfig Reference...</string>
+      <string>Show Build 42.22.2 BiomeMapConfig Reference...</string>
      </property>
     </widget>
    </item>

@@ -1692,7 +1692,10 @@ void TileDefWatcherFile::check(Tiled::Internal::FileSystemWatcher &watcher)
     if (fileInfo.exists()) {
         qDebug() << "TileDefWatcher read " << fileInfo.absoluteFilePath();
         TileDefFileReader reader;
-        reader.read(fileInfo.absoluteFilePath(), *mTileDefFile);
+        if (!reader.read(fileInfo.absoluteFilePath(), *mTileDefFile)) {
+            qWarning().noquote() << mTileDefFile->errorString();
+            qDeleteAll(mTileDefFile->takeTilesets());
+        }
         QString canonicalPath = fileInfo.canonicalFilePath();
         if (watching != canonicalPath) {
             watcher.addPath(canonicalPath);
@@ -1708,12 +1711,12 @@ TileDefWatcher::TileDefWatcher() :
     mWatcher(new FileSystemWatcher(this))
 {
     connect(mWatcher, &FileSystemWatcher::fileChanged, this, &TileDefWatcher::fileChanged);
-#ifdef WORLDED
+    connect(Preferences::instance(), &Preferences::tilePropertiesFilesChanged, this,
+            [this](const QStringList &paths) {
+        preferencesChanged(paths);
+        mChangedFilesTimer.start();
+    });
     preferencesChanged(Preferences::instance()->tilePropertiesFiles());
-#else
-    connect(Preferences::instance(), &Preferences::tilePropertiesFilesChanged, this, &TileDefWatcher::preferencesChanged);
-    preferencesChanged(Tiled::Internal::Preferences::instance()->tilePropertiesFiles());
-#endif
 
     mChangedFilesTimer.setInterval(3000);
     mChangedFilesTimer.setSingleShot(true);
@@ -1731,38 +1734,23 @@ void TileDefWatcher::check()
     if (!mNeedsCheck)
         return;
 
+    mDefinitions = {};
     for (TileDefWatcherFile *watcherFile : qAsConst(mFiles)) {
         watcherFile->tileDefFileChecked = false;
         watcherFile->check(*mWatcher);
-    }
-    for (int i = 0; i < mFiles.size(); ++i) {
-        TileDefWatcherFile *patch = mFiles.at(i);
-        if (!TileDefinitionPaths::logicalName(patch->mFilePath).endsWith(QLatin1String(".patch.tiles"),
-                                       Qt::CaseInsensitive))
-            continue;
-        for (int j = 0; j < i; ++j)
-            mFiles.at(j)->mTileDefFile->mergePropertiesFrom(
-                        *patch->mTileDefFile);
+        mDefinitions.add(*watcherFile->mTileDefFile, TileDefinitionPaths::isPatch(watcherFile->mFilePath));
     }
     mNeedsCheck = false;
 }
 
-TileDefTileset *TileDefWatcher::tileset(const QString &tilesetName)
+const QVector<TileDefTile *> &TileDefWatcher::tiles(const QString &tilesetName) const
 {
-    for (TileDefWatcherFile *watcherFile : qAsConst(mFiles)) {
-        if (TileDefTileset *tileset = watcherFile->mTileDefFile->tileset(tilesetName)) {
-            return tileset;
-        }
-    }
-    return nullptr;
+    return mDefinitions.tiles(tilesetName);
 }
 
-TileDefTile *TileDefWatcher::tile(const QString &tilesetName, int tileIndex)
+TileDefTile *TileDefWatcher::tile(const QString &tilesetName, int tileIndex) const
 {
-    if (TileDefTileset *tileset1 = tileset(tilesetName)) {
-        return tileset1->tileAt(tileIndex);
-    }
-    return nullptr;
+    return mDefinitions.tile(tilesetName, tileIndex);
 }
 
 TileDefWatcherFile *TileDefWatcher::fileByName(const QString &filePath)
@@ -1878,45 +1866,43 @@ static bool tileHasGrimeProperties(BuildingTile *btile, GrimeProperties *props)
         props->DoubleLeft = props->DoubleRight = false;
     }
 
-    if (TileDefTileset *tdts = tileDefWatcher->tileset(btile->mTilesetName)) {
-        if (TileDefTile *tdt = tdts->tileAt(btile->mIndex)) {
-            if (tdt->mProperties.contains(QString::fromLatin1("GrimeType"))) {
-                if (props) {
-                    if (tdt->mProperties.contains(QString::fromLatin1("DoorWallW")) ||
-                            tdt->mProperties.contains(QString::fromLatin1("WallW")) ||
-                            tdt->mProperties.contains(QString::fromLatin1("WallWTrans")) ||
-                            tdt->mProperties.contains(QString::fromLatin1("windowW")))
-                        props->West = true;
-                    else if (tdt->mProperties.contains(QString::fromLatin1("DoorWallN")) ||
-                             tdt->mProperties.contains(QString::fromLatin1("WallN")) ||
-                             tdt->mProperties.contains(QString::fromLatin1("WallNTrans")) ||
-                             tdt->mProperties.contains(QString::fromLatin1("windowN")))
-                        props->North = true;
-                    else if (tdt->mProperties.contains(QString::fromLatin1("WallNW")))
-                        props->West = props->North = true;
-                    else if (tdt->mProperties.contains(QString::fromLatin1("WallSE")))
-                        props->SouthEast = true;
-                    if (tdt->mProperties.contains(QLatin1String("GrimeType"))) {
-                        props->FullWindow = tdt->mProperties[QLatin1String("GrimeType")] == QLatin1String("FullWindow");
-                        props->Trim = tdt->mProperties[QLatin1String("GrimeType")] == QLatin1String("Trim");
-                        props->DoubleLeft = tdt->mProperties[QLatin1String("GrimeType")] == QLatin1String("DoubleLeft");
-                        props->DoubleRight = tdt->mProperties[QLatin1String("GrimeType")] == QLatin1String("DoubleRight");
-                    }
+    if (auto *tdt = tileDefWatcher->tile(btile->mTilesetName, btile->mIndex)) {
+        if (tdt->mProperties.contains(QString::fromLatin1("GrimeType"))) {
+            if (props) {
+                if (tdt->mProperties.contains(QString::fromLatin1("DoorWallW")) ||
+                        tdt->mProperties.contains(QString::fromLatin1("WallW")) ||
+                        tdt->mProperties.contains(QString::fromLatin1("WallWTrans")) ||
+                        tdt->mProperties.contains(QString::fromLatin1("windowW")))
+                    props->West = true;
+                else if (tdt->mProperties.contains(QString::fromLatin1("DoorWallN")) ||
+                         tdt->mProperties.contains(QString::fromLatin1("WallN")) ||
+                         tdt->mProperties.contains(QString::fromLatin1("WallNTrans")) ||
+                         tdt->mProperties.contains(QString::fromLatin1("windowN")))
+                    props->North = true;
+                else if (tdt->mProperties.contains(QString::fromLatin1("WallNW")))
+                    props->West = props->North = true;
+                else if (tdt->mProperties.contains(QString::fromLatin1("WallSE")))
+                    props->SouthEast = true;
+                if (tdt->mProperties.contains(QLatin1String("GrimeType"))) {
+                    props->FullWindow = tdt->mProperties[QLatin1String("GrimeType")] == QLatin1String("FullWindow");
+                    props->Trim = tdt->mProperties[QLatin1String("GrimeType")] == QLatin1String("Trim");
+                    props->DoubleLeft = tdt->mProperties[QLatin1String("GrimeType")] == QLatin1String("DoubleLeft");
+                    props->DoubleRight = tdt->mProperties[QLatin1String("GrimeType")] == QLatin1String("DoubleRight");
                 }
-                return true;
             }
-            if (tdt->mProperties.contains(QString::fromLatin1("WallW"))) {
-                if (props) {
-                    props->West = true; // regular west wall
-                }
-                return true;
+            return true;
+        }
+        if (tdt->mProperties.contains(QString::fromLatin1("WallW"))) {
+            if (props) {
+                props->West = true; // regular west wall
             }
-            if (tdt->mProperties.contains(QString::fromLatin1("WallN"))) {
-                if (props) {
-                    props->North = true; // regular north wall
-                }
-                return true;
+            return true;
+        }
+        if (tdt->mProperties.contains(QString::fromLatin1("WallN"))) {
+            if (props) {
+                props->North = true; // regular north wall
             }
+            return true;
         }
     }
 

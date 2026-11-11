@@ -552,23 +552,30 @@ bool TileMetaInfoMgr::addNewTilesets(bool loadImages)
         const QString tilesetName = imageInfo.completeBaseName();
         if (tileset(tilesetName))
             continue;
-        QImageReader reader(it.value().path);
+        QString imageSource;
+        QString imageSource2x;
+        int scale = 1;
+        if (!TilesetManager::instance()->getTilesetFileName(
+                    tilesetName, imageSource, imageSource2x, &scale))
+            continue;
+        const QString &imagePath = scale == 2 ? imageSource2x : imageSource;
+        QImageReader reader(imagePath);
         const QSize imageSize = reader.size();
         const QSize tileSize =
                 Tiled::getZomboidTilesetSize1x(tilesetName);
         if (!imageSize.isValid()
-                || imageSize.width() < tileSize.width() * it.value().scale
-                || imageSize.height() < tileSize.height() * it.value().scale) {
+                || imageSize.width() < tileSize.width() * scale
+                || imageSize.height() < tileSize.height() * scale) {
             qWarning() << "Ignoring undersized tileset PNG"
-                       << it.value().path << imageSize;
+                       << imagePath << imageSize;
             continue;
         }
         Tileset *newTileset = nullptr;
         if (loadImages) {
-            newTileset = loadTileset(it.value().path);
+            newTileset = loadTileset(imagePath);
             if (!newTileset) {
                 qWarning() << "Unable to discover tileset"
-                           << it.value().path << mError;
+                           << imagePath << mError;
                 continue;
             }
         } else {
@@ -576,20 +583,16 @@ bool TileMetaInfoMgr::addNewTilesets(bool loadImages)
                                      tileSize.width(),
                                      tileSize.height());
             Tiled::setZomboidTileOffset(newTileset);
-            QString imageSource;
-            QString imageSource2x;
-            TilesetManager::instance()->getTilesetFileName(
-                        tilesetName, imageSource, imageSource2x);
             const QSize logicalImageSize =
-                    imageSize / it.value().scale;
+                    imageSize / scale;
             if (!newTileset->loadFromNothing(logicalImageSize,
                                              imageSource)) {
                 qWarning() << "Unable to register tileset metadata"
-                           << it.value().path << logicalImageSize;
+                           << imagePath << logicalImageSize;
                 delete newTileset;
                 continue;
             }
-            if (it.value().scale == 2)
+            if (scale == 2)
                 newTileset->setImageSource2x(imageSource2x);
             else
                 newTileset->setImageSource2x(QString());

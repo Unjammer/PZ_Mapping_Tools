@@ -13,6 +13,7 @@
 #include <QPainterPath>
 #include <QSaveFile>
 #include <QtMath>
+#include <array>
 #include <cmath>
 static int floorDivide(int value, int divisor)
 {
@@ -395,6 +396,8 @@ QString BiomeMapItem::mapsDirectoryPath() const
 {
     const GenerateLotsSettings &settings =
             mScene->world()->getGenerateLotsSettings();
+    if (!settings.biomeMap.trimmed().isEmpty())
+        return QFileInfo(configuredFilePath()).absolutePath();
     const QString exportRoot = settings.exportDir.isEmpty()
             ? PortableSettings::installRootPath()
             : settings.exportDir;
@@ -445,6 +448,7 @@ bool BiomeMapItem::loadTiles(QImage *image) const
     QImage assembled(expected, QImage::Format_ARGB32);
     assembled.fill(qRgba(64, 64, 0, 255));
     QPainter painter(&assembled);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
     bool found = false;
     for (int tileY = firstTileY; tileY <= lastTileY; ++tileY) {
         for (int tileX = firstTileX; tileX <= lastTileX; ++tileX) {
@@ -553,6 +557,12 @@ void BiomeMapItem::rebuildPreview()
         return;
     }
     QImage visual(mSourceImage.size(), QImage::Format_ARGB32);
+    static const auto colors = [] {
+        std::array<QRgb, 256> result{};
+        for (int value = 0; value < int(result.size()); ++value)
+            result[value] = BiomeMapImageProcessor::displayColor(value).rgb();
+        return result;
+    }();
     for (int y = 0; y < mSourceImage.height(); ++y) {
         const QRgb *source =
                 reinterpret_cast<const QRgb *>(mSourceImage.constScanLine(y));
@@ -560,9 +570,7 @@ void BiomeMapItem::rebuildPreview()
         for (int x = 0; x < mSourceImage.width(); ++x) {
             const int value = mDisplayZoneChannel
                     ? qGreen(source[x]) : qRed(source[x]);
-            const QColor color =
-                    BiomeMapImageProcessor::displayColor(value);
-            target[x] = qRgba(color.red(), color.green(), color.blue(), 255);
+            target[x] = colors[value];
         }
     }
     QTransform transform;

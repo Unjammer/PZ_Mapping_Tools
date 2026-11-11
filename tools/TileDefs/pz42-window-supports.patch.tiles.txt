@@ -1,0 +1,71 @@
+version = 1
+tileset
+{
+    file = walls_exterior_house_03
+    size = 8,2
+    id = 1
+    tile
+    {
+        xy = 0,1
+        WindowShape = 19
+    }
+    tile
+    {
+        xy = 1,1
+        WindowShape = 19
+    }
+}
+tileset
+{
+    file = walls_exterior_house_04
+    size = 8,10
+    id = 2
+    tile
+    {
+        xy = 0,4
+        WindowShape = 17
+    }
+    tile
+    {
+        xy = 1,4
+        WindowShape = 18
+    }
+    tile
+    {
+        xy = 2,4
+        WindowShape = 17
+    }
+    tile
+    {
+        xy = 3,4
+        WindowShape = 18
+    }
+    tile
+    {
+        xy = 4,9
+        WindowShape = 17
+        WindowW = 
+        wall = 
+    }
+    tile
+    {
+        xy = 5,9
+        WindowShape = 18
+        WindowW = 
+        wall = 
+    }
+    tile
+    {
+        xy = 6,9
+        WindowN = 
+        WindowShape = 17
+        wall = 
+    }
+    tile
+    {
+        xy = 7,9
+        WindowN = 
+        WindowShape = 18
+        wall = 
+    }
+}

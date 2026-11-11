@@ -160,6 +160,14 @@
 <context>
     <name>MainWindow</name>
     <message>
+        <source>Procedural Loot Viewer / Editor...</source>
+        <translation>程序化战利品查看器 / 编辑器…</translation>
+    </message>
+    <message>
+        <source>Inspect game RoomDef/container loot and edit project-owned procedural distributions</source>
+        <translation>查看游戏房间和容器中的战利品并编辑项目的程序化分布</translation>
+    </message>
+    <message>
         <location filename="../src/tiled/mainwindow.ui" line="+17"/>
         <source>Tiled</source>
         <translation>Tiled</translation>
@@ -2793,6 +2801,861 @@ Line %1, column %2</source>
         <location filename="../src/tiled/utils.cpp" line="+31"/>
         <source>Image files</source>
         <translation>图像文件</translation>
+    </message>
+</context>
+<context>
+    <name>Tiled::Internal::LootDistributionDialog</name>
+    <message>
+        <source>Could not read %1: %2</source>
+        <translation>无法读取 %1：%2</translation>
+    </message>
+    <message>
+        <source>Could not save %1: %2</source>
+        <translation>无法保存 %1：%2</translation>
+    </message>
+    <message>
+        <source>%1
+
+%2</source>
+        <translation>%1
+
+%2</translation>
+    </message>
+    <message>
+        <source>Select the Project Zomboid game directory or its media/lua/server/Items directory.</source>
+        <translation>请选择《Project Zomboid》的游戏目录或其 media/lua/server/Items 目录。</translation>
+    </message>
+    <message>
+        <source>Could not create the isolated Lua state.</source>
+        <translation>无法创建隔离的 Lua 环境。</translation>
+    </message>
+    <message>
+        <source>The game loot registries were loaded but no room or procedural definitions were found.</source>
+        <translation>已加载游戏战利品数据，但未找到房间定义或程序化分布。</translation>
+    </message>
+    <message>
+        <source>Invalid loot-editor manifest %1: %2</source>
+        <translation>战利品编辑器清单 %1 无效：%2</translation>
+    </message>
+    <message>
+        <source>Unsupported loot-editor manifest schema in %1.</source>
+        <translation>%1 中的战利品编辑器清单格式不受支持。</translation>
+    </message>
+    <message>
+        <source>Could not create the Lua syntax checker.</source>
+        <translation>无法创建 Lua 语法检查器。</translation>
+    </message>
+    <message>
+        <source>Generated Lua is invalid: %1</source>
+        <translation>生成的 Lua 无效：%1</translation>
+    </message>
+    <message>
+        <source>Select a project/mod root first.</source>
+        <translation>请先选择项目或模组的根目录。</translation>
+    </message>
+    <message>
+        <source>The project/mod root must be outside the Project Zomboid game directory. Game files remain read-only.</source>
+        <translation>项目或模组的根目录必须位于《Project Zomboid》游戏目录之外。游戏文件保持只读。</translation>
+    </message>
+    <message>
+        <source>Could not create %1.</source>
+        <translation>无法创建 %1。</translation>
+    </message>
+    <message>
+        <source>Item row %1 has a chance but no item name.</source>
+        <translation>物品列表第 %1 行有概率，但缺少物品名称。</translation>
+    </message>
+    <message>
+        <source>Item row %1 needs a non-negative numeric chance per roll.</source>
+        <translation>物品列表第 %1 行的单次抽取概率必须为非负数。</translation>
+    </message>
+    <message>
+        <source>Add row</source>
+        <translation>添加行</translation>
+    </message>
+    <message>
+        <source>Remove selected rows</source>
+        <translation>移除选中的行</translation>
+    </message>
+    <message>
+        <source>Item</source>
+        <translation>物品</translation>
+    </message>
+    <message>
+        <source>Chance / roll</source>
+        <translation>单次抽取概率</translation>
+    </message>
+    <message>
+        <source>New procedural distribution</source>
+        <translation>新建程序化分布</translation>
+    </message>
+    <message>
+        <source>Edit procedural distribution</source>
+        <translation>编辑程序化分布</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>名称</translation>
+    </message>
+    <message>
+        <source>Rolls</source>
+        <translation>抽取次数</translation>
+    </message>
+    <message>
+        <source>Items - each chance is tested on every roll</source>
+        <translation>物品（每次抽取均独立判定各项概率）</translation>
+    </message>
+    <message>
+        <source>Junk - sandbox loot rarity does not reduce it</source>
+        <translation>杂物（沙盒稀有度不会降低其掉落概率）</translation>
+    </message>
+    <message>
+        <source>Junk rolls</source>
+        <translation>杂物抽取次数</translation>
+    </message>
+    <message>
+        <source>Missing name</source>
+        <translation>缺少名称</translation>
+    </message>
+    <message>
+        <source>Enter a procedural-distribution name.</source>
+        <translation>请输入程序化分布的名称。</translation>
+    </message>
+    <message>
+        <source>Invalid item chance</source>
+        <translation>物品概率无效</translation>
+    </message>
+    <message>
+        <source>New room/container distribution</source>
+        <translation>新建房间或容器的分布</translation>
+    </message>
+    <message>
+        <source>Edit room/container distribution</source>
+        <translation>编辑房间或容器的分布</translation>
+    </message>
+    <message>
+        <source>Procedural</source>
+        <translation>程序化</translation>
+    </message>
+    <message>
+        <source>Direct item rolls</source>
+        <translation>直接抽取物品</translation>
+    </message>
+    <message>
+        <source>RoomDef name</source>
+        <translation>房间定义名称</translation>
+    </message>
+    <message>
+        <source>Container type</source>
+        <translation>容器类型</translation>
+    </message>
+    <message>
+        <source>Mode</source>
+        <translation>模式</translation>
+    </message>
+    <message>
+        <source>Weight is relative among eligible rows. min/max count containers already assigned in the RoomDef. A force* selector takes priority when it matches.</source>
+        <translation>权重仅在符合条件的规则之间比较。min/max 统计该房间定义中已分配的容器。匹配的 force* 条件优先。</translation>
+    </message>
+    <message>
+        <source>Distribution</source>
+        <translation>分布</translation>
+    </message>
+    <message>
+        <source>Weight</source>
+        <translation>权重</translation>
+    </message>
+    <message>
+        <source>Min</source>
+        <translation>最小值</translation>
+    </message>
+    <message>
+        <source>Max</source>
+        <translation>最大值</translation>
+    </message>
+    <message>
+        <source>Force items</source>
+        <translation>强制物品条件</translation>
+    </message>
+    <message>
+        <source>Force zones</source>
+        <translation>强制区域条件</translation>
+    </message>
+    <message>
+        <source>Force tiles</source>
+        <translation>强制图块条件</translation>
+    </message>
+    <message>
+        <source>Force rooms</source>
+        <translation>强制房间条件</translation>
+    </message>
+    <message>
+        <source>Editor notes</source>
+        <translation>编辑器备注</translation>
+    </message>
+    <message>
+        <source>Add procedural rule</source>
+        <translation>添加程序化规则</translation>
+    </message>
+    <message>
+        <source>Ignore zombie-density bonus</source>
+        <translation>忽略僵尸密度加成</translation>
+    </message>
+    <message>
+        <source>Trash container</source>
+        <translation>垃圾容器</translation>
+    </message>
+    <message>
+        <source>fillRand (0 = unset)</source>
+        <translation>fillRand（0 = 未设置）</translation>
+    </message>
+    <message>
+        <source>Items</source>
+        <translation>物品</translation>
+    </message>
+    <message>
+        <source>Junk</source>
+        <translation>杂物</translation>
+    </message>
+    <message>
+        <source>Missing identity</source>
+        <translation>缺少标识</translation>
+    </message>
+    <message>
+        <source>Enter both a RoomDef name and a container type.</source>
+        <translation>请输入房间定义名称和容器类型。</translation>
+    </message>
+    <message>
+        <source>Empty procedural mapping</source>
+        <translation>缺少程序化映射规则</translation>
+    </message>
+    <message>
+        <source>Add at least one procedural-distribution rule.</source>
+        <translation>请至少添加一条程序化分布规则。</translation>
+    </message>
+    <message>
+        <source>Invalid procedural rule</source>
+        <translation>程序化规则无效</translation>
+    </message>
+    <message>
+        <source>Procedural rule %1 needs a distribution name.</source>
+        <translation>程序化规则 %1 缺少分布名称。</translation>
+    </message>
+    <message>
+        <source>Missing distribution</source>
+        <translation>缺少分布</translation>
+    </message>
+    <message>
+        <source>Rule %1 references "%2", which is not present in the effective procedural-distribution registry.</source>
+        <translation>规则 %1 引用的“%2”不在当前程序化分布中。</translation>
+    </message>
+    <message>
+        <source>Rule %1 has a non-integer weight, min, or max value.</source>
+        <translation>规则 %1 的权重、最小值或最大值不是整数。</translation>
+    </message>
+    <message>
+        <source>Select the read-only game definitions.</source>
+        <translation>请选择只读的游戏定义目录。</translation>
+    </message>
+    <message>
+        <source>Procedural Loot Viewer / Editor</source>
+        <translation>程序化战利品查看器 / 编辑器</translation>
+    </message>
+    <message>
+        <source>Definition sources</source>
+        <translation>定义来源</translation>
+    </message>
+    <message>
+        <source>Project Zomboid game directory (read-only)</source>
+        <translation>《Project Zomboid》游戏目录（只读）</translation>
+    </message>
+    <message>
+        <source>Browse...</source>
+        <translation>浏览…</translation>
+    </message>
+    <message>
+        <source>Game definitions (read-only)</source>
+        <translation>游戏定义（只读）</translation>
+    </message>
+    <message>
+        <source>Map project or mod root (editable)</source>
+        <translation>地图项目或模组根目录（可编辑）</translation>
+    </message>
+    <message>
+        <source>Project / mod root (editable)</source>
+        <translation>项目或模组根目录（可编辑）</translation>
+    </message>
+    <message>
+        <source>Reload</source>
+        <translation>重新加载</translation>
+    </message>
+    <message>
+        <source>Open generated location</source>
+        <translation>打开生成文件的目录</translation>
+    </message>
+    <message>
+        <source>Filter RoomDef, translation or container type...</source>
+        <translation>筛选房间定义、译名或容器类型…</translation>
+    </message>
+    <message>
+        <source>Room / container</source>
+        <translation>房间 / 容器</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>来源</translation>
+    </message>
+    <message>
+        <source>Translation</source>
+        <translation>译名</translation>
+    </message>
+    <message>
+        <source>New room/container...</source>
+        <translation>新建房间或容器…</translation>
+    </message>
+    <message>
+        <source>Clone / edit in project...</source>
+        <translation>复制或在项目中编辑…</translation>
+    </message>
+    <message>
+        <source>Remove project override</source>
+        <translation>移除项目覆盖</translation>
+    </message>
+    <message>
+        <source>Edit room translations...</source>
+        <translation>编辑房间译名…</translation>
+    </message>
+    <message>
+        <source>Rooms &amp;&amp; containers</source>
+        <translation>房间和容器</translation>
+    </message>
+    <message>
+        <source>Room translations</source>
+        <translation>房间译名</translation>
+    </message>
+    <message>
+        <source>Enter one RoomDef ID=translation per line.
+Example: library=Library</source>
+        <translation>每行输入一个“房间定义 ID=译名”。
+例如：library=图书馆</translation>
+    </message>
+    <message>
+        <source>Line %1 must contain a RoomDef ID and a translation separated by =.</source>
+        <translation>第 %1 行必须包含用 = 分隔的房间定义 ID 和译名。</translation>
+    </message>
+    <message>
+        <source>Filter procedural distribution or item...</source>
+        <translation>筛选程序化分布或物品…</translation>
+    </message>
+    <message>
+        <source>Procedural distribution</source>
+        <translation>程序化分布</translation>
+    </message>
+    <message>
+        <source>New distribution...</source>
+        <translation>新建分布…</translation>
+    </message>
+    <message>
+        <source>Procedural distributions</source>
+        <translation>程序化分布</translation>
+    </message>
+    <message>
+        <source>Choose Project Zomboid game directory</source>
+        <translation>选择《Project Zomboid》游戏目录</translation>
+    </message>
+    <message>
+        <source>Choose map project or mod root</source>
+        <translation>选择地图项目或模组的根目录</translation>
+    </message>
+    <message>
+        <source>Unsafe project location</source>
+        <translation>项目位置不安全</translation>
+    </message>
+    <message>
+        <source>Choose a project/mod root outside the Project Zomboid installation. The editor never writes into the game directory.</source>
+        <translation>请选择《Project Zomboid》安装目录之外的项目或模组根目录。编辑器不会写入游戏目录。</translation>
+    </message>
+    <message>
+        <source>Could not load loot definitions</source>
+        <translation>无法加载战利品定义</translation>
+    </message>
+    <message>
+        <source>Could not load project loot</source>
+        <translation>无法加载项目战利品</translation>
+    </message>
+    <message>
+        <source>Loaded %1 rooms, %2 procedural distributions; %3 project room/container overrides and %4 project procedural overrides. Game files remain read-only. %5 unresolved references are marked in the mapping table.</source>
+        <translation>已加载 %1 个房间和 %2 个程序化分布。项目覆盖了 %3 个房间或容器以及 %4 个程序化分布。游戏文件保持只读。映射表中标出了 %5 个未解析的引用。</translation>
+    </message>
+    <message>
+        <source>Project</source>
+        <translation>项目</translation>
+    </message>
+    <message>
+        <source>Game</source>
+        <translation>游戏</translation>
+    </message>
+    <message>
+        <source>Game + project</source>
+        <translation>游戏与项目</translation>
+    </message>
+    <message>
+        <source>Select a container below this RoomDef.</source>
+        <translation>请选择此房间定义下的容器。</translation>
+    </message>
+    <message>
+        <source>Procedural selector. Share is normalized only among non-forced rows shown here; force* constraints and min/max can change which rows are eligible at runtime.</source>
+        <translation>程序化选择器。占比仅按此处显示的非强制规则计算。force* 条件和 min/max 可能改变游戏中符合条件的规则。</translation>
+    </message>
+    <message>
+        <source>Direct distribution: %1 rolls. Chance / roll is the Lua value before sandbox rarity, zombie density, time decay and container-capacity effects.</source>
+        <translation>直接分布，抽取 %1 次。单次抽取概率为 Lua 原始值，未计入沙盒稀有度、僵尸密度、时间衰减和容器容量。</translation>
+    </message>
+    <message>
+        <source>Neutral share</source>
+        <translation>基准占比</translation>
+    </message>
+    <message>
+        <source>Forced by</source>
+        <translation>强制条件</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>状态</translation>
+    </message>
+    <message>
+        <source>items</source>
+        <translation>物品</translation>
+    </message>
+    <message>
+        <source>zones</source>
+        <translation>区域</translation>
+    </message>
+    <message>
+        <source>tiles</source>
+        <translation>图块</translation>
+    </message>
+    <message>
+        <source>rooms</source>
+        <translation>房间</translation>
+    </message>
+    <message>
+        <source>N/A</source>
+        <translation>不适用</translation>
+    </message>
+    <message>
+        <source>(missing = 0)</source>
+        <translation>（缺省 = 0）</translation>
+    </message>
+    <message>
+        <source>Resolved</source>
+        <translation>已解析</translation>
+    </message>
+    <message>
+        <source>Group</source>
+        <translation>类别</translation>
+    </message>
+    <message>
+        <source>Neutral cumulative</source>
+        <translation>基准累计概率</translation>
+    </message>
+    <message>
+        <source>Notes</source>
+        <translation>备注</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>普通物品</translation>
+    </message>
+    <message>
+        <source>Junk modifier rules</source>
+        <translation>杂物修正规则</translation>
+    </message>
+    <message>
+        <source>%1 normal rolls and %2 junk rolls. The cumulative column is a neutral mathematical preview, not an exact in-game result: sandbox category multipliers, zombie density, time decay and capacity still apply.</source>
+        <translation>普通物品抽取 %1 次，杂物抽取 %2 次。累计概率仅供参考。游戏中仍会应用沙盒类别倍率、僵尸密度、时间衰减和容器容量。</translation>
+    </message>
+    <message>
+        <source>Duplicate entries</source>
+        <translation>重复条目</translation>
+    </message>
+    <message>
+        <source>%1 independent entries</source>
+        <translation>%1 个独立条目</translation>
+    </message>
+    <message>
+        <source>Replace existing definition</source>
+        <translation>替换现有定义</translation>
+    </message>
+    <message>
+        <source>A distribution named "%1" already exists. Create a project override for it?</source>
+        <translation>已存在名为“%1”的分布。是否创建项目覆盖？</translation>
+    </message>
+    <message>
+        <source>Remove the project definition "%1"? The read-only game definition, if any, will become visible again.</source>
+        <translation>是否移除项目定义“%1”？若游戏中存在对应的只读定义，将恢复显示。</translation>
+    </message>
+    <message>
+        <source>Replace existing mapping</source>
+        <translation>替换现有映射</translation>
+    </message>
+    <message>
+        <source>The mapping %1 -&gt; %2 already exists. Create a project override for it?</source>
+        <translation>映射 %1 → %2 已存在。是否创建项目覆盖？</translation>
+    </message>
+    <message>
+        <source>Remove the project mapping %1 -&gt; %2? The read-only game mapping, if any, will become visible again.</source>
+        <translation>是否移除项目映射 %1 → %2？若游戏中存在对应的只读映射，将恢复显示。</translation>
+    </message>
+    <message>
+        <source>Could not save project loot</source>
+        <translation>无法保存项目战利品</translation>
+    </message>
+    <message>
+        <source>Saved %1 and generated %2. Game files were not modified.</source>
+        <translation>已保存 %1 并生成 %2。游戏文件未修改。</translation>
+    </message>
+    <message>
+        <source>The project/mod root is inside the read-only game directory.</source>
+        <translation>项目或模组的根目录位于只读的游戏目录中。</translation>
+    </message>
+    <message>
+        <source>Unresolved project procedural references:
+%1</source>
+        <translation>项目中未解析的程序化分布引用如下。
+%1</translation>
+    </message>
+    <message>
+        <source>%1 rooms, %2 containers (%3 procedural, %4 direct), %5 procedural distributions, %6 project overrides, %7 unresolved read-only game references</source>
+        <translation>%1 个房间，%2 个容器（%3 个程序化分布，%4 个直接分布），%5 个程序化分布定义，%6 个项目覆盖，%7 个未解析的只读游戏引用</translation>
+    </message>
+    <message>
+        <source>Could not create screenshot directory %1.</source>
+        <translation>无法创建截图目录 %1。</translation>
+    </message>
+    <message>
+        <source>Could not save loot-editor screenshot %1.</source>
+        <translation>无法保存战利品编辑器的截图 %1。</translation>
+    </message>
+    <message>
+        <source>Loot localization validation failed.</source>
+        <translation>战利品本地化验证失败。</translation>
+    </message>
+    <message>
+        <source>. Loot localization checks passed.</source>
+        <translation>。战利品本地化检查通过。</translation>
+    </message>
+</context>
+<context>
+    <name>BuildingEditor::BuildingPreferencesDialog</name>
+    <message>
+        <source>Interface language:</source>
+        <translation>界面语言：</translation>
+    </message>
+    <message>
+        <source>System default</source>
+        <translation>系统默认</translation>
+    </message>
+</context>
+<context>
+    <name>BuildingEditorWindow</name>
+    <message>
+        <source>Procedural Loot Viewer / Editor...</source>
+        <translation>程序化战利品查看器 / 编辑器…</translation>
+    </message>
+    <message>
+        <source>Inspect loot for RoomDefs and edit project-owned procedural distributions</source>
+        <translation>查看房间定义的战利品并编辑项目的程序化分布</translation>
+    </message>
+</context>
+<context>
+    <name>QPlatformTheme</name>
+    <message>
+        <source>OK</source>
+        <translation>确定</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>关闭</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>保存</translation>
+    </message>
+    <message>
+        <source>&amp;Yes</source>
+        <translation>是(&amp;Y)</translation>
+    </message>
+    <message>
+        <source>&amp;No</source>
+        <translation>否(&amp;N)</translation>
+    </message>
+</context>
+<context>
+    <name>QFileDialog</name>
+    <message>
+        <source>Look in:</source>
+        <translation>查找位置：</translation>
+    </message>
+    <message>
+        <source>Back</source>
+        <translation>后退</translation>
+    </message>
+    <message>
+        <source>Go back</source>
+        <translation>返回上一目录</translation>
+    </message>
+    <message>
+        <source>Forward</source>
+        <translation>前进</translation>
+    </message>
+    <message>
+        <source>Go forward</source>
+        <translation>前往下一目录</translation>
+    </message>
+    <message>
+        <source>Parent Directory</source>
+        <translation>上级目录</translation>
+    </message>
+    <message>
+        <source>Go to the parent directory</source>
+        <translation>转到上级目录</translation>
+    </message>
+    <message>
+        <source>Create New Folder</source>
+        <translation>新建文件夹</translation>
+    </message>
+    <message>
+        <source>Create a New Folder</source>
+        <translation>新建文件夹</translation>
+    </message>
+    <message>
+        <source>List View</source>
+        <translation>列表视图</translation>
+    </message>
+    <message>
+        <source>Change to list view mode</source>
+        <translation>切换为列表视图</translation>
+    </message>
+    <message>
+        <source>Detail View</source>
+        <translation>详细视图</translation>
+    </message>
+    <message>
+        <source>Change to detail view mode</source>
+        <translation>切换为详细视图</translation>
+    </message>
+    <message>
+        <source>Sidebar</source>
+        <translation>侧边栏</translation>
+    </message>
+    <message>
+        <source>List of places and bookmarks</source>
+        <translation>位置和书签列表</translation>
+    </message>
+    <message>
+        <source>Files</source>
+        <translation>文件</translation>
+    </message>
+    <message>
+        <source>Files of type:</source>
+        <translation>文件类型：</translation>
+    </message>
+    <message>
+        <source>Directory:</source>
+        <translation>目录：</translation>
+    </message>
+    <message>
+        <source>File &amp;name:</source>
+        <translation>文件名(&amp;N)：</translation>
+    </message>
+    <message>
+        <source>Find Directory</source>
+        <translation>查找目录</translation>
+    </message>
+    <message>
+        <source>Directories</source>
+        <translation>目录</translation>
+    </message>
+    <message>
+        <source>&amp;Open</source>
+        <translation>打开(&amp;O)</translation>
+    </message>
+    <message>
+        <source>&amp;Choose</source>
+        <translation>选择(&amp;C)</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>打开</translation>
+    </message>
+    <message>
+        <source>&amp;New Folder</source>
+        <translation>新建文件夹(&amp;N)</translation>
+    </message>
+    <message>
+        <source>New Folder</source>
+        <translation>新建文件夹</translation>
+    </message>
+    <message>
+        <source>&amp;Rename</source>
+        <translation>重命名(&amp;R)</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>删除</translation>
+    </message>
+    <message>
+        <source>&amp;Delete</source>
+        <translation>删除(&amp;D)</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>移除</translation>
+    </message>
+    <message>
+        <source>Show &amp;hidden files</source>
+        <translation>显示隐藏文件(&amp;H)</translation>
+    </message>
+    <message>
+        <source>Show </source>
+        <translation>显示 </translation>
+    </message>
+    <message>
+        <source>Recent Places</source>
+        <translation>最近访问的位置</translation>
+    </message>
+    <message>
+        <source>All files (*)</source>
+        <translation>所有文件 (*)</translation>
+    </message>
+    <message>
+        <source>%1
+Directory not found.
+Please verify the correct directory name was given.</source>
+        <translation>%1
+找不到目录。
+请检查目录名称。</translation>
+    </message>
+    <message>
+        <source>%1
+File not found.
+Please verify the correct file name was given.</source>
+        <translation>%1
+找不到文件。
+请检查文件名称。</translation>
+    </message>
+    <message>
+        <source>'%1' is write protected.
+Do you want to delete it anyway?</source>
+        <translation>“%1”受写入保护。
+是否仍要删除？</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete '%1'?</source>
+        <translation>确定要删除“%1”吗？</translation>
+    </message>
+    <message>
+        <source>Could not delete directory.</source>
+        <translation>无法删除目录。</translation>
+    </message>
+</context>
+<context>
+    <name>QFileSystemModel</name>
+    <message>
+        <source>Name</source>
+        <translation>名称</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>大小</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <comment>All other platforms</comment>
+        <translation>类型</translation>
+    </message>
+    <message>
+        <source>Date Modified</source>
+        <translation>修改日期</translation>
+    </message>
+    <message>
+        <source>Computer</source>
+        <translation>计算机</translation>
+    </message>
+    <message>
+        <source>My Computer</source>
+        <translation>此电脑</translation>
+    </message>
+    <message>
+        <source>Invalid filename</source>
+        <translation>文件名无效</translation>
+    </message>
+</context>
+<context>
+    <name>QWidgetTextControl</name>
+    <message>
+        <source>&amp;Undo</source>
+        <translation>撤销(&amp;U)</translation>
+    </message>
+    <message>
+        <source>&amp;Redo</source>
+        <translation>重做(&amp;R)</translation>
+    </message>
+    <message>
+        <source>Cu&amp;t</source>
+        <translation>剪切(&amp;T)</translation>
+    </message>
+    <message>
+        <source>&amp;Copy</source>
+        <translation>复制(&amp;C)</translation>
+    </message>
+    <message>
+        <source>&amp;Paste</source>
+        <translation>粘贴(&amp;P)</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>删除</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation>全选</translation>
+    </message>
+</context>
+<context>
+    <name>QLineEdit</name>
+    <message>
+        <source>&amp;Undo</source>
+        <translation>撤销(&amp;U)</translation>
+    </message>
+    <message>
+        <source>&amp;Redo</source>
+        <translation>重做(&amp;R)</translation>
+    </message>
+    <message>
+        <source>Cu&amp;t</source>
+        <translation>剪切(&amp;T)</translation>
+    </message>
+    <message>
+        <source>&amp;Copy</source>
+        <translation>复制(&amp;C)</translation>
+    </message>
+    <message>
+        <source>&amp;Paste</source>
+        <translation>粘贴(&amp;P)</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>删除</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation>全选</translation>
     </message>
 </context>
 </TS>

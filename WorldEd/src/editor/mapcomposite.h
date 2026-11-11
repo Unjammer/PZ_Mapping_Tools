@@ -24,6 +24,7 @@
 #include "tilelayer.h" // for Cell
 #endif
 #include "ztilelayergroup.h"
+#include "lotcomposition.h"
 
 #include <QObject>
 #include <QMap>
@@ -86,7 +87,6 @@ struct TilePlusLayer
 {
     TilePlusLayer()
         : mSubMap(nullptr)
-        , mHideIfVisible(nullptr)
         , mLayerName()
         , mTile(nullptr)
         , mVisible(true)
@@ -97,10 +97,11 @@ struct TilePlusLayer
 
     TilePlusLayer(const TilePlusLayer& rhs) noexcept
         : mSubMap(rhs.mSubMap)
-        , mHideIfVisible(rhs.mHideIfVisible)
+        , mCoveringLots(rhs.mCoveringLots)
         , mLayerName(rhs.mLayerName)
         , mTile(rhs.mTile)
         , mVisible(rhs.mVisible)
+        , mLeadingUnderlayFloor(rhs.mLeadingUnderlayFloor)
         , mOpacity(rhs.mOpacity)
     {
 
@@ -108,10 +109,11 @@ struct TilePlusLayer
 
     TilePlusLayer(const TilePlusLayer&& rhs) noexcept
         : mSubMap(rhs.mSubMap)
-        , mHideIfVisible(rhs.mHideIfVisible)
+        , mCoveringLots(rhs.mCoveringLots)
         , mLayerName(rhs.mLayerName)
         , mTile(rhs.mTile)
         , mVisible(rhs.mVisible)
+        , mLeadingUnderlayFloor(rhs.mLeadingUnderlayFloor)
         , mOpacity(rhs.mOpacity)
     {
 
@@ -119,7 +121,6 @@ struct TilePlusLayer
 
     TilePlusLayer(const QString &layerName, const Tiled::Tile *tile, bool visible, qreal opacity)
         : mSubMap(nullptr)
-        , mHideIfVisible(nullptr)
         , mLayerName(layerName)
         , mTile(tile)
         , mVisible(visible)
@@ -131,19 +132,21 @@ struct TilePlusLayer
     TilePlusLayer& operator=(const TilePlusLayer& other) noexcept
     {
         mSubMap = other.mSubMap;
-        mHideIfVisible = other.mHideIfVisible;
+        mCoveringLots = other.mCoveringLots;
         mLayerName = other.mLayerName;
         mTile = other.mTile;
         mVisible = other.mVisible;
+        mLeadingUnderlayFloor = other.mLeadingUnderlayFloor;
         mOpacity = other.mOpacity;
         return *this;
     }
 
     MapComposite *mSubMap; // This tile belongs to a Lot
-    MapComposite *mHideIfVisible; // This tile belongs to a Cell, hide it if the Lot=mHideIfVisible is visible
+    PZTools::LotVisibilityMask mCoveringLots;
     QString mLayerName;
     const Tiled::Tile* mTile;
     bool mVisible;
+    bool mLeadingUnderlayFloor = false;
     qreal mOpacity;
 };
 

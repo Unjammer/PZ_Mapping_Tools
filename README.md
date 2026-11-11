@@ -146,19 +146,32 @@ Check Buildings groups selected Kids Bedroom and Rearrange Grid repairs by
 building and saves each changed TBX once. Selecting both a building and one
 of its issues does not apply that issue twice.
 
-Tile definitions can be loaded from binary `.tiles` files or their editable
-`.tiles.txt` companions. TileDefs opens either format and saves the binary
-file together with its text companion. Generate Lots, building tile properties,
-Loot and Create .pack also accept text definitions. Text `.patch.tiles.txt`
-files apply after their base definitions. Automatic discovery loads each
-binary/text pair once, using the binary when both are present. An explicitly
-configured text file remains selected.
+TileDefs opens binary `.tiles` files and editable `.tiles.txt` companions
+and saves both. Automatic discovery selects the binary when both files are
+present. Select the text companion explicitly to load it instead.
 
-Game tile definitions are detected in `media/tile_definitions` and in the
-older `media` layout. Generate Lots also accepts the game root or either
-media directory and resolves the tile-definitions folder. Mod definitions
-retain their configured locations. Ladder direction uses the Build 42.22
-property names `ladderN`, `ladderS`, `ladderE` and `ladderW`.
+The editors resolve vanilla TileDefs from the selected Project Zomboid
+installation, checking `media/tile_definitions` before the older `media`
+layout. Changing the installation refreshes the automatic paths.
+
+In TileZed Preferences, add mod files under **Additional Tile Property Files**
+in the order of the game's active mods and their `tiledef=` entries. Put each
+`.patch.tiles` or `.patch.tiles.txt` after the definition it changes. A patch
+adds or replaces properties on sprites already loaded. A later regular
+TileDef replaces the sprite records it supplies. The three editors share
+this list and read it on startup.
+
+Generate Lots accepts the game root, either media directory or a project
+TileDef directory. It uses the same order for LOT export and for rebuilding
+navigation from `.source`. WorldEd loads extra definitions discovered in the
+project directory, then the explicit mod list in its configured order, then
+the remaining patches discovered in that directory. Add a patch to the
+explicit list to choose where it applies. Create .pack uses the shared list
+by default. A pack profile with TileDef entries supplies its own ordered
+list of additions.
+
+Ladder direction uses the Build 42.22 property names `ladderN`, `ladderS`,
+`ladderE` and `ladderW`.
 
 The [Build 42.22 property reference](docs/PZ-TileDef-Comparator-and-Snow-Editor.md#build-4222-property-reference)
 explains ladder directions and landings, the `Material` sound choice,
@@ -166,6 +179,13 @@ door/window forcing properties, and `PickUpWeight` with `CustomItem`.
 
 LOT export removes the `.png` suffix from tilesheet names regardless of its
 letter case, so `.png` and `.PNG` sheets produce the same sprite names.
+
+TileZed's legacy isometric TMX view preserves the original position and scale
+of cropped sprites. Windows stay aligned with their supporting wall openings
+when viewing a building exported from BuildingEd.
+
+The [Build 42.22.2 window support patch](docs/PZ-TileDef-Comparator-and-Snow-Editor.md#window-supports-and-wall-cutaways)
+provides the missing wall cutaway properties for selected vanilla supports.
 
 TileSetZ is available directly in TileZed's Tools menu and a tile's context
 menu. It creates and edits PNG tilesheets and precuts textures at the wall-face
@@ -204,10 +224,12 @@ Clearing outside the current furniture dimensions leaves its tile grid intact.
 BuildingEd copies room layouts only with All Layers selected. Copying tiles
 from the current layer and level pastes onto the destination layer without
 creating or replacing rooms. Extended window shapes retain wall grime.
-Walls, trims, doors, windows and frames on floorless building squares retain
-underlying vegetation. Furniture and other nonstructural layers clear the
-Vegetation layers beneath them. Matching layers are replaced, building floors
-cover underlying map tiles, and AboveLot layers remain above buildings.
+On squares occupied by a TBX, TileZed and WorldEd keep the initial run of
+TMX layers starting with `Floor`, including `FloorOverlay` in that run.
+A TBX `Floor` tile covers those layers too. Floorless walls, wall finishes,
+doors, windows and frames also retain underlying vegetation. Furniture and
+other contents on the same square cover the vegetation. `AboveLot` layers
+draw above the building.
 WorldEd recreates InGameMap scene items after map reloads and retains their
 tool-dependent visibility. Road-outline simplification preserves real corners.
 Empty InGameMap geometry can be selected and redrawn safely. BuildingEd
@@ -301,9 +323,10 @@ Important additions include:
   a dated PZW snapshot below `.pztools-backups`, keeps the cleanup undoable,
   and never removes a reference from a cell that contains other project data.
 - Project Doctor for paths, missing tilesets, and project cleanup
-- Build 42.20 Biomemap reference and separate red and green painting modes
-- Main, vegetation, and Biomemap editing require a saved PZW and use the
-  project directory for generated images
+- The BiomeMap brush paints the red biome channel and the green foraging-zone
+  channel separately. It writes native tiles alongside the configured image.
+  See the [Build 42.22.2 BiomeMap reference](docs/PZ-B42.20-BiomeMapConfig.md).
+- Main, vegetation, and BiomeMap editing require a saved PZW.
 - Main terrain, vegetation, and Zombie Heatmap editing accepts PNG and BMP.
   Saving preserves the selected extension and writes matching PNG or BMP file
   data. Attached terrain images refresh in the World view after saving.
@@ -537,7 +560,8 @@ Important additions include:
   transaction is incomplete and resumes only after the coherent final state is
   available.
 - Preserved room-floor definitions across save and reopen
-- Procedural-loot inspection and project overrides
+- Procedural-loot inspection and project overrides, with editable RoomDef
+  translations and item names from the selected game language
 - Lua building automation with transactional Undo
 - Configurable autosave at 1, 5, 10, 20, or 60 minutes
 - The Layers visibility threshold is restored from the portable INI.
@@ -876,9 +900,19 @@ All three applications discover valid PNG sheets recursively.
 4. One-scale-only sheets remain valid.
 5. Nested official pack directories and custom directories are supported.
 
+Duplicate sheets in extracted vanilla 2x pack folders follow the game's
+pack priority. For `fixtures_overlay_counters_01`, this selects the complete
+sheet from `Tiles2x.pack`, including the eight overlay sprites at IDs 40 to
+47. A loose PNG at the top of `2x` can override the extracted sheets. WorldEd
+uses the same resolution when updating `Tilesets.txt`.
+
 TMX files retain their complete ordered tileset headers. This is required for
 older maps, adjacent cells with different `firstgid` values, and embedded BMP
 rules that reference tiles not currently painted on a normal tile layer.
+Existing map references such as `floors_exterior_natural_01_18` and
+`floors_exterior_natural_01_41` can still appear in vanilla LOT headers even
+when the current texture packs contain no image for those IDs. The editors
+retain those IDs when loading and exporting maps.
 
 A fully transparent cell in a resolved sheet is valid and remains distinct
 from a missing PNG. BuildingEd tile, furniture, mixed-tileset, and Building >

@@ -50,7 +50,7 @@ public:
     void setFileName(const QString &fileName)
     { mFileName = fileName; }
 
-    bool read(const QString &fileName);
+    bool read(const QString &fileName, bool buildEditorProperties = true);
     bool write(const QString &fileName, const QList<TileDefTileset*> &tilesets);
     bool write(const QString &fileName,
                const QList<TileDefTileset*> &tilesets,
@@ -75,8 +75,8 @@ public:
     { return mError; }
 
 private:
-    TileDefTileset *readTileset(const SimpleFileBlock& block);
-    TileDefTile *readTile(const SimpleFileBlock& block, TileDefTileset *tileset);
+    TileDefTileset *readTileset(const SimpleFileBlock& block, bool buildEditorProperties);
+    TileDefTile *readTile(const SimpleFileBlock& block, TileDefTileset *tileset, bool buildEditorProperties);
     bool parseUInt(const SimpleFileBlock& block, const QString& key, int& result);
     bool parseUInt(const QString& str, int& result);
     bool parse2Ints(const QString &s, int *pa, int *pb);

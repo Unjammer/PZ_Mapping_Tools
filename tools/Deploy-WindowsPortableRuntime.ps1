@@ -331,6 +331,7 @@ try {
         }
     }
     $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'docs') (Join-Path $destination 'docs')
+    $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'tools\TileDefs') (Join-Path $destination 'tools\TileDefs')
     $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'TileZed\src\tiled\BuildingEditor\manual') (Join-Path $destination 'docs\BuildingEd')
     $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'licenses') (Join-Path $destination 'licenses')
 

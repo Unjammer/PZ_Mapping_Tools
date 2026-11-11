@@ -456,18 +456,10 @@ void GenerateLotsDialog::importSources()
     LotSourceFiles::NavigationOptions navigation;
     const bool rebuildNavigation = ui->rebuildSourceNavigation->isChecked();
     if (rebuildNavigation) {
-        if (!mTileDefFolder.isEmpty())
-            navigation.tileDefinitions.append(mTileDefFolder);
-        for (const QString &path : Preferences::instance()->tilePropertiesFiles()) {
-            if (!mTileDefFolder.isEmpty()
-                    && TileDefinitionPaths::runtimeNames().contains(
-                        TileDefinitionPaths::logicalName(path), Qt::CaseInsensitive)
-                    && QFileInfo(path).canonicalPath().compare(
-                        QDir(TileDefinitionPaths::directory(mTileDefFolder)).canonicalPath(),
-                        Qt::CaseInsensitive) != 0)
-                continue;
-            navigation.tileDefinitions.append(path);
-        }
+        const auto *preferences = Preferences::instance();
+        navigation.tileDefinitions = TileDefinitionPaths::projectInputs(
+                    mTileDefFolder, preferences->tilePropertiesFiles(),
+                    preferences->configuredTilePropertiesFiles(), preferences->projectZomboidDirectory());
         if (mWorldDoc->world()->gridFormat() == WorldGridFormat::Native256) {
             const QPoint origin(ui->xOrigin->value(), ui->yOrigin->value());
             for (WorldCell *cell : mWorldDoc->world()->cells()) {

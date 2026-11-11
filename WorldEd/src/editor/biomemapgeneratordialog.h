@@ -37,9 +37,11 @@ private:
                    QStringList *neutralFallbackTiles) const;
     QImage createZoneLayer(const QSize &size,
                            int unzonedFallbackId,
+                           bool useVegitationZone,
                            QStringList *rasterizedTypes,
                            QStringList *objectsLuaTypes) const;
-    int effectiveUnzonedFallback(QString *overridePath = nullptr) const;
+    int effectiveUnzonedFallback(QString *overridePath = nullptr,
+                                 bool *biomeOverride = nullptr) const;
     Ui::BiomeMapGeneratorDialog *ui;
     World *mWorld;
     QString mProjectFilePath;

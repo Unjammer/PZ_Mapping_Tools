@@ -1,51 +1,54 @@
-# PZ Mapping Tools - Build 20261030
+# PZ Mapping Tools - Build 20261111d
 
-_Changes since [Build 20261024](https://github.com/Unjammer/PZ_Mapping_Tools/releases/tag/43.00B261024),
-published on 2026-10-24._
+_Changes since [Build 20261030](https://github.com/Unjammer/PZ_Mapping_Tools/releases/tag/43.00B261030),
+published on 2026-11-02._
 
 ## Changes
 
-- The TileDef guide documents Build 42.22 ladder directions, upper landings,
-  material sounds, door/window forcing and moveable weights with CustomItem.
-
-- BuildingEd adds View > Show Walls, with Ctrl+Shift+W, to hide walls and their
-  attached details temporarily while placing furniture in isometric views.
-  Existing per-floor layer visibility is retained.
-- BuildingEd can pin a room highlight through its right-click menu or
-  Ctrl+Shift+H. The highlight remains fixed while the pointer moves and is
-  shared between Iso, Tiles and Attributes modes of the same document.
-  Right-click object dragging remains available. Delete Object is in the menu.
-- Window-frame selection loads pending TileDefs before reading WindowShape,
-  preventing a cold lookup from falling back to the standard frame.
-
-- LOT source import can optionally recalculate ground-level navigation using
-  neighboring room headers and base-game/mod TileDefs. It preserves manual
-  corrections and partial coverage, saves navigation references for subsequent
-  source-only imports, and supports a command-line check without output writes.
-- Generate Lots and source navigation rebuilding share stair, water, tree and
-  hoppable collision rules, including explicit north/west collision properties.
-  Import uses a progress window while the application remains responsive.
-
-- Tile definition discovery supports the Build 42.22 `media/tile_definitions`
-  directory and the older `media` layout. Missing binary definitions can use
-  their `.tiles.txt` companions. Generate Lots, Loot and Create .pack read
-  text definitions, and text property patches merge with their base files.
-  Automatic discovery loads each binary/text pair only once.
-- The existing Ladder direction control writes `ladderN`, `ladderS`,
-  `ladderE` and `ladderW`, matching Build 42.22 climbing properties.
-- Importing LOT `.source` files preserves leading and trailing spaces in room
-  names, including files saved with Windows line endings.
-- LOT source directory conversion validates all cells before replacing outputs,
-  reports missing companion files and text error locations, and preserves
-  identical output files. `--check-lot-sources=<directory>` checks source text
-  without replacing binary files.
-- TMX saving omits the cached `invisible` tile property while preserving other
-  authored tile properties and the loaded tileset declarations.
-- Check Buildings safely refreshes selected results after a building changes
-  and updates the Fix Selected button for the refreshed selection.
-- Check Buildings applies selected Kids Bedroom and Rearrange Grid fixes in
-  one read and write per TBX. Parent and child selections are not processed
-  twice, and rooms already converted to Kids Bedroom are left unchanged.
+- The editors resolve duplicate vanilla 2x sheets in game pack order.
+  `fixtures_overlay_counters_01` now uses the complete sheet from `Tiles2x.pack`
+  so the counter overlays retain their original sprite IDs and artwork.
+- The editors index the configured Tiles tree once per refresh. Catalogue
+  discovery and WorldEd's `Tilesets.txt` update use the same image resolution
+  as map loading, including nested 2x and 1x sheets.
+- WorldEd's BiomeMap reference matches Build 42.22.2. Generation accepts the
+  complete editor palette and rasterizes the supported named foraging zones.
+  Unmapped source colors and legacy grass without a biome override use
+  neutral red 64. Automatic green 171 requires a matching zone entry.
+- WorldEd validates the BiomeMap's green-channel foraging-zone IDs on the
+  world-aligned 8 x 8 chunk grid and preserves each ID when a chunk contains
+  several. In vanilla `biomemap_42_38.png`, pixel `(0, 0)` is
+  `RGB(115, 64, 64)`. Red 115 selects the `townhouse` biome, green 64 selects
+  `ForagingNav`, and the game ignores blue. Boundary exports retain valid
+  base pixels outside the project. The brush reads and writes the native
+  tiles alongside the configured BiomeMap image.
+- Vanilla TileDef paths follow the selected game installation. The editors
+  share an ordered list of additional TileDefs in TileZed Preferences.
+- The editors and exporters apply each TileDef patch to sprites already
+  loaded at that point. A later regular definition replaces only the sprite
+  records it supplies. Generate Lots and LOT source navigation use the same
+  resolution as building properties and texture pack creation.
+- Rebuilding navigation from LOT sources keeps collision on the original
+  squares across chunk boundaries.
+- Recreating a texture pack clears previous floor textures when the current
+  TileDefs classify every sprite as a regular texture.
+- TileZed preserves sprite alignment in legacy isometric TMX rendering.
+  Windows and their supporting wall openings render together after a
+  BuildingEd TMX export.
+- The optional Build 42.22.2 window support TileDef patch supplies missing
+  cutaway and frame properties for selected vanilla wall sprites.
+- WorldEd and TileZed restore the original masking of TMX tiles beneath TBX
+  buildings in previews and exports. Floorless walls, wall finishes, doors,
+  windows and frames retain vegetation. The initial `Floor*` layers, including
+  `FloorOverlay`, stay visible until a TBX floor covers them. `AboveLot` tiles
+  draw above the building.
+- TileZed and BuildingEd can display and search user-defined room translations
+  in the Procedural Loot Viewer / Editor. The item column displays game
+  translations for the selected interface language and retains the original
+  item IDs for editing and export.
+- The Procedural Loot Viewer / Editor interface is available in Simplified
+  Chinese and French. BuildingEd Preferences includes the shared interface
+  language setting.
 
 ## Credits and special thanks
 

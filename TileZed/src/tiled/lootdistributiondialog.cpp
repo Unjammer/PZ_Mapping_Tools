@@ -7,7 +7,9 @@
  * option) any later version.
  */
 #include "lootdistributiondialog.h"
+#include "languagemanager.h"
 #include "preferences.h"
+#include "../portablesettings.h"
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QCheckBox>
@@ -23,6 +25,7 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QHash>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -31,6 +34,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLocale>
 #include <QMap>
 #include <QMessageBox>
 #include <QPixmap>
@@ -43,6 +47,7 @@
 #include <QStackedWidget>
 #include <QTabWidget>
 #include <QTableWidget>
+#include <QTemporaryDir>
 #include <QTextBrowser>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -62,6 +67,202 @@ const char kManifestRelativePath[] =
         "media/lua/server/Items/PZToolsLootEditor.json";
 const char kLuaRelativePath[] =
         "media/lua/server/Items/PZToolsLootDefinitions.lua";
+const char kRoomTranslationsFile[] = "LootRoomTranslations.txt";
+
+QString gameTranslationLanguage(QString localeName)
+{
+    localeName.replace(QLatin1Char('-'), QLatin1Char('_'));
+    const QString locale = localeName.toLower();
+    const QString language = locale.section(QLatin1Char('_'), 0, 0);
+    if (language == QLatin1String("zh")) {
+        return QLocale(localeName).script() == QLocale::TraditionalChineseScript
+                ? QStringLiteral("CH") : QStringLiteral("CN");
+    }
+    static const QHash<QString, QString> localeCodes = {
+        {QStringLiteral("es_ar"), QStringLiteral("AR")},
+        {QStringLiteral("es_cl"), QStringLiteral("ES_CL")},
+        {QStringLiteral("es_mx"), QStringLiteral("ES_MX")},
+        {QStringLiteral("pt_br"), QStringLiteral("PTBR")}
+    };
+    const auto localeCode = localeCodes.constFind(locale);
+    if (localeCode != localeCodes.constEnd())
+        return localeCode.value();
+    static const QHash<QString, QString> languageCodes = {
+        {QStringLiteral("ja"), QStringLiteral("JP")},
+        {QStringLiteral("nb"), QStringLiteral("NO")},
+        {QStringLiteral("nn"), QStringLiteral("NO")},
+        {QStringLiteral("uk"), QStringLiteral("UA")}
+    };
+    return languageCodes.value(language, language.toUpper());
+}
+
+QString itemTranslationPath(const QString &itemsRoot, const QString &locale)
+{
+    return QDir::cleanPath(QDir(itemsRoot).filePath(
+                QStringLiteral("../../shared/Translate/%1/ItemName.json")
+                .arg(gameTranslationLanguage(locale))));
+}
+
+QJsonObject gameItemTranslations(const QString &itemsRoot, const QString &locale)
+{
+    QFile file(itemTranslationPath(itemsRoot, locale));
+    if (!file.open(QIODevice::ReadOnly))
+        return QJsonObject();
+    return QJsonDocument::fromJson(file.readAll()).object();
+}
+
+QString translatedItemName(const QJsonObject &translations, const QString &id)
+{
+    const QString fullType = id.contains(QLatin1Char('.'))
+            ? id : QStringLiteral("Base.") + id;
+    const QString name = translations.value(fullType).toString();
+    return name.trimmed().isEmpty() ? id : name;
+}
+
+QTableWidgetItem *translatedLootItem(const QJsonObject &translations,
+                                     const QString &id)
+{
+    QTableWidgetItem *item =
+            new QTableWidgetItem(translatedItemName(translations, id));
+    item->setData(Qt::UserRole, id);
+    item->setToolTip(id);
+    return item;
+}
+
+bool matchesLootSearch(const QString &needle, const QString &id,
+                       const QString &translatedName = QString())
+{
+    return id.contains(needle, Qt::CaseInsensitive)
+            || translatedName.contains(needle, Qt::CaseInsensitive);
+}
+
+QHash<QString, QString> parseRoomTranslations(const QString &text,
+                                              int *invalidLine = nullptr)
+{
+    QHash<QString, QString> translations;
+    const QStringList lines = text.split(QLatin1Char('\n'));
+    for (int i = 0; i < lines.size(); ++i) {
+        const QString line = lines.at(i).trimmed();
+        if (line.isEmpty() || line.startsWith(QLatin1Char('#')))
+            continue;
+        const int equals = line.indexOf(QLatin1Char('='));
+        const QString id = line.left(equals).trimmed();
+        const QString name = line.mid(equals + 1).trimmed();
+        if (equals < 0 || id.isEmpty() || name.isEmpty()) {
+            if (invalidLine && *invalidLine == 0)
+                *invalidLine = i + 1;
+            continue;
+        }
+        translations.insert(id, name);
+    }
+    return translations;
+}
+
+bool readRoomTranslations(const QString &path, QString *text, QString *error)
+{
+    QFile file(path);
+    if (!file.exists()) {
+        text->clear();
+        return true;
+    }
+    if (file.open(QIODevice::ReadOnly)) {
+        *text = QString::fromUtf8(file.readAll());
+        if (file.error() == QFileDevice::NoError)
+            return true;
+    }
+    if (error) {
+        *error = LootDistributionDialog::tr("Could not read %1: %2")
+                .arg(QDir::toNativeSeparators(path), file.errorString());
+    }
+    return false;
+}
+
+bool writeRoomTranslations(const QString &path, const QString &text,
+                           QString *error)
+{
+    QSaveFile file(path);
+    const QByteArray bytes = text.toUtf8();
+    if (file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size()
+            && file.commit()) {
+        return true;
+    }
+    if (error) {
+        *error = LootDistributionDialog::tr("Could not save %1: %2")
+                .arg(QDir::toNativeSeparators(path), file.errorString());
+    }
+    return false;
+}
+
+bool validateLootTranslations(const QString &itemsRoot,
+                              const QJsonObject &procedures)
+{
+    const QString room = QStringLiteral("library");
+    const QString name = QStringLiteral("\u56fe\u4e66\u9986");
+    const QString text = QStringLiteral("# Rooms\nlibrary=") + name
+            + QStringLiteral("\nlivingroom=\u5ba2\u5385\n");
+    QTemporaryDir temporary;
+    QString readBack;
+    if (!temporary.isValid())
+        return false;
+    const QString file = temporary.filePath(QLatin1String(kRoomTranslationsFile));
+    if (!writeRoomTranslations(file, text, nullptr)
+            || !readRoomTranslations(file, &readBack, nullptr)
+            || readBack != text) {
+        return false;
+    }
+    const auto rooms = parseRoomTranslations(readBack);
+    int invalidLine = 0;
+    parseRoomTranslations(QStringLiteral("\nmissing equals"), &invalidLine);
+    if (invalidLine != 2 || rooms.size() != 2 || rooms.value(room) != name
+            || !matchesLootSearch(name, room, rooms.value(room))
+            || !matchesLootSearch(QStringLiteral("LIB"), room, rooms.value(room))
+            || matchesLootSearch(QStringLiteral("kitchen"), room, rooms.value(room))) {
+        return false;
+    }
+
+    const QString simplified = QStringLiteral("zh_CN");
+    const QString traditional = QStringLiteral("zh_TW");
+    if (gameTranslationLanguage(simplified) != QLatin1String("CN")
+            || gameTranslationLanguage(traditional) != QLatin1String("CH")
+            || gameTranslationLanguage(QStringLiteral("ja")) != QLatin1String("JP")
+            || gameTranslationLanguage(QStringLiteral("es_AR")) != QLatin1String("AR")
+            || gameTranslationLanguage(QStringLiteral("pt_BR")) != QLatin1String("PTBR")) {
+        return false;
+    }
+    const QString shortId = QStringLiteral("308Box");
+    const QString fullId = QStringLiteral("Base.308Box");
+    const QString missingId = QStringLiteral("Unknown.308Box");
+    const QJsonObject fixture = {{fullId, name}};
+    if (translatedItemName(fixture, shortId) != name
+            || translatedItemName(fixture, fullId) != name
+            || translatedItemName(fixture, missingId) != missingId
+            || !matchesLootSearch(name, shortId, translatedItemName(fixture, shortId))) {
+        return false;
+    }
+
+    if (QFileInfo::exists(itemTranslationPath(itemsRoot, simplified))) {
+        const QJsonObject gameNames = gameItemTranslations(itemsRoot, simplified);
+        if (gameNames.isEmpty())
+            return false;
+        for (const QJsonValue &definition : procedures) {
+            const QJsonArray items = definition.toObject()
+                    .value(QStringLiteral("items")).toArray();
+            for (int i = 0; i + 1 < items.size(); i += 2) {
+                const QString id = items.at(i).toString();
+                const QString displayName = translatedItemName(gameNames, id);
+                if (displayName == id)
+                    continue;
+                QTableWidget preview(1, 1);
+                preview.setItem(0, 0, translatedLootItem(gameNames, id));
+                const QTableWidgetItem *cell = preview.item(0, 0);
+                return cell->text() == displayName && cell->toolTip() == id
+                        && cell->data(Qt::UserRole).toString() == id;
+            }
+        }
+    }
+    return true;
+}
+
 QString luaString(lua_State *state, int index)
 {
     size_t length = 0;
@@ -110,7 +311,7 @@ bool executeLuaFile(lua_State *state, const QString &fileName, QString *error)
     if (status == LUA_OK)
         return true;
     if (error) {
-        *error = QObject::tr("%1\n\n%2")
+        *error = LootDistributionDialog::tr("%1\n\n%2")
                 .arg(QDir::toNativeSeparators(fileName),
                      luaString(state, -1));
     }
@@ -240,7 +441,7 @@ bool loadGameDefinitions(const QString &requestedPath, LootData *data,
     const QString root = normalizedItemsRoot(requestedPath);
     if (root.isEmpty()) {
         if (error) {
-            *error = QObject::tr(
+            *error = LootDistributionDialog::tr(
                         "Select the Project Zomboid game directory or its "
                         "media/lua/server/Items directory.");
         }
@@ -249,7 +450,7 @@ bool loadGameDefinitions(const QString &requestedPath, LootData *data,
     lua_State *state = luaL_newstate();
     if (!state) {
         if (error)
-            *error = QObject::tr("Could not create the isolated Lua state.");
+            *error = LootDistributionDialog::tr("Could not create the isolated Lua state.");
         return false;
     }
     luaL_openlibs(state);
@@ -320,7 +521,7 @@ bool loadGameDefinitions(const QString &requestedPath, LootData *data,
     lua_close(state);
     if (rooms.isEmpty() || procedures.isEmpty()) {
         if (error) {
-            *error = QObject::tr(
+            *error = LootDistributionDialog::tr(
                         "The game loot registries were loaded but no room or "
                         "procedural definitions were found.");
         }
@@ -404,7 +605,7 @@ bool loadProjectDefinitions(const QString &projectRoot, LootData *data,
     QFile file(fileName);
     if (!file.open(QIODevice::ReadOnly)) {
         if (error) {
-            *error = QObject::tr("Could not read %1: %2")
+            *error = LootDistributionDialog::tr("Could not read %1: %2")
                     .arg(QDir::toNativeSeparators(fileName),
                          file.errorString());
         }
@@ -416,7 +617,7 @@ bool loadProjectDefinitions(const QString &projectRoot, LootData *data,
     if (parseError.error != QJsonParseError::NoError
             || !document.isObject()) {
         if (error) {
-            *error = QObject::tr("Invalid loot-editor manifest %1: %2")
+            *error = LootDistributionDialog::tr("Invalid loot-editor manifest %1: %2")
                     .arg(QDir::toNativeSeparators(fileName),
                          parseError.errorString());
         }
@@ -425,7 +626,7 @@ bool loadProjectDefinitions(const QString &projectRoot, LootData *data,
     const QJsonObject root = document.object();
     if (root.value(QStringLiteral("schema")).toInt() != 1) {
         if (error) {
-            *error = QObject::tr(
+            *error = LootDistributionDialog::tr(
                         "Unsupported loot-editor manifest schema in %1.")
                     .arg(QDir::toNativeSeparators(fileName));
         }
@@ -573,7 +774,7 @@ bool validateGeneratedLua(const QString &lua, QString *error)
     lua_State *state = luaL_newstate();
     if (!state) {
         if (error)
-            *error = QObject::tr("Could not create the Lua syntax checker.");
+            *error = LootDistributionDialog::tr("Could not create the Lua syntax checker.");
         return false;
     }
     const QByteArray bytes = lua.toUtf8();
@@ -581,7 +782,7 @@ bool validateGeneratedLua(const QString &lua, QString *error)
                 state, bytes.constData(), size_t(bytes.size()),
                 "PZToolsLootDefinitions.lua");
     if (status != LUA_OK && error) {
-        *error = QObject::tr("Generated Lua is invalid: %1")
+        *error = LootDistributionDialog::tr("Generated Lua is invalid: %1")
                 .arg(luaString(state, -1));
     }
     lua_close(state);
@@ -591,14 +792,14 @@ bool saveProjectDefinitions(const LootData &data, QString *error)
 {
     if (data.projectRoot.isEmpty()) {
         if (error)
-            *error = QObject::tr("Select a project/mod root first.");
+            *error = LootDistributionDialog::tr("Select a project/mod root first.");
         return false;
     }
     const QString gameRoot = gameOwnerRoot(data.itemsRoot);
     if (!gameRoot.isEmpty()
             && sameOrInside(data.projectRoot, gameRoot)) {
         if (error) {
-            *error = QObject::tr(
+            *error = LootDistributionDialog::tr(
                         "The project/mod root must be outside the "
                         "Project Zomboid game directory. Game files remain "
                         "read-only.");
@@ -609,7 +810,7 @@ bool saveProjectDefinitions(const LootData &data, QString *error)
     const QString lua = luaFileName(data.projectRoot);
     if (!QDir().mkpath(QFileInfo(manifest).absolutePath())) {
         if (error) {
-            *error = QObject::tr("Could not create %1.")
+            *error = LootDistributionDialog::tr("Could not create %1.")
                     .arg(QDir::toNativeSeparators(
                              QFileInfo(manifest).absolutePath()));
         }
@@ -627,7 +828,7 @@ bool saveProjectDefinitions(const LootData &data, QString *error)
                 QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0
             || !manifestFile.commit()) {
         if (error) {
-            *error = QObject::tr("Could not save %1: %2")
+            *error = LootDistributionDialog::tr("Could not save %1: %2")
                     .arg(QDir::toNativeSeparators(manifest),
                          manifestFile.errorString());
         }
@@ -645,7 +846,7 @@ bool saveProjectDefinitions(const LootData &data, QString *error)
             || luaFile.write(luaBytes) != luaBytes.size()
             || !luaFile.commit()) {
         if (error) {
-            *error = QObject::tr("Could not save %1: %2")
+            *error = LootDistributionDialog::tr("Could not save %1: %2")
                     .arg(QDir::toNativeSeparators(lua),
                          luaFile.errorString());
         }
@@ -696,7 +897,7 @@ bool validateItemEditor(QTableWidget *table, QString *error)
             continue;
         if (name.isEmpty()) {
             if (error) {
-                *error = QObject::tr(
+                *error = LootDistributionDialog::tr(
                             "Item row %1 has a chance but no item name.")
                         .arg(row + 1);
             }
@@ -706,7 +907,7 @@ bool validateItemEditor(QTableWidget *table, QString *error)
         const double chance = chanceText.toDouble(&ok);
         if (!ok || !std::isfinite(chance) || chance < 0.0) {
             if (error) {
-                *error = QObject::tr(
+                *error = LootDistributionDialog::tr(
                             "Item row %1 needs a non-negative numeric "
                             "chance per roll.")
                         .arg(row + 1);
@@ -757,10 +958,10 @@ QWidget *tableButtons(QTableWidget *table, int columnCount, QWidget *parent)
     layout->setContentsMargins(0, 0, 0, 0);
     QToolButton *add = new QToolButton(widget);
     add->setText(QStringLiteral("+"));
-    add->setToolTip(QObject::tr("Add row"));
+    add->setToolTip(LootDistributionDialog::tr("Add row"));
     QToolButton *remove = new QToolButton(widget);
     remove->setText(QStringLiteral("-"));
-    remove->setToolTip(QObject::tr("Remove selected rows"));
+    remove->setToolTip(LootDistributionDialog::tr("Remove selected rows"));
     layout->addWidget(add);
     layout->addWidget(remove);
     layout->addStretch();
@@ -779,8 +980,8 @@ QTableWidget *newItemEditor(QWidget *parent)
     QTableWidget *table = new QTableWidget(parent);
     table->setColumnCount(2);
     table->setHorizontalHeaderLabels(
-                QStringList() << QObject::tr("Item")
-                              << QObject::tr("Chance / roll"));
+                QStringList() << LootDistributionDialog::tr("Item")
+                              << LootDistributionDialog::tr("Chance / roll"));
     table->horizontalHeader()->setSectionResizeMode(
                 0, QHeaderView::Stretch);
     table->horizontalHeader()->setSectionResizeMode(
@@ -800,8 +1001,8 @@ public:
         , mOriginal(definition)
     {
         setWindowTitle(name.isEmpty()
-                       ? tr("New procedural distribution")
-                       : tr("Edit procedural distribution"));
+                       ? LootDistributionDialog::tr("New procedural distribution")
+                       : LootDistributionDialog::tr("Edit procedural distribution"));
         resize(680, 650);
         QVBoxLayout *layout = new QVBoxLayout(this);
         QFormLayout *form = new QFormLayout;
@@ -812,11 +1013,11 @@ public:
         mRolls->setDecimals(3);
         mRolls->setValue(definition.value(
                              QStringLiteral("rolls")).toDouble(1.0));
-        form->addRow(tr("Name"), mName);
-        form->addRow(tr("Rolls"), mRolls);
+        form->addRow(LootDistributionDialog::tr("Name"), mName);
+        form->addRow(LootDistributionDialog::tr("Rolls"), mRolls);
         layout->addLayout(form);
         QGroupBox *itemsGroup = new QGroupBox(
-                    tr("Items - each chance is tested on every roll"), this);
+                    LootDistributionDialog::tr("Items - each chance is tested on every roll"), this);
         QVBoxLayout *itemsLayout = new QVBoxLayout(itemsGroup);
         mItems = newItemEditor(itemsGroup);
         populateItemEditor(
@@ -826,7 +1027,7 @@ public:
         itemsLayout->addWidget(tableButtons(mItems, 2, itemsGroup));
         layout->addWidget(itemsGroup, 1);
         QGroupBox *junkGroup = new QGroupBox(
-                    tr("Junk - sandbox loot rarity does not reduce it"), this);
+                    LootDistributionDialog::tr("Junk - sandbox loot rarity does not reduce it"), this);
         QVBoxLayout *junkLayout = new QVBoxLayout(junkGroup);
         mJunkRolls = new QDoubleSpinBox(junkGroup);
         mJunkRolls->setRange(0.0, 1000.0);
@@ -836,7 +1037,7 @@ public:
         mJunkRolls->setValue(
                     junk.value(QStringLiteral("rolls")).toDouble(0.0));
         QFormLayout *junkForm = new QFormLayout;
-        junkForm->addRow(tr("Junk rolls"), mJunkRolls);
+        junkForm->addRow(LootDistributionDialog::tr("Junk rolls"), mJunkRolls);
         junkLayout->addLayout(junkForm);
         mJunk = newItemEditor(junkGroup);
         populateItemEditor(
@@ -850,15 +1051,15 @@ public:
                 [this]() {
             if (mName->text().trimmed().isEmpty()) {
                 QMessageBox::warning(
-                            this, tr("Missing name"),
-                            tr("Enter a procedural-distribution name."));
+                            this, LootDistributionDialog::tr("Missing name"),
+                            LootDistributionDialog::tr("Enter a procedural-distribution name."));
                 return;
             }
             QString error;
             if (!validateItemEditor(mItems, &error)
                     || !validateItemEditor(mJunk, &error)) {
                 QMessageBox::warning(
-                            this, tr("Invalid item chance"), error);
+                            this, LootDistributionDialog::tr("Invalid item chance"), error);
                 return;
             }
             accept();
@@ -907,8 +1108,8 @@ public:
         , mProcedures(procedures)
     {
         setWindowTitle(container.isEmpty()
-                       ? tr("New room/container distribution")
-                       : tr("Edit room/container distribution"));
+                       ? LootDistributionDialog::tr("New room/container distribution")
+                       : LootDistributionDialog::tr("Edit room/container distribution"));
         resize(940, 690);
         QVBoxLayout *layout = new QVBoxLayout(this);
         QFormLayout *form = new QFormLayout;
@@ -917,18 +1118,18 @@ public:
         mRoom->setReadOnly(!allowRename);
         mContainer->setReadOnly(!allowRename);
         mMode = new QComboBox(this);
-        mMode->addItem(tr("Procedural"), QStringLiteral("procedural"));
-        mMode->addItem(tr("Direct item rolls"), QStringLiteral("direct"));
-        form->addRow(tr("RoomDef name"), mRoom);
-        form->addRow(tr("Container type"), mContainer);
-        form->addRow(tr("Mode"), mMode);
+        mMode->addItem(LootDistributionDialog::tr("Procedural"), QStringLiteral("procedural"));
+        mMode->addItem(LootDistributionDialog::tr("Direct item rolls"), QStringLiteral("direct"));
+        form->addRow(LootDistributionDialog::tr("RoomDef name"), mRoom);
+        form->addRow(LootDistributionDialog::tr("Container type"), mContainer);
+        form->addRow(LootDistributionDialog::tr("Mode"), mMode);
         layout->addLayout(form);
         mStack = new QStackedWidget(this);
         layout->addWidget(mStack, 1);
         QWidget *proceduralPage = new QWidget(mStack);
         QVBoxLayout *procLayout = new QVBoxLayout(proceduralPage);
         QLabel *procHelp = new QLabel(
-                    tr("Weight is relative among eligible rows. min/max count "
+                    LootDistributionDialog::tr("Weight is relative among eligible rows. min/max count "
                        "containers already assigned in the RoomDef. A force* "
                        "selector takes priority when it matches."), proceduralPage);
         procHelp->setWordWrap(true);
@@ -937,11 +1138,11 @@ public:
         mProcList->setColumnCount(9);
         mProcList->setHorizontalHeaderLabels(
                     QStringList()
-                    << tr("Distribution") << tr("Weight")
-                    << tr("Min") << tr("Max")
-                    << tr("Force items") << tr("Force zones")
-                    << tr("Force tiles") << tr("Force rooms")
-                    << tr("Editor notes"));
+                    << LootDistributionDialog::tr("Distribution") << LootDistributionDialog::tr("Weight")
+                    << LootDistributionDialog::tr("Min") << LootDistributionDialog::tr("Max")
+                    << LootDistributionDialog::tr("Force items") << LootDistributionDialog::tr("Force zones")
+                    << LootDistributionDialog::tr("Force tiles") << LootDistributionDialog::tr("Force rooms")
+                    << LootDistributionDialog::tr("Editor notes"));
         mProcList->horizontalHeader()->setSectionResizeMode(
                     0, QHeaderView::ResizeToContents);
         for (int i = 4; i < 9; ++i)
@@ -963,8 +1164,8 @@ public:
                 [this]() {
             bool ok = false;
             const QString name = QInputDialog::getItem(
-                        this, tr("Add procedural rule"),
-                        tr("Distribution"), mProcedures, 0, true, &ok);
+                        this, LootDistributionDialog::tr("Add procedural rule"),
+                        LootDistributionDialog::tr("Distribution"), mProcedures, 0, true, &ok);
             if (!ok || name.trimmed().isEmpty())
                 return;
             const int row = mProcList->rowCount();
@@ -994,19 +1195,19 @@ public:
         mFillRand->setValue(
                     definition.value(QStringLiteral("fillRand")).toDouble());
         mIgnoreDensity = new QCheckBox(
-                    tr("Ignore zombie-density bonus"), directPage);
+                    LootDistributionDialog::tr("Ignore zombie-density bonus"), directPage);
         mIgnoreDensity->setChecked(
                     definition.value(
                         QStringLiteral("ignoreZombieDensity")).toBool());
-        mTrash = new QCheckBox(tr("Trash container"), directPage);
+        mTrash = new QCheckBox(LootDistributionDialog::tr("Trash container"), directPage);
         mTrash->setChecked(
                     definition.value(QStringLiteral("isTrash")).toBool());
-        directForm->addRow(tr("Rolls"), mRolls);
-        directForm->addRow(tr("fillRand (0 = unset)"), mFillRand);
+        directForm->addRow(LootDistributionDialog::tr("Rolls"), mRolls);
+        directForm->addRow(LootDistributionDialog::tr("fillRand (0 = unset)"), mFillRand);
         directForm->addRow(QString(), mIgnoreDensity);
         directForm->addRow(QString(), mTrash);
         directLayout->addLayout(directForm);
-        QGroupBox *itemsGroup = new QGroupBox(tr("Items"), directPage);
+        QGroupBox *itemsGroup = new QGroupBox(LootDistributionDialog::tr("Items"), directPage);
         QVBoxLayout *itemsLayout = new QVBoxLayout(itemsGroup);
         mItems = newItemEditor(itemsGroup);
         populateItemEditor(
@@ -1015,7 +1216,7 @@ public:
         itemsLayout->addWidget(mItems);
         itemsLayout->addWidget(tableButtons(mItems, 2, itemsGroup));
         directLayout->addWidget(itemsGroup, 1);
-        QGroupBox *junkGroup = new QGroupBox(tr("Junk"), directPage);
+        QGroupBox *junkGroup = new QGroupBox(LootDistributionDialog::tr("Junk"), directPage);
         QVBoxLayout *junkLayout = new QVBoxLayout(junkGroup);
         mJunkRolls = new QDoubleSpinBox(junkGroup);
         mJunkRolls->setRange(0.0, 1000.0);
@@ -1025,7 +1226,7 @@ public:
         mJunkRolls->setValue(
                     junk.value(QStringLiteral("rolls")).toDouble());
         QFormLayout *junkForm = new QFormLayout;
-        junkForm->addRow(tr("Junk rolls"), mJunkRolls);
+        junkForm->addRow(LootDistributionDialog::tr("Junk rolls"), mJunkRolls);
         junkLayout->addLayout(junkForm);
         mJunk = newItemEditor(junkGroup);
         populateItemEditor(
@@ -1050,29 +1251,29 @@ public:
             if (mRoom->text().trimmed().isEmpty()
                     || mContainer->text().trimmed().isEmpty()) {
                 QMessageBox::warning(
-                            this, tr("Missing identity"),
-                            tr("Enter both a RoomDef name and a container type."));
+                            this, LootDistributionDialog::tr("Missing identity"),
+                            LootDistributionDialog::tr("Enter both a RoomDef name and a container type."));
                 return;
             }
             if (mMode->currentIndex() == 0 && mProcList->rowCount() == 0) {
                 QMessageBox::warning(
-                            this, tr("Empty procedural mapping"),
-                            tr("Add at least one procedural-distribution rule."));
+                            this, LootDistributionDialog::tr("Empty procedural mapping"),
+                            LootDistributionDialog::tr("Add at least one procedural-distribution rule."));
                 return;
             }
             if (mMode->currentIndex() == 0) {
                 for (int row = 0; row < mProcList->rowCount(); ++row) {
                     if (cellText(row, 0).isEmpty()) {
                         QMessageBox::warning(
-                                    this, tr("Invalid procedural rule"),
-                                    tr("Procedural rule %1 needs a "
+                                    this, LootDistributionDialog::tr("Invalid procedural rule"),
+                                    LootDistributionDialog::tr("Procedural rule %1 needs a "
                                        "distribution name.").arg(row + 1));
                         return;
                     }
                     if (!mProcedures.contains(cellText(row, 0))) {
                         QMessageBox::warning(
-                                    this, tr("Missing distribution"),
-                                    tr("Rule %1 references \"%2\", which is "
+                                    this, LootDistributionDialog::tr("Missing distribution"),
+                                    LootDistributionDialog::tr("Rule %1 references \"%2\", which is "
                                        "not present in the effective "
                                        "procedural-distribution registry.")
                                     .arg(row + 1)
@@ -1088,8 +1289,8 @@ public:
                         text.toInt(&ok);
                         if (!ok) {
                             QMessageBox::warning(
-                                        this, tr("Invalid procedural rule"),
-                                        tr("Rule %1 has a non-integer "
+                                        this, LootDistributionDialog::tr("Invalid procedural rule"),
+                                        LootDistributionDialog::tr("Rule %1 has a non-integer "
                                            "weight, min, or max value.")
                                         .arg(row + 1));
                             return;
@@ -1101,7 +1302,7 @@ public:
                 if (!validateItemEditor(mItems, &error)
                         || !validateItemEditor(mJunk, &error)) {
                     QMessageBox::warning(
-                                this, tr("Invalid item chance"), error);
+                                this, LootDistributionDialog::tr("Invalid item chance"), error);
                     return;
                 }
             }
@@ -1269,6 +1470,7 @@ public:
         , requestedContainer(initialContainer)
     {
         buildUi();
+        readRoomTranslationSettings();
         QSettings *settings = Preferences::instance()->settings();
         QString gamePath = settings->value(
                     QStringLiteral("LootDistributionEditor/GamePath"))
@@ -1285,42 +1487,42 @@ public:
         if (!gamePath.isEmpty())
             reload(false);
         else
-            setStatus(q->tr("Select the read-only game definitions."));
+            setStatus(LootDistributionDialog::tr("Select the read-only game definitions."));
     }
     void buildUi()
     {
-        q->setWindowTitle(q->tr("Procedural Loot Viewer / Editor"));
+        q->setWindowTitle(LootDistributionDialog::tr("Procedural Loot Viewer / Editor"));
         q->resize(1180, 780);
         QVBoxLayout *layout = new QVBoxLayout(q);
-        QGroupBox *paths = new QGroupBox(q->tr("Definition sources"), q);
+        QGroupBox *paths = new QGroupBox(LootDistributionDialog::tr("Definition sources"), q);
         QFormLayout *pathLayout = new QFormLayout(paths);
         QWidget *gameRow = new QWidget(paths);
         QHBoxLayout *gameRowLayout = new QHBoxLayout(gameRow);
         gameRowLayout->setContentsMargins(0, 0, 0, 0);
         gameEdit = new QLineEdit(gameRow);
         gameEdit->setPlaceholderText(
-                    q->tr("Project Zomboid game directory (read-only)"));
-        QPushButton *gameBrowse = new QPushButton(q->tr("Browse..."), gameRow);
+                    LootDistributionDialog::tr("Project Zomboid game directory (read-only)"));
+        QPushButton *gameBrowse = new QPushButton(LootDistributionDialog::tr("Browse..."), gameRow);
         gameRowLayout->addWidget(gameEdit, 1);
         gameRowLayout->addWidget(gameBrowse);
-        pathLayout->addRow(q->tr("Game definitions (read-only)"), gameRow);
+        pathLayout->addRow(LootDistributionDialog::tr("Game definitions (read-only)"), gameRow);
         QWidget *projectRow = new QWidget(paths);
         QHBoxLayout *projectRowLayout = new QHBoxLayout(projectRow);
         projectRowLayout->setContentsMargins(0, 0, 0, 0);
         projectEdit = new QLineEdit(projectRow);
         projectEdit->setPlaceholderText(
-                    q->tr("Map project or mod root (editable)"));
+                    LootDistributionDialog::tr("Map project or mod root (editable)"));
         QPushButton *projectBrowse =
-                new QPushButton(q->tr("Browse..."), projectRow);
+                new QPushButton(LootDistributionDialog::tr("Browse..."), projectRow);
         projectRowLayout->addWidget(projectEdit, 1);
         projectRowLayout->addWidget(projectBrowse);
-        pathLayout->addRow(q->tr("Project / mod root (editable)"), projectRow);
+        pathLayout->addRow(LootDistributionDialog::tr("Project / mod root (editable)"), projectRow);
         QWidget *pathButtons = new QWidget(paths);
         QHBoxLayout *pathButtonsLayout = new QHBoxLayout(pathButtons);
         pathButtonsLayout->setContentsMargins(0, 0, 0, 0);
-        QPushButton *reloadButton = new QPushButton(q->tr("Reload"), pathButtons);
+        QPushButton *reloadButton = new QPushButton(LootDistributionDialog::tr("Reload"), pathButtons);
         openFolderButton = new QPushButton(
-                    q->tr("Open generated location"), pathButtons);
+                    LootDistributionDialog::tr("Open generated location"), pathButtons);
         pathButtonsLayout->addWidget(reloadButton);
         pathButtonsLayout->addWidget(openFolderButton);
         pathButtonsLayout->addStretch();
@@ -1357,15 +1559,16 @@ public:
     {
         QWidget *page = new QWidget(tabs);
         QVBoxLayout *layout = new QVBoxLayout(page);
-        QLineEdit *filter = new QLineEdit(page);
-        filter->setPlaceholderText(
-                    q->tr("Filter RoomDef or container type..."));
-        layout->addWidget(filter);
+        roomFilter = new QLineEdit(page);
+        roomFilter->setPlaceholderText(
+                    LootDistributionDialog::tr("Filter RoomDef, translation or container type..."));
+        layout->addWidget(roomFilter);
         QSplitter *splitter = new QSplitter(page);
         roomTree = new QTreeWidget(splitter);
         roomTree->setHeaderLabels(
-                    QStringList() << q->tr("Room / container")
-                                  << q->tr("Source"));
+                    QStringList() << LootDistributionDialog::tr("Room / container")
+                                  << LootDistributionDialog::tr("Source")
+                                  << LootDistributionDialog::tr("Translation"));
         roomTree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
         roomTree->setMinimumWidth(330);
         splitter->addWidget(roomTree);
@@ -1391,59 +1594,115 @@ public:
         QHBoxLayout *buttonLayout = new QHBoxLayout(buttons);
         buttonLayout->setContentsMargins(0, 0, 0, 0);
         newContainerButton = new QPushButton(
-                    q->tr("New room/container..."), buttons);
+                    LootDistributionDialog::tr("New room/container..."), buttons);
         editContainerButton = new QPushButton(
-                    q->tr("Clone / edit in project..."), buttons);
+                    LootDistributionDialog::tr("Clone / edit in project..."), buttons);
         deleteContainerButton = new QPushButton(
-                    q->tr("Remove project override"), buttons);
+                    LootDistributionDialog::tr("Remove project override"), buttons);
+        QPushButton *editRoomTranslationsButton = new QPushButton(
+                    LootDistributionDialog::tr("Edit room translations..."), buttons);
         buttonLayout->addWidget(newContainerButton);
         buttonLayout->addWidget(editContainerButton);
         buttonLayout->addWidget(deleteContainerButton);
         buttonLayout->addStretch();
+        buttonLayout->addWidget(editRoomTranslationsButton);
         layout->addWidget(buttons);
-        tabs->addTab(page, q->tr("Rooms && containers"));
+        tabs->addTab(page, LootDistributionDialog::tr("Rooms && containers"));
         QObject::connect(roomTree, &QTreeWidget::currentItemChanged, q,
                          [this]() { showCurrentContainer(); });
-        QObject::connect(filter, &QLineEdit::textChanged, q,
-                         [this](const QString &text) {
-            const QString needle = text.trimmed();
-            for (int i = 0; i < roomTree->topLevelItemCount(); ++i) {
-                QTreeWidgetItem *room = roomTree->topLevelItem(i);
-                bool any = room->text(0).contains(
-                            needle, Qt::CaseInsensitive);
-                for (int child = 0; child < room->childCount(); ++child) {
-                    QTreeWidgetItem *container = room->child(child);
-                    const bool match = needle.isEmpty()
-                            || room->text(0).contains(
-                                needle, Qt::CaseInsensitive)
-                            || container->text(0).contains(
-                                needle, Qt::CaseInsensitive);
-                    container->setHidden(!match);
-                    any = any || match;
-                }
-                room->setHidden(!any);
-            }
-        });
+        QObject::connect(roomFilter, &QLineEdit::textChanged, q,
+                         [this]() { filterRooms(); });
         QObject::connect(newContainerButton, &QAbstractButton::clicked, q,
                          [this]() { editContainer(true); });
         QObject::connect(editContainerButton, &QAbstractButton::clicked, q,
                          [this]() { editContainer(false); });
         QObject::connect(deleteContainerButton, &QAbstractButton::clicked, q,
                          [this]() { deleteContainer(); });
+        QObject::connect(editRoomTranslationsButton, &QAbstractButton::clicked,
+                         q, [this]() { editRoomTranslations(); });
+    }
+    void filterRooms()
+    {
+        const QString needle = roomFilter->text().trimmed();
+        for (int i = 0; i < roomTree->topLevelItemCount(); ++i) {
+            QTreeWidgetItem *room = roomTree->topLevelItem(i);
+            const bool roomMatches = matchesLootSearch(
+                        needle, room->text(0), room->text(2));
+            bool any = roomMatches;
+            for (int child = 0; child < room->childCount(); ++child) {
+                QTreeWidgetItem *container = room->child(child);
+                const bool match = roomMatches || matchesLootSearch(
+                            needle, container->text(0));
+                container->setHidden(!match);
+                any = any || match;
+            }
+            room->setHidden(!any);
+        }
+    }
+    void readRoomTranslationSettings()
+    {
+        QString text;
+        if (readRoomTranslations(
+                    PortableSettings::path(QLatin1String(kRoomTranslationsFile)),
+                    &text, nullptr)) {
+            roomTranslations = parseRoomTranslations(text);
+        }
+    }
+    void editRoomTranslations()
+    {
+        const QString path =
+                PortableSettings::path(QLatin1String(kRoomTranslationsFile));
+        const QString title = LootDistributionDialog::tr("Room translations");
+        QString text;
+        QString error;
+        if (!readRoomTranslations(path, &text, &error)) {
+            QMessageBox::warning(q, title, error);
+            return;
+        }
+        for (;;) {
+            bool accepted = false;
+            text = QInputDialog::getMultiLineText(
+                        q, title, LootDistributionDialog::tr("Enter one RoomDef ID=translation per line.\n"
+                                        "Example: library=Library"),
+                        text, &accepted);
+            if (!accepted)
+                return;
+            int invalidLine = 0;
+            const QHash<QString, QString> translations =
+                    parseRoomTranslations(text, &invalidLine);
+            if (invalidLine != 0) {
+                QMessageBox::warning(
+                            q, title,
+                            LootDistributionDialog::tr("Line %1 must contain a RoomDef ID and a "
+                                  "translation separated by =.").arg(invalidLine));
+                continue;
+            }
+            if (!writeRoomTranslations(path, text, &error)) {
+                QMessageBox::warning(q, title, error);
+                continue;
+            }
+            roomTranslations = translations;
+            for (int i = 0; i < roomTree->topLevelItemCount(); ++i) {
+                QTreeWidgetItem *room = roomTree->topLevelItem(i);
+                room->setText(2, roomTranslations.value(room->text(0)));
+            }
+            filterRooms();
+            return;
+        }
     }
     void buildProcedureTab()
     {
         QWidget *page = new QWidget(tabs);
         QVBoxLayout *layout = new QVBoxLayout(page);
-        QLineEdit *filter = new QLineEdit(page);
-        filter->setPlaceholderText(
-                    q->tr("Filter procedural distribution or item..."));
-        layout->addWidget(filter);
+        procedureFilter = new QLineEdit(page);
+        procedureFilter->setPlaceholderText(
+                    LootDistributionDialog::tr("Filter procedural distribution or item..."));
+        layout->addWidget(procedureFilter);
         QSplitter *splitter = new QSplitter(page);
         procedureTree = new QTreeWidget(splitter);
         procedureTree->setHeaderLabels(
-                    QStringList() << q->tr("Procedural distribution")
-                                  << q->tr("Source"));
+                    QStringList() << LootDistributionDialog::tr("Procedural distribution")
+                                  << LootDistributionDialog::tr("Source"));
         procedureTree->header()->setSectionResizeMode(
                     0, QHeaderView::Stretch);
         procedureTree->setMinimumWidth(330);
@@ -1470,54 +1729,22 @@ public:
         QHBoxLayout *buttonLayout = new QHBoxLayout(buttons);
         buttonLayout->setContentsMargins(0, 0, 0, 0);
         newProcedureButton = new QPushButton(
-                    q->tr("New distribution..."), buttons);
+                    LootDistributionDialog::tr("New distribution..."), buttons);
         editProcedureButton = new QPushButton(
-                    q->tr("Clone / edit in project..."), buttons);
+                    LootDistributionDialog::tr("Clone / edit in project..."), buttons);
         deleteProcedureButton = new QPushButton(
-                    q->tr("Remove project override"), buttons);
+                    LootDistributionDialog::tr("Remove project override"), buttons);
         buttonLayout->addWidget(newProcedureButton);
         buttonLayout->addWidget(editProcedureButton);
         buttonLayout->addWidget(deleteProcedureButton);
         buttonLayout->addStretch();
         layout->addWidget(buttons);
-        tabs->addTab(page, q->tr("Procedural distributions"));
+        tabs->addTab(page, LootDistributionDialog::tr("Procedural distributions"));
         QObject::connect(procedureTree,
                          &QTreeWidget::currentItemChanged, q,
                          [this]() { showCurrentProcedure(); });
-        QObject::connect(filter, &QLineEdit::textChanged, q,
-                         [this](const QString &text) {
-            const QString needle = text.trimmed();
-            const QJsonObject procedures = data.procedures();
-            for (int i = 0;
-                 i < procedureTree->topLevelItemCount(); ++i) {
-                QTreeWidgetItem *item =
-                        procedureTree->topLevelItem(i);
-                bool match = needle.isEmpty()
-                        || item->text(0).contains(
-                            needle, Qt::CaseInsensitive);
-                if (!match) {
-                    const QJsonObject definition =
-                            procedures.value(item->text(0)).toObject();
-                    const QJsonArray groups[] = {
-                        definition.value(QStringLiteral("items")).toArray(),
-                        definition.value(QStringLiteral("junk")).toObject()
-                        .value(QStringLiteral("items")).toArray()
-                    };
-                    for (const QJsonArray &items : groups) {
-                        for (int n = 0; n < items.size(); n += 2) {
-                            if (items.at(n).toString().contains(
-                                        needle, Qt::CaseInsensitive)) {
-                                match = true;
-                                break;
-                            }
-                        }
-                        if (match)
-                            break;
-                    }
-                }
-                item->setHidden(!match);
-            }
-        });
+        QObject::connect(procedureFilter, &QLineEdit::textChanged, q,
+                         [this]() { filterProcedures(); });
         QObject::connect(newProcedureButton, &QAbstractButton::clicked, q,
                          [this]() { editProcedure(true); });
         QObject::connect(editProcedureButton, &QAbstractButton::clicked, q,
@@ -1525,11 +1752,43 @@ public:
         QObject::connect(deleteProcedureButton, &QAbstractButton::clicked, q,
                          [this]() { deleteProcedure(); });
     }
+    void filterProcedures()
+    {
+        const QString needle = procedureFilter->text().trimmed();
+        const QJsonObject procedures = data.procedures();
+        for (int i = 0; i < procedureTree->topLevelItemCount(); ++i) {
+            QTreeWidgetItem *item = procedureTree->topLevelItem(i);
+            bool match = matchesLootSearch(needle, item->text(0));
+            if (!match) {
+                const QJsonObject definition =
+                        procedures.value(item->text(0)).toObject();
+                const QJsonArray groups[] = {
+                    definition.value(QStringLiteral("items")).toArray(),
+                    definition.value(QStringLiteral("junk")).toObject()
+                    .value(QStringLiteral("items")).toArray()
+                };
+                for (const QJsonArray &items : groups) {
+                    for (int n = 0; n < items.size(); n += 2) {
+                        const QString id = items.at(n).toString();
+                        if (matchesLootSearch(needle, id,
+                                              translatedItemName(itemTranslations, id))) {
+                            match = true;
+                            break;
+                        }
+                    }
+                    if (match)
+                        break;
+                }
+            }
+            item->setHidden(!match);
+        }
+    }
     void chooseGame()
     {
         const QString path = QFileDialog::getExistingDirectory(
-                    q, q->tr("Choose Project Zomboid game directory"),
-                    gameEdit->text());
+                    q, LootDistributionDialog::tr("Choose Project Zomboid game directory"),
+                    gameEdit->text(),
+                    QFileDialog::ShowDirsOnly | QFileDialog::DontUseNativeDialog);
         if (path.isEmpty())
             return;
         gameEdit->setText(QDir::toNativeSeparators(path));
@@ -1539,8 +1798,9 @@ public:
     void chooseProject()
     {
         const QString path = QFileDialog::getExistingDirectory(
-                    q, q->tr("Choose map project or mod root"),
-                    projectEdit->text());
+                    q, LootDistributionDialog::tr("Choose map project or mod root"),
+                    projectEdit->text(),
+                    QFileDialog::ShowDirsOnly | QFileDialog::DontUseNativeDialog);
         if (path.isEmpty())
             return;
         projectEdit->setText(QDir::toNativeSeparators(path));
@@ -1551,7 +1811,8 @@ public:
         QString root = projectEdit->text().trimmed();
         if (root.isEmpty()) {
             root = QFileDialog::getExistingDirectory(
-                        q, q->tr("Choose map project or mod root"));
+                        q, LootDistributionDialog::tr("Choose map project or mod root"), QString(),
+                        QFileDialog::ShowDirsOnly | QFileDialog::DontUseNativeDialog);
             if (root.isEmpty())
                 return false;
             projectEdit->setText(QDir::toNativeSeparators(root));
@@ -1562,8 +1823,8 @@ public:
         if (!gameRoot.isEmpty()
                 && sameOrInside(data.projectRoot, gameRoot)) {
             QMessageBox::warning(
-                        q, q->tr("Unsafe project location"),
-                        q->tr("Choose a project/mod root outside the "
+                        q, LootDistributionDialog::tr("Unsafe project location"),
+                        LootDistributionDialog::tr("Choose a project/mod root outside the "
                               "Project Zomboid installation. The editor never "
                               "writes into the game directory."));
             data.projectRoot.clear();
@@ -1579,7 +1840,7 @@ public:
             clearViews();
             setStatus(error, true);
             if (reportErrors)
-                QMessageBox::warning(q, q->tr("Could not load loot definitions"),
+                QMessageBox::warning(q, LootDistributionDialog::tr("Could not load loot definitions"),
                                      error);
             return;
         }
@@ -1587,11 +1848,14 @@ public:
             clearViews();
             setStatus(error, true);
             if (reportErrors)
-                QMessageBox::warning(q, q->tr("Could not load project loot"),
+                QMessageBox::warning(q, LootDistributionDialog::tr("Could not load project loot"),
                                      error);
             return;
         }
         data = loaded;
+        itemTranslations = gameItemTranslations(
+                    data.itemsRoot, LanguageManager::currentLanguage());
+        readRoomTranslationSettings();
         gameEdit->setText(QDir::toNativeSeparators(data.itemsRoot));
         projectEdit->setText(QDir::toNativeSeparators(data.projectRoot));
         QSettings *settings = Preferences::instance()->settings();
@@ -1602,7 +1866,7 @@ public:
                     QStringLiteral("LootDistributionEditor/ProjectRoot"),
                     data.projectRoot);
         populateViews();
-        setStatus(q->tr(
+        setStatus(LootDistributionDialog::tr(
                       "Loaded %1 rooms, %2 procedural distributions; "
                       "%3 project room/container overrides and %4 project "
                       "procedural overrides. Game files remain read-only. "
@@ -1649,6 +1913,7 @@ public:
             QTreeWidgetItem *roomItem =
                     new QTreeWidgetItem(roomTree);
             roomItem->setText(0, roomName);
+            roomItem->setText(2, roomTranslations.value(roomName));
             roomItem->setData(0, RoleRoom, roomName);
             const QJsonObject room = rooms.value(roomName).toObject();
             QStringList containerNames = room.keys();
@@ -1664,7 +1929,7 @@ public:
                             roomName, containerName);
                 containerItem->setText(0, containerName);
                 containerItem->setText(
-                            1, local ? q->tr("Project") : q->tr("Game"));
+                            1, local ? LootDistributionDialog::tr("Project") : LootDistributionDialog::tr("Game"));
                 containerItem->setData(0, RoleRoom, roomName);
                 containerItem->setData(
                             0, RoleContainer, containerName);
@@ -1699,9 +1964,9 @@ public:
             }
             const bool gameRoom = data.gameRooms.contains(roomName);
             roomItem->setText(1, localRoom
-                              ? (gameRoom ? q->tr("Game + project")
-                                          : q->tr("Project"))
-                              : q->tr("Game"));
+                              ? (gameRoom ? LootDistributionDialog::tr("Game + project")
+                                          : LootDistributionDialog::tr("Project"))
+                              : LootDistributionDialog::tr("Game"));
         }
         if (wantedContainer) {
             roomTree->setCurrentItem(wantedContainer);
@@ -1726,7 +1991,7 @@ public:
             const bool local = data.projectProcedures.contains(name);
             item->setText(0, name);
             item->setText(
-                        1, local ? q->tr("Project") : q->tr("Game"));
+                        1, local ? LootDistributionDialog::tr("Project") : LootDistributionDialog::tr("Game"));
             item->setData(0, RoleProject, local);
             if (local)
                 item->setForeground(0, QBrush(QColor(35, 145, 65)));
@@ -1738,6 +2003,8 @@ public:
         else if (procedureTree->topLevelItemCount())
             procedureTree->setCurrentItem(
                         procedureTree->topLevelItem(0));
+        filterRooms();
+        filterProcedures();
     }
     QString currentRoom() const
     {
@@ -1765,7 +2032,7 @@ public:
         deleteContainerButton->setEnabled(project);
         if (!valid) {
             roomTitle->setText(roomName);
-            roomHelp->setText(q->tr(
+            roomHelp->setText(LootDistributionDialog::tr(
                                   "Select a container below this RoomDef."));
             roomTable->setRowCount(0);
             return;
@@ -1779,7 +2046,7 @@ public:
         roomTitle->setText(QStringLiteral("%1 -> %2")
                            .arg(roomName, containerName));
         if (procedural) {
-            roomHelp->setText(q->tr(
+            roomHelp->setText(LootDistributionDialog::tr(
                                   "Procedural selector. Share is normalized "
                                   "only among non-forced rows shown here; "
                                   "force* constraints and min/max can change "
@@ -1789,7 +2056,7 @@ public:
         } else {
             const double rolls =
                     definition.value(QStringLiteral("rolls")).toDouble();
-            roomHelp->setText(q->tr(
+            roomHelp->setText(LootDistributionDialog::tr(
                                   "Direct distribution: %1 rolls. Chance / "
                                   "roll is the Lua value before sandbox "
                                   "rarity, zombie density, time decay and "
@@ -1804,10 +2071,10 @@ public:
         roomTable->setColumnCount(7);
         roomTable->setHorizontalHeaderLabels(
                     QStringList()
-                    << q->tr("Distribution") << q->tr("Weight")
-                    << q->tr("Neutral share") << q->tr("Min")
-                    << q->tr("Max") << q->tr("Forced by")
-                    << q->tr("Status"));
+                    << LootDistributionDialog::tr("Distribution") << LootDistributionDialog::tr("Weight")
+                    << LootDistributionDialog::tr("Neutral share") << LootDistributionDialog::tr("Min")
+                    << LootDistributionDialog::tr("Max") << LootDistributionDialog::tr("Forced by")
+                    << LootDistributionDialog::tr("Status"));
         roomTable->horizontalHeader()->setSectionResizeMode(
                     0, QHeaderView::Stretch);
         roomTable->horizontalHeader()->setSectionResizeMode(
@@ -1845,8 +2112,8 @@ public:
                 QStringLiteral("forceForRooms")
             };
             const QStringList forceLabels = {
-                q->tr("items"), q->tr("zones"),
-                q->tr("tiles"), q->tr("rooms")
+                LootDistributionDialog::tr("items"), LootDistributionDialog::tr("zones"),
+                LootDistributionDialog::tr("tiles"), LootDistributionDialog::tr("rooms")
             };
             for (int i = 0; i < forceKeys.size(); ++i) {
                 if (!rule.value(forceKeys.at(i)).toString().isEmpty())
@@ -1854,7 +2121,7 @@ public:
             }
             const bool forced = !forcedBy.isEmpty();
             const QString share = forced || total <= 0.0
-                    ? q->tr("N/A")
+                    ? LootDistributionDialog::tr("N/A")
                     : QStringLiteral("%1%")
                       .arg(QString::number(weight / total * 100.0, 'f', 1));
             const QStringList values = {
@@ -1864,15 +2131,15 @@ public:
                 rule.contains(QStringLiteral("min"))
                     ? QString::number(
                         rule.value(QStringLiteral("min")).toInt())
-                    : q->tr("(missing = 0)"),
+                    : LootDistributionDialog::tr("(missing = 0)"),
                 rule.contains(QStringLiteral("max"))
                     ? QString::number(
                         rule.value(QStringLiteral("max")).toInt())
-                    : q->tr("(missing = 0)"),
+                    : LootDistributionDialog::tr("(missing = 0)"),
                 forcedBy.join(QStringLiteral(", ")),
                 procedures.contains(name)
-                    ? q->tr("Resolved")
-                    : q->tr("Missing distribution")
+                    ? LootDistributionDialog::tr("Resolved")
+                    : LootDistributionDialog::tr("Missing distribution")
             };
             for (int column = 0; column < values.size(); ++column)
                 roomTable->setItem(
@@ -1905,10 +2172,10 @@ public:
         roomTable->setColumnCount(5);
         roomTable->setHorizontalHeaderLabels(
                     QStringList()
-                    << q->tr("Group") << q->tr("Item")
-                    << q->tr("Chance / roll")
-                    << q->tr("Neutral cumulative")
-                    << q->tr("Notes"));
+                    << LootDistributionDialog::tr("Group") << LootDistributionDialog::tr("Item")
+                    << LootDistributionDialog::tr("Chance / roll")
+                    << LootDistributionDialog::tr("Neutral cumulative")
+                    << LootDistributionDialog::tr("Notes"));
         roomTable->horizontalHeader()->setSectionResizeMode(
                     1, QHeaderView::Stretch);
         roomTable->horizontalHeader()->setSectionResizeMode(
@@ -1934,9 +2201,9 @@ public:
                                 new QTableWidgetItem(values.at(column)));
             }
         };
-        append(q->tr("Normal"), items, rolls, QString());
-        append(q->tr("Junk"), junkItems, junkRolls,
-               q->tr("Junk modifier rules"));
+        append(LootDistributionDialog::tr("Normal"), items, rolls, QString());
+        append(LootDistributionDialog::tr("Junk"), junkItems, junkRolls,
+               LootDistributionDialog::tr("Junk modifier rules"));
     }
     void showCurrentProcedure()
     {
@@ -1957,7 +2224,7 @@ public:
         const QJsonObject junk =
                 definition.value(QStringLiteral("junk")).toObject();
         procedureTitle->setText(name);
-        procedureHelp->setText(q->tr(
+        procedureHelp->setText(LootDistributionDialog::tr(
                                    "%1 normal rolls and %2 junk rolls. "
                                    "The cumulative column is a neutral "
                                    "mathematical preview, not an exact "
@@ -1973,10 +2240,10 @@ public:
         procedureTable->setColumnCount(5);
         procedureTable->setHorizontalHeaderLabels(
                     QStringList()
-                    << q->tr("Group") << q->tr("Item")
-                    << q->tr("Chance / roll")
-                    << q->tr("Neutral cumulative")
-                    << q->tr("Duplicate entries"));
+                    << LootDistributionDialog::tr("Group") << LootDistributionDialog::tr("Item")
+                    << LootDistributionDialog::tr("Chance / roll")
+                    << LootDistributionDialog::tr("Neutral cumulative")
+                    << LootDistributionDialog::tr("Duplicate entries"));
         procedureTable->horizontalHeader()->setSectionResizeMode(
                     1, QHeaderView::Stretch);
         const QJsonArray items =
@@ -2003,18 +2270,20 @@ public:
                     QStringLiteral("%1%").arg(formattedNumber(chance)),
                     cumulativeChance(chance, groupRolls),
                     duplicates.value(itemName) > 1
-                        ? q->tr("%1 independent entries")
+                        ? LootDistributionDialog::tr("%1 independent entries")
                           .arg(duplicates.value(itemName))
                         : QString()
                 };
                 for (int column = 0; column < values.size(); ++column)
                     procedureTable->setItem(
                                 row, column,
-                                new QTableWidgetItem(values.at(column)));
+                                column == 1
+                                ? translatedLootItem(itemTranslations, itemName)
+                                : new QTableWidgetItem(values.at(column)));
             }
         };
-        appendGroup(q->tr("Normal"), items, rolls);
-        appendGroup(q->tr("Junk"), junkItems,
+        appendGroup(LootDistributionDialog::tr("Normal"), items, rolls);
+        appendGroup(LootDistributionDialog::tr("Junk"), junkItems,
                     junk.value(QStringLiteral("rolls")).toDouble());
         procedureTable->resizeColumnsToContents();
         procedureTable->horizontalHeader()->setSectionResizeMode(
@@ -2036,8 +2305,8 @@ public:
         const QString name = dialog.name();
         if (create && data.procedures().contains(name)) {
             if (QMessageBox::question(
-                        q, q->tr("Replace existing definition"),
-                        q->tr("A distribution named \"%1\" already exists. "
+                        q, LootDistributionDialog::tr("Replace existing definition"),
+                        LootDistributionDialog::tr("A distribution named \"%1\" already exists. "
                               "Create a project override for it?").arg(name))
                     != QMessageBox::Yes) {
                 return;
@@ -2054,8 +2323,8 @@ public:
         if (!data.projectProcedures.contains(name))
             return;
         if (QMessageBox::question(
-                    q, q->tr("Remove project override"),
-                    q->tr("Remove the project definition \"%1\"? "
+                    q, LootDistributionDialog::tr("Remove project override"),
+                    LootDistributionDialog::tr("Remove the project definition \"%1\"? "
                           "The read-only game definition, if any, will become "
                           "visible again.").arg(name))
                 != QMessageBox::Yes) {
@@ -2088,8 +2357,8 @@ public:
         if (create && data.rooms().value(roomName).toObject()
                 .contains(containerName)) {
             if (QMessageBox::question(
-                        q, q->tr("Replace existing mapping"),
-                        q->tr("The mapping %1 -> %2 already exists. Create a "
+                        q, LootDistributionDialog::tr("Replace existing mapping"),
+                        LootDistributionDialog::tr("The mapping %1 -> %2 already exists. Create a "
                               "project override for it?")
                         .arg(roomName, containerName))
                     != QMessageBox::Yes) {
@@ -2111,8 +2380,8 @@ public:
         if (!data.isProjectContainer(roomName, containerName))
             return;
         if (QMessageBox::question(
-                    q, q->tr("Remove project override"),
-                    q->tr("Remove the project mapping %1 -> %2? The read-only "
+                    q, LootDistributionDialog::tr("Remove project override"),
+                    LootDistributionDialog::tr("Remove the project mapping %1 -> %2? The read-only "
                           "game mapping, if any, will become visible again.")
                     .arg(roomName, containerName))
                 != QMessageBox::Yes) {
@@ -2132,12 +2401,12 @@ public:
         QString error;
         if (!saveProjectDefinitions(data, &error)) {
             QMessageBox::critical(
-                        q, q->tr("Could not save project loot"), error);
+                        q, LootDistributionDialog::tr("Could not save project loot"), error);
             setStatus(error, true);
             return false;
         }
         populateViews();
-        setStatus(q->tr("Saved %1 and generated %2. Game files were not "
+        setStatus(LootDistributionDialog::tr("Saved %1 and generated %2. Game files were not "
                         "modified.")
                   .arg(QDir::toNativeSeparators(
                            manifestFileName(data.projectRoot)),
@@ -2184,12 +2453,15 @@ public:
     }
     LootDistributionDialog *q;
     LootData data;
+    QHash<QString, QString> roomTranslations;
+    QJsonObject itemTranslations;
     QString requestedRoom;
     QString requestedContainer;
     QLineEdit *gameEdit;
     QLineEdit *projectEdit;
     QPushButton *openFolderButton;
     QTabWidget *tabs;
+    QLineEdit *roomFilter;
     QTreeWidget *roomTree;
     QLabel *roomTitle;
     QLabel *roomHelp;
@@ -2197,6 +2469,7 @@ public:
     QPushButton *newContainerButton;
     QPushButton *editContainerButton;
     QPushButton *deleteContainerButton;
+    QLineEdit *procedureFilter;
     QTreeWidget *procedureTree;
     QLabel *procedureTitle;
     QLabel *procedureHelp;
@@ -2231,7 +2504,7 @@ bool LootDistributionDialog::validateDefinitions(
         if (!gameRoot.isEmpty()
                 && sameOrInside(data.projectRoot, gameRoot)) {
             if (error) {
-                *error = tr("The project/mod root is inside the read-only "
+                *error = LootDistributionDialog::tr("The project/mod root is inside the read-only "
                             "game directory.");
             }
             return false;
@@ -2239,6 +2512,11 @@ bool LootDistributionDialog::validateDefinitions(
     }
     if (!validateGeneratedLua(generatedLua(data), error))
         return false;
+    if (!validateLootTranslations(data.itemsRoot, data.gameProcedures)) {
+        if (error)
+            *error = LootDistributionDialog::tr("Loot localization validation failed.");
+        return false;
+    }
     QStringList gameProblems;
     QStringList projectProblems;
     const QJsonObject procedures = data.procedures();
@@ -2283,14 +2561,14 @@ bool LootDistributionDialog::validateDefinitions(
     }
     if (!projectProblems.isEmpty()) {
         if (error) {
-            *error = tr("Unresolved project procedural references:\n%1")
+            *error = LootDistributionDialog::tr("Unresolved project procedural references:\n%1")
                     .arg(projectProblems.mid(0, 20)
                          .join(QLatin1Char('\n')));
         }
         return false;
     }
     if (summary) {
-        *summary = tr("%1 rooms, %2 containers (%3 procedural, %4 direct), "
+        *summary = LootDistributionDialog::tr("%1 rooms, %2 containers (%3 procedural, %4 direct), "
                      "%5 procedural distributions, %6 project overrides, "
                      "%7 unresolved read-only game references")
                 .arg(rooms.size()).arg(containerCount)
@@ -2303,7 +2581,8 @@ bool LootDistributionDialog::validateDefinitions(
                 count += room.toObject().size();
             return count;
         }())
-                .arg(gameProblems.size());
+                .arg(gameProblems.size())
+                + LootDistributionDialog::tr(". Loot localization checks passed.");
     }
     return true;
 }
@@ -2341,7 +2620,7 @@ bool LootDistributionDialog::renderValidation(
     const QFileInfo outputInfo(outputFile);
     if (!QDir().mkpath(outputInfo.absolutePath())) {
         if (error) {
-            *error = tr("Could not create screenshot directory %1.")
+            *error = LootDistributionDialog::tr("Could not create screenshot directory %1.")
                     .arg(QDir::toNativeSeparators(
                              outputInfo.absolutePath()));
         }
@@ -2354,7 +2633,7 @@ bool LootDistributionDialog::renderValidation(
     dialog.hide();
     if (capture.isNull() || !capture.save(outputFile, "PNG")) {
         if (error) {
-            *error = tr("Could not save loot-editor screenshot %1.")
+            *error = LootDistributionDialog::tr("Could not save loot-editor screenshot %1.")
                     .arg(QDir::toNativeSeparators(outputFile));
         }
         restoreSettings();

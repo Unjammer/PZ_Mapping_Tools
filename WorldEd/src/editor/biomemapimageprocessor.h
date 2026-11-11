@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QImage>
 #include <QList>
+#include <QPoint>
 #include <QSet>
 #include <QString>
 class BiomeMapImageProcessor
@@ -32,13 +33,16 @@ public:
                           const QImage &zoneLayer);
     static QImage createBiomeLayer(const QImage &mainImage,
                                    const QImage &vegetationImage,
-                                   QSet<QRgb> *unknownColors = nullptr);
+                                   QSet<QRgb> *unknownColors = nullptr,
+                                   bool useVegitationOverride = false);
     static const QList<PaletteEntry> &palette();
     static const PaletteEntry *entryForValue(int value);
     static QString oreSelectorDescription(const QString &ore);
     static QColor displayColor(int value);
+    static int zoneValueForName(const QString &name);
     static Analysis analyze(const QImage &biomeLayer,
                             const QImage &zoneLayer,
+                            const QPoint &worldOrigin = QPoint(),
                             int chunkSize = 8);
     static bool validateConfiguration(QString *errorString);
 private:

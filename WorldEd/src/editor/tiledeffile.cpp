@@ -287,6 +287,7 @@ bool TileDefFile::read(const QString &fileName)
             tiles[j] = new TileDefTile(ts, j);
         }
         ts->mTiles = tiles;
+        ts->mDeclaredTileCount = tileCount;
 #ifndef WORLDED
         // Deal with the image being a different size now than it was when the
         // .tiles file was saved.
@@ -384,30 +385,6 @@ QList<TileDefTileset *> TileDefFile::takeTilesets()
     mTilesets.clear();
     mTilesetByName.clear();
     return tilesets;
-}
-
-int TileDefFile::mergePropertiesFrom(const TileDefFile &overlay)
-{
-    int mergedTiles = 0;
-    for (TileDefTileset *overlayTileset : overlay.tilesets()) {
-        TileDefTileset *baseTileset = tileset(overlayTileset->mName);
-        if (!baseTileset)
-            continue;
-        const int count = qMin(baseTileset->mTiles.size(),
-                               overlayTileset->mTiles.size());
-        for (int i = 0; i < count; ++i) {
-            TileDefTile *overlayTile = overlayTileset->mTiles.at(i);
-            if (overlayTile->mProperties.isEmpty())
-                continue;
-            TileDefTile *baseTile = baseTileset->mTiles.at(i);
-            for (auto it = overlayTile->mProperties.cbegin();
-                 it != overlayTile->mProperties.cend(); ++it) {
-                baseTile->mProperties[it.key()] = it.value();
-            }
-            ++mergedTiles;
-        }
-    }
-    return mergedTiles;
 }
 
 /////

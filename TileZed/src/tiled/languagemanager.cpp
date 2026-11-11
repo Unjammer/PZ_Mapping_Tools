@@ -47,6 +47,12 @@ void LanguageManager::deleteInstance()
     mInstance = 0;
 }
 
+QString LanguageManager::currentLanguage()
+{
+    const QString language = Preferences::instance()->language();
+    return language.isEmpty() ? QLocale::system().name() : language;
+}
+
 LanguageManager::LanguageManager()
     : mQtTranslator(0)
     , mAppTranslator(0)
@@ -70,9 +76,7 @@ void LanguageManager::installTranslators()
     mQtTranslator = new QTranslator;
     mAppTranslator = new QTranslator;
 
-    QString language = Preferences::instance()->language();
-    if (language.isEmpty())
-        language = QLocale::system().name();
+    const QString language = currentLanguage();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     const QString qtTranslationsDir =

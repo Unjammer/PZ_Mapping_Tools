@@ -582,7 +582,7 @@ void PreferencesDialog::updateActions()
     row = mUi->tilePropertiesListWidget->currentRow();
     mUi->removePZPropertiesFile->setEnabled(row != -1);
     mUi->raisePZPropertiesFile->setEnabled(row > 0);
-    mUi->lowerPZPropertiesFile->setEnabled(row >= 0 && row < mUi->tilePropertiesListWidget->count());
+    mUi->lowerPZPropertiesFile->setEnabled(row >= 0 && row + 1 < mUi->tilePropertiesListWidget->count());
 }
 #endif // ZOMBOID
 
@@ -642,7 +642,7 @@ void PreferencesDialog::fromPreferences()
                 prefs->autoSaveIntervalMinutes());
     mAutoSaveCombo->setCurrentIndex(autoSaveIndex >= 0 ? autoSaveIndex : 0);
 
-    for (const QString &fileName : prefs->tilePropertiesFiles())
+    for (const QString &fileName : prefs->configuredTilePropertiesFiles())
         mUi->tilePropertiesListWidget->addItem(QDir::toNativeSeparators(fileName));
     if (mUi->tilePropertiesListWidget->count())
         mUi->tilePropertiesListWidget->setCurrentRow(0);

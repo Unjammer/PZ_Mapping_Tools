@@ -243,7 +243,7 @@ void TilesetManager::setReloadTilesetsOnChange(bool enabled)
 
 void TilesetManager::tilesetDirectoryChanged()
 {
-    mTilesetPaths.clear();
+    mImagePaths.clear();
     if (!mWatchedTilesetDirectories.isEmpty())
         mWatcher->removePaths(mWatchedTilesetDirectories);
     mWatchedTilesetDirectories.clear();
@@ -252,6 +252,8 @@ void TilesetManager::tilesetDirectoryChanged()
     QStringList directories = { rootPath, path2x };
     const QStringList roots = directories;
     for (const QString &path : roots) {
+        if (path.isEmpty())
+            continue;
         QDirIterator iterator(path, QDir::Dirs | QDir::NoDotAndDotDot,
                               QDirIterator::Subdirectories);
         while (iterator.hasNext())
@@ -267,92 +269,11 @@ void TilesetManager::tilesetDirectoryChanged()
     }
 }
 
-bool TilesetManager::getTilesetFileName(const QString &tilesetName, QString &path1x, QString &path2x)
+bool TilesetManager::getTilesetFileName(const QString &tilesetName, QString &path1x, QString &path2x, int *scale)
 {
-    TilesetPaths paths = mTilesetPaths.value(tilesetName);
-    if (paths.bValid) {
-        path1x = paths.path1x;
-        path2x = paths.path2x;
-        return true;
-    }
-
-    QString tiles1xDir = Preferences::instance()->tilesDirectory();
-    QString tiles2xDir = Preferences::instance()->tiles2xDirectory();
-
-    QDir dir1x(tiles1xDir);
-    QDir dir2x(tiles2xDir);
-
-    QString fileName = tilesetName + QLatin1String(".png");
-    path1x = dir1x.filePath(fileName);
-    path2x = dir2x.filePath(fileName);
-
-    if (QImageReader(path2x).size().isValid()) {
-        paths.bValid = true;
-        paths.path1x = path1x;
-        paths.path2x = path2x;
-        mTilesetPaths[tilesetName] = paths;
-        return true;
-    }
-    auto findImage = [&fileName](const QDir &root,
-                                 const QString &excludedTree = QString()) {
-        QStringList candidates;
-        const QString excludedPrefix = excludedTree.isEmpty()
-                ? QString()
-                : QDir::cleanPath(QFileInfo(excludedTree).absoluteFilePath())
-                  + QDir::separator();
-        QDirIterator iterator(root.absolutePath(),
-                              QStringList() << fileName,
-                              QDir::Files,
-                              QDirIterator::Subdirectories);
-        while (iterator.hasNext()) {
-            const QString candidate =
-                    QDir::cleanPath(QFileInfo(iterator.next())
-                                    .absoluteFilePath());
-            if (!excludedPrefix.isEmpty()
-                    && candidate.startsWith(
-                        excludedPrefix, Qt::CaseInsensitive)) {
-                continue;
-            }
-            if (QImageReader(candidate).size().isValid())
-                candidates += candidate;
-        }
-        candidates.sort(Qt::CaseInsensitive);
-        return candidates.isEmpty() ? QString() : candidates.first();
-    };
-    const QString nested2x = findImage(dir2x);
-    if (!nested2x.isEmpty()) {
-        const QString relative = dir2x.relativeFilePath(nested2x);
-        path1x = dir1x.filePath(relative);
-        path2x = nested2x;
-        paths.bValid = true;
-        paths.path1x = path1x;
-        paths.path2x = path2x;
-        mTilesetPaths[tilesetName] = paths;
-        return true;
-    }
-
-    if (QImageReader(path1x).size().isValid()) {
-        paths.bValid = true;
-        paths.path1x = path1x;
-        paths.path2x = path2x;
-        mTilesetPaths[tilesetName] = paths;
-        return true;
-    }
-
-    const QString nested1x =
-            findImage(dir1x, dir2x.absolutePath());
-    if (!nested1x.isEmpty()) {
-        const QString relative = dir1x.relativeFilePath(nested1x);
-        path1x = nested1x;
-        path2x = dir2x.filePath(relative);
-        paths.bValid = true;
-        paths.path1x = path1x;
-        paths.path2x = path2x;
-        mTilesetPaths[tilesetName] = paths;
-        return true;
-    }
-
-    return false;
+    const auto *preferences = Preferences::instance();
+    return mImagePaths.find(preferences->tilesDirectory(), preferences->tiles2xDirectory(),
+                            tilesetName, path1x, path2x, scale);
 }
 
 void TilesetManager::fileChanged(const QString &path)
@@ -380,9 +301,10 @@ void TilesetManager::fileChangedTimeout()
 {
 #ifdef ZOMBOID
     mImageLoader->waitForDone();
+    if (!mChangedFiles.isEmpty() || !mChangedDirectories.isEmpty())
+        mImagePaths.clear();
     if (!mChangedDirectories.isEmpty()) {
         qInfo() << "Tiles directory changed:" << mChangedDirectories;
-        mTilesetPaths.clear();
         if (!TileMetaInfoMgr::instance()->addNewTilesets()) {
             qWarning().noquote()
                     << "Unable to discover new PNG sheets after a Tiles "
@@ -558,7 +480,7 @@ void TilesetManager::imageLoaded(Tileset *image, Tileset *tileset)
 void TilesetManager::tilePropertiesChanged()
 {
     for (Tileset *cached : qAsConst(mTilesetImageCache->mTilesets)) {
-        cachePZProperties(cached);
+        cachePZProperties(cached, true);
     }
     for (Tileset *tileset : tilesets()) {
         QString imageSource = tileset->imageSource();
@@ -710,21 +632,28 @@ int TilesetManager::countLoadingTilesets(const QList<Tileset*> &tilesets) const
     return count;
 }
 
-void TilesetManager::cachePZProperties(Tileset *cached)
+void TilesetManager::cachePZProperties(Tileset *cached, bool refresh)
 {
     QString tilesetName = QFileInfo(cached->imageSource2x().isEmpty() ? cached->imageSource() : cached->imageSource2x()).completeBaseName();
     TileDefWatcher *tileDefWatcher = BuildingEditor::getTileDefWatcher();
     tileDefWatcher->check();
     QString INVISIBLE = QLatin1String("invisible");
-    if (TileDefTileset *tdts = tileDefWatcher->tileset(tilesetName)) {
-        for (int i = 0; i < cached->tileCount(); i++) {
-            TileDefTile *tdt = tdts->tileAt(i);
-            if (tdt == nullptr)
-                 break;
-            cached->tileAt(i)->setProperties({});
-            if (tdt->mProperties.contains(INVISIBLE)) {
-                cached->tileAt(i)->setProperty(INVISIBLE, QString());
-            }
+    const auto &definitions = tileDefWatcher->tiles(tilesetName);
+    const int count = qMin(cached->tileCount(), definitions.size());
+    for (int i = 0; i < count; ++i) {
+        auto *tile = cached->tileAt(i);
+        tile->setProperties({});
+        if (definitions.at(i)->mProperties.contains(INVISIBLE))
+            tile->setProperty(INVISIBLE, QString());
+    }
+    if (refresh) {
+        for (int i = count; i < cached->tileCount(); ++i) {
+            auto *tile = cached->tileAt(i);
+            if (!tile->properties().contains(INVISIBLE))
+                continue;
+            auto properties = tile->properties();
+            properties.remove(INVISIBLE);
+            tile->setProperties(properties);
         }
     }
 }

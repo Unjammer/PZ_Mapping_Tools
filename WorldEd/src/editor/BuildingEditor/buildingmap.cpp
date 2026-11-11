@@ -456,11 +456,10 @@ BuildingMapEmptyOutsideFill::BuildingMapEmptyOutsideFill(Tiled::Map *map, Buildi
     const QString BlockRain(QStringLiteral("BlockRain"));
     const QString solidfloor(QStringLiteral("solidfloor"));
     for (Tiled::Tileset *tileset : map->tilesets()) {
-        TileDefTileset *tdts = tileDefWatcher->tileset(tileset->name());
-        if (tdts == nullptr)
-            continue;
-        for (int i = 0; i < tileset->tileCount(); i++) {
-            if (TileDefTile *tdt = tdts->tileAt(i)) {
+        const auto &definitions = tileDefWatcher->tiles(tileset->name());
+        const int count = qMin(tileset->tileCount(), definitions.size());
+        for (int i = 0; i < count; i++) {
+            if (TileDefTile *tdt = definitions.at(i)) {
                 if (tdt->mProperties.contains(BlockRain) || tdt->mProperties.contains(solidfloor)) {
                     mBlockRainTiles += tileset->tileAt(i);
                 }

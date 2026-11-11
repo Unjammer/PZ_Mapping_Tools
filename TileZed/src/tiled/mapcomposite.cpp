@@ -283,21 +283,8 @@ bool CompositeLayerGroup::orderedCellsAt(const QPoint &pos,
         if (orderedCells.isEmpty()) {
             continue;
         }
-        if (shouldSuppressExistingTilesOnLevel(mLevel) && orderedCells.first().layer->name() == sFloor) {
-            // Floor tile suppress all other tiles, except AboveLot tiles.
-            cellsToKeep.clear();
-        }
-        if (shouldSuppressExistingTilesOnLevel(mLevel)) {
-            for (int i = cellsToKeep.size() - 1; i >= 0; --i) {
-                const QString &name = cellsToKeep.at(i).layer->name();
-                for (const OrderedCell &replacement : qAsConst(orderedCells)) {
-                    if (PZTools::lotLayerSuppressesLayer(replacement.layer->name(), name)) {
-                        cellsToKeep.remove(i);
-                        break;
-                    }
-                }
-            }
-        }
+        if (shouldSuppressExistingTilesOnLevel(mLevel))
+            PZTools::suppressLotUnderlay(cellsToKeep, orderedCells);
         cellsToKeep.append(orderedCells);
     }
 
@@ -512,21 +499,8 @@ bool CompositeLayerGroup::orderedCellsAt2(const QPoint &pos, OrderedCellsTempora
         if (orderedCells.isEmpty()) {
             continue;
         }
-        if (shouldSuppressExistingTilesOnLevel(mLevel) && orderedCells.first().layer->name() == sFloor) {
-            // Floor tile suppress all other tiles, except AboveLot tiles.
-            cellsToKeep.clear();
-        }
-        if (shouldSuppressExistingTilesOnLevel(mLevel)) {
-            for (int i = cellsToKeep.size() - 1; i >= 0; --i) {
-                const QString &name = cellsToKeep.at(i).layer->name();
-                for (const OrderedCell &replacement : qAsConst(orderedCells)) {
-                    if (PZTools::lotLayerSuppressesLayer(replacement.layer->name(), name)) {
-                        cellsToKeep.remove(i);
-                        break;
-                    }
-                }
-            }
-        }
+        if (shouldSuppressExistingTilesOnLevel(mLevel))
+            PZTools::suppressLotUnderlay(cellsToKeep, orderedCells);
         cellsToKeep.append(orderedCells);
     }
 
@@ -697,6 +671,7 @@ bool CompositeLayerGroup::orderedCellsAt3(const QPoint &pos, OrderedCellsTempora
 
     cellMapCells.clear();
     aboveLotCells.clear();
+    bool leadingCellMapFloors = true;
 
     // Get tiles from cell maps at this location
     for (const SubMapLayers& subMapLayer : qAsConst(mPreparedSubMapLayers)) {
@@ -713,6 +688,7 @@ bool CompositeLayerGroup::orderedCellsAt3(const QPoint &pos, OrderedCellsTempora
             // In practice this doesn't happen, because cell maps don't overlap.
             cellMapCells.clear();
             aboveLotCells.clear();
+            leadingCellMapFloors = true;
         }
         for (const OrderedCell &oc : qAsConst(orderedCells)) {
             TilePlusLayer cellMapCell(oc.layer->nameWithPrefix(), oc.cell->tile, oc.layerGroup->mVisibleLayers[oc.layerIndex], oc.opacity);
@@ -720,6 +696,8 @@ bool CompositeLayerGroup::orderedCellsAt3(const QPoint &pos, OrderedCellsTempora
                 aboveLotCells.append(cellMapCell);
                 continue;
             }
+            leadingCellMapFloors &= PZTools::isLotUnderlayFloor(oc.layer->name());
+            cellMapCell.mLeadingUnderlayFloor = leadingCellMapFloors;
             cellMapCells.append(cellMapCell);
         }
     }
@@ -736,38 +714,25 @@ bool CompositeLayerGroup::orderedCellsAt3(const QPoint &pos, OrderedCellsTempora
         if (orderedCells.isEmpty()) {
             continue;
         }
-        if (shouldSuppressExistingTilesOnLevel(mLevel) && orderedCells.first().layer->name() == sFloor) {
-            // Floor tiles suppress all other tiles, except AboveLot tiles.
-            for (int i = 0; i < buildingCells.size(); i++) {
-                TilePlusLayer& cell = buildingCells[i];
-                cell.mHideIfVisible = subMapLayer.mSubMap;
-            }
-        }
         if (shouldSuppressExistingTilesOnLevel(mLevel)) {
-            for (TilePlusLayer &cell : buildingCells) {
-                const QString name = MapComposite::layerNameWithoutPrefix(cell.mLayerName);
-                for (const OrderedCell &replacement : qAsConst(orderedCells)) {
-                    if (PZTools::lotLayerSuppressesLayer(replacement.layer->name(), name)) {
-                        cell.mHideIfVisible = subMapLayer.mSubMap;
-                        break;
-                    }
+            const PZTools::LotUnderlay underlay(orderedCells);
+            const auto hideUnderlay = [&](QVector<TilePlusLayer> &stack) {
+                for (TilePlusLayer &cell : stack) {
+                    if (!underlay.keepsLayer(MapComposite::layerNameWithoutPrefix(cell.mLayerName),
+                                             cell.mLeadingUnderlayFloor))
+                        cell.mCoveringLots.add(subMapLayer.mSubMap);
                 }
-            }
+            };
+            hideUnderlay(cellMapCells);
+            hideUnderlay(buildingCells);
         }
+        bool leadingBuildingFloors = true;
         for (const OrderedCell &oc : qAsConst(orderedCells)) {
             TilePlusLayer buildingCell(oc.layer->nameWithPrefix(), oc.cell->tile, oc.layerGroup->mVisibleLayers[oc.layerIndex], oc.opacity);
+            leadingBuildingFloors &= PZTools::isLotUnderlayFloor(oc.layer->name());
+            buildingCell.mLeadingUnderlayFloor = leadingBuildingFloors;
             buildingCell.mSubMap = oc.layerGroup->owner();
             buildingCells.append(buildingCell);
-        }
-    }
-
-    if (shouldSuppressExistingTilesOnLevel(mLevel)) {
-        for (const TilePlusLayer &replacement : qAsConst(buildingCells)) {
-            const QString name = MapComposite::layerNameWithoutPrefix(replacement.mLayerName);
-            for (TilePlusLayer &cell : cellMapCells) {
-                if (PZTools::lotLayerSuppressesLayer(name, MapComposite::layerNameWithoutPrefix(cell.mLayerName)))
-                    cell.mHideIfVisible = replacement.mSubMap;
-            }
         }
     }
 
@@ -835,7 +800,7 @@ bool CompositeLayerGroup::orderedCellsAt3(const QPoint &pos, OrderedCellsTempora
             if (bKeepOther && isOther) {
                 continue;
             }
-            cell.mHideIfVisible = subMap;
+            cell.mCoveringLots.add(subMap);
         }
         for (const OrderedCell &oc : qAsConst(orderedCells)) {
             TilePlusLayer cell(oc.layer->nameWithPrefix(), oc.cell->tile, oc.layerGroup->mVisibleLayers[oc.layerIndex], oc.opacity);

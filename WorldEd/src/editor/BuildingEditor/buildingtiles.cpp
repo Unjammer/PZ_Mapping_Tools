@@ -1127,11 +1127,7 @@ int BTC_Windows::wallEnum(const BuildingTileEntry *entry, int e) const
     }
     TileDefWatcher *tileDefWatcher = getTileDefWatcher();
     tileDefWatcher->check();
-    TileDefTileset *tdTileset = tileDefWatcher->tileset(tile->mTilesetName);
-    if (tdTileset == nullptr) {
-        return defaultWallEnum(entry, e);
-    }
-    TileDefTile *tdTile = tdTileset->tileAt(tile->mIndex);
+    TileDefTile *tdTile = tileDefWatcher->tile(tile->mTilesetName, tile->mIndex);
     if (tdTile == nullptr || !tdTile->mProperties.contains(QStringLiteral("WindowShape"))) {
         return defaultWallEnum(entry, e);
     }
@@ -1154,11 +1150,7 @@ bool BTC_Windows::shadowHack(const BuildingTileEntry *entry, int e, QPoint &p) c
     }
     TileDefWatcher *tileDefWatcher = getTileDefWatcher();
     tileDefWatcher->check();
-    TileDefTileset *tdTileset = tileDefWatcher->tileset(tile->mTilesetName);
-    if (tdTileset == nullptr) {
-        return false;
-    }
-    TileDefTile *tdTile = tdTileset->tileAt(tile->mIndex);
+    TileDefTile *tdTile = tileDefWatcher->tile(tile->mTilesetName, tile->mIndex);
     if (tdTile == nullptr || !tdTile->mProperties.contains(QStringLiteral("WindowShape"))) {
         return false; // original 2 window shapes don't use the WindowShape property
     }

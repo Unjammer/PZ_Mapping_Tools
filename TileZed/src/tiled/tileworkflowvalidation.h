@@ -273,7 +273,7 @@ inline bool validateTileWorkflows(QString *error)
         MapComposite *composite = document.mapComposite();
         MapComposite *placed = composite->addMap(&info, QPoint(), 0);
         CompositeLayerGroup *group = composite->tileLayersForLevel(0);
-        const auto composition = [&](bool floor) {
+        const auto composition = [&]() {
             composite->synch();
             group->prepareDrawing(document.renderer(), composite->boundingRect(document.renderer()).toAlignedRect());
             QVector<const Cell *> cells;
@@ -287,19 +287,19 @@ inline bool validateTileWorkflows(QString *error)
                 baseFound = baseFound || cell->tile == tiles->tileAt(11);
                 lotFound = lotFound || cell->tile == tiles->tileAt(10);
             }
-            check(lotFound && baseFound != floor, QStringLiteral("Map layers remain visible only beneath floorless lot squares"));
+            check(lotFound && !baseFound, QStringLiteral("Placed buildings suppress underlying furniture"));
             group->prepareDrawing2();
             OrderedCellsTemporaries temporary;
             QVector<const Cell *> exportCells;
             group->orderedCellsAt2(QPoint(1, 1), temporary, exportCells);
             check(cells == exportCells, QStringLiteral("Rendering and export agree on retained layers"));
         };
-        composition(false);
+        composition();
         auto *floor = new TileLayer(QStringLiteral("Floor"), 0, 0, 8, 8);
         floor->setCell(1, 1, Cell(tiles->tileAt(0)));
         lot.insertLayer(0, floor);
         placed->layerAdded(0);
-        composition(true);
+        composition();
         composite->removeMap(placed);
     }
     {

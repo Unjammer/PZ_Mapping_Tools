@@ -684,7 +684,10 @@
           </sizepolicy>
          </property>
          <property name="title">
-          <string>Tile Property Files (.tiles, .tiles.txt)</string>
+          <string>Additional Tile Property Files (.tiles, .tiles.txt)</string>
+         </property>
+         <property name="toolTip">
+          <string>Game definitions are loaded automatically. List mod files in game load order, with each patch after the definition it changes.</string>
          </property>
          <property name="alignment">
           <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>

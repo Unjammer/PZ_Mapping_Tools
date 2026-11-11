@@ -1187,7 +1187,7 @@ void LayerGroupVBO::paint2(QPainter *painter, Tiled::MapRenderer *renderer,
                         GLuint start = i * 4;
                         GLuint end = start + 4 - 1;
                         GLuint count = 4;
-                        if ((tile.mHideIfVisible != nullptr) && isLotVisible(tile.mHideIfVisible))
+                        if (tile.mCoveringLots.hidesTile(isLotVisible))
                             continue;
                         if ((tile.mSubMap != nullptr) && (isLotVisible(tile.mSubMap) == false))
                             continue;
@@ -1401,7 +1401,7 @@ void LayerGroupVBO::gatherTiles(Tiled::MapRenderer *renderer, const QRectF& expo
                     bool bJUMBO = !customSize.isEmpty();
                     VBOTile vboTile;
                     vboTile.mSubMap = cell.mSubMap;
-                    vboTile.mHideIfVisible = cell.mHideIfVisible;
+                    vboTile.mCoveringLots = cell.mCoveringLots;
                     vboTile.mLayerIndex = mMapCompositeVBO->mLayerNameToIndex.value(cell.mLayerName, -1);
                     vboTile.mRect = QRect(screenPos.x() + tileset->tileOffset().x() + tile->offset().x(),
                                           screenPos.y() + tileset->tileOffset().y() + tile->offset().y() - tile->height(),

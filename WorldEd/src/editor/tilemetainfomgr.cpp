@@ -514,23 +514,30 @@ bool TileMetaInfoMgr::addNewTilesets(bool loadImages)
                 QFileInfo(it.value().path).completeBaseName();
         if (tileset(tilesetName))
             continue;
-        QImageReader reader(it.value().path);
+        QString imageSource;
+        QString imageSource2x;
+        int scale = 1;
+        if (!TilesetManager::instance()->getTilesetFileName(
+                    tilesetName, imageSource, imageSource2x, &scale))
+            continue;
+        const QString &imagePath = scale == 2 ? imageSource2x : imageSource;
+        QImageReader reader(imagePath);
         const QSize imageSize = reader.size();
         const QSize tileSize =
                 Tiled::getZomboidTilesetSize1x(tilesetName);
         if (!imageSize.isValid()
-                || imageSize.width() < tileSize.width() * it.value().scale
-                || imageSize.height() < tileSize.height() * it.value().scale) {
+                || imageSize.width() < tileSize.width() * scale
+                || imageSize.height() < tileSize.height() * scale) {
             qWarning() << "Ignoring undersized tileset PNG"
-                       << it.value().path << imageSize;
+                       << imagePath << imageSize;
             continue;
         }
         Tileset *tileset = nullptr;
         if (loadImages) {
-            tileset = loadTileset(it.value().path);
+            tileset = loadTileset(imagePath);
             if (!tileset) {
                 qWarning() << "Unable to discover tileset"
-                           << it.value().path << mError;
+                           << imagePath << mError;
                 continue;
             }
         } else {
@@ -538,20 +545,16 @@ bool TileMetaInfoMgr::addNewTilesets(bool loadImages)
                                   tileSize.width(),
                                   tileSize.height());
             Tiled::setZomboidTileOffset(tileset);
-            QString imageSource;
-            QString imageSource2x;
-            TilesetManager::instance()->getTilesetFileName(
-                        tilesetName, imageSource, imageSource2x);
             const QSize logicalImageSize =
-                    imageSize / it.value().scale;
+                    imageSize / scale;
             if (!tileset->loadFromNothing(logicalImageSize,
                                           imageSource)) {
                 qWarning() << "Unable to register tileset metadata"
-                           << it.value().path << logicalImageSize;
+                           << imagePath << logicalImageSize;
                 delete tileset;
                 continue;
             }
-            if (it.value().scale == 2)
+            if (scale == 2)
                 tileset->setImageSource2x(imageSource2x);
             else
                 tileset->setImageSource2x(QString());
@@ -647,20 +650,27 @@ bool TileMetaInfoMgr::rebuildTilesetsTxt(int *addedCountResult,
     int updatedCount = 0;
     int removedCount = 0;
     QSet<QString> validImageKeys;
+    TilesetImagePaths imagePaths;
     for (auto it = images.constBegin(); it != images.constEnd(); ++it) {
         TilesetsTxtFile::Tileset *fileTileset =
                 catalogByName.value(it.key(), nullptr);
-        QImageReader reader(it.value().path);
+        QString path1x;
+        QString path2x;
+        int scale = 1;
+        if (!imagePaths.find(rootPath, root2x, it.value().name, path1x, path2x, &scale))
+            continue;
+        const QString &imagePath = scale == 2 ? path2x : path1x;
+        QImageReader reader(imagePath);
         const QSize imageSize = reader.size();
         if (!imageSize.isValid()) {
             qWarning() << "Ignoring unreadable tileset PNG"
-                       << it.value().path << reader.errorString();
+                       << imagePath << reader.errorString();
             continue;
         }
         const QSize tileSize =
                 Tiled::getZomboidTilesetSize1x(it.value().name);
-        const int scaledTileWidth = tileSize.width() * it.value().scale;
-        const int scaledTileHeight = tileSize.height() * it.value().scale;
+        const int scaledTileWidth = tileSize.width() * scale;
+        const int scaledTileHeight = tileSize.height() * scale;
         int columns = 0;
         int rows = 0;
         if (imageSize.width() % scaledTileWidth != 0
@@ -671,7 +681,7 @@ bool TileMetaInfoMgr::rebuildTilesetsTxt(int *addedCountResult,
                 qWarning()
                         << "Ignoring newly discovered PNG whose logical "
                            "tile geometry cannot be inferred"
-                        << it.value().path << imageSize
+                        << imagePath << imageSize
                         << "expected conventional tile"
                         << QSize(scaledTileWidth, scaledTileHeight);
                 continue;
@@ -688,10 +698,10 @@ bool TileMetaInfoMgr::rebuildTilesetsTxt(int *addedCountResult,
         if (columns < 1 || rows < 1)
             continue;
         validImageKeys += it.key();
-        QDir scaleRoot(it.value().scale == 2 ? root2x : rootPath);
+        QDir scaleRoot(scale == 2 ? root2x : rootPath);
         QString relativeFile =
                 QDir::fromNativeSeparators(
-                    scaleRoot.relativeFilePath(it.value().path));
+                    scaleRoot.relativeFilePath(imagePath));
         if (relativeFile.endsWith(
                     QLatin1String(".png"), Qt::CaseInsensitive)) {
             relativeFile.chop(4);

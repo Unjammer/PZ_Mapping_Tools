@@ -20,6 +20,7 @@
 
 #include "appissuenotifier.h"
 #include "buildingpreferences.h"
+#include "languagemanager.h"
 #include "preferences.h"
 #include "../../portablesettings.h"
 #include "../../sharedmainwindowgeometrywidget.h"
@@ -30,6 +31,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLocale>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
@@ -46,7 +48,8 @@ BuildingPreferencesDialog::BuildingPreferencesDialog(QWidget *parent) :
     mErrorsOnlyNotifications(new QCheckBox(
           tr("Show only errors in application notifications"), this)),
     mProjectZomboidDirectory(new QLineEdit(this)),
-    mAutoSaveCombo(new QComboBox(this))
+    mAutoSaveCombo(new QComboBox(this)),
+    mLanguageCombo(new QComboBox(this))
 {
     ui->setupUi(this);
 
@@ -124,6 +127,26 @@ BuildingPreferencesDialog::BuildingPreferencesDialog(QWidget *parent) :
     autoSaveLayout->addWidget(mAutoSaveCombo);
     autoSaveLayout->addStretch();
     ui->gridLayout->addLayout(autoSaveLayout, 3, 0);
+
+    QHBoxLayout *languageLayout = new QHBoxLayout;
+    languageLayout->addWidget(new QLabel(tr("Interface language:"), this));
+    const QStringList languages =
+            Tiled::Internal::LanguageManager::instance()->availableLanguages();
+    for (const QString &name : languages) {
+        const QLocale locale(name);
+        const QString label = QStringLiteral("%1 (%2)")
+                .arg(locale.nativeLanguageName(), locale.nativeCountryName());
+        mLanguageCombo->addItem(label, name);
+    }
+    mLanguageCombo->model()->sort(0);
+    mLanguageCombo->insertItem(0, tr("System default"), QString());
+    const int languageIndex = mLanguageCombo->findData(
+                Tiled::Internal::Preferences::instance()->language());
+    mLanguageCombo->setCurrentIndex(qMax(0, languageIndex));
+    languageLayout->addWidget(mLanguageCombo);
+    languageLayout->addStretch();
+    ui->gridLayout->addLayout(languageLayout, 4, 0);
+
     connect(browseGamePath, &QAbstractButton::clicked, this, [this]() {
         const QString directory = QFileDialog::getExistingDirectory(
                     this, tr("Project Zomboid Installation"),
@@ -188,6 +211,8 @@ void BuildingPreferencesDialog::accept()
     Tiled::Internal::Preferences::instance()
             ->setProjectZomboidDirectory(
                 mProjectZomboidDirectory->text().trimmed());
+    Tiled::Internal::Preferences::instance()->setLanguage(
+                mLanguageCombo->currentData().toString());
     AppIssueCenter::setErrorsOnlyNotifications(
                 mErrorsOnlyNotifications->isChecked());
     QDialog::accept();

@@ -24,6 +24,7 @@
 #include "worldcell.h"
 #include "worldconstants.h"
 #include "partialchunkselection.h"
+#include "lotcomposition.h"
 
 #include "map.h"
 #include "tile.h"
@@ -766,7 +767,7 @@ private:
 struct VBOTile
 {
     MapComposite *mSubMap = nullptr; // This tile belongs to a Lot.
-    MapComposite *mHideIfVisible = nullptr; // This tile belongs to a Cell, hide it if the Lot=mHideIfVisible is visible.
+    PZTools::LotVisibilityMask mCoveringLots;
     int mLayerIndex;
     QRect mRect;
     QString mTilesetName;

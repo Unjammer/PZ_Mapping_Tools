@@ -18,6 +18,8 @@
 #ifndef BUILDINGFLOOR_H
 #define BUILDINGFLOOR_H
 
+#include "../../../../shared/tiledefinitionindex.h"
+
 #include "propertiesgrid.h"
 
 #include <QHash>
@@ -340,6 +342,7 @@ private:
 } // namespace BuildingEditor
 
 class TileDefFile;
+class TileDefFileReader;
 class TileDefTile;
 class TileDefTileset;
 
@@ -367,8 +370,10 @@ public:
     ~TileDefWatcher();
 
     void check();
-    TileDefTileset *tileset(const QString &tilesetName);
-    TileDefTile *tile(const QString &tilesetName, int tileIndex);
+    const QVector<TileDefTile *> &tiles(const QString &tilesetName) const;
+    TileDefTile *tile(const QString &tilesetName, int tileIndex) const;
+    const TileDefinitionIndex<TileDefFile, TileDefFileReader, TileDefTile> &definitions() const
+    { return mDefinitions; }
     TileDefWatcherFile *fileByName(const QString &filePath);
     TileDefWatcherFile *fileByName(const QString &filePath, const QList<TileDefWatcherFile*> &files);
 
@@ -386,6 +391,7 @@ public:
 
 private:
     bool mNeedsCheck = true;
+    TileDefinitionIndex<TileDefFile, TileDefFileReader, TileDefTile> mDefinitions;
 };
 
 }

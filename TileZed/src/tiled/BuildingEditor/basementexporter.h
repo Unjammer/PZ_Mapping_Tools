@@ -7,7 +7,7 @@
 
 namespace Tiled {
 namespace Internal {
-class TileDefFile;
+class TileDefWatcher;
 }
 }
 
@@ -38,7 +38,7 @@ class BasementExporter
 {
 public:
     static BasementStairTiles staircaseTiles(
-            const QList<Tiled::Internal::TileDefFile *> &definitions);
+            Tiled::Internal::TileDefWatcher &watcher);
     static BasementExportResult exportFile(const BasementExportRequest &request);
 };
 

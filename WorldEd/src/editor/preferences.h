@@ -102,6 +102,7 @@ public:
     QString tiles2xDirectory() const;
 
     QStringList tilePropertiesFiles() const { return mTilePropertiesFiles; }
+    QStringList configuredTilePropertiesFiles() const { return mConfiguredTilePropertiesFiles; }
 
     QString texturesDirectory() const;
 
@@ -181,6 +182,7 @@ signals:
     void mapsDirectoryChanged();
     void tilesDirectoryChanged();
     void projectZomboidDirectoryChanged();
+    void tilePropertiesFilesChanged(const QStringList &fileNames);
     void showAdjacentMapsChanged(bool show);
     void highlightRoomUnderPointerChanged(bool highlight);
     void showLotFloorsOnlyChanged(bool show);
@@ -281,6 +283,8 @@ private:
     QString mTilesDirectory;
     QString mProjectZomboidDirectory;
     QStringList mTilePropertiesFiles;
+    QStringList mConfiguredTilePropertiesFiles;
+    void refreshTilePropertiesFiles();
     QString mOpenFileDirectory;
     QString mWorldMapXMLFile;
     bool mShowAdjacentMaps;

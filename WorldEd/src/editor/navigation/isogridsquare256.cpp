@@ -20,20 +20,14 @@
 #include "isochunk256.h"
 #include "navigationflags.h"
 #include "tiledeffile.h"
-#include "../../../../shared/tiledefinitionpaths.h"
-#include "world.h"
 
 #include "tile.h"
 #include "tileset.h"
 #include "tilelayer.h"
 
-#include <QDebug>
-#include <QDir>
-#include <QMap>
-
 using namespace Navigate;
 
-QList<TileDefFile*> IsoGridSquare256::mTileDefFiles;
+IsoGridSquare256::Definitions IsoGridSquare256::mTileDefinitions;
 
 IsoGridSquare256::IsoGridSquare256(int x, int y, int z, IsoChunk256 *chunk, TempVars256 &vars) :
     x(x),
@@ -51,14 +45,9 @@ IsoGridSquare256::IsoGridSquare256(int x, int y, int z, IsoChunk256 *chunk, Temp
 
     NavigationFlags flags;
     for (const Tiled::Cell *cell : cells) {
-        for (TileDefFile *file : mTileDefFiles) {
-            TileDefTileset *tileset = file->tileset(cell->tile->tileset()->name());
-            if (!tileset)
-                continue;
-            if (TileDefTile *tile = tileset->tileAt(cell->tile->id()))
-                flags.add(tile->mProperties);
-            break;
-        }
+        const auto *tile = mTileDefinitions.tile(cell->tile->tileset()->name(), cell->tile->id());
+        if (tile)
+            flags.add(tile->mProperties);
     }
     const quint8 bits = flags.bits();
     mSolid = bits & 1;
@@ -92,35 +81,3 @@ bool IsoGridSquare256::isRoom()
     return mRoom;
 }
 
-bool IsoGridSquare256::loadTileDefFiles(const GenerateLotsSettings &settings, QString &error)
-{
-    qDeleteAll(mTileDefFiles);
-    mTileDefFiles.clear();
-
-    const QDir dir(TileDefinitionPaths::directory(settings.tileDefFolder));
-    const QStringList files = TileDefinitionPaths::files(dir.absolutePath());
-    foreach (QString fileName, files) {
-        if (TileDefinitionPaths::logicalName(fileName).endsWith(QLatin1String("_4.tiles")))
-            continue;
-        TileDefFile *tdefFile = new TileDefFile();
-        TileDefFileReader reader;
-        if (!reader.read(dir.filePath(fileName), *tdefFile)) {
-            error = tdefFile->errorString();
-            delete tdefFile;
-            return false;
-        }
-        qDebug() << "read " << fileName;
-        if (TileDefinitionPaths::logicalName(fileName).endsWith(QLatin1String(".patch.tiles"),
-                              Qt::CaseInsensitive)) {
-            int patchedTiles = 0;
-            for (TileDefFile *baseFile : qAsConst(mTileDefFiles))
-                patchedTiles += baseFile->mergePropertiesFrom(*tdefFile);
-            qDebug() << "applied" << fileName << "to" << patchedTiles
-                     << "existing tiles";
-            delete tdefFile;
-            continue;
-        }
-        mTileDefFiles += tdefFile;
-    }
-    return true;
-}

@@ -65,7 +65,7 @@ static bool ReadString(QDataStream &in, QString *value)
 static const int MAX_RECOVERABLE_TILESETS = 8192;
 static const qint64 MAX_RECOVERABLE_TOTAL_TILES = 8 * 1024 * 1024;
 static const qint64 MAX_RECOVERABLE_TILE_SLOTS = 1024 * 1024;
-bool TileDefFile::read(const QString &fileName)
+bool TileDefFile::read(const QString &fileName, bool buildEditorProperties)
 {
     mError.clear();
     mFileName.clear();
@@ -282,7 +282,8 @@ bool TileDefFile::read(const QString &fileName)
                 properties[propertyName] = propertyValue;
             }
             TilePropertyMgr::instance()->modify(properties);
-            tile->mPropertyUI.FromProperties(properties);
+            if (buildEditorProperties)
+                tile->mPropertyUI.FromProperties(properties);
             tile->mProperties = properties;
             tiles[j] = tile;
         }
@@ -290,6 +291,7 @@ bool TileDefFile::read(const QString &fileName)
             tiles[j] = new TileDefTile(ts, j);
         }
         ts->mTiles = tiles;
+        ts->mDeclaredTileCount = tileCount;
         insertTileset(mTilesets.size(), ts);
     }
 
@@ -550,34 +552,6 @@ QList<TileDefTileset *> TileDefFile::takeTilesets()
     return tilesets;
 }
 
-int TileDefFile::mergePropertiesFrom(const TileDefFile &overlay)
-{
-    int mergedTiles = 0;
-    for (TileDefTileset *overlayTileset : overlay.tilesets()) {
-        TileDefTileset *baseTileset = tileset(overlayTileset->mName);
-        if (!baseTileset)
-            continue;
-        const int count = qMin(baseTileset->mTiles.size(),
-                               overlayTileset->mTiles.size());
-        for (int i = 0; i < count; ++i) {
-            TileDefTile *overlayTile = overlayTileset->mTiles.at(i);
-            if (overlayTile->mProperties.isEmpty())
-                continue;
-            TileDefTile *baseTile = baseTileset->mTiles.at(i);
-            for (auto it = overlayTile->mProperties.cbegin();
-                 it != overlayTile->mProperties.cend(); ++it) {
-                baseTile->mProperties[it.key()] = it.value();
-            }
-#ifndef WORLDED
-            QMap<QString,QString> properties = baseTile->mProperties;
-            TilePropertyMgr::instance()->modify(properties);
-            baseTile->mPropertyUI.FromProperties(properties);
-#endif
-            ++mergedTiles;
-        }
-    }
-    return mergedTiles;
-}
 QSet<int> TileDefFile::usedTilesetIDs() const
 {
     QSet<int> result;
@@ -1232,7 +1206,7 @@ bool TileDefFileReader::read(const QString &fileName, Tiled::Internal::TileDefFi
 
     if (fileName.endsWith(QLatin1String(".txt"), Qt::CaseInsensitive)) {
         TileDefTextFile textFile;
-        if (textFile.read(fileName) == false) {
+        if (!textFile.read(fileName, mBuildEditorProperties)) {
             defFile.setErrorString(textFile.errorString());
             return false;
         }
@@ -1242,7 +1216,7 @@ bool TileDefFileReader::read(const QString &fileName, Tiled::Internal::TileDefFi
         defFile.setFileName(fileName.mid(0, fileName.length() - 4));
         return true;
     }
-    if (!defFile.read(fileName)) {
+    if (!defFile.read(fileName, mBuildEditorProperties)) {
         return false;
     }
     return true;

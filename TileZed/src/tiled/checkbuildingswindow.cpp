@@ -522,7 +522,6 @@ void CheckBuildingsWindow::check(BuildingMap *bmap, Building *building, Map *map
                     if (tile == nullptr) {
                         continue;
                     }
-                    TileDefTileset *tdts = tileDefWatcher->tileset(tile->tileset()->name());
                     if (tile->tileset()->name().startsWith(QLatin1String("floors_interior_"))) {
                         if (!interiorFloor && floor->GetRoomAt(x, y) == nullptr) {
                             issue(Issue::InteriorOutside, "Interior floor tile outside building", x, y, z);
@@ -557,22 +556,20 @@ void CheckBuildingsWindow::check(BuildingMap *bmap, Building *building, Map *map
                     if (tile->tileset()->name().startsWith(QLatin1String("fixtures_counters_01"))) {
                         counters++;
                     }
-                    if (tdts != nullptr) {
-                        if (TileDefTile* tdt = tdts->tileAt(tile->id())) {
-                            if (tdt->mProperties.contains(QLatin1String("WallW")) && !tdt->mProperties.contains(QLatin1String("GarageDoor"))) {
-                                bWallW = true;
-                            }
-                            if (tdt->mProperties.contains(QLatin1String("WallN")) && !tdt->mProperties.contains(QLatin1String("GarageDoor"))) {
-                                bWallN = true;
-                            }
-                            if (tdt->mProperties.contains(QLatin1String("doorW"))) {
-                                doorTile = tile;
-                                bDoorW = true;
-                            }
-                            if (tdt->mProperties.contains(QLatin1String("doorN"))) {
-                                doorTile = tile;
-                                bDoorN = true;
-                            }
+                    if (TileDefTile *tdt = tileDefWatcher->tile(tile->tileset()->name(), tile->id())) {
+                        if (tdt->mProperties.contains(QLatin1String("WallW")) && !tdt->mProperties.contains(QLatin1String("GarageDoor"))) {
+                            bWallW = true;
+                        }
+                        if (tdt->mProperties.contains(QLatin1String("WallN")) && !tdt->mProperties.contains(QLatin1String("GarageDoor"))) {
+                            bWallN = true;
+                        }
+                        if (tdt->mProperties.contains(QLatin1String("doorW"))) {
+                            doorTile = tile;
+                            bDoorW = true;
+                        }
+                        if (tdt->mProperties.contains(QLatin1String("doorN"))) {
+                            doorTile = tile;
+                            bDoorN = true;
                         }
                     }
                     if ((bWallW && bDoorW) || (bWallN && bDoorN)) {

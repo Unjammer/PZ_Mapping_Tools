@@ -27,6 +27,7 @@
 #include "mapcomposite.h"
 #include "mapmanager.h"
 #include "mapobject.h"
+#include "preferences.h"
 #include "progress.h"
 #include "tiledeffile.h"
 #include "tilemetainfomgr.h"
@@ -459,7 +460,11 @@ bool LotFilesManager256::generateWorld(WorldDocument *worldDoc, GenerateMode mod
         return false;
     }
 
-    if (!Navigate::IsoGridSquare256::loadTileDefFiles(lotSettings, mError)) {
+    const auto *preferences = Preferences::instance();
+    const QStringList tileDefinitions = TileDefinitionPaths::projectInputs(
+                lotSettings.tileDefFolder, preferences->tilePropertiesFiles(),
+                preferences->configuredTilePropertiesFiles(), preferences->projectZomboidDirectory());
+    if (!Navigate::IsoGridSquare256::mTileDefinitions.load(tileDefinitions, mError)) {
         delete mDialog;
         mDialog = nullptr;
         return false;
@@ -2314,19 +2319,17 @@ void LotFilesWorker256::generateJumboTrees(CombinedCellMaps& combinedMaps)
 
     QSet<QString> treeTiles;
     QSet<QString> floorVegTiles;
-    for (TileDefFile *tdf : qAsConst(Navigate::IsoGridSquare256::mTileDefFiles)) {
-        for (TileDefTileset *tdts : tdf->tilesets()) {
-            for (TileDefTile *tdt : qAsConst(tdts->mTiles)) {
-                // Get the set of all tree tiles.
-                if (tdt->mProperties.contains(QLatin1String("tree")) || (tdts->mName.startsWith(QLatin1String("vegetation_trees")))) {
-                    treeTiles += QString::fromLatin1("%1_%2").arg(tdts->mName).arg(tdt->id());
-                }
-                // Get the set of all floor + vegetation tiles.
-                if (tdt->mProperties.contains(QLatin1String("solidfloor")) ||
-                        tdt->mProperties.contains(QLatin1String("FloorOverlay")) ||
-                        tdt->mProperties.contains(QLatin1String("vegitation"))) {
-                    floorVegTiles += QString::fromLatin1("%1_%2").arg(tdts->mName).arg(tdt->id());
-                }
+    const auto &definitions = Navigate::IsoGridSquare256::mTileDefinitions.sheets();
+    for (auto sheet = definitions.cbegin(); sheet != definitions.cend(); ++sheet) {
+        const bool trees = sheet.key().startsWith(QLatin1String("vegetation_trees"));
+        for (const TileDefTile *tile : sheet.value()) {
+            if (trees || tile->mProperties.contains(QLatin1String("tree"))) {
+                treeTiles += QString::fromLatin1("%1_%2").arg(sheet.key()).arg(tile->id());
+            }
+            if (tile->mProperties.contains(QLatin1String("solidfloor")) ||
+                    tile->mProperties.contains(QLatin1String("FloorOverlay")) ||
+                    tile->mProperties.contains(QLatin1String("vegitation"))) {
+                floorVegTiles += QString::fromLatin1("%1_%2").arg(sheet.key()).arg(tile->id());
             }
         }
     }
@@ -3089,9 +3092,9 @@ QRect CombinedCellMaps::toCellRect300(const QRect &cellRect256)
 }
 bool LotFilesManager256::validateJumboExport(QString *error)
 {
-    const auto savedDefinitions = Navigate::IsoGridSquare256::mTileDefFiles;
+    const auto savedDefinitions = Navigate::IsoGridSquare256::mTileDefinitions;
     const auto restoreDefinitions = qScopeGuard([&]() {
-        Navigate::IsoGridSquare256::mTileDefFiles = savedDefinitions;
+        Navigate::IsoGridSquare256::mTileDefinitions = savedDefinitions;
     });
     TileDefFile definitions;
     const QStringList names = {
@@ -3112,7 +3115,8 @@ bool LotFilesManager256::validateJumboExport(QString *error)
         }
         definitions.insertTileset(i, sheet);
     }
-    Navigate::IsoGridSquare256::mTileDefFiles = {&definitions};
+    Navigate::IsoGridSquare256::mTileDefinitions = {};
+    Navigate::IsoGridSquare256::mTileDefinitions.add(definitions);
     LotFilesManager256 manager;
     const auto clearZones = qScopeGuard([&]() { qDeleteAll(manager.mJumboZoneList); });
     for (WorldGridFormat format : {WorldGridFormat::Legacy300, WorldGridFormat::Native256}) {

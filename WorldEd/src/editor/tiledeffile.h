@@ -103,6 +103,7 @@ public:
     int mColumns;
     int mRows;
     QVector<TileDefTile*> mTiles;
+    int mDeclaredTileCount = -1;
     int mID;
 };
 
@@ -137,7 +138,6 @@ public:
 
     QList<TileDefTileset*> takeTilesets();
 
-    int mergePropertiesFrom(const TileDefFile &overlay);
 
     QStringList tilesetNames() const
     { return mTilesetByName.keys(); }

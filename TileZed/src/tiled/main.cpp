@@ -34,6 +34,7 @@
 #include "packcompare.h"
 #include "packextractdialog.h"
 #include "createpackdialog.h"
+#include "texturepacker.h"
 #include "languagemanager.h"
 #include "preferences.h"
 #include "pztoolsbuild.h"
@@ -2350,11 +2351,13 @@ int main(int argc, char *argv[])
                 PackExtractDialog::runSelfTest(
                     &extractSummary, &error);
         const bool historyValid = extractValid && CreatePackDialog::validateRecentPacks(&error);
-        const bool valid = compareValid && extractValid && historyValid;
+        QWidget progressWindow;
+        ZProgressManager::instance()->setMainWindow(&progressWindow);
+        const bool valid = historyValid && TexturePacker::validateTileDefinitions(&error);
         qInfo().noquote()
                 << "TileZed pack-tools validation:"
                 << (valid
-                    ? QStringLiteral("PASS: %1; %2; recent pack paths")
+                    ? QStringLiteral("PASS: %1; %2; recent pack paths and ordered TileDef exports")
                       .arg(compareSummary, extractSummary)
                     : QStringLiteral("FAIL: %1").arg(error));
         return valid ? 0 : 1;

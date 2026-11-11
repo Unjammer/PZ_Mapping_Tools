@@ -52,7 +52,7 @@ TileDefTextFile::~TileDefTextFile()
 #define VERSION1 1
 #define VERSION_LATEST VERSION1
 
-bool TileDefTextFile::read(const QString &fileName)
+bool TileDefTextFile::read(const QString &fileName, bool buildEditorProperties)
 {
     qDeleteAll(mTilesets);
     mTilesets.clear();
@@ -81,7 +81,7 @@ bool TileDefTextFile::read(const QString &fileName)
 
     for (const SimpleFileBlock& block : std::as_const(simple.blocks)) {
         if (block.name == QLatin1String("tileset")) {
-            TileDefTileset *tileset = readTileset(block);
+            TileDefTileset *tileset = readTileset(block, buildEditorProperties);
             if (tileset == nullptr) {
                 return false;
             }
@@ -185,7 +185,7 @@ QList<TileDefTileset *> TileDefTextFile::takeTilesets()
     return tilesets;
 }
 
-TileDefTileset *TileDefTextFile::readTileset(const SimpleFileBlock &block)
+TileDefTileset *TileDefTextFile::readTileset(const SimpleFileBlock &block, bool buildEditorProperties)
 {
     QString tilesetFileName = block.value("file");
     if (tilesetFileName.isEmpty()) {
@@ -206,7 +206,7 @@ TileDefTileset *TileDefTextFile::readTileset(const SimpleFileBlock &block)
     ts->mTiles.resize(ts->mColumns * ts->mRows);
     for (const SimpleFileBlock& child : block.blocks) {
         if (child.name == QLatin1String("tile")) {
-            TileDefTile *tile = readTile(child, ts.get());
+            TileDefTile *tile = readTile(child, ts.get(), buildEditorProperties);
             if (tile == nullptr) {
                 return nullptr;
             }
@@ -224,7 +224,7 @@ TileDefTileset *TileDefTextFile::readTileset(const SimpleFileBlock &block)
     return ts.release();
 }
 
-TileDefTile *TileDefTextFile::readTile(const SimpleFileBlock &block, TileDefTileset *tileset)
+TileDefTile *TileDefTextFile::readTile(const SimpleFileBlock &block, TileDefTileset *tileset, bool buildEditorProperties)
 {
     std::unique_ptr<TileDefTile> tile(new TileDefTile(tileset, -1));
     QMap<QString,QString> properties;
@@ -245,7 +245,8 @@ TileDefTile *TileDefTextFile::readTile(const SimpleFileBlock &block, TileDefTile
         return nullptr;
     }
     TilePropertyMgr::instance()->modify(properties);
-    tile->mPropertyUI.FromProperties(properties);
+    if (buildEditorProperties)
+        tile->mPropertyUI.FromProperties(properties);
     tile->mProperties = properties;
     return tile.release();
 }
