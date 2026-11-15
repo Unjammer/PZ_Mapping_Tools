@@ -64,6 +64,7 @@ LootWindow::LootWindow(QWidget *parent) :
 {
     ui->setupUi(this);
 
+    ui->actionClose->setShortcuts(QList<QKeySequence>() << QKeySequence::StandardKey::Close << Qt::Key_Escape);
     connect(ui->actionClose, &QAction::triggered, this, &QWidget::close);
     connect(ui->gameDirBrowse, &QAbstractButton::clicked, this, &LootWindow::chooseGameDirectory);
     connect(ui->treeWidget->selectionModel(), &QItemSelectionModel::selectionChanged,

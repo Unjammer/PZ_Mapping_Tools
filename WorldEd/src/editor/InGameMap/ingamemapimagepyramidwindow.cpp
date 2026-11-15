@@ -127,6 +127,7 @@ InGameMapImagePyramidWindow::InGameMapImagePyramidWindow(QWidget *parent) :
 
     setAttribute(Qt::WA_DeleteOnClose, true);
 
+    ui->actionClose->setShortcuts(QList<QKeySequence>() << QKeySequence::StandardKey::Close << Qt::Key_Escape);
     connect(ui->inputBrowseButton, &QToolButton::clicked, this, &InGameMapImagePyramidWindow::chooseInputFile);
     connect(ui->outputBrowseButton, &QToolButton::clicked, this, &InGameMapImagePyramidWindow::chooseOutputFile);
     connect(ui->createZipButton, &QPushButton::clicked, this, &InGameMapImagePyramidWindow::createZip);
