@@ -425,7 +425,6 @@ AbstractOverlayDialog::AbstractOverlayDialog(QWidget *parent) :
     ui->tilesetTilesView->setDragEnabled(true);
 
 //    ContainerOverlayFile cof;
-//    cof.read(QLatin1String("D:/pz/mpspmerge/workdir/media/lua/server/Items/WorldFiller.lua"));
 /*
     ContainerOverlay *overlay = new ContainerOverlay;
     overlay->mTileName = QLatin1String("location_shop_generic_01_40");

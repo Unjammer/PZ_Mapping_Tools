@@ -19,7 +19,6 @@
 #include <QWidget>
 
 class QCheckBox;
-class QCloseEvent;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -82,7 +81,7 @@ public:
                             QWidget *parent = nullptr);
 
 protected:
-    void closeEvent(QCloseEvent *event) override;
+    void reject() override;
 
 private:
     void loadInitialImage();

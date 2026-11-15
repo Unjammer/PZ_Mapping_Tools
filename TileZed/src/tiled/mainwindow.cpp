@@ -2677,9 +2677,6 @@ void MainWindow::initActionManager()
 
 void MainWindow::keyboardShortcuts()
 {
-    QString error;
-    mActionManager->load(error);
-    mActionManager->emitShortcutEditedForAllActions();
     if (mKeyboardShortcutWindow == nullptr) {
         mKeyboardShortcutWindow = new KeyboardShortcutWindow(mActionManager, &mSettings, QStringLiteral("TileZed/KeyboardShortcutsWindow"), this);
         mKeyboardShortcutWindow->setAttribute(Qt::WA_DeleteOnClose, false);

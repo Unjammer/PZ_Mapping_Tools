@@ -5,7 +5,6 @@
 #include <QVector>
 
 class QCheckBox;
-class QCloseEvent;
 class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
@@ -23,7 +22,7 @@ public:
     QString fileName() const;
 
 protected:
-    void closeEvent(QCloseEvent *event) override;
+    void reject() override;
 
 private:
     struct Annotation

@@ -336,7 +336,7 @@ bool DirectMapPreviewRunner::isRunning()
 }
 
 bool DirectMapPreviewRunner::start(const QString &project, const QString &gameDirectory,
-                                   const QPoint &startCell, const QString &validationScript, QString &error,
+                                   const QVector<QPoint> &selection, const QString &validationScript, QString &error,
                                    std::function<void(bool)> finished)
 {
     if (isRunning()) {
@@ -360,7 +360,7 @@ bool DirectMapPreviewRunner::start(const QString &project, const QString &gameDi
     }
     QVector<QByteArray> cells;
     QJsonArray spawn;
-    if (!DirectMapPreview::read(project, cells, spawn, error, startCell))
+    if (!DirectMapPreview::read(project, cells, spawn, error, selection))
         return false;
     auto session = std::make_unique<PreviewSession>(std::move(finished));
     if (!session->begin(game, agent, std::move(cells), spawn, validationScript, error))

@@ -744,11 +744,11 @@ removed. Keep custom Lua in a separate file.
 ## Play Map Source
 
 Set the Project Zomboid installation and Tiles paths in WorldEd Preferences.
-Open a cell or select it in World View, then choose **File > Play Map Source...**.
-The solo debug session starts at a valid SpawnPoint in that cell or chooses an
-authored starting square there. In World View, the first selected cell sets
-the start when several are selected. With no cell selected, WorldEd picks a
-start from the project. The example project is in
+Select one or more cells in World View, then choose **File > Play Map Source...**.
+In Cell View, the command previews the open cell. To preview the entire project,
+press **Ctrl+A** in World View before launching. The solo debug session
+starts in the first selected cell with a walkable authored square. A valid
+SpawnPoint in that cell takes precedence. The example project is in
 `tools/DirectMapPreview/example/DirectPreview.pzw`.
 
 A TMX is the editable cell map assigned in WorldEd. It holds tile layers such
@@ -756,8 +756,9 @@ as terrain, roads, and water. The PZW stores the cell assignments and where
 to place building files (TBX). A preview cell can use a TMX, placed buildings,
 or both.
 
-All authored cells in the saved Native256 project are available in the same
-session. A preview cell replaces the base-game cell at the same coordinates.
+Selected cells with authored content in the saved Native256 project are
+available in the same session. A preview cell replaces the base-game cell at
+the same coordinates.
 The game can fill unpainted ground in sparse source cells procedurally. Outside
 the preview cells, the game uses its own map. The preview streams chunks in
 memory without generating LOT or chunkdata files. The temporary game profile
@@ -779,6 +780,10 @@ includes the current zoom, visible levels and RoomDefs overlay.
 Use **Close** inside the window or press **Esc**, including when the window
 has no title bar. For pending edits, choose **Save**, **Discard**, or
 **Cancel**. If saving fails, the editor stays open.
+
+Reopening **Keyboard Shortcuts** keeps any pending changes. Use **Reload
+From Disk** in that window to reload the saved shortcuts. The window asks
+what to do with pending changes before it reloads them.
 
 In **Tilesets** and **Building Tiles**, **OK** applies the current edits.
 Use **Close** or **Esc** to review pending edits before leaving. In TileZed

@@ -49,6 +49,7 @@ private slots:
 
 private:
     QHash<QAction *, QList<QKeySequence>> currentShortcuts() const;
+    bool resolvePendingEdits();
     bool saveShortcuts();
 
     Ui::KeyboardShortcutWindow *ui;
@@ -57,7 +58,7 @@ private:
     QSettings *mSettings;
     QString mSettingsKey;
     QHash<QAction *, QList<QKeySequence>> mSavedShortcuts;
-    bool mFinishingEditForClose = false;
+    bool mFinishingEdit = false;
 };
 
 #endif // KEYBOARDSHORTCUTWINDOW_H

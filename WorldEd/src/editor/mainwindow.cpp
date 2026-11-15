@@ -4379,16 +4379,22 @@ void MainWindow::playMapSource()
     WorldDocument *document = currentWorldDocument();
     if (!document)
         return;
+    QVector<QPoint> selection;
+    if (CellDocument *cellDocument = mCurrentDocument->asCellDocument()) {
+        selection.append(cellDocument->cell()->pos());
+    } else {
+        for (WorldCell *cell : document->selectedCells())
+            selection.append(cell->pos());
+    }
+    if (selection.isEmpty()) {
+        QMessageBox::information(this, tr("Play Map Source"),
+                                 tr("Select one or more cells in World View, or open a cell to playtest it."));
+        return;
+    }
     if (document->fileName().isEmpty() || document->isModified()) {
         QMessageBox::information(this, tr("Play Map Source"),
                                  tr("Save the project before launching the playtest."));
         return;
-    }
-    QPoint startCell(-1, -1);
-    if (CellDocument *cellDocument = mCurrentDocument->asCellDocument()) {
-        startCell = cellDocument->cell()->pos();
-    } else if (!document->selectedCells().isEmpty()) {
-        startCell = document->selectedCells().first()->pos();
     }
     QString error;
     const QPointer<MainWindow> window(this);
@@ -4398,7 +4404,7 @@ void MainWindow::playMapSource()
     };
     if (!DirectMapPreviewRunner::start(document->fileName(),
                                       Preferences::instance()->projectZomboidDirectory(),
-                                      startCell, {}, error, finished)) {
+                                      selection, {}, error, finished)) {
         QMessageBox::warning(this, tr("Play Map Source"), error);
         return;
     }
@@ -4731,15 +4737,13 @@ void MainWindow::initActionManager()
 
 void MainWindow::keyboardShortcuts()
 {
-    QString error;
-    mActionManager->load(error);
-    mActionManager->emitShortcutEditedForAllActions();
     if (mKeyboardShortcutWindow == nullptr) {
         mKeyboardShortcutWindow = new KeyboardShortcutWindow(mActionManager, &mSettings, QStringLiteral("KeyboardShortcutsWindow"), this);
         mKeyboardShortcutWindow->setAttribute(Qt::WA_DeleteOnClose, false);
     }
     mKeyboardShortcutWindow->show();
     mKeyboardShortcutWindow->raise();
+    mKeyboardShortcutWindow->activateWindow();
 }
 void MainWindow::objectGroupsDialog()
 {

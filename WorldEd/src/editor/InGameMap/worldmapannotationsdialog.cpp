@@ -1,7 +1,6 @@
 #include "worldmapannotationsdialog.h"
 
 #include <QCheckBox>
-#include <QCloseEvent>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -215,7 +214,8 @@ WorldMapAnnotationsDialog::WorldMapAnnotationsDialog(
             [this]() { duplicateSelected(); });
     connect(removeButton, &QPushButton::clicked, this,
             [this]() { removeSelected(); });
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::close);
+    connect(buttons, &QDialogButtonBox::rejected,
+            this, &WorldMapAnnotationsDialog::reject);
     connect(mTable, &QTableWidget::currentCellChanged, this,
             [this](int, int, int, int) { updateEditor(); });
 
@@ -255,12 +255,10 @@ QString WorldMapAnnotationsDialog::fileName() const
     return mFileName;
 }
 
-void WorldMapAnnotationsDialog::closeEvent(QCloseEvent *event)
+void WorldMapAnnotationsDialog::reject()
 {
     if (maybeSave())
-        event->accept();
-    else
-        event->ignore();
+        QDialog::reject();
 }
 
 void WorldMapAnnotationsDialog::addAnnotation(const Annotation &annotation)

@@ -16,7 +16,6 @@
 #include "worlddocument.h"
 
 #include <QCheckBox>
-#include <QCloseEvent>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
@@ -409,19 +408,18 @@ ChunkDataOverrideDialog::ChunkDataOverrideDialog(
             this, &ChunkDataOverrideDialog::redo);
     connect(mSave, &QPushButton::clicked,
             this, &ChunkDataOverrideDialog::saveImage);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::close);
+    connect(buttons, &QDialogButtonBox::rejected,
+            this, &ChunkDataOverrideDialog::reject);
 
     loadInitialImage();
     updatePaintValue();
     updateHistoryActions();
 }
 
-void ChunkDataOverrideDialog::closeEvent(QCloseEvent *event)
+void ChunkDataOverrideDialog::reject()
 {
     if (confirmClose())
-        event->accept();
-    else
-        event->ignore();
+        QDialog::reject();
 }
 
 void ChunkDataOverrideDialog::loadInitialImage()

@@ -50,6 +50,7 @@ private slots:
 
 private:
     void captureSavedShortcuts();
+    bool resolveShortcutChanges(bool reload);
 
     Ui::KeyboardShortcutWindow *ui;
     ActionManager *mActionManager;

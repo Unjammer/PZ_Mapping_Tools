@@ -1,24 +1,19 @@
-# PZ Mapping Tools - Build 20261114f
+# PZ Mapping Tools - Build 20261115b
 
-_Changes since [Build 20261111d](https://github.com/Unjammer/PZ_Mapping_Tools/releases/tag/43.00B261111)._
+_Changes since [Build 20261114f](https://github.com/Unjammer/PZ_Mapping_Tools/releases/tag/43.00B261114)._
 
 ## Changes
 
-- WorldEd, TileZed, and BuildingEd provide visible **Close** buttons and
-  **Esc** in their auxiliary editors and viewers. Windows with pending
-  edits offer **Save**, **Discard**, and **Cancel** before closing. In
-  WorldEd, **File > Close** also works in Create Image Pyramid.
-- WorldEd's **Play Map Source...** starts a Project Zomboid 42.22.2 solo
-  debug session in the open or selected Native256 cell. All authored cells
-  in the project are available in the same session. WorldEd streams the TMX
-  and TBX data in memory, including at existing game map coordinates.
-- With the Pencil in BuildingEd Iso view, right-click picks the room type
-  under the pointer. Shift+right-click opens the context menu for pinning
-  or releasing the room highlight.
-- WorldEd supports level-0 NoFishZone and RiverZone rectangles. Export their
-  shared Lua directly into a map mod or include it in the complete mod export.
-  The Lua covers whole authored squares and includes the last no-fishing
-  rectangle in the Build 42.22.2 fish-school lookup.
+- Reopening Keyboard Shortcuts preserves pending edits. **Reload From Disk**
+  asks how to handle pending changes.
+- **Esc** checks for unsaved changes in WorldEd's World Map Annotations
+  and Native256 Chunk Data Overrides editors.
+- **Play Map Source** falls back to a walkable square when the authored
+  SpawnPoint has no usable floor.
+- **Play Map Source** loads the selected cells in World View or the open cell
+  in Cell View. Select all cells to playtest the entire project.
+- Documentation links resolve from both the source tree and the portable
+  installation.
 
 ## Credits and special thanks
 

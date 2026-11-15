@@ -59,12 +59,25 @@ function Resolve-ExistingFile {
 }
 
 function Copy-FileWhenChanged {
-    param([string]$Source, [string]$Destination)
+    param([string]$Source, [string]$Destination, [hashtable]$LinkReplacements)
 
     $sourcePath = Resolve-ExistingFile $Source 'Source'
     $destinationParent = Split-Path -Parent $Destination
     if (-not (Test-Path -LiteralPath $destinationParent -PathType Container)) {
         New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
+    }
+
+    if ($LinkReplacements) {
+        $content = [System.IO.File]::ReadAllText($sourcePath)
+        foreach ($replacement in $LinkReplacements.GetEnumerator()) {
+            $content = $content.Replace($replacement.Key, $replacement.Value)
+        }
+        if ((Test-Path -LiteralPath $Destination -PathType Leaf) -and
+            [string]::Equals([System.IO.File]::ReadAllText($Destination), $content, [System.StringComparison]::Ordinal)) {
+            return $false
+        }
+        [System.IO.File]::WriteAllText($Destination, $content, [System.Text.UTF8Encoding]::new($false))
+        return $true
     }
 
     if (Test-Path -LiteralPath $Destination -PathType Leaf) {
@@ -80,13 +93,13 @@ function Copy-FileWhenChanged {
 }
 
 function Copy-DirectoryFilesWhenChanged {
-    param([string]$SourceDirectory, [string]$DestinationDirectory)
+    param([string]$SourceDirectory, [string]$DestinationDirectory, [hashtable]$LinkReplacementsByPath = @{})
 
     $sourcePath = Resolve-ExistingDirectory $SourceDirectory 'Source'
     $count = 0
     foreach ($file in Get-ChildItem -LiteralPath $sourcePath -File -Recurse) {
         $relativePath = $file.FullName.Substring($sourcePath.Length).TrimStart('\')
-        if (Copy-FileWhenChanged $file.FullName (Join-Path $DestinationDirectory $relativePath)) {
+        if (Copy-FileWhenChanged $file.FullName (Join-Path $DestinationDirectory $relativePath) $LinkReplacementsByPath[$relativePath]) {
             ++$count
         }
     }
@@ -317,7 +330,6 @@ try {
         [pscustomobject]@{ Source = 'AUTHORS.txt'; Destination = 'AUTHORS.txt' },
         [pscustomobject]@{ Source = 'BUILDING.md'; Destination = 'BUILDING.md' },
         [pscustomobject]@{ Source = 'COPYING'; Destination = 'COPYING.txt' },
-        [pscustomobject]@{ Source = 'DOCUMENTATION.md'; Destination = 'DOCUMENTATION.md' },
         [pscustomobject]@{ Source = 'FEATURE_PROVENANCE.md'; Destination = 'FEATURE_PROVENANCE.md' },
         [pscustomobject]@{ Source = 'README.md'; Destination = 'README.md' },
         [pscustomobject]@{ Source = 'RELEASE_CHANGELOG.md'; Destination = 'RELEASE_CHANGELOG.md' },
@@ -330,9 +342,21 @@ try {
             ++$changedFiles
         }
     }
-    $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'docs') (Join-Path $destination 'docs')
+    $sourceManual = 'TileZed/src/tiled/BuildingEditor/manual/'
+    $rootManualLinks = @{ ('href="../' + $sourceManual) = 'href="BuildingEd/' }
+    $nestedManualLinks = @{ ('href="../../' + $sourceManual) = 'href="../BuildingEd/' }
+    $documentationLinks = @{
+        'index.html' = $rootManualLinks
+        'TileZed\LuaScripting.html' = $nestedManualLinks
+        'TileZed\PZToolsGuide.html' = $nestedManualLinks
+    }
+    $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'docs') (Join-Path $destination 'docs') $documentationLinks
     $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'tools\TileDefs') (Join-Path $destination 'tools\TileDefs')
     $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'TileZed\src\tiled\BuildingEditor\manual') (Join-Path $destination 'docs\BuildingEd')
+    $indexLinks = @{ ('](' + $sourceManual) = '](docs/BuildingEd/' }
+    if (Copy-FileWhenChanged (Join-Path $sourceRoot 'DOCUMENTATION.md') (Join-Path $destination 'DOCUMENTATION.md') $indexLinks) {
+        ++$changedFiles
+    }
     $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'licenses') (Join-Path $destination 'licenses')
 
     $requiredPaths = @(

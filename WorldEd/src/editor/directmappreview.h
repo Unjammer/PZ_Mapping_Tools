@@ -15,7 +15,7 @@ class DirectMapPreview
 {
 public:
     static bool read(const QString &projectPath, QVector<QByteArray> &cells, QJsonArray &spawn,
-                     QString &error, const QPoint &startCell = QPoint(-1, -1));
+                     QString &error, const QVector<QPoint> &selection);
 
 private:
     static bool readCell(WorldDocument &document, WorldCell &cell, const QPoint &worldCell,

@@ -59,37 +59,64 @@ KeyboardShortcutWindow::~KeyboardShortcutWindow()
 
 void KeyboardShortcutWindow::closeEvent(QCloseEvent *event)
 {
+    if (!resolveShortcutChanges(false)) {
+        event->ignore();
+        return;
+    }
+    saveSettings();
+    QMainWindow::closeEvent(event);
+}
+
+bool KeyboardShortcutWindow::resolveShortcutChanges(bool reload)
+{
     mEditorWidget->finishShortcutEdit();
     const auto &actions = mActionManager->registeredActions();
     const auto edited = std::any_of(actions.cbegin(), actions.cend(), [this](QAction *action) {
         return mSavedShortcuts.value(action) != action->shortcuts();
     });
+    QString error;
     if (edited) {
-        const auto answer = QMessageBox::question(this, tr("Unsaved Keyboard Shortcuts"),
-                                                 tr("Save your changes to the keyboard shortcuts?"),
-                                                 QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
-                                                 QMessageBox::Cancel);
-        if (answer == QMessageBox::Cancel) {
-            event->ignore();
-            return;
-        }
+        const auto answer = QMessageBox::question(
+                    this, tr("Unsaved Keyboard Shortcuts"),
+                    reload ? tr("Save your changes before reloading keyboard shortcuts?")
+                           : tr("Save your changes to the keyboard shortcuts?"),
+                    QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                    QMessageBox::Cancel);
         if (answer == QMessageBox::Save) {
-            QString error;
             if (!mActionManager->save(error)) {
                 QMessageBox::critical(this, tr("Cannot Save Keyboard Shortcuts"), error);
-                event->ignore();
-                return;
+                return false;
             }
             captureSavedShortcuts();
-        } else {
-            for (QAction *action : actions)
-                action->setShortcuts(mSavedShortcuts.value(action));
-            mEditorWidget->setModelData();
-            mActionManager->emitShortcutEditedForAllActions();
+            return true;
+        }
+        if (answer != QMessageBox::Discard)
+            return false;
+    }
+
+    QHash<QAction *, QList<QKeySequence>> stagedShortcuts;
+    if (edited) {
+        for (QAction *action : actions) {
+            if (reload)
+                stagedShortcuts.insert(action, action->shortcuts());
+            action->setShortcuts(mSavedShortcuts.value(action));
         }
     }
-    saveSettings();
-    QMainWindow::closeEvent(event);
+
+    if (reload) {
+        if (!mActionManager->load(error)) {
+            for (auto it = stagedShortcuts.cbegin(); it != stagedShortcuts.cend(); ++it)
+                it.key()->setShortcuts(it.value());
+            QMessageBox::warning(this, tr("Cannot Load Keyboard Shortcuts"), error);
+            return false;
+        }
+        captureSavedShortcuts();
+    }
+    if (edited || reload) {
+        mEditorWidget->setModelData();
+        mActionManager->emitShortcutEditedForAllActions();
+    }
+    return true;
 }
 
 void KeyboardShortcutWindow::captureSavedShortcuts()
@@ -120,12 +147,5 @@ void KeyboardShortcutWindow::readSettings()
 
 void KeyboardShortcutWindow::reloadFromDisk()
 {
-    QString error;
-    if (!mActionManager->load(error)) {
-        QMessageBox::warning(this, tr("Cannot Load Keyboard Shortcuts"), error);
-        return;
-    }
-    captureSavedShortcuts();
-    mEditorWidget->setModelData();
-    mActionManager->emitShortcutEditedForAllActions();
+    resolveShortcutChanges(true);
 }

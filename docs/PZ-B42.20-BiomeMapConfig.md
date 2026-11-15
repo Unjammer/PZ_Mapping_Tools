@@ -1,7 +1,5 @@
 # Project Zomboid 42.22.2 BiomeMapConfig reference
 
-![BiomeMapConfig infographic for the matching 42.20 palette](images/biomemap-config-build-42-20-discord-v3.png)
-
 Build 42.22.2 reads two independent IDs from each BiomeMap pixel and looks
 them up in `lua/server/metazones/BiomeMapConfig.lua`.
 

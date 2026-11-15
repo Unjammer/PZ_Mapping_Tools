@@ -1177,11 +1177,12 @@ int main(int argc, char *argv[])
     const int previewIndex = commandLineArguments.indexOf(QStringLiteral("--play-map-source"));
     if (previewIndex >= 0) {
         const int checkIndex = commandLineArguments.indexOf(QStringLiteral("--preview-validation"));
-        const int cellIndex = commandLineArguments.indexOf(QStringLiteral("--preview-cell"));
+        const QString cellOption = QStringLiteral("--preview-cell");
         const QString project = commandLineArguments.value(previewIndex + 1);
         const QString checks = checkIndex < 0 ? QString() : commandLineArguments.value(checkIndex + 1);
-        QPoint startCell(-1, -1);
-        if (cellIndex >= 0) {
+        QVector<QPoint> selection;
+        for (int cellIndex = commandLineArguments.indexOf(cellOption); cellIndex >= 0;
+             cellIndex = commandLineArguments.indexOf(cellOption, cellIndex + 1)) {
             const QStringList coordinates = commandLineArguments.value(cellIndex + 1).split(QLatin1Char(','));
             bool validX = false;
             bool validY = false;
@@ -1191,14 +1192,14 @@ int main(int argc, char *argv[])
                 qCritical() << "--preview-cell requires nonnegative project coordinates as X,Y";
                 return 1;
             }
-            startCell = QPoint(x, y);
+            selection.append(QPoint(x, y));
         }
         MainWindow previewWindow;
         QString error;
         if (project.isEmpty() || (checkIndex >= 0 && checks.isEmpty())
                 || !previewWindow.InitConfigFiles()
                 || !DirectMapPreviewRunner::start(
-                    project, Preferences::instance()->projectZomboidDirectory(), startCell, checks, error,
+                    project, Preferences::instance()->projectZomboidDirectory(), selection, checks, error,
                     [](bool success) { QCoreApplication::exit(success ? 0 : 1); })) {
             qCritical().noquote() << "Direct map preview:" << error;
             return 1;

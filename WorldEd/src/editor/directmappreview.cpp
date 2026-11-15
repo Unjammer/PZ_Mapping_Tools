@@ -21,6 +21,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QScopeGuard>
+#include <QSet>
 #include <QThread>
 #include <QtMath>
 
@@ -51,31 +52,47 @@ int lastCellInRange(qint64 square, int totalCells)
     return int(qMin(square / CELL_SIZE_256, qint64(totalCells - 1)));
 }
 
-bool indexPlacements(World &world, QHash<WorldCell *, WorldCellLotList> &placements, QString &error)
+bool indexPlacements(World &world, const QSet<WorldCell *> &selection,
+                     QHash<WorldCell *, WorldCellLotList> &placements, QString &error)
 {
     const QPoint origin = world.getGenerateLotsSettings().worldOrigin;
-    for (int y = 0; y < world.height(); ++y) {
-        for (int x = 0; x < world.width(); ++x) {
-            WorldCell *cell = world.cellAt(x, y);
-            for (WorldCellLot *lot : cell->lots()) {
-                if (!QFileInfo(lot->mapName()).isFile()) {
-                    error = identifyCell(*cell, QStringLiteral("The placed building or map file is missing: %1")
-                                         .arg(lot->mapName()));
-                    return false;
-                }
-                if (lot->width() <= 0 || lot->height() <= 0) {
-                    error = identifyCell(*cell, QStringLiteral("The placement for %1 has invalid dimensions.")
-                                         .arg(QFileInfo(lot->mapName()).fileName()));
-                    return false;
-                }
-                if (!cell->mapFilePath().isEmpty()
-                        && QRect(0, 0, CELL_SIZE_256, CELL_SIZE_256).contains(lot->bounds()))
+    const QRect cellBounds(0, 0, CELL_SIZE_256, CELL_SIZE_256);
+    for (WorldCell *cell : world.cells()) {
+        const bool ownerSelected = selection.contains(cell);
+        const bool hasMap = !cell->mapFilePath().isEmpty();
+        for (WorldCellLot *lot : cell->lots()) {
+            if (lot->width() <= 0 || lot->height() <= 0) {
+                if (!ownerSelected)
                     continue;
+                error = identifyCell(*cell, QStringLiteral("The placement for %1 has invalid dimensions.")
+                                     .arg(QFileInfo(lot->mapName()).fileName()));
+                return false;
+            }
+            const bool insideOwner = cellBounds.contains(lot->bounds());
+            if (!ownerSelected && insideOwner)
+                continue;
 
-                const qint64 left = qint64(x) * CELL_SIZE_256 + lot->x();
-                const qint64 top = qint64(y) * CELL_SIZE_256 + lot->y();
+            bool used = ownerSelected;
+            if (!hasMap || !insideOwner) {
+                const qint64 left = qint64(cell->x()) * CELL_SIZE_256 + lot->x();
+                const qint64 top = qint64(cell->y()) * CELL_SIZE_256 + lot->y();
                 const qint64 right = left + lot->width() - 1;
                 const qint64 bottom = top + lot->height() - 1;
+                const int firstX = firstCellInRange(left, world.width());
+                const int lastX = lastCellInRange(right, world.width());
+                const int firstY = firstCellInRange(top, world.height());
+                const int lastY = lastCellInRange(bottom, world.height());
+                for (int cellY = firstY; cellY <= lastY; ++cellY) {
+                    for (int cellX = firstX; cellX <= lastX; ++cellX) {
+                        WorldCell *target = world.cellAt(cellX, cellY);
+                        if ((target != cell || !hasMap) && selection.contains(target)) {
+                            placements[target].append(lot);
+                            used = true;
+                        }
+                    }
+                }
+                if (!used)
+                    continue;
                 const qint64 worldLeft = qint64(origin.x()) * CELL_SIZE_256 + left;
                 const qint64 worldTop = qint64(origin.y()) * CELL_SIZE_256 + top;
                 if (worldLeft < std::numeric_limits<int>::min()
@@ -85,17 +102,11 @@ bool indexPlacements(World &world, QHash<WorldCell *, WorldCellLotList> &placeme
                     error = identifyCell(*cell, QStringLiteral("A placed building extends beyond the supported coordinate range."));
                     return false;
                 }
-                const int firstX = firstCellInRange(left, world.width());
-                const int lastX = lastCellInRange(right, world.width());
-                const int firstY = firstCellInRange(top, world.height());
-                const int lastY = lastCellInRange(bottom, world.height());
-                for (int cellY = firstY; cellY <= lastY; ++cellY) {
-                    for (int cellX = firstX; cellX <= lastX; ++cellX) {
-                        WorldCell *target = world.cellAt(cellX, cellY);
-                        if (target != cell || cell->mapFilePath().isEmpty())
-                            placements[target].append(lot);
-                    }
-                }
+            }
+            if (!QFileInfo(lot->mapName()).isFile()) {
+                error = identifyCell(*cell, QStringLiteral("The placed building or map file is missing: %1")
+                                     .arg(lot->mapName()));
+                return false;
             }
         }
     }
@@ -139,7 +150,7 @@ struct StartSquare
 }
 
 bool DirectMapPreview::read(const QString &projectPath, QVector<QByteArray> &cells, QJsonArray &spawn,
-                            QString &error, const QPoint &startCell)
+                            QString &error, const QVector<QPoint> &selection)
 {
     cells.clear();
     spawn = QJsonArray();
@@ -156,15 +167,27 @@ bool DirectMapPreview::read(const QString &projectPath, QVector<QByteArray> &cel
         return false;
     }
 
-    const bool hasSelection = startCell != QPoint(-1, -1);
-    WorldCell *selected = hasSelection ? world->cellAt(startCell) : nullptr;
-    if (hasSelection && !selected) {
-        error = QStringLiteral("The selected cell (%1, %2) is outside this project.")
-                .arg(startCell.x()).arg(startCell.y());
-        return false;
+    QVector<WorldCell *> previewCells;
+    QSet<WorldCell *> selectedCells;
+    if (selection.isEmpty()) {
+        previewCells = world->cells();
+        selectedCells = QSet<WorldCell *>(previewCells.cbegin(), previewCells.cend());
+    } else {
+        for (const QPoint &position : selection) {
+            WorldCell *cell = world->cellAt(position);
+            if (!cell) {
+                error = QStringLiteral("The selected cell (%1, %2) is outside this project.")
+                        .arg(position.x()).arg(position.y());
+                return false;
+            }
+            if (!selectedCells.contains(cell)) {
+                selectedCells.insert(cell);
+                previewCells.append(cell);
+            }
+        }
     }
     QHash<WorldCell *, WorldCellLotList> placements;
-    if (!indexPlacements(*world, placements, error))
+    if (!indexPlacements(*world, selectedCells, placements, error))
         return false;
 
     const QPoint origin = world->getGenerateLotsSettings().worldOrigin;
@@ -173,50 +196,47 @@ bool DirectMapPreview::read(const QString &projectPath, QVector<QByteArray> &cel
     QVector<QByteArray> loadedCells;
     QJsonArray authoredStart;
     QJsonArray fallbackStart;
-    for (int y = 0; y < world->height(); ++y) {
-        for (int x = 0; x < world->width(); ++x) {
-            WorldCell *cell = world->cellAt(x, y);
-            WorldCellLotList overlappingLots = placements.take(cell);
-            const QString &mapPath = cell->mapFilePath();
-            if (mapPath.isEmpty() && overlappingLots.isEmpty())
-                continue;
-            if (!mapPath.isEmpty()
-                    && (!mapPath.endsWith(QLatin1String(".tmx"), Qt::CaseInsensitive)
-                        || !QFileInfo(mapPath).isFile())) {
-                error = identifyCell(*cell, QStringLiteral("Open or assign its saved TileZed map (.tmx). The current file is %1.")
-                                     .arg(mapPath));
-                return false;
-            }
-            const qint64 cellX = qint64(origin.x()) + x;
-            const qint64 cellY = qint64(origin.y()) + y;
-            if (cellX < 0 || cellX > maxGameCell || cellY < 0 || cellY > maxGameCell) {
-                error = identifyCell(*cell, QStringLiteral("Its game cell (%1, %2) is out of range. Use a world origin that keeps cell coordinates from 0 to %3.")
-                                     .arg(cellX).arg(cellY).arg(maxGameCell));
-                return false;
-            }
-            QByteArray cellData;
-            QJsonArray authored;
-            QJsonArray fallback;
-            if (!readCell(document, *cell, QPoint(int(cellX), int(cellY)), overlappingLots,
-                          cellData, authored, fallback, error)) {
-                error = identifyCell(*cell, error);
-                return false;
-            }
-            if (cellData.isEmpty())
-                continue;
-            loadedCells.append(std::move(cellData));
-            if (!selected || selected == cell) {
-                if (authoredStart.isEmpty())
-                    authoredStart = authored;
-                if (fallbackStart.isEmpty())
-                    fallbackStart = fallback;
-            }
+    for (WorldCell *cell : previewCells) {
+        WorldCellLotList overlappingLots = placements.take(cell);
+        const QString &mapPath = cell->mapFilePath();
+        if (mapPath.isEmpty() && overlappingLots.isEmpty())
+            continue;
+        if (!mapPath.isEmpty()
+                && (!mapPath.endsWith(QLatin1String(".tmx"), Qt::CaseInsensitive)
+                    || !QFileInfo(mapPath).isFile())) {
+            error = identifyCell(*cell, QStringLiteral("Open or assign its saved TileZed map (.tmx). The current file is %1.")
+                                 .arg(mapPath));
+            return false;
+        }
+        const qint64 cellX = qint64(origin.x()) + cell->x();
+        const qint64 cellY = qint64(origin.y()) + cell->y();
+        if (cellX < 0 || cellX > maxGameCell || cellY < 0 || cellY > maxGameCell) {
+            error = identifyCell(*cell, QStringLiteral("Its game cell (%1, %2) is out of range. Use a world origin that keeps cell coordinates from 0 to %3.")
+                                 .arg(cellX).arg(cellY).arg(maxGameCell));
+            return false;
+        }
+        QByteArray cellData;
+        QJsonArray authored;
+        QJsonArray fallback;
+        if (!readCell(document, *cell, QPoint(int(cellX), int(cellY)), overlappingLots,
+                      cellData, authored, fallback, error)) {
+            error = identifyCell(*cell, error);
+            return false;
+        }
+        if (cellData.isEmpty())
+            continue;
+        loadedCells.append(std::move(cellData));
+        if (selection.isEmpty() || (authoredStart.isEmpty() && fallbackStart.isEmpty())) {
+            if (authoredStart.isEmpty())
+                authoredStart = authored;
+            if (fallbackStart.isEmpty())
+                fallbackStart = fallback;
         }
     }
     const QJsonArray chosenSpawn = authoredStart.isEmpty() ? fallbackStart : authoredStart;
     if (chosenSpawn.isEmpty()) {
         const QString noStart = QStringLiteral("No walkable start square was found. Assign a TileZed map (.tmx) or place a building with a floor.");
-        error = selected ? identifyCell(*selected, noStart) : noStart;
+        error = previewCells.size() == 1 ? identifyCell(*previewCells.first(), noStart) : noStart;
         return false;
     }
     cells = std::move(loadedCells);
@@ -396,10 +416,14 @@ bool DirectMapPreview::readCell(WorldDocument &document, WorldCell &cell, const 
         orderedCells.clear();
         if (!group || !group->orderedCellsAt2(QPoint(int(x), int(y)), temporaries, orderedCells))
             continue;
+        bool floor = false;
         bool blocked = false;
-        for (const Tiled::Cell *entry : qAsConst(orderedCells))
-            blocked |= tileProperties.value(entry->tile).blocked;
-        if (orderedCells.isEmpty() || blocked)
+        for (const Tiled::Cell *entry : qAsConst(orderedCells)) {
+            const PreviewTile tile = tileProperties.value(entry->tile);
+            floor |= tile.floor;
+            blocked |= tile.blocked;
+        }
+        if (!floor || blocked)
             continue;
         authoredSpawn = QJsonArray{tileOrigin.x() + int(x), tileOrigin.y() + int(y), level};
         break;
