@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<world version="1.0" width="1" height="1" cellFormat="native-256">
+ <GenerateLots>
+  <worldOrigin origin="44,17" />
+ </GenerateLots>
+ <propertyenum name="Professions" choices="unemployed" multi="true" />
+ <propertydef name="Professions" default="unemployed" enum="Professions" />
+ <objecttype name="SpawnPoint" />
+ <objectgroup name="SpawnPoint" color="#00b7ff" defaulttype="SpawnPoint" />
+ <cell x="0" y="0" map="PreviewCell.tmx">
+  <lot x="128" y="128" level="0" width="13" height="11" map="ShoreHouse.tbx" />
+  <object type="SpawnPoint" group="SpawnPoint" name="Shore House Arrival" x="130" y="126" level="0" width="1" height="1">
+   <property name="Professions" value="unemployed" />
+  </object>
+ </cell>
+</world>

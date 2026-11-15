@@ -52,6 +52,7 @@
 #include "otherworldsdialog.h"
 #include "cellscene.h"
 #include "defaultsfile.h"
+#include "directmappreviewrunner.h"
 #include "expectedpropertiesdialog.h"
 #include "generatelotsdialog.h"
 #include "scenetools.h"
@@ -290,6 +291,15 @@ int main(int argc, char *argv[])
         }
         const QString zoneExportPrefix =
                 QLatin1String("--validate-zone-export=");
+        if (argument == QLatin1String("--validate-fishing-zone-export")) {
+            QString error;
+            if (!LuaWriter::validateFishingZoneExport(&error)) {
+                qCritical().noquote() << "Fishing zone export validation failed:" << error;
+                return 56;
+            }
+            qInfo() << "Fishing zone export validation passed";
+            return 0;
+        }
         if (argument == QLatin1String("--validate-zone-export")
                 || argument.startsWith(zoneExportPrefix)) {
             QString summary;
@@ -593,6 +603,15 @@ int main(int argc, char *argv[])
                     qCritical().noquote()
                             << "WorldDefaults.txt utility-zone validation failed:"
                             << typeName;
+                    return 25;
+                }
+            }
+            for (const QString &typeName : {QStringLiteral("NoFishZone"), QStringLiteral("RiverZone")}) {
+                WorldObjectGroup *group = defaults.mObjectGroups.find(typeName);
+                if (!defaults.mObjectTypes.contains(typeName) || !group
+                        || group->type()->name() != typeName) {
+                    qCritical().noquote()
+                            << "WorldDefaults.txt fishing-zone validation failed:" << typeName;
                     return 25;
                 }
             }
@@ -1154,6 +1173,38 @@ int main(int argc, char *argv[])
     }
 
     Preferences::instance()->applyTheme();
+
+    const int previewIndex = commandLineArguments.indexOf(QStringLiteral("--play-map-source"));
+    if (previewIndex >= 0) {
+        const int checkIndex = commandLineArguments.indexOf(QStringLiteral("--preview-validation"));
+        const int cellIndex = commandLineArguments.indexOf(QStringLiteral("--preview-cell"));
+        const QString project = commandLineArguments.value(previewIndex + 1);
+        const QString checks = checkIndex < 0 ? QString() : commandLineArguments.value(checkIndex + 1);
+        QPoint startCell(-1, -1);
+        if (cellIndex >= 0) {
+            const QStringList coordinates = commandLineArguments.value(cellIndex + 1).split(QLatin1Char(','));
+            bool validX = false;
+            bool validY = false;
+            const int x = coordinates.value(0).toInt(&validX);
+            const int y = coordinates.value(1).toInt(&validY);
+            if (coordinates.size() != 2 || !validX || !validY || x < 0 || y < 0) {
+                qCritical() << "--preview-cell requires nonnegative project coordinates as X,Y";
+                return 1;
+            }
+            startCell = QPoint(x, y);
+        }
+        MainWindow previewWindow;
+        QString error;
+        if (project.isEmpty() || (checkIndex >= 0 && checks.isEmpty())
+                || !previewWindow.InitConfigFiles()
+                || !DirectMapPreviewRunner::start(
+                    project, Preferences::instance()->projectZomboidDirectory(), startCell, checks, error,
+                    [](bool success) { QCoreApplication::exit(success ? 0 : 1); })) {
+            qCritical().noquote() << "Direct map preview:" << error;
+            return 1;
+        }
+        return a.exec();
+    }
 
     MainWindow w;
     w.show();

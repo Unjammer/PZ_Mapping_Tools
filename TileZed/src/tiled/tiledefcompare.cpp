@@ -17,6 +17,7 @@
 
 #include "tiledefcompare.h"
 #include "ui_tiledefcompare.h"
+#include "toolwindowclose.h"
 
 #include "preferences.h"
 #include "tilemetainfomgr.h"
@@ -28,6 +29,7 @@
 
 #include <QApplication>
 #include <QClipboard>
+#include <QCloseEvent>
 #include <QCryptographicHash>
 #include <QFile>
 #include <QFileDialog>
@@ -240,6 +242,7 @@ TileDefCompare::TileDefCompare(QWidget *parent) :
     ui(new Ui::TileDefCompare)
 {
     ui->setupUi(this);
+    addToolWindowCloseButton(this, ui->gridLayout);
     resize(qMax(width(), 1180), qMax(height(), 760));
     ui->packEdit1->setEditable(true);
     ui->packEdit2->setEditable(true);
@@ -513,6 +516,7 @@ void TileDefCompare::compare()
             item->setForeground(QBrush(QColor(205, 135, 25)));
 
     }
+    mSavedUseMap = mUseMap;
     rebuildReportText();
     addRecentFile1(path1);
     addRecentFile2(path2);
@@ -580,24 +584,37 @@ void TileDefCompare::use2()
     updateActions();
 }
 
-void TileDefCompare::saveMerged()
+void TileDefCompare::closeEvent(QCloseEvent *event)
+{
+    if (mUseMap == mSavedUseMap) {
+        event->accept();
+        return;
+    }
+    const auto answer = QMessageBox::question(
+                this, tr("Unsaved Merge"),
+                tr("Save changes to the merged tile definitions?"),
+                QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                QMessageBox::Cancel);
+    event->setAccepted(answer == QMessageBox::Discard
+                       || (answer == QMessageBox::Save && saveMerged()));
+}
+
+bool TileDefCompare::saveMerged()
 {
     if (!mCompared) {
         QMessageBox::information(
                     this, tr("No comparison"),
                     tr("Compare two files before saving a merged result."));
-        return;
+        return false;
     }
     QString fileName = QFileDialog::getSaveFileName(this, tr("Save As"),
                                                     mMergedFile.fileName(),
                                                     QLatin1String("Tile properties files (*.tiles)"));
     if (fileName.isEmpty())
-        return;
+        return false;
 
     foreach (TileDefTileset *ts, mMergedFile.tilesets()) {
         foreach (TileDefTile *tile, ts->mTiles) {
-            // we copied these in use1()/use2()
-            // normally the UI updates mPropertyUI and then TileDefFile.write() does mPropertyUI.ToProperties()
             tile->mPropertyUI.FromProperties(tile->mProperties);
         }
     }
@@ -605,18 +622,20 @@ void TileDefCompare::saveMerged()
     if (!mMergedFile.write(fileName)) {
         QMessageBox::warning(this, tr("Error writing .tiles file"),
                              mMergedFile.errorString());
-        return;
-    };
+        return false;
+    }
     mMergedFile.setFileName(fileName);
 
     TileDefTextFile textFile;
     if (!textFile.write(fileName + QLatin1String(".txt"), mMergedFile.tilesets())) {
         QMessageBox::warning(this, tr("Error writing .tiles.txt file"), textFile.errorString());
-        return;
-    };
+        return false;
+    }
+    mSavedUseMap = mUseMap;
     statusBar()->showMessage(
                 tr("Saved merged definitions to %1 and %1.txt")
                 .arg(QDir::toNativeSeparators(fileName)), 8000);
+    return true;
 }
 
 void TileDefCompare::currentRowChanged(int row)

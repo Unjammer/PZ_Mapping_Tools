@@ -29,6 +29,13 @@
    <item row="0" column="0">
     <widget class="Tiled::Lua::LuaToolOptionsWidget" name="options" native="true"/>
    </item>
+   <item row="1" column="0">
+    <widget class="QDialogButtonBox" name="closeButtons">
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Close</set>
+     </property>
+    </widget>
+   </item>
   </layout>
  </widget>
  <customwidgets>

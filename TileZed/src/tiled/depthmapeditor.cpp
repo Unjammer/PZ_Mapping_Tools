@@ -1,4 +1,5 @@
 #include "depthmapeditor.h"
+#include "toolwindowclose.h"
 #include "tile.h"
 #include "tilemetainfomgr.h"
 #include "tileset.h"
@@ -443,13 +444,8 @@ void DepthMapCanvas::mouseMoveEvent(QMouseEvent *event)
 void DepthMapCanvas::mouseReleaseEvent(QMouseEvent *event)
 {
     if (mGeometryEditing) {
-        if (event->button() == Qt::LeftButton) {
-            const bool edited = mGeometryDragging || mGeometryResizing;
-            mGeometryDragging = false;
-            mGeometryResizing = false;
-            if (edited)
-                emit geometryEditFinished();
-        }
+        if (event->button() == Qt::LeftButton)
+            finishEdit();
         return;
     }
     if (!mStrokeActive ||
@@ -459,9 +455,20 @@ void DepthMapCanvas::mouseReleaseEvent(QMouseEvent *event)
         return;
     }
     continueStroke(imagePoint(event->pos()));
-    mStrokeActive = false;
-    if (mStrokeChanged)
-        emit editFinished(mDepth);
+    finishEdit();
+}
+void DepthMapCanvas::finishEdit()
+{
+    if (mGeometryDragging || mGeometryResizing) {
+        mGeometryDragging = false;
+        mGeometryResizing = false;
+        emit geometryEditFinished();
+    }
+    if (mStrokeActive) {
+        mStrokeActive = false;
+        if (mStrokeChanged)
+            emit editFinished(mDepth);
+    }
 }
 int DepthMapCanvas::pickGeometry(const QPointF &point) const
 {
@@ -1180,6 +1187,7 @@ DepthMapEditor::DepthMapEditor(QWidget *parent)
     mMainSplitter->setStretchFactor(2, 2);
     mMainSplitter->setSizes({ 380, 620, 650 });
     outerLayout->addWidget(mMainSplitter, 1);
+    addToolWindowCloseButton(this, outerLayout);
     setCentralWidget(central);
     mCursorLabel = new QLabel(this);
     statusBar()->addPermanentWidget(mCursorLabel);
@@ -1684,7 +1692,23 @@ bool DepthMapEditor::setTileset(
 }
 void DepthMapEditor::closeEvent(QCloseEvent *event)
 {
+    mCanvas->finishEdit();
     if (confirmDiscardChanges()) {
+        if (mRevision != mSavedRevision || mGeometryDirty) {
+            mTileset = nullptr;
+            mAtlas = QImage();
+            mFilePath.clear();
+            mGeometryDocument = DepthGeometryDocument();
+            mGeometryFilePath.clear();
+            mGeometryDirty = false;
+            mEdits.clear();
+            mEditIndex = 0;
+            mRevision = 0;
+            mSavedRevision = 0;
+            mNextRevision = 1;
+            buildTileTable(-1);
+            updateWindowState();
+        }
         QSettings settings;
         settings.setValue(QStringLiteral("DepthMapEditor/WindowGeometry"),
                           saveGeometry());

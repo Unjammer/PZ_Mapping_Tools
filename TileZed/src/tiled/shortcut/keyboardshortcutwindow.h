@@ -18,6 +18,8 @@
 #ifndef KEYBOARDSHORTCUTWINDOW_H
 #define KEYBOARDSHORTCUTWINDOW_H
 
+#include <QHash>
+#include <QKeySequence>
 #include <QMainWindow>
 
 class ActionManager;
@@ -46,11 +48,16 @@ private slots:
     void reloadFromDisk();
 
 private:
+    QHash<QAction *, QList<QKeySequence>> currentShortcuts() const;
+    bool saveShortcuts();
+
     Ui::KeyboardShortcutWindow *ui;
     ActionManager *mActionManager;
     ShortcutEditorWidget *mEditorWidget;
     QSettings *mSettings;
     QString mSettingsKey;
+    QHash<QAction *, QList<QKeySequence>> mSavedShortcuts;
+    bool mFinishingEditForClose = false;
 };
 
 #endif // KEYBOARDSHORTCUTWINDOW_H

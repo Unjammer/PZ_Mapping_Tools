@@ -27,6 +27,7 @@
 #include "shortcuteditordelegate.h"
 
 #include <QAbstractItemModel>
+#include <QKeyEvent>
 #include <QKeySequenceEdit>
 
 //! [0]
@@ -42,6 +43,7 @@ QWidget *ShortcutEditorDelegate::createEditor(QWidget *parent,
                                               const QModelIndex &/*index*/) const
 {
     QKeySequenceEdit *editor = new QKeySequenceEdit(parent);
+    mActiveEditor = editor;
     connect(editor, &QKeySequenceEdit::editingFinished, this, &ShortcutEditorDelegate::commitAndCloseEditor);
     return editor;
 }
@@ -50,11 +52,38 @@ QWidget *ShortcutEditorDelegate::createEditor(QWidget *parent,
 //! [2]
 void ShortcutEditorDelegate::commitAndCloseEditor()
 {
-    QKeySequenceEdit *editor = static_cast<QKeySequenceEdit *>(sender());
+    if (sender() == mActiveEditor.data())
+        finishEditing();
+}
+//! [2]
+
+void ShortcutEditorDelegate::finishEditing()
+{
+    QWidget *editor = mActiveEditor.data();
+    if (!editor || !editor->isVisible())
+        return;
+    mActiveEditor.clear();
     Q_EMIT commitData(editor);
     Q_EMIT closeEditor(editor);
 }
-//! [2]
+
+bool ShortcutEditorDelegate::eventFilter(QObject *object, QEvent *event)
+{
+    if (object == mActiveEditor.data()) {
+        if (event->type() == QEvent::KeyPress) {
+            const auto *key = static_cast<QKeyEvent *>(event);
+            if (key->key() == Qt::Key_Escape && key->modifiers() == Qt::NoModifier) {
+                if (!key->isAutoRepeat())
+                    emit closeRequested();
+                return true;
+            }
+        }
+        if (event->type() == QEvent::FocusOut
+                && static_cast<QFocusEvent *>(event)->reason() == Qt::PopupFocusReason)
+            return false;
+    }
+    return QStyledItemDelegate::eventFilter(object, event);
+}
 
 //! [3]
 void ShortcutEditorDelegate::setEditorData(QWidget *editor,

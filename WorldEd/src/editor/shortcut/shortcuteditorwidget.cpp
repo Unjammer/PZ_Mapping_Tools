@@ -42,6 +42,8 @@ ShortcutEditorWidget::ShortcutEditorWidget(ActionManager *actionManager, QWidget
     m_model = new ShortcutEditorModel(actionManager, this);
     connect(m_model, &QAbstractItemModel::dataChanged, this, &ShortcutEditorWidget::dataChanged);
     m_delegate = new ShortcutEditorDelegate(this);
+    connect(m_delegate, &ShortcutEditorDelegate::closeRequested,
+            this, &ShortcutEditorWidget::closeRequested);
     m_view = new QTreeView(this);
     m_view->setModel(m_model);
     m_view->setItemDelegateForColumn(static_cast<int>(Column::Shortcut), m_delegate);
@@ -66,6 +68,11 @@ void ShortcutEditorWidget::setModelData()
 {
     m_model->setActions();
     m_view->expandAll();
+}
+
+void ShortcutEditorWidget::finishShortcutEdit()
+{
+    m_delegate->finishEditing();
 }
 
 void ShortcutEditorWidget::saveSettings(QSettings &settings)

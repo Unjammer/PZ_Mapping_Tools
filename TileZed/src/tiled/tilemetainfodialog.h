@@ -84,10 +84,15 @@ private slots:
 
     void updateUI();
 
-    void accept();
-    void reject();
+    void accept() override;
+    void reject() override;
 
 private:
+    enum class PendingEdits { Close, Saved, KeepOpen };
+
+    PendingEdits resolvePendingEdits();
+    bool saveCatalogue();
+    void finish(int result);
     void saveSettings();
     void restoreSettings();
     void saveSplitterSizes(QSplitter *splitter);

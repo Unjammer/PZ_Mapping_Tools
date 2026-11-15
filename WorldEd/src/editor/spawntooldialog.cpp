@@ -42,6 +42,7 @@ SpawnToolDialog::SpawnToolDialog(QWidget *parent) :
 
     connect(ui->add, &QAbstractButton::clicked, this, &SpawnToolDialog::addItem);
     connect(ui->remove, &QAbstractButton::clicked, this, &SpawnToolDialog::removeItem);
+    connect(ui->closeButton, &QPushButton::clicked, this, &QDialog::reject);
     connect(ui->list, &QListWidget::itemChanged,
             this, &SpawnToolDialog::itemChanged);
     connect(ui->list, &QListWidget::currentRowChanged, this, &SpawnToolDialog::currentRowChanged);

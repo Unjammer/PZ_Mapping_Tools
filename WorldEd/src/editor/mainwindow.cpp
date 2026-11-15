@@ -40,6 +40,7 @@
 #include "lotfilesmanager256.h"
 #include "lotpackwindow.h"
 #include "luawriter.h"
+#include "directmappreviewrunner.h"
 #include "mapcomposite.h"
 #include "mapimagemanager.h"
 #include "mapmanager.h"
@@ -135,8 +136,10 @@
 #include <QFileInfo>
 #include <QElapsedTimer>
 #include <QGraphicsSceneMouseEvent>
+#include <QInputDialog>
 #include <QMessageBox>
 #include <QLabel>
+#include <QLineEdit>
 #include <QHBoxLayout>
 #include <QPainter>
 #include <QPainterPath>
@@ -1345,6 +1348,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->actionWriteObjects, &QAction::triggered, this, &MainWindow::WriteWorldObjects);
     connect(ui->actionReadObjectsFromLua, &QAction::triggered, this, &MainWindow::ReadWorldObjects);
     connect(ui->actionWriteRoomTonesToLua, &QAction::triggered, this, &MainWindow::WriteRoomTones);
+    connect(ui->actionExportFishingZones, &QAction::triggered, this, &MainWindow::exportFishingZones);
+    connect(ui->actionPlayMapSource, &QAction::triggered, this, &MainWindow::playMapSource);
     connect(ui->actionFromToAll, &QAction::triggered,
             this, &MainWindow::FromToAll);
     connect(ui->actionFromToSelected, &QAction::triggered,
@@ -1906,10 +1911,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     if (mLotPackWindow)
         mLotPackWindow->close();
 
-    if (confirmAllSave()) {
-        if (mKeyboardShortcutWindow != nullptr) {
-            mKeyboardShortcutWindow->close();
-        }
+    if (confirmAllSave() && (!mKeyboardShortcutWindow || mKeyboardShortcutWindow->close())) {
         event->accept();
     } else {
         event->ignore();
@@ -4327,6 +4329,82 @@ void MainWindow::WriteRoomTones()
     }
 }
 
+static void showFishingZoneWarnings(QWidget *parent, const QString &message,
+                                    const QStringList &warnings)
+{
+    QMessageBox dialog(QMessageBox::Warning, MainWindow::tr("Fishing Zones Skipped"),
+                       message, QMessageBox::Ok, parent);
+    dialog.setInformativeText(MainWindow::tr("%1 invalid fishing zone(s) were omitted.")
+                              .arg(warnings.size()));
+    dialog.setDetailedText(warnings.join(QLatin1Char('\n')));
+    dialog.exec();
+}
+
+void MainWindow::exportFishingZones()
+{
+    WorldDocument *worldDoc = currentWorldDocument();
+    if (!worldDoc)
+        return;
+
+    const QFileInfo project(worldDoc->fileName());
+    const QString modDirectory = QFileDialog::getExistingDirectory(
+                this, tr("Choose the Map Mod Folder"), project.absolutePath());
+    if (modDirectory.isEmpty())
+        return;
+
+    bool accepted;
+    const QString mapName = QInputDialog::getText(
+                this, tr("Export Fishing Zones"), tr("Map folder name"),
+                QLineEdit::Normal, project.completeBaseName(), &accepted).trimmed();
+    if (!accepted)
+        return;
+
+    LuaWriter writer;
+    const QString path = QDir::toNativeSeparators(LuaWriter::fishingZonesPath(modDirectory, mapName));
+    if (!writer.writeFishingZones(worldDoc->world(), modDirectory, mapName)) {
+        QMessageBox::warning(this, tr("Fishing Zone Export Failed"),
+                             tr("%1\n\n%2").arg(writer.errorString(), path));
+        return;
+    }
+
+    const QString message = tr("Saved the shared fishing-zone Lua file.\n%1").arg(path);
+    if (writer.warnings().isEmpty())
+        QMessageBox::information(this, tr("Fishing Zones Exported"), message);
+    else
+        showFishingZoneWarnings(this, message, writer.warnings());
+}
+
+void MainWindow::playMapSource()
+{
+    WorldDocument *document = currentWorldDocument();
+    if (!document)
+        return;
+    if (document->fileName().isEmpty() || document->isModified()) {
+        QMessageBox::information(this, tr("Play Map Source"),
+                                 tr("Save the project before launching the playtest."));
+        return;
+    }
+    QPoint startCell(-1, -1);
+    if (CellDocument *cellDocument = mCurrentDocument->asCellDocument()) {
+        startCell = cellDocument->cell()->pos();
+    } else if (!document->selectedCells().isEmpty()) {
+        startCell = document->selectedCells().first()->pos();
+    }
+    QString error;
+    const QPointer<MainWindow> window(this);
+    const auto finished = [window](bool success) {
+        if (window && !success)
+            window->statusBar()->showMessage(tr("The source map playtest failed. See the WorldEd log."), 15000);
+    };
+    if (!DirectMapPreviewRunner::start(document->fileName(),
+                                      Preferences::instance()->projectZomboidDirectory(),
+                                      startCell, {}, error, finished)) {
+        QMessageBox::warning(this, tr("Play Map Source"), error);
+        return;
+    }
+    statusBar()->showMessage(tr("Starting the source map playtest."), 5000);
+}
+
 void MainWindow::updateWindowTitle()
 {
     QString fileName = mCurrentDocument ? mCurrentDocument->fileName() : QString();
@@ -4380,11 +4458,15 @@ static void generateLots8x8(MainWindow *mainWin, Document *doc,
         return;
     }
     QString modError;
-    if (!dialog.finalizeModExport(&modError)) {
+    QStringList fishingWarnings;
+    if (!dialog.finalizeModExport(&modError, &fishingWarnings)) {
         QMessageBox::warning(mainWin, mainWin->tr("Mod Export Failed!"), modError);
     } else if (dialog.exportAsMod()) {
-        QMessageBox::information(mainWin, mainWin->tr("Mod Export Complete"),
-                                 mainWin->tr("The LOT files and mod structure were generated successfully."));
+        const QString message = mainWin->tr("The LOT files and mod structure were generated successfully.");
+        if (fishingWarnings.isEmpty())
+            QMessageBox::information(mainWin, mainWin->tr("Mod Export Complete"), message);
+        else
+            showFishingZoneWarnings(mainWin, message, fishingWarnings);
     }
 }
 
@@ -6314,6 +6396,8 @@ void MainWindow::updateActions()
     ui->actionWriteObjects->setEnabled(worldDoc != 0);
     ui->actionReadObjectsFromLua->setEnabled(worldDoc != 0);
     ui->actionWriteRoomTonesToLua->setEnabled(worldDoc != 0);
+    ui->actionExportFishingZones->setEnabled(currentWorldDoc != nullptr);
+    ui->actionPlayMapSource->setEnabled(currentWorldDoc != nullptr);
 
     ui->actionCopy->setEnabled(worldDoc);
     ui->actionPaste->setEnabled(worldDoc && !Clipboard::instance()->isEmpty());

@@ -20,12 +20,13 @@
 
 #include "actionmanager.h"
 #include "shortcuteditorwidget.h"
+#include "../toolwindowclose.h"
 
 #include <QAction>
-#include <QHBoxLayout>
 #include <QSettings>
 #include <QCloseEvent>
 #include <QMessageBox>
+#include <QScopedValueRollback>
 #include <QStatusBar>
 
 KeyboardShortcutWindow::KeyboardShortcutWindow(ActionManager *actionManager, QSettings *settings, const QString &settingsKey, QWidget *parent) :
@@ -37,26 +38,26 @@ KeyboardShortcutWindow::KeyboardShortcutWindow(ActionManager *actionManager, QSe
 {
     ui->setupUi(this);
 
-    QHBoxLayout *hBoxLayout = new QHBoxLayout;
     mEditorWidget = new ShortcutEditorWidget(mActionManager);
     connect(mEditorWidget, &ShortcutEditorWidget::shortcutEdited, actionManager, &ActionManager::shortcutEdited);
     connect(mEditorWidget, &ShortcutEditorWidget::shortcutEdited, this, [this]() {
-        QString error;
-        if (!mActionManager->save(error))
-            statusBar()->showMessage(tr("Cannot save keyboard shortcuts: %1").arg(error));
-        else
-            statusBar()->clearMessage();
+        if (!mFinishingEditForClose)
+            saveShortcuts();
     });
-    hBoxLayout->addWidget(mEditorWidget);
+    connect(mEditorWidget, &ShortcutEditorWidget::closeRequested,
+            this, &QWidget::close);
 
-    QWidget *centralWidget = new QWidget;
-    centralWidget->setLayout(hBoxLayout);
-    setCentralWidget(centralWidget);
+    auto *layout = new QVBoxLayout(ui->centralwidget);
+    layout->addWidget(mEditorWidget, 1);
+    auto *buttons = toolWindowCloseButtons(this);
+    buttons->button(QDialogButtonBox::Close)->setFocusPolicy(Qt::TabFocus);
+    layout->addWidget(buttons);
 
     connect(ui->actionReloadFromDisk, &QAction::triggered, this, &KeyboardShortcutWindow::reloadFromDisk);
-    ui->actionClose->setShortcuts(QList<QKeySequence>() << QKeySequence::StandardKey::Close << Qt::Key_Escape);
+    ui->actionClose->setShortcuts(QKeySequence::Close);
     connect(ui->actionClose, &QAction::triggered, this, &QMainWindow::close);
 
+    mSavedShortcuts = currentShortcuts();
     readSettings();
 }
 
@@ -67,14 +68,52 @@ KeyboardShortcutWindow::~KeyboardShortcutWindow()
 
 void KeyboardShortcutWindow::closeEvent(QCloseEvent *event)
 {
-    QString error;
-    if (!mActionManager->save(error)) {
-        QMessageBox::critical(this, tr("Cannot Save Keyboard Shortcuts"), error);
-        event->ignore();
-        return;
+    {
+        const QScopedValueRollback<bool> finishingEdit(mFinishingEditForClose, true);
+        mEditorWidget->finishShortcutEdit();
+    }
+    if (currentShortcuts() != mSavedShortcuts) {
+        const auto answer = QMessageBox::question(
+                    this, tr("Unsaved Keyboard Shortcuts"),
+                    tr("Save changes to keyboard shortcuts?"),
+                    QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                    QMessageBox::Cancel);
+        if (answer == QMessageBox::Discard) {
+            for (QAction *action : mActionManager->registeredActions()) {
+                const auto saved = mSavedShortcuts.constFind(action);
+                if (saved != mSavedShortcuts.constEnd())
+                    action->setShortcuts(saved.value());
+            }
+            mEditorWidget->setModelData();
+            mActionManager->emitShortcutEditedForAllActions();
+            statusBar()->clearMessage();
+        } else if (answer != QMessageBox::Save || !saveShortcuts()) {
+            event->ignore();
+            return;
+        }
     }
     saveSettings();
     QMainWindow::closeEvent(event);
+}
+
+QHash<QAction *, QList<QKeySequence>> KeyboardShortcutWindow::currentShortcuts() const
+{
+    QHash<QAction *, QList<QKeySequence>> shortcuts;
+    for (QAction *action : mActionManager->registeredActions())
+        shortcuts.insert(action, action->shortcuts());
+    return shortcuts;
+}
+
+bool KeyboardShortcutWindow::saveShortcuts()
+{
+    QString error;
+    if (!mActionManager->save(error)) {
+        statusBar()->showMessage(tr("Cannot save keyboard shortcuts: %1").arg(error));
+        return false;
+    }
+    mSavedShortcuts = currentShortcuts();
+    statusBar()->clearMessage();
+    return true;
 }
 
 void KeyboardShortcutWindow::saveSettings()
@@ -99,7 +138,12 @@ void KeyboardShortcutWindow::readSettings()
 void KeyboardShortcutWindow::reloadFromDisk()
 {
     QString error;
-    mActionManager->load(error);
+    if (!mActionManager->load(error)) {
+        statusBar()->showMessage(tr("Cannot load keyboard shortcuts: %1").arg(error));
+        return;
+    }
+    mSavedShortcuts = currentShortcuts();
+    statusBar()->clearMessage();
     mEditorWidget->setModelData();
     mActionManager->emitShortcutEditedForAllActions();
 }

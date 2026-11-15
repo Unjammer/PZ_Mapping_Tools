@@ -91,7 +91,8 @@ bool typeRequiresUnitRectangle(const QString &type)
 bool typeRequiresRectangle(const QString &type)
 {
     return typeRequiresUnitRectangle(type)
-            || type == QLatin1String("WaterZone");
+            || type == QLatin1String("WaterZone")
+            || WorldObjectValidation::isFishingZone(type);
 }
 
 void resolvedObjectProperties(PropertyHolder *holder, PropertyList &result)
@@ -547,9 +548,10 @@ void CreateObjectTool::activate()
     if (group) {
         if (mObjectName.isEmpty())
             mObjectName = group->name();
-        if ((mObjectTypeName.isEmpty()
-             || !mScene->world()->objectTypes().contains(mObjectTypeName))
-                && group->type()) {
+        if (group->type() && (mObjectTypeName.isEmpty()
+                || !mScene->world()->objectTypes().contains(mObjectTypeName)
+                || (selected.isEmpty()
+                    && WorldObjectValidation::isFishingZone(group->type()->name())))) {
             mObjectTypeName = group->type()->name();
         }
     }
@@ -591,17 +593,25 @@ void CreateObjectTool::editObjectPreset()
 void CreateObjectTool::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-        mStartScenePos = event->scenePos();
-        mMousePressed = true;
-        mAnchorPos = mScene->renderer()->pixelToTileCoordsInt(event->scenePos(), mScene->document()->currentLevel());
         QString typeName = mObjectTypeName;
-        if (typeName.isEmpty()) {
+        if (!mScene->world()->objectTypes().contains(typeName)) {
             WorldObjectGroup *group =
                     mScene->document()->currentObjectGroup();
             if (group && group->type())
                 typeName = group->type()->name();
         }
-        if (typeRequiresUnitRectangle(typeName))
+        const bool fishingZone = WorldObjectValidation::isFishingZone(typeName);
+        const int level = mScene->document()->currentLevel();
+        if (fishingZone && level != 0) {
+            QMessageBox::warning(MainWindow::instance(), tr("Level 0 required"),
+                                 tr("Switch to level 0 to draw a %1.").arg(typeName));
+            event->accept();
+            return;
+        }
+        mStartScenePos = event->scenePos();
+        mMousePressed = true;
+        mAnchorPos = mScene->renderer()->pixelToTileCoordsInt(event->scenePos(), level);
+        if (typeRequiresUnitRectangle(typeName) || fishingZone)
             startNewMapObject(mAnchorPos);
         event->accept();
     }

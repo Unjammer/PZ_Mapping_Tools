@@ -33,6 +33,7 @@
 #define CHUNK_SIZE_256 8
 
 class ExportLotsProgressDialog;
+class DirectMapPreview;
 
 class CombinedCellMaps
 {
@@ -150,6 +151,7 @@ private:
     QImage mSourceNavigationOverrides;
 
     friend class LotFilesManager256;
+    friend class DirectMapPreview;
 };
 
 class LotFilesManager256 : public QObject
@@ -261,6 +263,7 @@ private:
     QAtomicInteger<int> mAutoFilledHoleCount = 0;
 
     friend class LotFilesWorker256;
+    friend class DirectMapPreview;
 };
 
 #endif // LOTFILESMANAGER256_H

@@ -17,6 +17,7 @@
 
 #include "luaconsole.h"
 #include "ui_luaconsole.h"
+#include "toolwindowclose.h"
 
 #include "luamapsdialog.h"
 #include "luaworlddialog.h"
@@ -52,6 +53,7 @@ LuaConsole::LuaConsole(QWidget *parent) :
     setWindowFlags(windowFlags() | Qt::Tool);
 
     ui->setupUi(this);
+    addToolWindowCloseButton(this, ui->gridLayout);
 
     connect(ui->actionRun_Script, &QAction::triggered, this, &LuaConsole::runScript);
     connect(ui->actionRunAgain, &QAction::triggered, this, &LuaConsole::runAgain);

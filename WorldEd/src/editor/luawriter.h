@@ -36,12 +36,17 @@ public:
     bool writeSpawnPoints(World *world, const QString &filePath);
     bool writeWorldObjects(World *world, const QString &filePath);
     bool writeRoomTones(World *world, const QString &filePath);
+    bool writeFishingZones(World *world, const QString &modDirectory,
+                           const QString &mapName, bool writeEmpty = true);
+    static QString fishingZonesPath(const QString &modDirectory,
+                                    const QString &mapName);
     QString errorString() const;
     QStringList warnings() const;
 
     static bool validateSpawnPointExport(QString *summary, QString *error);
     static bool validateZoneExport(QString *summary, QString *error,
                                    const QString &projectPath = QString());
+    static bool validateFishingZoneExport(QString *error);
 
 private:
     void writeWorld(World *world, QIODevice *device, const QString &absDirPath);

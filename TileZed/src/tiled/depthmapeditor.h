@@ -54,6 +54,7 @@ public:
     void setDisplayMode(int mode) { mDisplayMode = mode; update(); }
     void setOverlayOpacity(int opacity) { mOverlayOpacity = opacity / 100.0; update(); }
     void setLockSourceAlpha(bool enabled) { mLockSourceAlpha = enabled; }
+    void finishEdit();
 signals:
     void editStarted(const QImage &before);
     void editFinished(const QImage &after);

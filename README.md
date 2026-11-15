@@ -336,6 +336,8 @@ Important additions include:
 - OpenStreetMap project generation with terrain, vegetation, buildings,
   streets, roads, markings, and typed zones
 - Regions and Street Names editors
+- The Create Image Pyramid, Loot Inspector, and Keyboard Shortcuts windows
+  can be dismissed with their **Close** button, **File > Close**, or **Esc**.
 - Native256 `spawnpoints.lua` output with absolute `posX`, `posY`, and `posZ`
   values instead of the historical 300-square `worldX` and `worldY` format
 - Creation defaults and non-blocking export validation for SpawnPoint,
@@ -495,14 +497,17 @@ Important additions include:
   curtains. Furniture remains visible. Toggle it with **Ctrl+Shift+W**.
   Each floor's individual layer visibility is retained when walls are shown
   again. This preview setting does not alter the building or exported map.
-- Right-click a room and choose **Pin Room Highlight** to keep that room
-  visible while moving the pointer elsewhere. Choose **Release Room Highlight**
-  to resume the pointer highlight. **View > Pin Room Highlight**, or
-  **Ctrl+Shift+H**, toggles the same state. The pin follows the document across
+- With the Pencil in Iso view, right-click an existing room to use its room
+  type. Use **Shift+right-click** to open the context menu with the Pencil.
+  Other tools open it with a right-click.
+- Choose **Pin Room Highlight** in the context menu to keep the room
+  highlighted while moving the pointer elsewhere. **Release Room Highlight**
+  returns to the pointer highlight. Toggle the pin from **View > Pin Room
+  Highlight** or with **Ctrl+Shift+H**. The pin follows the document across
   Iso, Tiles and Attributes modes. Changing floors, resizing or rotating the
-  building releases it. Both shortcuts can be changed in Keyboard Shortcuts.
-  Right-dragging an object still moves it. Use **Delete Object** in the
-  context menu to remove the object under the pointer.
+  building releases it. The keyboard shortcut can be changed in Keyboard
+  Shortcuts. Right-dragging an object still moves it. Use **Delete Object**
+  in the context menu to remove the object under the pointer.
 - Complete tileset discovery shared with TileZed and WorldEd
 - Layer-aware and floor-aware tile selection
 - Copy and cut preserve RoomDefs and room layouts together with selected tile
@@ -716,11 +721,69 @@ record and lists the exact reason. The object remains in the PZW for repair,
 the project remains saved, and LOT generation remains available. Correct the
 reported geometry or properties and save or export again to include it.
 
+## Fishing zones
+
+In Cell View at level 0, use **Create Object** with the `NoFishZone` or
+`RiverZone` group. Select the matching type in **New Object Defaults** and
+draw a rectangle. A click creates a one-square zone.
+`NoFishZone` blocks rod casts aimed inside the rectangle.
+`RiverZone` selects the river habitat for rod catches. In vanilla 42.22.2
+the same species are eligible in both habitats. Fishing nets use their own
+placement and catch rules. Vanilla can hide an existing net's menu when
+you click inside a no-fishing zone.
+
+**File > Export Fishing Zones** writes all valid zones from the project.
+Select the mod folder itself and enter the map folder name. The script goes
+in `common/media/lua/shared/<Map Name>/WorldEdFishingZones.lua` inside the mod.
+**File > Export Complete Mod (8x8)** writes the same script with the generated
+map files and mod metadata. WorldEd applies the project grid and world origin
+when exporting. Invalid zones are listed and remain editable in the project.
+Re-exporting updates the generated script, including after the last zone is
+removed. Keep custom Lua in a separate file.
+
+## Play Map Source
+
+Set the Project Zomboid installation and Tiles paths in WorldEd Preferences.
+Open a cell or select it in World View, then choose **File > Play Map Source...**.
+The solo debug session starts at a valid SpawnPoint in that cell or chooses an
+authored starting square there. In World View, the first selected cell sets
+the start when several are selected. With no cell selected, WorldEd picks a
+start from the project. The example project is in
+`tools/DirectMapPreview/example/DirectPreview.pzw`.
+
+A TMX is the editable cell map assigned in WorldEd. It holds tile layers such
+as terrain, roads, and water. The PZW stores the cell assignments and where
+to place building files (TBX). A preview cell can use a TMX, placed buildings,
+or both.
+
+All authored cells in the saved Native256 project are available in the same
+session. A preview cell replaces the base-game cell at the same coordinates.
+The game can fill unpainted ground in sparse source cells procedurally. Outside
+the preview cells, the game uses its own map. The preview streams chunks in
+memory without generating LOT or chunkdata files. The temporary game profile
+is removed when the session ends.
+
+Play Map Source supports the Windows game JAR for Project Zomboid 42.22.2
+and base-game tiles. It previews terrain, buildings, and rooms. Exported
+map zones, custom Lua, and compiled chunkdata overrides are outside the scope
+of the preview.
+
 ## LotPack screenshots
 
 The LotPack Viewer supports **File > Save Screenshot** and **F12** to save
 the current viewport as a PNG, with a choice of destination. The capture
 includes the current zoom, visible levels and RoomDefs overlay.
+
+## Closing tool windows
+
+Use **Close** inside the window or press **Esc**, including when the window
+has no title bar. For pending edits, choose **Save**, **Discard**, or
+**Cancel**. If saving fails, the editor stays open.
+
+In **Tilesets** and **Building Tiles**, **OK** applies the current edits.
+Use **Close** or **Esc** to review pending edits before leaving. In TileZed
+and BuildingEd, completed shortcut edits are still saved as soon as they
+are applied. If a write fails, the editor asks what to do when you close it.
 
 ## Partial chunk LOT export
 

@@ -133,6 +133,8 @@ public slots:
     void WriteWorldObjects();
     void ReadWorldObjects();
     void WriteRoomTones();
+    void exportFishingZones();
+    void playMapSource();
 
     void updateWindowTitle();
     void updateDocumentAutoSaveTimer();

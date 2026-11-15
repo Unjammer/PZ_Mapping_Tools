@@ -17,6 +17,7 @@
 
 #include "packviewer.h"
 #include "ui_packviewer.h"
+#include "toolwindowclose.h"
 #include "preferences.h"
 
 #include "packextractdialog.h"
@@ -43,6 +44,7 @@ PackViewer::PackViewer(QWidget *parent) :
     ui(new Ui::PackViewer)
 {
     ui->setupUi(this);
+    addToolWindowCloseButton(this, ui->gridLayout);
 
     ui->graphicsView->setScene(new QGraphicsScene(ui->graphicsView));
     ui->graphicsView->setBackgroundBrush(Qt::lightGray);

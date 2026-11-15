@@ -589,7 +589,9 @@ LotPackWindow::LotPackWindow(QWidget *parent) :
     connect(mView->zoomable(), &Zoomable::scaleChanged, this, &LotPackWindow::updateZoom);
 
     connect(ui->actionOpen_World, &QAction::triggered, this, qOverload<>(&LotPackWindow::open));
+    ui->actionClose->setShortcuts({QKeySequence::Close, Qt::Key_Escape});
     connect(ui->actionClose, &QAction::triggered, this, &QWidget::close);
+    connect(ui->closeButton, &QPushButton::clicked, ui->actionClose, &QAction::trigger);
     connect(ui->actionSaveScreenshot, &QAction::triggered,
             this, &LotPackWindow::saveScreenshot);
 

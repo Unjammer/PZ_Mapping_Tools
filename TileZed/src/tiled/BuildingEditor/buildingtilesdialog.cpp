@@ -23,7 +23,6 @@
 #include "buildingpreferences.h"
 #include "buildingtiles.h"
 #include "buildingtilesfile.h"
-#include "buildingtmx.h"
 #include "furnituregroups.h"
 #include "furnitureview.h"
 #include "horizontallinedelegate.h"
@@ -41,13 +40,18 @@
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QFile>
 #include <QFileDialog>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMessageBox>
+#include <QPointer>
+#include <QSaveFile>
 #include <QScrollBar>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStyledItemDelegate>
 #include <QToolBar>
 #include <QToolButton>
 #include <QUndoCommand>
@@ -57,6 +61,74 @@
 using namespace BuildingEditor;
 using namespace Tiled;
 using namespace Tiled::Internal;
+
+namespace {
+
+class CatalogueNameDelegate : public QStyledItemDelegate
+{
+public:
+    explicit CatalogueNameDelegate(QDialog *dialog)
+        : QStyledItemDelegate(dialog), mDialog(dialog)
+    {}
+
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
+                          const QModelIndex &index) const override
+    {
+        mEditor = QStyledItemDelegate::createEditor(parent, option, index);
+        return mEditor;
+    }
+
+    void finishEditing()
+    {
+        if (QWidget *editor = mEditor.data()) {
+            mEditor.clear();
+            if (editor->isVisible()) {
+                emit commitData(editor);
+                emit closeEditor(editor);
+            }
+        }
+    }
+
+protected:
+    bool eventFilter(QObject *object, QEvent *event) override
+    {
+        if (object == mEditor.data() && event->type() == QEvent::KeyPress
+                && static_cast<QKeyEvent *>(event)->matches(QKeySequence::Cancel)) {
+            finishEditing();
+            QMetaObject::invokeMethod(mDialog, "reject", Qt::QueuedConnection);
+            return true;
+        }
+        return QStyledItemDelegate::eventFilter(object, event);
+    }
+
+private:
+    QDialog *mDialog;
+    mutable QPointer<QWidget> mEditor;
+};
+
+struct CatalogueFileSnapshot
+{
+    QString path;
+    QByteArray contents;
+    bool exists = false;
+
+    bool restore() const
+    {
+        QFile current(path);
+        if (!exists)
+            return !current.exists() || current.remove();
+        if (current.open(QIODevice::ReadOnly)) {
+            if (current.readAll() == contents && current.error() == QFile::NoError)
+                return true;
+            current.close();
+        }
+        QSaveFile file(path);
+        return file.open(QIODevice::WriteOnly)
+                && file.write(contents) == contents.size() && file.commit();
+    }
+};
+
+}
 
 /////
 namespace BuildingEditor {
@@ -622,9 +694,11 @@ BuildingTilesDialog::BuildingTilesDialog(QWidget *parent) :
     mUndoGroup(new QUndoGroup(this)),
     mUndoStack(new QUndoStack(this)),
     mSynching(false),
-    mExpertMode(false)
+    mExpertMode(false),
+    mChanges(false)
 {
     ui->setupUi(this);
+    ui->categoryList->setItemDelegate(new CatalogueNameDelegate(this));
 
     QSettings &settings = BuildingPreferences::instance()->settings();
     mExpertMode = settings.value(QLatin1String("BuildingTilesDialog/ExpertMode"), false).toBool();
@@ -1934,8 +2008,6 @@ void BuildingTilesDialog::manageTilesets()
     dialog.exec();
 
     TileMetaInfoMgr *mgr = TileMetaInfoMgr::instance();
-    if (!mgr->writeTxt())
-        QMessageBox::warning(this, tr("Tileset Metadata Error"), mgr->errorString());
     setTilesetList();
     if (!selectedName.isEmpty()) {
         const int row = mgr->indexOf(selectedName);
@@ -2351,23 +2423,75 @@ bool BuildingTilesDialog::checkOpenDocuments()
     return true;
 }
 
-void BuildingTilesDialog::accept()
+bool BuildingTilesDialog::saveCatalogues()
 {
-    if ((mChanges = !mUndoStack->isClean())) {
-        BuildingTilesMgr::instance()->writeTxt(this);
-        if (!FurnitureGroups::instance()->writeTxt()) {
-            QMessageBox::warning(this, tr("Furniture Configuration Error"),
-                                 FurnitureGroups::instance()->errorString());
+    BuildingTilesMgr *tiles = BuildingTilesMgr::instance();
+    FurnitureGroups *furniture = FurnitureGroups::instance();
+    const QString tilesPath = tiles->txtPath();
+    const QString furniturePath = furniture->txtPath();
+    const QString backupSuffix = QStringLiteral(".bak");
+    QList<CatalogueFileSnapshot> snapshots;
+    for (const QString &path : {tilesPath, furniturePath, tilesPath + backupSuffix,
+                               furniturePath + backupSuffix}) {
+        QFile file(path);
+        CatalogueFileSnapshot snapshot;
+        snapshot.path = path;
+        snapshot.exists = file.exists();
+        if (snapshot.exists) {
+            if (file.open(QIODevice::ReadOnly))
+                snapshot.contents = file.readAll();
+            if (!file.isOpen() || file.error() != QFile::NoError) {
+                QMessageBox::warning(this, tr("Catalogue Save Error"),
+                                     tr("Could not read %1.\n%2").arg(path, file.errorString()));
+                return false;
+            }
         }
-        if (!BuildingTMX::instance()->writeTxt()) {
-            QMessageBox::warning(this, tr("Building Configuration Error"),
-                                 BuildingTMX::instance()->errorString());
-        }
-        mUndoStack->setClean();
-
-        emit edited();
+        snapshots.append(snapshot);
     }
 
+    BuildingTilesFile file;
+    const int revision = tiles->revision() + 1;
+    QString error;
+    if (!file.write(tilesPath, revision, tiles->sourceRevision(), tiles->categories().toVector())) {
+        error = file.errorString();
+    } else if (!furniture->writeTxt()) {
+        error = furniture->errorString();
+    } else {
+        tiles->setRevision(revision);
+        return true;
+    }
+
+    QStringList failedRestores;
+    for (const CatalogueFileSnapshot &snapshot : std::as_const(snapshots)) {
+        if (!snapshot.restore())
+            failedRestores.append(QDir::toNativeSeparators(snapshot.path));
+    }
+    if (!failedRestores.isEmpty()) {
+        error += tr("\n\nCould not restore the original contents of:\n%1")
+                .arg(failedRestores.join(QLatin1Char('\n')));
+    }
+    QMessageBox::warning(this, tr("Catalogue Save Error"), error);
+    return false;
+}
+
+void BuildingTilesDialog::accept()
+{
+    static_cast<CatalogueNameDelegate *>(ui->categoryList->itemDelegate())->finishEditing();
+    const bool changed = !mUndoStack->isClean();
+    if (changed && !saveCatalogues())
+        return;
+
+    mChanges = changed;
+    mUndoStack->clear();
+    if (changed)
+        emit edited();
+
+    saveSettings();
+    QDialog::accept();
+}
+
+void BuildingTilesDialog::saveSettings()
+{
     QSettings &settings = BuildingPreferences::instance()->settings();
     settings.beginGroup(QLatin1String("BuildingTilesDialog"));
     settings.setValue(QLatin1String("geometry"), saveGeometry());
@@ -2383,14 +2507,27 @@ void BuildingTilesDialog::accept()
 
     saveSplitterSizes(ui->overallSplitter);
     saveSplitterSizes(ui->categorySplitter);
-
-    QDialog::accept();
 }
 
 void BuildingTilesDialog::reject()
 {
-    // There's no 'Cancel' button, so changes are always accepted.
-    // But closing the dialog by the titlebar close-box or pressing the Escape
-    // key calls reject().
-    accept();
+    static_cast<CatalogueNameDelegate *>(ui->categoryList->itemDelegate())->finishEditing();
+    if (!mUndoStack->isClean()) {
+        const QMessageBox::StandardButton choice = QMessageBox::warning(
+                    this, tr("Unsaved Catalogue Changes"),
+                    tr("Save changes to the Building Tiles and Furniture catalogues?"),
+                    QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                    QMessageBox::Cancel);
+        if (choice == QMessageBox::Save) {
+            accept();
+            return;
+        }
+        if (choice != QMessageBox::Discard)
+            return;
+        mUndoStack->setIndex(mUndoStack->cleanIndex());
+    }
+    mChanges = false;
+    mUndoStack->clear();
+    saveSettings();
+    QDialog::reject();
 }

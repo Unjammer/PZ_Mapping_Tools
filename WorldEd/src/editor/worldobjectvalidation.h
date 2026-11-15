@@ -22,6 +22,7 @@ public:
     static QString typeDescription(const QString &typeName);
     static void applyTypeTooltips(QComboBox *comboBox);
     static bool supportsBasementAccess(WorldCellObject *object);
+    static bool isFishingZone(const QString &typeName);
     static void applyCreationDefaults(WorldCellObject *object);
     static bool requiresUnitRectangle(WorldCellObject *object);
     static bool requiresRectangle(WorldCellObject *object);

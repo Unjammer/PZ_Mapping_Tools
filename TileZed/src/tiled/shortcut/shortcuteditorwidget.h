@@ -48,12 +48,14 @@ public:
     ~ShortcutEditorWidget() override = default;
 
     void setModelData();
+    void finishShortcutEdit();
 
     void saveSettings(QSettings &settings);
     void readSettings(QSettings &settings);
 
 signals:
     void shortcutEdited(QAction *action);
+    void closeRequested();
 
 private slots:
     void clearShortcut();

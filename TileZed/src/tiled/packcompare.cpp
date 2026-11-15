@@ -17,6 +17,7 @@
 
 #include "packcompare.h"
 #include "ui_packcompare.h"
+#include "toolwindowclose.h"
 
 #include "preferences.h"
 #include "zprogress.h"
@@ -124,6 +125,7 @@ PackCompare::PackCompare(QWidget *parent)
     , ui(new Ui::PackCompare)
 {
     ui->setupUi(this);
+    addToolWindowCloseButton(this, ui->verticalLayout);
 
     ui->statusFilter->addItem(tr("All statuses"), -1);
     ui->statusFilter->addItem(tr("All changes"), 0);

@@ -466,6 +466,30 @@ objectgroup
     defaulttype = WaterZone
 }
 
+objecttype
+{
+    name = NoFishZone
+}
+
+objectgroup
+{
+    name = NoFishZone
+    color = #ca3d56
+    defaulttype = NoFishZone
+}
+
+objecttype
+{
+    name = RiverZone
+}
+
+objectgroup
+{
+    name = RiverZone
+    color = #169fbc
+    defaulttype = RiverZone
+}
+
 template
 {
     name = WaterZone

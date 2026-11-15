@@ -28,6 +28,9 @@ public:
     static bool renderValidation(const QString &outputFile,
                                  QString *errorString);
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private slots:
     void browse1();
     void browse2();
@@ -35,7 +38,7 @@ private slots:
     void compare();
     void use1();
     void use2();
-    void saveMerged();
+    bool saveMerged();
     void currentRowChanged(int row);
     void filterChanged();
     void copyReport();
@@ -66,6 +69,7 @@ private:
     QMap<QListWidgetItem*,Tiled::Internal::TileDefTile*> mTileMap1;
     QMap<QListWidgetItem*,Tiled::Internal::TileDefTile*> mTileMap2;
     QMap<QListWidgetItem*,int> mUseMap;
+    QMap<QListWidgetItem*,int> mSavedUseMap;
     QMap<QListWidgetItem*,int> mDifferenceKind;
     QLineEdit *mSearchEdit = nullptr;
     QComboBox *mDifferenceFilter = nullptr;

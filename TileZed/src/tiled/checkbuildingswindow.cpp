@@ -1,5 +1,6 @@
 #include "checkbuildingswindow.h"
 #include "ui_checkbuildingswindow.h"
+#include "toolwindowclose.h"
 
 #include "mainwindow.h"
 #include "mapcomposite.h"
@@ -42,6 +43,7 @@ CheckBuildingsWindow::CheckBuildingsWindow(QWidget *parent) :
     mFileSystemWatcher(new FileSystemWatcher(this))
 {
     ui->setupUi(this);
+    addToolWindowCloseButton(this, ui->gridLayout);
 
     setAttribute(Qt::WA_DeleteOnClose);
 

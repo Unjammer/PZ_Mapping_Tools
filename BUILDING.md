@@ -102,6 +102,22 @@ The main output is:
 C:\PZ_Mapping_Tools\build\worlded\PZWorldEd.exe
 ```
 
+### Build the Play Map Source agent
+
+Use a Windows JDK 25 and the Project Zomboid 42.22.2 installation to build the
+Java agent. From the source root, run the script in PowerShell with your paths.
+
+```powershell
+.\tools\DirectMapPreview\Build-PreviewAgent.ps1 `
+    -JdkDirectory 'C:\Java\jdk-25' `
+    -GameDirectory 'C:\Games\Project Zomboid' `
+    -OutputDirectory 'C:\PZ_Mapping_Tools\build\preview-agent'
+```
+
+Place `PZDirectMapPreview.jar` in `tools/DirectMapPreview` in the application
+package and copy the `example` folder alongside it. The launcher uses the
+game's bundled Java runtime during playtests.
+
 ### Build TileZed and BuildingEd
 
 Open `cmd.exe` and run:

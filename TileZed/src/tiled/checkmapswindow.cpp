@@ -17,6 +17,7 @@
 
 #include "checkmapswindow.h"
 #include "ui_checkmapswindow.h"
+#include "toolwindowclose.h"
 
 #include "bmpblender.h"
 #include "documentmanager.h"
@@ -49,6 +50,7 @@ CheckMapsWindow::CheckMapsWindow(QWidget *parent) :
     mFileSystemWatcher(new FileSystemWatcher(this))
 {
     ui->setupUi(this);
+    addToolWindowCloseButton(this, ui->gridLayout);
 
     setAttribute(Qt::WA_DeleteOnClose);
 

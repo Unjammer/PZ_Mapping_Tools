@@ -84,8 +84,8 @@ QPointF WorldCellObject::absoluteWorldPosition() const
         return pos();
     World *world = mCell->world();
     const QPoint origin = world->getGenerateLotsSettings().worldOrigin;
-    return QPointF((mCell->x() + origin.x()) * world->cellSize() + mX,
-                   (mCell->y() + origin.y()) * world->cellSize() + mY);
+    return QPointF((qreal(mCell->x()) + origin.x()) * world->cellSize() + mX,
+                   (qreal(mCell->y()) + origin.y()) * world->cellSize() + mY);
 }
 
 int WorldCellObject::index()

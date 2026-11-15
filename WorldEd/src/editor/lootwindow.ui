@@ -60,6 +60,13 @@
       </column>
      </widget>
     </item>
+    <item row="2" column="0" alignment="Qt::AlignRight">
+     <widget class="QPushButton" name="closeButton">
+      <property name="text">
+       <string>Close</string>
+      </property>
+     </widget>
+    </item>
    </layout>
   </widget>
   <widget class="QMenuBar" name="menubar">

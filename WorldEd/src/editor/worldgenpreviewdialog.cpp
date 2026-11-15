@@ -2844,7 +2844,15 @@ public:
             buildPrefabInterface(mainLayout);
         statusLabel = new QLabel(q);
         statusLabel->setWordWrap(true);
-        mainLayout->addWidget(statusLabel);
+        auto *closeButton = new QPushButton(q->tr("Close"), q);
+        closeButton->setObjectName(QStringLiteral("closeButton"));
+        closeButton->setAutoDefault(false);
+        auto *footer = new QHBoxLayout;
+        footer->addWidget(statusLabel, 1);
+        footer->addWidget(closeButton);
+        mainLayout->addLayout(footer);
+        QObject::connect(closeButton, &QPushButton::clicked, q,
+                         &QDialog::reject);
         QObject::connect(browseButton, &QPushButton::clicked, q,
                          [this]() { browse(); });
         QObject::connect(reloadButton, &QPushButton::clicked, q,

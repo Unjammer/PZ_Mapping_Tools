@@ -2,6 +2,7 @@
 #define GENERATELOTSDIALOG_H
 
 #include <QDialog>
+#include <QStringList>
 
 class QComboBox;
 
@@ -22,7 +23,7 @@ public:
 
     bool exportAsMod() const;
     void setExportAsMod(bool enabled);
-    bool finalizeModExport(QString *error) const;
+    bool finalizeModExport(QString *error, QStringList *warnings) const;
     void setModExportAvailable(bool available);
     bool fillHolesDuringExport() const;
     bool fillHolesWithNearestTile() const;

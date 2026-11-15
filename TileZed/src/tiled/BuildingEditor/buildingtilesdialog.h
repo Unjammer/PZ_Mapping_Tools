@@ -104,6 +104,8 @@ private:
     void setCategoryTiles();
     void setFurnitureTiles();
     void setTilesetList();
+    bool saveCatalogues();
+    void saveSettings();
     void saveSplitterSizes(QSplitter *splitter);
     void restoreSplitterSizes(QSplitter *splitter);
     void displayTileInTileset(Tiled::Tile *tile);

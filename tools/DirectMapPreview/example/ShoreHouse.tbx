@@ -1,0 +1,91 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<building version="4" width="12" height="10" ExteriorWall="3" ExteriorWallTrim="0" Door="2" DoorFrame="1" Window="8" Curtains="0" Shutters="0" Stairs="7" RoofCap="0" RoofSlope="0" RoofTop="0" GrimeWall="0">
+ <tile_entry category="door_frames">
+  <tile enum="West" tile="fixtures_doors_frames_01_000" />
+  <tile enum="North" tile="fixtures_doors_frames_01_001" />
+ </tile_entry>
+ <tile_entry category="doors">
+  <tile enum="West" tile="fixtures_doors_01_000" />
+  <tile enum="North" tile="fixtures_doors_01_001" />
+  <tile enum="WestOpen" tile="fixtures_doors_01_002" />
+  <tile enum="NorthOpen" tile="fixtures_doors_01_003" />
+ </tile_entry>
+ <tile_entry category="exterior_walls">
+  <tile enum="West" tile="walls_exterior_house_02_000" />
+  <tile enum="North" tile="walls_exterior_house_02_001" />
+  <tile enum="NorthWest" tile="walls_exterior_house_02_002" />
+  <tile enum="SouthEast" tile="walls_exterior_house_02_003" />
+  <tile enum="WestWindow" tile="walls_exterior_house_02_008" />
+  <tile enum="NorthWindow" tile="walls_exterior_house_02_009" />
+  <tile enum="WestDoor" tile="walls_exterior_house_02_010" />
+  <tile enum="NorthDoor" tile="walls_exterior_house_02_011" />
+ </tile_entry>
+ <tile_entry category="interior_walls">
+  <tile enum="West" tile="location_hospitality_sunstarmotel_01_000" />
+  <tile enum="North" tile="location_hospitality_sunstarmotel_01_001" />
+  <tile enum="NorthWest" tile="location_hospitality_sunstarmotel_01_002" />
+  <tile enum="SouthEast" tile="location_hospitality_sunstarmotel_01_003" />
+  <tile enum="WestWindow" tile="location_hospitality_sunstarmotel_01_008" />
+  <tile enum="NorthWindow" tile="location_hospitality_sunstarmotel_01_009" />
+  <tile enum="WestDoor" tile="location_hospitality_sunstarmotel_01_010" />
+  <tile enum="NorthDoor" tile="location_hospitality_sunstarmotel_01_011" />
+ </tile_entry>
+ <tile_entry category="floors">
+  <tile enum="Floor" tile="floors_interior_tilesandwood_01_043" />
+ </tile_entry>
+ <tile_entry category="floors">
+  <tile enum="Floor" tile="floors_interior_tilesandwood_01_045" />
+ </tile_entry>
+ <tile_entry category="stairs">
+  <tile enum="West1" tile="fixtures_stairs_01_000" />
+  <tile enum="West2" tile="fixtures_stairs_01_001" />
+  <tile enum="West3" tile="fixtures_stairs_01_002" />
+  <tile enum="North1" tile="fixtures_stairs_01_008" />
+  <tile enum="North2" tile="fixtures_stairs_01_009" />
+  <tile enum="North3" tile="fixtures_stairs_01_010" />
+ </tile_entry>
+ <tile_entry category="windows">
+  <tile enum="West" tile="fixtures_windows_01_000" />
+  <tile enum="North" tile="fixtures_windows_01_001" />
+ </tile_entry>
+ <tile_entry category="ceiling">
+  <tile enum="Ceiling" tile="ceilings_01_000" />
+ </tile_entry>
+ <used_tiles>3 4 5 6 2 1 7 8 9</used_tiles>
+ <used_furniture />
+ <room Name="Living Room" InternalName="livingroom" Color="224 102 60" InteriorWall="4" InteriorWallTrim="0" Floor="5" GrimeFloor="0" GrimeWall="0" Ceiling="9" />
+ <room Name="Kitchen" InternalName="kitchen" Color="55 175 95" InteriorWall="4" InteriorWallTrim="0" Floor="6" GrimeFloor="0" GrimeWall="0" Ceiling="9" />
+ <room Name="Upper Hall" InternalName="hall" Color="98 161 195" InteriorWall="4" InteriorWallTrim="0" Floor="6" GrimeFloor="0" GrimeWall="0" Ceiling="9" />
+ <floor>
+  <object type="door" FrameTile="1" x="2" y="1" dir="N" Tile="2" />
+  <object type="door" FrameTile="1" x="6" y="4" dir="W" Tile="2" />
+  <object type="window" CurtainsTile="0" ShuttersTile="0" x="8" y="1" dir="N" Tile="8" />
+  <object type="stairs" x="4" y="3" dir="N" Tile="7" />
+  <rooms>
+0,0,0,0,0,0,0,0,0,0,0,0,
+0,1,1,1,1,1,2,2,2,2,2,0,
+0,1,1,1,1,1,2,2,2,2,2,0,
+0,1,1,1,1,1,2,2,2,2,2,0,
+0,1,1,1,1,1,2,2,2,2,2,0,
+0,1,1,1,1,1,2,2,2,2,2,0,
+0,1,1,1,1,1,2,2,2,2,2,0,
+0,1,1,1,1,1,2,2,2,2,2,0,
+0,1,1,1,1,1,2,2,2,2,2,0,
+0,0,0,0,0,0,0,0,0,0,0,0
+</rooms>
+ </floor>
+ <floor>
+  <rooms>
+0,0,0,0,0,0,0,0,0,0,0,0,
+0,3,3,3,3,3,0,0,0,0,0,0,
+0,3,3,3,3,3,0,0,0,0,0,0,
+0,3,3,3,3,3,0,0,0,0,0,0,
+0,3,3,3,3,3,0,0,0,0,0,0,
+0,3,3,3,3,3,0,0,0,0,0,0,
+0,3,3,3,3,3,0,0,0,0,0,0,
+0,3,3,3,3,3,0,0,0,0,0,0,
+0,3,3,3,3,3,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0
+</rooms>
+ </floor>
+</building>

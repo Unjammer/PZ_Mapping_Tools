@@ -19,6 +19,7 @@
 
 #include "tiledefdialog.h"
 #include "ui_tiledefdialog.h"
+#include "toolwindowclose.h"
 
 #include "addtilesetsdialog.h"
 #include "preferences.h"
@@ -343,6 +344,7 @@ TileDefDialog::TileDefDialog(QWidget *parent) :
     mBaseGameTarget(false)
 {
     ui->setupUi(this);
+    addToolWindowCloseButton(this, ui->gridLayout);
 
     QMenu *targetMenu = new QMenu(tr("Target Format"), this);
     QActionGroup *targetGroup = new QActionGroup(this);

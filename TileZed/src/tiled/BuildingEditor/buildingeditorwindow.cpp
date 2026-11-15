@@ -774,13 +774,10 @@ void BuildingEditorWindow::setDiagnosticShortcutsEnabled(bool enabled)
 
 void BuildingEditorWindow::closeEvent(QCloseEvent *event)
 {
-    if (confirmAllSave()) {
+    if (confirmAllSave() && (!mKeyboardShortcutWindow || mKeyboardShortcutWindow->close())) {
         writeSettings();
         docman()->closeAllDocuments();
-        if (mKeyboardShortcutWindow != nullptr) {
-            mKeyboardShortcutWindow->close();
-        }
-        event->accept(); // doesn't destroy us
+        event->accept();
     } else
         event->ignore();
 

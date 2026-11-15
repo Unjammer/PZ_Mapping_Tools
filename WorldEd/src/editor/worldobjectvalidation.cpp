@@ -7,6 +7,9 @@
 #include <QCoreApplication>
 #include <QtMath>
 
+#include <cmath>
+#include <limits>
+
 namespace {
 
 void resolveProperties(PropertyHolder *holder, PropertyList &result)
@@ -40,6 +43,13 @@ bool isIntegral(qreal value)
 bool hasIntegralPosition(WorldCellObject *object)
 {
     return isIntegral(object->x()) && isIntegral(object->y());
+}
+
+bool isGameSquareCoordinate(qreal value)
+{
+    return value >= std::numeric_limits<int>::min()
+            && value <= std::numeric_limits<int>::max()
+            && std::floor(value) == value;
 }
 
 QString typeName(WorldCellObject *object)
@@ -220,6 +230,10 @@ QString WorldObjectValidation::typeDescription(const QString &typeName)
         return translated("Defines a point controlling animated water-flow direction and speed.");
     if (typeName == QLatin1String("WaterZone"))
         return translated("Overrides shore and water rendering information in a rectangle. It does not create water tiles.");
+    if (typeName == QLatin1String("NoFishZone"))
+        return translated("Marks a level 0 rectangle for the map mod's fishing zone Lua. It excludes the area from rod fishing.");
+    if (typeName == QLatin1String("RiverZone"))
+        return translated("Marks a level 0 rectangle for the map mod's fishing zone Lua. It selects the river fish habitat for catches in the area.");
     if (typeName == QLatin1String("Mannequin"))
         return translated("Applies configuration to mannequins already placed inside the zone.");
     if (typeName == QLatin1String("RoomTone"))
@@ -260,6 +274,12 @@ bool WorldObjectValidation::supportsBasementAccess(
         WorldCellObject *object)
 {
     return typeName(object) == QLatin1String("Basement");
+}
+
+bool WorldObjectValidation::isFishingZone(const QString &typeName)
+{
+    return typeName == QLatin1String("NoFishZone")
+            || typeName == QLatin1String("RiverZone");
 }
 
 void WorldObjectValidation::applyCreationDefaults(WorldCellObject *object)
@@ -312,7 +332,8 @@ bool WorldObjectValidation::requiresRectangle(WorldCellObject *object)
     const QString type = typeName(object);
     return requiresUnitRectangle(object)
             || type == QLatin1String("WaterZone")
-            || type == QLatin1String("SpawnOrigin");
+            || type == QLatin1String("SpawnOrigin")
+            || isFishingZone(type);
 }
 
 bool WorldObjectValidation::validateSpawnPoint(WorldCellObject *object,
@@ -356,6 +377,29 @@ bool WorldObjectValidation::validateExportObject(WorldCellObject *object,
     const QString type = typeName(object);
     if (type == QLatin1String("SpawnPoint"))
         return validateSpawnPoint(object, reason);
+
+    if (isFishingZone(type)) {
+        if (!object->isRectangle() || object->level() != 0
+                || object->width() < 1 || object->height() < 1) {
+            if (reason)
+                *reason = translated("Fishing zones must be non-empty rectangles on level 0");
+            return false;
+        }
+        const QPointF position = object->absoluteWorldPosition();
+        const qreal lastX = position.x() + (object->width() - 1);
+        const qreal lastY = position.y() + (object->height() - 1);
+        if (!isGameSquareCoordinate(position.x())
+                || !isGameSquareCoordinate(position.y())
+                || !isGameSquareCoordinate(lastX)
+                || !isGameSquareCoordinate(lastY)
+                || std::floor(object->width()) != object->width()
+                || std::floor(object->height()) != object->height()) {
+            if (reason)
+                *reason = translated("Fishing zone bounds must use whole map-square coordinates within the game's coordinate range");
+            return false;
+        }
+        return true;
+    }
 
     if (type == QLatin1String("WaterFlow")) {
         if (!object->isRectangle() || object->width() != 1

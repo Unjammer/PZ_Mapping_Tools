@@ -322,6 +322,8 @@ void TileMetaInfoDialog::addTileset()
                              false,
                              this);
     dialog.setAllowBrowse(true);
+    dialog.setPrompt(tr("Images selected outside the Tiles folder are copied to it immediately. "
+                        "Discarding catalogue changes leaves those images in the Tiles folder."));
     if (dialog.exec() != QDialog::Accepted)
         return;
 
@@ -521,13 +523,25 @@ void TileMetaInfoDialog::redoTextChanged(const QString &text)
 
 void TileMetaInfoDialog::browse()
 {
-    QString f = QFileDialog::getExistingDirectory(this, tr("Directory"),
-                                                  ui->editTiles->text());
-    if (!f.isEmpty()) {
-        TileMetaInfoMgr::instance()->changeTilesDirectory(f);
-        setTilesetList();
-        updateUI();
+    const QString path = QFileDialog::getExistingDirectory(this, tr("Directory"),
+                                                           ui->editTiles->text());
+    TileMetaInfoMgr *manager = TileMetaInfoMgr::instance();
+    if (path.isEmpty() || QDir(path) == QDir(manager->tilesDirectory()))
+        return;
+    if (QMessageBox::question(this, tr("Change Shared Tiles Directory"),
+                              tr("Apply this Tiles directory to all three mapping tools now?"),
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No)
+            != QMessageBox::Yes) {
+        return;
     }
+
+    if (resolvePendingEdits() == PendingEdits::KeepOpen)
+        return;
+
+    mUndoStack->clear();
+    manager->changeTilesDirectory(path);
+    setTilesetList();
+    updateUI();
 }
 
 void TileMetaInfoDialog::tilesetChanged(Tileset *tileset)
@@ -624,18 +638,53 @@ void TileMetaInfoDialog::updateUI()
     mSynching = false;
 }
 
+bool TileMetaInfoDialog::saveCatalogue()
+{
+    TileMetaInfoMgr *manager = TileMetaInfoMgr::instance();
+    if (manager->writeTxt())
+        return true;
+    QMessageBox::warning(this, tr("Tileset Metadata Error"), manager->errorString());
+    return false;
+}
+
 void TileMetaInfoDialog::accept()
 {
-    mClosing = true; // getting a crash when TileMetaInfoMgr is deleted before this in MainWindow::tilesetMetaInfoDialog
-    saveSettings();
-    ui->tilesets->clear();
-    ui->tiles->clear();
-    QDialog::accept();
+    if (saveCatalogue())
+        finish(QDialog::Accepted);
+}
+
+TileMetaInfoDialog::PendingEdits TileMetaInfoDialog::resolvePendingEdits()
+{
+    if (mUndoStack->isClean())
+        return PendingEdits::Close;
+
+    const QMessageBox::StandardButton choice = QMessageBox::warning(
+                this, tr("Unsaved Tileset Changes"), tr("Save changes to the tileset catalogue?"),
+                QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                QMessageBox::Cancel);
+    if (choice == QMessageBox::Save)
+        return saveCatalogue() ? PendingEdits::Saved : PendingEdits::KeepOpen;
+    if (choice != QMessageBox::Discard)
+        return PendingEdits::KeepOpen;
+
+    mUndoStack->setIndex(mUndoStack->cleanIndex());
+    return PendingEdits::Close;
 }
 
 void TileMetaInfoDialog::reject()
 {
-    accept();
+    const PendingEdits pending = resolvePendingEdits();
+    if (pending != PendingEdits::KeepOpen)
+        finish(pending == PendingEdits::Saved ? QDialog::Accepted : QDialog::Rejected);
+}
+
+void TileMetaInfoDialog::finish(int result)
+{
+    mClosing = true;
+    saveSettings();
+    ui->tilesets->clear();
+    ui->tiles->clear();
+    QDialog::done(result);
 }
 
 void TileMetaInfoDialog::saveSettings()

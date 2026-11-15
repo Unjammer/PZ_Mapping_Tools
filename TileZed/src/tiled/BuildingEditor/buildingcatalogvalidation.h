@@ -7,6 +7,7 @@
 #include "simplefile.h"
 #include "building.h"
 #include "buildingdocument.h"
+#include "buildingdocumentmgr.h"
 #include "buildingeditorwindow.h"
 #include "buildingfloor.h"
 #include "buildingobjects.h"
@@ -18,9 +19,11 @@
 #include "buildinglayersdock.h"
 #include "buildingpreferences.h"
 #include "buildingtilesdialog.h"
+#include "buildingtools.h"
 #include "furnitureview.h"
 #include "furnituregroups.h"
 #include "mapcomposite.h"
+#include "objecteditmode.h"
 #include "tilelayer.h"
 #include "preferences.h"
 #include "shortcut/actionmanager.h"
@@ -255,6 +258,100 @@ inline bool validateBuildingEditorWorkflows(BuildingEditorWindow *window, QStrin
     prefs->setHighlightFloor(highlight);
     prefs->setShowLowerFloors(lower);
     prefs->setShowOnlyFloors(onlyFloors);
+
+    {
+        const bool highlight = prefs->highlightRoom();
+        BuildingDocumentMgr *documents = BuildingDocumentMgr::instance();
+        BuildingDocument *previous = documents->currentDocument();
+        IMode *previousMode = ModeManager::instance().currentMode();
+        auto *building = new Building(4, 4, nullptr);
+        auto *first = new Room;
+        first->Name = QStringLiteral("First Room");
+        first->Color = qRgb(120, 120, 120);
+        auto *second = new Room;
+        second->Name = QStringLiteral("Second Room");
+        second->Color = qRgb(150, 130, 110);
+        building->insertRoom(0, first);
+        building->insertRoom(1, second);
+        auto *floor = new BuildingFloor(building, 0);
+        floor->SetRoomAt(1, 1, first);
+        floor->SetRoomAt(2, 1, second);
+        building->insertFloor(0, floor);
+        auto *document = new BuildingDocument(building, QString());
+        auto *isoMode = window->findChild<IsoObjectEditMode *>();
+        documents->addDocument(document);
+        if (isoMode)
+            ModeManager::instance().setCurrentMode(isoMode);
+        auto *scene = qobject_cast<BuildingIsoScene *>(ToolManager::instance()->currentEditor());
+        check(isoMode && scene && scene->document() == document, QStringLiteral("Iso room-picking document"));
+        if (isoMode && scene && scene->document() == document) {
+            window->setCurrentRoom(first);
+            ToolManager::instance()->activateTool(PencilTool::instance());
+            const auto sendMouse = [&](QEvent::Type type, Qt::MouseButton button,
+                                       Qt::MouseButtons buttons, QPoint tile, Qt::KeyboardModifiers modifiers) {
+                QGraphicsSceneMouseEvent event(type);
+                event.setButton(button);
+                event.setButtons(buttons);
+                event.setModifiers(modifiers);
+                event.setScenePos(scene->tileToScene(tile, 0) + QPointF(0, 8));
+                event.setScreenPos(QPoint(100, 100));
+                QApplication::sendEvent(scene, &event);
+            };
+            const auto clickRight = [&](QPoint tile, Qt::KeyboardModifiers modifiers, const QString &actionText) {
+                sendMouse(QEvent::GraphicsSceneMousePress, Qt::RightButton, Qt::RightButton, tile, modifiers);
+                sendMouse(QEvent::GraphicsSceneMouseRelease, Qt::RightButton, Qt::NoButton, tile, modifiers);
+                bool opened = false;
+                QObject menuLifetime;
+                QTimer::singleShot(0, &menuLifetime, [&]() {
+                    auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+                    if (!menu)
+                        return;
+                    opened = true;
+                    for (QAction *action : menu->actions()) {
+                        if (action->text() != actionText || !action->isEnabled())
+                            continue;
+                        menu->setActiveAction(action);
+                        QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+                        QApplication::sendEvent(menu, &enter);
+                        return;
+                    }
+                    menu->close();
+                });
+                QGraphicsSceneContextMenuEvent context(QEvent::GraphicsSceneContextMenu);
+                context.setReason(QGraphicsSceneContextMenuEvent::Mouse);
+                context.setModifiers(modifiers);
+                context.setScenePos(scene->tileToScene(tile, 0) + QPointF(0, 8));
+                context.setScreenPos(QPoint(100, 100));
+                QApplication::sendEvent(scene, &context);
+                return opened;
+            };
+            check(!clickRight(QPoint(2, 1), Qt::NoModifier, QString()) && document->currentRoom() == second,
+                  QStringLiteral("Iso Pencil right-click picks room without a menu"));
+            check(!clickRight(QPoint(3, 3), Qt::NoModifier, QString()) && document->currentRoom() == second,
+                  QStringLiteral("Iso Pencil right-click leaves the room type on an empty square"));
+            check(clickRight(QPoint(1, 1), Qt::ShiftModifier, QStringLiteral("Pin Room Highlight"))
+                  && document->pinnedRoomHighlight() == QPoint(1, 1) && document->currentRoom() == second,
+                  QStringLiteral("Iso Pencil Shift-right-click pins without changing the room type"));
+            check(!clickRight(QPoint(2, 1), Qt::NoModifier, QString())
+                  && document->pinnedRoomHighlight() == QPoint(1, 1),
+                  QStringLiteral("Iso Pencil right-click preserves the pinned highlight"));
+            check(clickRight(QPoint(3, 3), Qt::ShiftModifier, QStringLiteral("Release Room Highlight"))
+                  && !document->hasPinnedRoomHighlight(),
+                  QStringLiteral("Iso Pencil Shift-right-click can release the pin"));
+            sendMouse(QEvent::GraphicsSceneMousePress, Qt::LeftButton, Qt::LeftButton, QPoint(3, 3), Qt::NoModifier);
+            sendMouse(QEvent::GraphicsSceneMousePress, Qt::RightButton, Qt::LeftButton | Qt::RightButton,
+                      QPoint(3, 3), Qt::NoModifier);
+            sendMouse(QEvent::GraphicsSceneMouseRelease, Qt::RightButton, Qt::LeftButton, QPoint(3, 3), Qt::NoModifier);
+            sendMouse(QEvent::GraphicsSceneMouseRelease, Qt::LeftButton, Qt::NoButton, QPoint(3, 3), Qt::NoModifier);
+            check(!floor->GetRoomAt(QPoint(3, 3)) && document->undoStack()->count() == 0,
+                  QStringLiteral("Iso Pencil right-click cancels room drawing"));
+        }
+        documents->closeDocument(document);
+        documents->setCurrentDocument(previous);
+        if (previousMode && previousMode->isEnabled())
+            ModeManager::instance().setCurrentMode(previousMode);
+        prefs->setHighlightRoom(highlight);
+    }
 
     {
         const bool showWalls = prefs->showWalls();

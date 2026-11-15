@@ -1,5 +1,6 @@
 #include "rearrangetiles.h"
 #include "ui_rearrangetiles.h"
+#include "toolwindowclose.h"
 
 #include "preferences.h"
 #include "zoomable.h"
@@ -452,6 +453,7 @@ RearrangeTiles::RearrangeTiles(QWidget *parent) :
     bDirty(false)
 {
     ui->setupUi(this);
+    addToolWindowCloseButton(this, ui->gridLayout);
 
     mZoomable->setScale(0.5); // FIXME
     mZoomable->connectToComboBox(ui->scaleComboBox);
@@ -636,7 +638,8 @@ void RearrangeTiles::tileClicked(const QModelIndex &index)
 
 bool RearrangeTiles::fileSave()
 {
-    writeTxt();
+    if (!writeTxt())
+        return false;
     bDirty = false;
     return true;
 }
@@ -725,7 +728,7 @@ void RearrangeTiles::readTxt()
     }
 }
 
-void RearrangeTiles::writeTxt()
+bool RearrangeTiles::writeTxt()
 {
     QString fileName = Preferences::instance()->appConfigPath(QLatin1String("Rearrange.txt"));
     RearrangeFile file;
@@ -734,8 +737,9 @@ void RearrangeTiles::writeTxt()
                               tr("Error while writing %1\n%2")
                               .arg(fileName)
                               .arg(file.errorString()));
-        return;
+        return false;
     }
+    return true;
 }
 
 bool RearrangeTiles::confirmSave()

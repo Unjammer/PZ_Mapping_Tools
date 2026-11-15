@@ -130,6 +130,9 @@ InGameMapImagePyramidWindow::InGameMapImagePyramidWindow(QWidget *parent) :
     connect(ui->inputBrowseButton, &QToolButton::clicked, this, &InGameMapImagePyramidWindow::chooseInputFile);
     connect(ui->outputBrowseButton, &QToolButton::clicked, this, &InGameMapImagePyramidWindow::chooseOutputFile);
     connect(ui->createZipButton, &QPushButton::clicked, this, &InGameMapImagePyramidWindow::createZip);
+    ui->actionClose->setShortcuts({QKeySequence::Close, Qt::Key_Escape});
+    connect(ui->actionClose, &QAction::triggered, this, &QWidget::close);
+    connect(ui->closeButton, &QPushButton::clicked, ui->actionClose, &QAction::trigger);
 
     if (Document *doc = DocumentManager::instance()->currentDocument()) {
         World *world = nullptr;

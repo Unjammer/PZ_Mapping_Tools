@@ -26,6 +26,7 @@
 #include <QDebug>
 #include <QFileInfo>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QSettings>
 
 using namespace Tiled;
@@ -39,6 +40,8 @@ LuaToolDialog::LuaToolDialog(QWidget *parent) :
     mVisibleLater(true)
 {
     ui->setupUi(this);
+    ui->closeButtons->button(QDialogButtonBox::Close)->setObjectName(QStringLiteral("closeButton"));
+    connect(ui->closeButtons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
     setWindowFlags(windowFlags() | Qt::Tool);
 
@@ -61,8 +64,10 @@ void LuaToolDialog::setVisible(bool visible)
 {
     QDialog::setVisible(visible);
 
-    if (!visible)
+    if (!visible) {
+        mVisibleLaterTimer.stop();
         writeSettings();
+    }
 }
 
 void LuaToolDialog::setVisibleLater(bool visible)

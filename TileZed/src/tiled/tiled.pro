@@ -566,6 +566,7 @@ HEADERS += ../../../shared/settingsvalue.h \
     tiledefcompare.h \
     checkbuildingswindow.h \
     checkmapswindow.h \
+    toolwindowclose.h \
     rearrangetiles.h \
     BuildingEditor/roofhiding.h
 

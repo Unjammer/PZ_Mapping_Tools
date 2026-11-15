@@ -80,6 +80,8 @@ SOURCES += main.cpp\
     ../../../shared/buildingcatalogue/buildingfurniturefile.cpp \
     ../../../shared/buildingcatalogue/buildingtilesfile.cpp \
     exportlotsprogressdialog.cpp \
+    directmappreview.cpp \
+    directmappreviewrunner.cpp \
     environmentpreviewitem.cpp \
     expectedpropertiesdialog.cpp \
     generatelotsfailuredialog.cpp \
@@ -233,6 +235,8 @@ HEADERS  += mainwindow.h \
     ../../../shared/buildingcatalogue/buildingfurniturefile.h \
     ../../../shared/buildingcatalogue/buildingtilesfile.h \
     exportlotsprogressdialog.h \
+    directmappreview.h \
+    directmappreviewrunner.h \
     environmentpreviewitem.h \
     expectedpropertiesdialog.h \
     generatelotsfailuredialog.h \

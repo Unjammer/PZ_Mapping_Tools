@@ -1,4 +1,5 @@
 #include "tilesetzeditor.h"
+#include "toolwindowclose.h"
 #include "tilesetz.h"
 #include "tileset.h"
 #include "tilemetainfomgr.h"
@@ -667,8 +668,12 @@ TileSetZEditor::TileSetZEditor(QWidget *parent)
     redo->setIcon(QIcon(QStringLiteral(":/images/24x24/edit-redo.png")));
     fileTools->addAction(undo);
     fileTools->addAction(redo);
-    mWorkspace = new QTabWidget(this);
-    setCentralWidget(mWorkspace);
+    auto *central = new QWidget(this);
+    auto *centralLayout = new QVBoxLayout(central);
+    mWorkspace = new QTabWidget(central);
+    centralLayout->addWidget(mWorkspace, 1);
+    addToolWindowCloseButton(this, centralLayout);
+    setCentralWidget(central);
     auto *splitter = new QSplitter(mWorkspace);
     mWorkspace->addTab(splitter, tr("Draw tiles"));
     auto *sheetPane = new QWidget(splitter);

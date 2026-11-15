@@ -956,11 +956,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
     writeSettings();
     if ((!mTileSetZEditor || mTileSetZEditor->close()) && confirmAllSave() &&
             TileDefDialog::closeYerself() &&
-            (!mContainerOverlayDialog || mContainerOverlayDialog->close())) {
-
-        if (mKeyboardShortcutWindow != nullptr) {
-            mKeyboardShortcutWindow->close();
-        }
+            (!mContainerOverlayDialog || mContainerOverlayDialog->close()) &&
+            (!mKeyboardShortcutWindow || mKeyboardShortcutWindow->close())) {
 
         /*
          * Calling QWidget::setVisible(true) removes QEvent::Quit from the event loop.
@@ -2215,21 +2212,8 @@ void MainWindow::checkMaps()
 
 void MainWindow::tilesetMetaInfoDialog()
 {
-    TileMetaInfoMgr *mgr = TileMetaInfoMgr::instance();
-
-    qInfo() << "Opening Tileset Metadata dialog";
     TileMetaInfoDialog dialog(this);
     dialog.exec();
-    qInfo() << "Tileset Metadata dialog closed; saving"
-            << mgr->tilesets().count() << "catalog entries";
-
-    if (!mgr->writeTxt()) {
-        qWarning() << "Tileset catalog save failed:"
-                   << mgr->errorString();
-        QMessageBox::warning(this, tr("Tileset Metadata Error"), mgr->errorString());
-    } else {
-        qInfo() << "Tileset catalog saved successfully";
-    }
 }
 
 void MainWindow::rearrangeTiles()

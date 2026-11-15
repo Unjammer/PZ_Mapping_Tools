@@ -279,6 +279,8 @@
     <addaction name="actionWriteObjects"/>
     <addaction name="actionReadObjectsFromLua"/>
     <addaction name="actionWriteRoomTonesToLua"/>
+    <addaction name="actionExportFishingZones"/>
+    <addaction name="actionPlayMapSource"/>
     <addaction name="separator"/>
     <addaction name="actionClose"/>
     <addaction name="actionCloseAll"/>
@@ -1189,6 +1191,16 @@
   <action name="actionWriteRoomTonesToLua">
    <property name="text">
     <string>Write RoomTones to Lua...</string>
+   </property>
+  </action>
+  <action name="actionExportFishingZones">
+   <property name="text">
+    <string>Export Fishing Zones...</string>
+   </property>
+  </action>
+  <action name="actionPlayMapSource">
+   <property name="text">
+    <string>Play Map Source...</string>
    </property>
   </action>
   <action name="actionShowInvisibleTiles">

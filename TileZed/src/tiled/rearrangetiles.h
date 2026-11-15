@@ -297,7 +297,7 @@ private:
     void rearrange(const QString &tilesetName, const RearrangeIndex &index);
     void updateUI();
     void readTxt();
-    void writeTxt();
+    bool writeTxt();
     bool confirmSave();
 
 private:

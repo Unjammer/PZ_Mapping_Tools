@@ -12,7 +12,6 @@
 #include <QWidget>
 class QButtonGroup;
 class QCheckBox;
-class QCloseEvent;
 class QComboBox;
 class QLabel;
 class QLineEdit;
@@ -50,6 +49,7 @@ public:
     void setCompositePreview(bool composite);
     void setVegetationOpacity(int percent);
     void replaceImages(const QImage &ground, const QImage &vegetation);
+    void finishPaintStroke();
 signals:
     void editStarted(const QString &label);
     void editFinished();
@@ -99,8 +99,8 @@ public:
             QWidget *parent, const QSize &size,
             const QString &operation, int cellSize);
     static int recommendedWorkingImageMemoryLimitMiB(const QSize &size);
-protected:
-    void closeEvent(QCloseEvent *event) override;
+public slots:
+    void reject() override;
 private slots:
     void browseRules();
     void reloadRules();
@@ -131,6 +131,7 @@ private:
     bool validateWorkingImageSize(const QSize &size,
                                   const QString &operation);
     bool maybeDiscardChanges();
+    void rememberImageOutput();
     bool validateAttachment(QString *error) const;
     bool attachImagesToWorld(const QString &groundPath, QString *error);
     void beginImageEdit(const QString &label);
@@ -186,6 +187,9 @@ private:
     int mNextRevision = 1;
     bool mHistoryEditActive = false;
     bool mDirty = false;
+    QString mSavedGroundPath;
+    QPoint mSavedOrigin;
+    bool mSavedAttachToProject = false;
     QByteArray mSourceMetadata;
 };
 #endif

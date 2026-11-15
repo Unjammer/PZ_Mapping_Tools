@@ -4,6 +4,7 @@
 #include "../portablesettings.h"
 #include "preferences.h"
 #include "lotsourcefiles.h"
+#include "luawriter.h"
 #include "../../../shared/tiledefinitionpaths.h"
 #include "BuildingEditor/buildingtiles.h"
 #include "tilemetainfomgr.h"
@@ -310,7 +311,7 @@ bool GenerateLotsDialog::prepareModExport(QString *error)
     return true;
 }
 
-bool GenerateLotsDialog::finalizeModExport(QString *error) const
+bool GenerateLotsDialog::finalizeModExport(QString *error, QStringList *warnings) const
 {
     if (!exportAsMod())
         return true;
@@ -348,8 +349,21 @@ bool GenerateLotsDialog::finalizeModExport(QString *error) const
     }
 
     const QString mapInfoPath = QDir(modMapDirectory()).filePath(QLatin1String("map.info"));
-    return writeTextFileIfMissing(mapInfoPath,
-            QStringLiteral("title=%1\n").arg(ui->mapNameEdit->text().trimmed()), error);
+    const QString mapName = ui->mapNameEdit->text().trimmed();
+    if (!writeTextFileIfMissing(mapInfoPath, QStringLiteral("title=%1\n").arg(mapName), error))
+        return false;
+
+    LuaWriter writer;
+    if (!writer.writeFishingZones(mWorldDoc->world(), modDirectory(), mapName, false)) {
+        if (error)
+            *error = tr("Could not export the fishing zones to %1.\n%2")
+                    .arg(QDir::toNativeSeparators(LuaWriter::fishingZonesPath(modDirectory(), mapName)),
+                         writer.errorString());
+        return false;
+    }
+    if (warnings)
+        *warnings = writer.warnings();
+    return true;
 }
 
 void GenerateLotsDialog::exportBrowse()

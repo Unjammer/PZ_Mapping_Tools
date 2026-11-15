@@ -9,7 +9,6 @@
 #include "map.h"
 #include <QButtonGroup>
 #include <QCheckBox>
-#include <QCloseEvent>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDir>
@@ -215,10 +214,15 @@ void TerrainImageCanvas::mouseMoveEvent(QMouseEvent *event)
 }
 void TerrainImageCanvas::mouseReleaseEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton && mPainting) {
-        mPainting = false;
-        emit editFinished();
-    }
+    if (event->button() == Qt::LeftButton)
+        finishPaintStroke();
+}
+void TerrainImageCanvas::finishPaintStroke()
+{
+    if (!mPainting)
+        return;
+    mPainting = false;
+    emit editFinished();
 }
 void TerrainImageCanvas::leaveEvent(QEvent *)
 {
@@ -583,9 +587,15 @@ TerrainImageEditorDialog::TerrainImageEditorDialog(
     QHBoxLayout *statusLayout = new QHBoxLayout;
     statusLayout->addWidget(mImageStatus, 1);
     statusLayout->addWidget(mPointerStatus);
+    auto *closeButton = new QPushButton(tr("Close"), this);
+    closeButton->setObjectName(QStringLiteral("closeButton"));
+    closeButton->setAutoDefault(false);
+    statusLayout->addWidget(closeButton);
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->addWidget(splitter, 1);
     mainLayout->addLayout(statusLayout);
+    connect(closeButton, &QPushButton::clicked,
+            this, &TerrainImageEditorDialog::reject);
     connect(browseRulesButton, &QToolButton::clicked,
             this, &TerrainImageEditorDialog::browseRules);
     connect(reloadRulesButton, &QPushButton::clicked,
@@ -710,12 +720,10 @@ bool TerrainImageEditorDialog::saveImportedImages()
 {
     return saveImages();
 }
-void TerrainImageEditorDialog::closeEvent(QCloseEvent *event)
+void TerrainImageEditorDialog::reject()
 {
     if (maybeDiscardChanges())
-        event->accept();
-    else
-        event->ignore();
+        QDialog::reject();
 }
 void TerrainImageEditorDialog::browseRules()
 {
@@ -855,6 +863,7 @@ bool TerrainImageEditorDialog::saveImages()
     }
     MapImageManager::instance()->reloadImageFile(groundPath);
     mGroundPath->setText(QDir::toNativeSeparators(groundPath));
+    rememberImageOutput();
     mSavedRevision = mRevision;
     setDirty(false);
     updateImageStatus();
@@ -1394,6 +1403,7 @@ bool TerrainImageEditorDialog::loadImagePair(const QString &groundPath)
             }
         }
     }
+    rememberImageOutput();
     resetHistory(false);
     updateImageStatus();
     return true;
@@ -1506,19 +1516,32 @@ int TerrainImageEditorDialog::recommendedWorkingImageMemoryLimitMiB(
 }
 bool TerrainImageEditorDialog::maybeDiscardChanges()
 {
-    if (!mDirty)
+    mCanvas->finishPaintStroke();
+    const bool outputChanged = !mCanvas->groundImage().isNull()
+            && (normalizedGroundPath(mGroundPath->text()) != mSavedGroundPath
+                || (mAttachToProject->isChecked()
+                    && (!mSavedAttachToProject
+                        || QPoint(mOriginX->value(), mOriginY->value())
+                        != mSavedOrigin)));
+    if (!mDirty && !outputChanged)
         return true;
     const QMessageBox::StandardButton answer =
             QMessageBox::question(
                 this, tr("Unsaved Terrain Images"),
-                tr("Save changes to the ground and vegetation image files?"),
+                tr("Save changes to the terrain images or their project placement?"),
                 QMessageBox::Save | QMessageBox::Discard |
-                QMessageBox::Cancel, QMessageBox::Save);
+                QMessageBox::Cancel, QMessageBox::Cancel);
     if (answer == QMessageBox::Cancel)
         return false;
     if (answer == QMessageBox::Save)
         return saveImages();
     return true;
+}
+void TerrainImageEditorDialog::rememberImageOutput()
+{
+    mSavedGroundPath = normalizedGroundPath(mGroundPath->text());
+    mSavedOrigin = QPoint(mOriginX->value(), mOriginY->value());
+    mSavedAttachToProject = mAttachToProject->isChecked();
 }
 bool TerrainImageEditorDialog::validateAttachment(QString *error) const
 {

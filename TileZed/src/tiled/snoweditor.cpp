@@ -17,6 +17,7 @@
 
 #include "snoweditor.h"
 #include "ui_snoweditor.h"
+#include "toolwindowclose.h"
 
 #include "tiledeffile.h"
 #include "tiledeftextfile.h"
@@ -53,6 +54,7 @@ SnowEditor::SnowEditor(QWidget *parent) :
     mZoomable(new Zoomable(this))
 {
     ui->setupUi(this);
+    addToolWindowCloseButton(this, ui->gridLayout);
     resize(qMax(width(), 1100), qMax(height(), 680));
 
     connect(ui->actionOpen, &QAction::triggered, this, qOverload<>(&SnowEditor::fileOpen));
@@ -169,21 +171,31 @@ SnowEditor::~SnowEditor()
 
 void SnowEditor::closeEvent(QCloseEvent *event)
 {
-    if (confirmSave())
-        event->accept();
-    else
+    if (!confirmSave()) {
         event->ignore();
+        return;
+    }
+    if (mTileDefFile && mDirty) {
+        const QString path = mTileDefFile->fileName();
+        delete mTileDefFile;
+        mTileDefFile = nullptr;
+        mDirty = false;
+        clearOverlayTiles();
+        if (QFileInfo(path).isFile())
+            fileOpen(path);
+        if (!mTileDefFile) {
+            ui->tilesetListTarget->clearSelection();
+            ui->tilesetListSource->clearSelection();
+        }
+        syncUI();
+    }
+    event->accept();
 }
 
 void SnowEditor::manageTilesets()
 {
     TileMetaInfoDialog dialog(this);
     dialog.exec();
-
-    TileMetaInfoMgr *mgr = TileMetaInfoMgr::instance();
-    if (!mgr->writeTxt()) {
-        QMessageBox::warning(this, tr("Snow Rules Error"), mgr->errorString());
-    }
 }
 
 void SnowEditor::tileDroppedAt(const QString &tilesetName, int tileId, int row, int column, const QModelIndex &parent)
@@ -434,7 +446,7 @@ void SnowEditor::setOverlayTiles()
     }
     clearOverlayTiles();
     MixedTilesetModel *model = ui->targetView->model();
-    if (mPropertyName.isEmpty()) {
+    if (!mTileDefFile || mPropertyName.isEmpty()) {
         return;
     }
     TileDefTileset *tdts = mTileDefFile->tileset(mCurrentTilesetTarget->name());

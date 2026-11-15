@@ -437,9 +437,11 @@ MapRenderer *BuildingIsoScene::mapRenderer() const
 void BuildingIsoScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     if (event->button() == Qt::RightButton) {
+        const bool pencilClick = mCurrentTool == PencilTool::instance()
+                && !event->modifiers().testFlag(Qt::ShiftModifier);
         mRightPressPosition = event->screenPos();
         mRightPressScenePosition = event->scenePos();
-        mRightPressActive = event->buttons() == Qt::RightButton;
+        mRightPressActive = event->buttons() == Qt::RightButton && !pencilClick;
         mRightPressDragged = false;
         if (mRightPressActive) {
             event->accept();

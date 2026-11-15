@@ -27,6 +27,7 @@
 #ifndef SHORTCUTEDITORDELEGATE_H
 #define SHORTCUTEDITORDELEGATE_H
 
+#include <QPointer>
 #include <QStyledItemDelegate>
 
 //! [0]
@@ -37,8 +38,13 @@ class ShortcutEditorDelegate : public QStyledItemDelegate
 public:
     explicit ShortcutEditorDelegate(QObject *parent = nullptr);
     ~ShortcutEditorDelegate() override = default;
+    void finishEditing();
+
+signals:
+    void closeRequested();
 
 protected:
+    bool eventFilter(QObject *object, QEvent *event) override;
     QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
                           const QModelIndex &index) const override;
 
@@ -51,6 +57,7 @@ protected:
 
 private:
     void commitAndCloseEditor();
+    mutable QPointer<QWidget> mActiveEditor;
 };
 //! [0]
 

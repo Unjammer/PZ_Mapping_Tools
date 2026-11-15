@@ -17,6 +17,7 @@
 
 #include "containeroverlaydialog.h"
 #include "ui_containeroverlaydialog.h"
+#include "toolwindowclose.h"
 
 // FIXME: shouldn't know anything about this class
 #include "tileoverlayfile.h"
@@ -347,6 +348,7 @@ AbstractOverlayDialog::AbstractOverlayDialog(QWidget *parent) :
     mUndoStack(new QUndoStack(this))
 {
     ui->setupUi(this);
+    addToolWindowCloseButton(this, ui->gridLayout);
 
     mUndoGroup->addStack(mUndoStack);
     mUndoGroup->setActiveStack(mUndoStack);
@@ -860,10 +862,6 @@ void AbstractOverlayDialog::manageTilesets()
 {
     TileMetaInfoDialog dialog(this);
     dialog.exec();
-
-    TileMetaInfoMgr *mgr = TileMetaInfoMgr::instance();
-    if (!mgr->writeTxt())
-        QMessageBox::warning(this, tr("Overlay Configuration Error"), mgr->errorString());
 }
 
 void AbstractOverlayDialog::tilesetAdded(Tileset *tileset)
