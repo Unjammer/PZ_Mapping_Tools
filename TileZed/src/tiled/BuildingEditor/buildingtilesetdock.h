@@ -45,9 +45,13 @@ class BuildingDocument;
 
 class BuildingTilesetView : public Tiled::Internal::MixedTilesetView
 {
+    Q_OBJECT
 public:
     BuildingTilesetView(QWidget *parent = 0);
     void contextMenuEvent(QContextMenuEvent *event);
+
+signals:
+    void addTileToPalette(const QString &sheet, int tileId);
 };
 
 class BuildingTilesetDock : public QDockWidget
@@ -59,10 +63,13 @@ public:
     ~BuildingTilesetDock();
     
     void firstTimeSetup();
-    bool validateTilesetCatalog(QString *errorString);
+    bool buildingTilePicked(const QString &tileName, bool reveal);
 
     void writeSettings(QSettings& settings);
     void readSettings(QSettings& settings);
+
+signals:
+    void addTileToPalette(const QString &sheet, int tileId);
 
 private:
     void changeEvent(QEvent *event);
@@ -71,7 +78,7 @@ private:
     void setTilesetList();
     void setTilesList();
 
-    void switchLayerForTile(Tiled::Tile *tile);
+    void selectDrawTile(Tiled::Tile *tile);
 
     typedef Tiled::Tileset Tileset;
     typedef Tiled::Tile Tile;
@@ -92,8 +99,6 @@ private slots:
     void autoSwitchLayerChanged(bool enabled);
 
     void tileScaleChanged(qreal scale);
-
-    void buildingTilePicked(const QString &tileName);
 
     void filterEdited(const QString &text);
 

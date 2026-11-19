@@ -106,6 +106,127 @@ function Copy-DirectoryFilesWhenChanged {
     return $count
 }
 
+function Install-PortableDefaults {
+    param([string]$SourceRoot, [string]$Destination)
+
+    $defaults = [ordered]@{
+        'TileZed' = @('Curbs.txt', 'Edges.txt', 'Fences.txt', 'LuaTools.txt', 'Rearrange.txt',
+            'RearrangeGrid.txt', 'RoomNames.txt', 'RoomTone.txt', 'TileProperties.txt', 'Tilesets.txt')
+        'TileZed\src\tiled\BuildingEditor' = @('BuildingFurniture.txt', 'BuildingTemplates.txt',
+            'BuildingTiles.txt', 'TMXConfig.txt')
+        'WorldEd' = @('Blends.txt', 'MapBaseXML.txt', 'MapToPNG.txt', 'Roads.txt', 'Rules.txt', 'WorldDefaults.txt')
+    }
+    $files = [ordered]@{}
+    foreach ($dir in $defaults.Keys) {
+        foreach ($name in $defaults[$dir]) {
+            $files["config\$name"] = Join-Path (Join-Path $SourceRoot $dir) $name
+        }
+    }
+    $files['brushes\README.txt'] = Join-Path $SourceRoot 'TileZed\brushes\README.txt'
+    $luaFiles = @(
+        '_add_RoomDefs.lua', 'add_default_layers.lua', 'blend.lua', 'convert-selection-to-lot.lua',
+        'dashed-line.lua', 'dashed-white-line.lua', 'example-building-fill-room.lua',
+        'example-building-inspect.lua', 'example-fill-selection.lua', 'example-inspect-map.lua',
+        'example-roomdefs.lua', 'fence-tool.png', 'fix-sand.lua', 'fix_tree_and_plant.lua',
+        'fix_two_plants.lua', 'make-street.lua', 'parking-stall.lua', 'perlin_trees.lua',
+        'rearrange_location_restaurant_bar.lua', 'rearrange_location_restaurant_pie.lua',
+        'reload-rules.lua', 'remove-blend-tiles.lua', 'remove-overlapping-blend-tiles.lua',
+        'remove-unknown-colors.lua', 'replace_floors_exterior_street.lua',
+        'replace_floors_exterior_street_to_veg.lua', 'replace_vegetation_groundcover.lua',
+        'replace_vegetation_ornamental.lua', 'tiles-to-rules.lua', 'tool-curb-data.lua',
+        'tool-curb.lua', 'tool-curb.png', 'tool-edge-data.lua', 'tool-edge.lua', 'tool-edge.png',
+        'tool-fence-data.lua', 'tool-fence.lua', 'tool-fence.png', 'tool-four-directions.lua',
+        'tool-mailbox-rural.lua', 'tool-parking-stall.lua', 'tool-parking-stall.png',
+        'tool-random-houseplant.lua', 'tool-random-houseplant.png', 'tool-stop-sign.lua',
+        'tool-street-decoration-data.lua', 'tool-street-decoration.lua', 'tool-street-decoration.png',
+        'west-parking-stalls.lua', 'wooden-fence-1.lua', 'wooden-fence-2.lua'
+    )
+    foreach ($name in $luaFiles) {
+        $files["lua\$name"] = Join-Path $SourceRoot "TileZed\lua\$name"
+    }
+    $added = 0
+    foreach ($path in $files.Keys) {
+        $target = Join-Path $Destination $path
+        if (-not (Test-Path -LiteralPath $target) -and (Copy-FileWhenChanged $files[$path] $target)) {
+            ++$added
+        }
+    }
+    foreach ($name in @('settings', 'themes')) {
+        New-Item -ItemType Directory -Path (Join-Path $Destination $name) -Force | Out-Null
+    }
+    return $added
+}
+
+function Install-EditorTranslations {
+    param([string]$SourceRoot, [string]$TileZedBuild, [string]$Destination)
+
+    $count = 0
+    foreach ($ts in Get-ChildItem -LiteralPath (Join-Path $SourceRoot 'TileZed\translations') -Filter 'tiled_*.ts' -File) {
+        $relative = "translations\$($ts.BaseName).qm"
+        $compiled = Join-Path $TileZedBuild $relative
+        $target = Join-Path $Destination $relative
+        if (Test-Path -LiteralPath $compiled -PathType Leaf) {
+            if (Copy-FileWhenChanged $compiled $target) {
+                ++$count
+            }
+        } elseif (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
+            throw "Missing translation $compiled. Build TileZed's top-level tiled.pro with Qt Linguist lrelease installed."
+        }
+    }
+    return $count
+}
+
+function Test-EmbeddedPreviewAgent {
+    param([string]$WorldEdExecutable, [string]$AgentJar)
+
+    $jar = [System.IO.File]::ReadAllBytes($AgentJar)
+    $length = [BitConverter]::GetBytes([uint32]$jar.Length)
+    if ([BitConverter]::IsLittleEndian) {
+        [array]::Reverse($length)
+    }
+    $encoding = [System.Text.Encoding]::GetEncoding(28591)
+    $data = $encoding.GetString($length) + $encoding.GetString($jar)
+    $name = $encoding.GetString([System.Text.Encoding]::BigEndianUnicode.GetBytes('PZDirectMapPreview.jar'))
+    $image = $encoding.GetString([System.IO.File]::ReadAllBytes($WorldEdExecutable))
+    return $image.Contains($name) -and $image.Contains($data)
+}
+
+function Remove-EmbeddedAgentDuplicate {
+    param([string]$SourceRoot, [string]$Destination)
+
+    $relative = 'tools\DirectMapPreview\PZDirectMapPreview.jar'
+    $copy = Join-Path $Destination $relative
+    if (-not (Test-Path -LiteralPath $copy -PathType Leaf)) {
+        return 0
+    }
+    $item = Get-Item -LiteralPath $copy -Force
+    $directory = $item.Directory
+    while ($null -ne $directory) {
+        if ($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            return 0
+        }
+        if ($directory.FullName.TrimEnd('\') -eq $Destination.TrimEnd('\')) {
+            break
+        }
+        $directory = $directory.Parent
+    }
+    if ($null -eq $directory -or ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        return 0
+    }
+    $sourceJar = Join-Path $SourceRoot $relative
+    if (-not (Test-Path -LiteralPath $sourceJar -PathType Leaf)) {
+        return 0
+    }
+    $embeddedHash = (Get-FileHash -LiteralPath $sourceJar -Algorithm SHA256).Hash
+    $exe = Join-Path $Destination 'bin\PZWorldEd.exe'
+    if ((Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash -eq $embeddedHash -and
+        (Test-Path -LiteralPath $exe -PathType Leaf) -and (Test-EmbeddedPreviewAgent $exe $sourceJar)) {
+        Remove-Item -LiteralPath $copy
+        return 1
+    }
+    return 0
+}
+
 function Get-PeLinkerVersion {
     param([string]$Path)
 
@@ -229,6 +350,11 @@ try {
     $worldEdBuild = Resolve-ExistingDirectory $WorldEdBuildDirectory 'WorldEd build'
     $destination = [System.IO.Path]::GetFullPath($DestinationDirectory)
     $qtBin = Resolve-ExistingDirectory $QtBinDirectory 'Qt bin'
+    $sourceRoot = Split-Path -Parent $PSScriptRoot
+    if ((Test-Path -LiteralPath (Join-Path $destination 'WorldEd\PZWorldEd.pro')) -or
+        $destination.TrimEnd('\') -in @($tileZedBuild, $worldEdBuild, $qtBin)) {
+        throw "Choose a package directory separate from the sources, compiler output and Qt installation."
+    }
     $bin = Join-Path $destination 'bin'
     New-Item -ItemType Directory -Path $bin -Force | Out-Null
     $removedFiles = 0
@@ -254,14 +380,15 @@ try {
         }
     }
 
-    $pluginSource = Join-Path $tileZedBuild 'plugins\tiled'
-    $pluginDestination = Join-Path $destination 'plugins\tiled'
-    foreach ($plugin in Get-ChildItem -LiteralPath $pluginSource -Filter '*.dll' -File) {
-        if (Copy-FileWhenChanged $plugin.FullName (Join-Path $pluginDestination $plugin.Name)) {
+    $editorPlugins = @('flare', 'droidcraft', 'json', 'lot', 'lua', 'tengine', 'tmw', 'replicaisland')
+    foreach ($plugin in $editorPlugins) {
+        $relative = "plugins\tiled\$plugin.dll"
+        if (Copy-FileWhenChanged (Join-Path $tileZedBuild $relative) (Join-Path $destination $relative)) {
             ++$changedFiles
         }
     }
 
+    $previousDllNames = @(Get-ChildItem -LiteralPath $bin -Filter '*.dll' -File | ForEach-Object { $_.Name })
     $windeployqt = Resolve-ExistingFile (Join-Path $qtBin 'windeployqt.exe') 'windeployqt'
     & $windeployqt --release --no-compiler-runtime --no-translations --dir $bin (Join-Path $bin 'TileZed.exe') (Join-Path $bin 'BuildingEd.exe') (Join-Path $bin 'PZWorldEd.exe')
     if ($LASTEXITCODE -ne 0) {
@@ -282,8 +409,8 @@ try {
             Get-PeLinkerVersion $file.Source
         }
     }
-    foreach ($plugin in Get-ChildItem -LiteralPath $pluginSource -Filter '*.dll' -File) {
-        $linkerVersions += Get-PeLinkerVersion $plugin.FullName
+    foreach ($plugin in $editorPlugins) {
+        $linkerVersions += Get-PeLinkerVersion (Join-Path $tileZedBuild "plugins\tiled\$plugin.dll")
     }
     $minimumRuntimeVersion = $linkerVersions | Sort-Object -Descending | Select-Object -First 1
 
@@ -313,19 +440,20 @@ try {
         }
     }
 
-    foreach ($name in $unusedVcRuntimeFiles + @('ucrtbase.dll')) {
-        $path = Join-Path $bin $name
-        if (Test-Path -LiteralPath $path -PathType Leaf) {
-            Remove-Item -LiteralPath $path -Force
-            ++$removedFiles
+    foreach ($file in Get-ChildItem -LiteralPath $bin -Filter '*.dll' -File) {
+        if ($file.Name -notin $previousDllNames -and
+            ($file.Name -in $unusedVcRuntimeFiles -or $file.Name -eq 'ucrtbase.dll' -or $file.Name -like 'api-ms-win-*.dll')) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            if ($signature.Status -eq [System.Management.Automation.SignatureStatus]::Valid -and
+                $signature.SignerCertificate.Subject -match 'Microsoft Corporation') {
+                Remove-Item -LiteralPath $file.FullName -Force
+                ++$removedFiles
+            }
         }
     }
-    foreach ($file in Get-ChildItem -LiteralPath $bin -Filter 'api-ms-win-*.dll' -File) {
-        Remove-Item -LiteralPath $file.FullName -Force
-        ++$removedFiles
-    }
 
-    $sourceRoot = Split-Path -Parent $PSScriptRoot
+    $changedFiles += Install-PortableDefaults $sourceRoot $destination
+    $changedFiles += Install-EditorTranslations $sourceRoot $tileZedBuild $destination
     $documentFiles = @(
         [pscustomobject]@{ Source = 'AUTHORS.txt'; Destination = 'AUTHORS.txt' },
         [pscustomobject]@{ Source = 'BUILDING.md'; Destination = 'BUILDING.md' },
@@ -351,13 +479,24 @@ try {
         'TileZed\PZToolsGuide.html' = $nestedManualLinks
     }
     $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'docs') (Join-Path $destination 'docs') $documentationLinks
-    $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'tools\TileDefs') (Join-Path $destination 'tools\TileDefs')
     $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'TileZed\src\tiled\BuildingEditor\manual') (Join-Path $destination 'docs\BuildingEd')
     $indexLinks = @{ ('](' + $sourceManual) = '](docs/BuildingEd/' }
     if (Copy-FileWhenChanged (Join-Path $sourceRoot 'DOCUMENTATION.md') (Join-Path $destination 'DOCUMENTATION.md') $indexLinks) {
         ++$changedFiles
     }
     $changedFiles += Copy-DirectoryFilesWhenChanged (Join-Path $sourceRoot 'licenses') (Join-Path $destination 'licenses')
+    $mapperFiles = @(
+        'tools\DirectMapPreview\example\DirectPreview.pzw',
+        'tools\DirectMapPreview\example\PreviewCell.tmx',
+        'tools\DirectMapPreview\example\ShoreHouse.tbx',
+        'tools\TileDefs\pz42-window-supports.patch.tiles',
+        'tools\TileDefs\pz42-window-supports.patch.tiles.txt'
+    )
+    foreach ($relative in $mapperFiles) {
+        if (Copy-FileWhenChanged (Join-Path $sourceRoot $relative) (Join-Path $destination $relative)) {
+            ++$changedFiles
+        }
+    }
 
     $requiredPaths = @(
         'bin\Qt5Core.dll',
@@ -386,7 +525,7 @@ try {
         'SOURCE-OFFER.txt',
         'THIRD_PARTY_NOTICES.txt',
         'UPSTREAM-HISTORY.md'
-    )
+    ) + $mapperFiles
     foreach ($path in $requiredPaths) {
         $resolved = Join-Path $destination $path
         if (-not (Test-Path -LiteralPath $resolved)) {
@@ -401,12 +540,13 @@ try {
         }
     }
 
+    $removedFiles += Remove-EmbeddedAgentDuplicate $sourceRoot $destination
     Write-Host "Portable runtime deployed successfully"
     Write-Host "Destination: $destination"
     Write-Host "MSVC runtime: $runtimeVersion"
     Write-Host "Minimum linker version: $minimumRuntimeVersion"
     Write-Host "Changed files: $changedFiles"
-    Write-Host "Removed unused runtime files: $removedFiles"
+    Write-Host "Removed redundant files: $removedFiles"
 }
 finally {
     Remove-SafeTemporaryDirectory $temporaryRuntimeRoot

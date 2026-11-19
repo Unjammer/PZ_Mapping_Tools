@@ -152,7 +152,6 @@ public:
     bool expectTile(const QString &layerName, int x, int y, Tile *tile);
 
     void setBlendEdgesEverywhere(bool enabled);
-    void testBlendEdgesEverywhere(bool enabled, QRegion &tileSelection);
 
 signals:
     void layersRecreated();

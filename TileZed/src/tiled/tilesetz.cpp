@@ -440,15 +440,6 @@ QImage insert(const QImage &sheet, const QImage &tiles, int scale, int firstId, 
     return result;
 }
 
-bool hasPixels(const QImage &image)
-{
-    for (int y = 0; y < image.height(); ++y)
-        for (int x = 0; x < image.width(); ++x)
-            if (qAlpha(image.pixel(x, y)))
-                return true;
-    return false;
-}
-
 QImage clean(const QImage &image)
 {
     QImage result = image.convertToFormat(QImage::Format_ARGB32);

@@ -30,6 +30,7 @@
 #include <QUndoStack>
 #include <QXmlStreamReader>
 
+#include <algorithm>
 #include <cmath>
 
 class InGameMapReaderPrivate
@@ -70,19 +71,8 @@ public:
 
     World *readWorld(QIODevice *device, const QString &path, World* world)
     {
-        mError.clear();
         mPath = path;
-        xml.clear();
-
-        xml.setDevice(device);
-
-        if (xml.readNextStartElement() && xml.name() == QLatin1String("world")) {
-            readWorld(world);
-        } else if (!xml.hasError()) {
-            xml.raiseError(tr("Missing 'world' element."));
-        }
-
-        if (xml.hasError()) {
+        if (!readDocument(device, world, nullptr)) {
             for (const auto &features : mReadFeatures)
                 qDeleteAll(features);
             mReadFeatures.clear();
@@ -95,60 +85,78 @@ public:
         return world;
     }
 
-private:
-    World *readWorld(World* world)
+    bool readOverlay(QIODevice *device, InGameMapReader::Overlay &result)
     {
-        Q_ASSERT(xml.isStartElement() && xml.name() == QLatin1String("world"));
+        InGameMapReader::Overlay overlay;
+        if (!readDocument(device, nullptr, &overlay))
+            return false;
+        overlay.cellSize = mSourceCellSize ? mSourceCellSize : 256;
+        std::stable_sort(overlay.cells.begin(), overlay.cells.end(), [](const auto &a, const auto &b) {
+            return a.position.y() != b.position.y() ? a.position.y() < b.position.y() : a.position.x() < b.position.x();
+        });
+        result = std::move(overlay);
+        return true;
+    }
 
-        const QXmlStreamAttributes atts = xml.attributes();
-//        const int width = atts.value(QLatin1String("width")).toString().toInt();
-//        const int height = atts.value(QLatin1String("height")).toString().toInt();
-
+private:
+    bool readDocument(QIODevice *device, World *world, InGameMapReader::Overlay *overlay)
+    {
+        mError.clear();
+        xml.clear();
+        xml.setDevice(device);
+        if (!xml.readNextStartElement() || xml.name() != QLatin1String("world")) {
+            if (!xml.hasError())
+                xml.raiseError(tr("Missing 'world' element."));
+            return false;
+        }
         mWorld = world;
-        mSourceCellSize = world->cellSize();
-        const QString cellSize = atts.value(QLatin1String("cellSize")).toString();
+        mSourceCellSize = world ? world->cellSize() : 0;
+        const QString cellSize = xml.attributes().value(QLatin1String("cellSize")).toString();
         if (!cellSize.isEmpty()) {
             bool valid = false;
             const int declaredSize = cellSize.toInt(&valid);
             if (!valid || (declaredSize != 256 && declaredSize != 300)) {
                 xml.raiseError(tr("Unsupported cellSize: %1").arg(cellSize));
-                return nullptr;
+                return false;
             }
             mSourceCellSize = declaredSize;
         }
-/*
-        for (int y = 0; y < world->height(); y++) {
-            for (int x = 0; x < world->width(); x++) {
-                if (WorldCell* cell = world->cellAt(x, y)) {
-                    cell->inGameMap() = WorldCellInGameCell(cell);
-                }
-            }
-        }
-*/
         while (xml.readNextStartElement()) {
             if (xml.name() == QLatin1String("cell"))
-                readCell();
+                readCell(overlay);
             else
                 readUnknownElement();
         }
-
-        // Clean up in case of error
-        if (xml.hasError()) {
-            mWorld = nullptr;
-        }
-
-        return mWorld;
+        if (overlay)
+            while (!xml.atEnd())
+                xml.readNext();
+        return !xml.hasError();
     }
 
-    void readCell()
+    void readCell(InGameMapReader::Overlay *overlay)
     {
         Q_ASSERT(xml.isStartElement() && xml.name() == QLatin1String("cell"));
 
-        const QPoint& worldOrigin = mWorld->getGenerateLotsSettings().worldOrigin;
-
         const QXmlStreamAttributes atts = xml.attributes();
-        const int sourceX = atts.value(QLatin1String("x")).toString().toInt();
-        const int sourceY = atts.value(QLatin1String("y")).toString().toInt();
+        const int sourceX = atts.value(QLatin1String("x")).toInt();
+        const int sourceY = atts.value(QLatin1String("y")).toInt();
+        if (overlay) {
+            InGameMapReader::OverlayCell cell;
+            cell.position = QPoint(sourceX, sourceY);
+            while (xml.readNextStartElement()) {
+                if (xml.name() == QLatin1String("feature")) {
+                    InGameMapFeature feature(nullptr);
+                    readFeatureData(feature);
+                    cell.features.append(std::move(feature));
+                } else {
+                    readUnknownElement();
+                }
+            }
+            if (!cell.features.isEmpty())
+                overlay->cells.append(std::move(cell));
+            return;
+        }
+        const QPoint &worldOrigin = mWorld->getGenerateLotsSettings().worldOrigin;
         if (mSourceCellSize == mWorld->cellSize()
                 && !mWorld->contains(sourceX - worldOrigin.x(),
                                      sourceY - worldOrigin.y())) {
@@ -165,30 +173,28 @@ private:
         }
     }
 
-    void readFeature(int sourceX, int sourceY)
+    void readFeatureData(InGameMapFeature &feature)
     {
         Q_ASSERT(xml.isStartElement() && xml.name() == QLatin1String("feature"));
 
-        InGameMapFeature* feature = new InGameMapFeature(nullptr);
-
         while (xml.readNextStartElement()) {
             if (xml.name() == QLatin1String("geometry"))
-                readFeatureGeometry(*feature);
+                readFeatureGeometry(feature);
             else if (xml.name() == QLatin1String("properties"))
-                readFeatureProperties(*feature);
+                readFeatureProperties(feature);
             else
                 readUnknownElement();
         }
+    }
 
+    void readFeature(int sourceX, int sourceY)
+    {
+        InGameMapFeature* feature = new InGameMapFeature(nullptr);
+        readFeatureData(*feature);
         if (xml.hasError()) {
             delete feature;
             return;
         }
-
-//        if (feature->properties().contains(QStringLiteral("natural"), QStringLiteral("forest"))) {
-//            delete feature;
-//            return;
-//        }
 
         const QPoint &worldOrigin = mWorld->getGenerateLotsSettings().worldOrigin;
         const int targetCellSize = mWorld->cellSize();
@@ -290,6 +296,8 @@ private:
         InGameMapPoint point;
         point.x = atts.value(QLatin1String("x")).toDouble();
         point.y = atts.value(QLatin1String("y")).toDouble();
+        if (!mSourceCellSize && (point.x > 256.0 || point.y > 256.0))
+            mSourceCellSize = 300;
 
         coordinates += point;
 
@@ -381,6 +389,12 @@ World *InGameMapReader::readWorld(const QString &fileName, World* world)
         return nullptr;
 
     return readWorld(&file, QFileInfo(fileName).absolutePath(), world);
+}
+
+bool InGameMapReader::readOverlay(const QString &fileName, Overlay &overlay)
+{
+    QFile file(fileName);
+    return d->openFile(&file) && d->readOverlay(&file, overlay);
 }
 
 bool InGameMapReader::replaceWorld(const QString &fileName, WorldDocument *document)

@@ -42,7 +42,7 @@ private:
     QString objectType(BuildingObject *object) const;
     FloorTileGrid *userTiles(FloorState *state, const QString &layerName,
                              bool create);
-    void registerApi(lua_State *state);
+    int registerApi(lua_State *state);
     static BuildingLuaScript *fromLua(lua_State *state);
     static int argumentBase(lua_State *state);
     static int luaWidth(lua_State *state);
@@ -88,6 +88,7 @@ private:
     static int luaSetTileSelection(lua_State *state);
     static int luaClearTileSelection(lua_State *state);
     static int luaAvailableActions(lua_State *state);
+    static int luaRegisterFloorGrime(lua_State *state);
     static int luaInvoke(lua_State *state);
     BuildingDocument *mDocument;
     QList<FloorState *> mFloors;
@@ -101,6 +102,7 @@ private:
     bool mRoomSelectionChanged;
     bool mTileSelectionChanged;
     QStringList mRequestedActions;
+    QList<QPair<QString, QStringList>> mFloorGrimeMaterials;
 };
 }
 #endif

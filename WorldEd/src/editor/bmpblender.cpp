@@ -245,63 +245,6 @@ void BmpBlender::setBlendEdgesEverywhere(bool enabled)
     markDirty(0, 0, mMap->width() - 1, mMap->height() - 1);
 }
 
-void BmpBlender::testBlendEdgesEverywhere(bool enabled, QRegion& tileSelection)
-{
-    if (mInitTilesLater) {
-        initTiles();
-        mInitTilesLater = false;
-    }
-
-    int x1 = 0;
-    int x2 = mMap->width() - 1;
-    int y1 = 0;
-    int y2 = mMap->height() - 1;
-
-    // First: blend with the setting the opposite of what it's being set to.
-    mBlendEdgesEverywhere = !enabled;
-    markDirty(0, 0, mMap->width() - 1, mMap->height() - 1);
-    imagesToTileGrids(x1, y1, x2, y2);
-    addEdgeTiles(x1, y1, x2, y2);
-    tileGridsToLayers(x1, y1, x2, y2);
-
-    // Save the tile layers so we can compare them.
-    QMap<QString,TileLayer*> tileLayers = mTileLayers;
-    mTileLayers.clear();
-
-    // Second: blend with the setting at the desired value.
-    mBlendEdgesEverywhere = enabled;
-    markDirty(0, 0, mMap->width() - 1, mMap->height() - 1);
-    imagesToTileGrids(x1, y1, x2, y2);
-    addEdgeTiles(x1, y1, x2, y2);
-    tileGridsToLayers(x1, y1, x2, y2);
-
-    tileSelection = QRegion();
-
-    for (QString layerName : mTileLayers.keys()) {
-        TileLayer *layer1 = tileLayers[layerName];
-        TileLayer *layer2 = mTileLayers[layerName];
-        if (layer1 != nullptr && layer2 != nullptr) {
-            QRegion diff = layer1->computeDiffRegion(layer2);
-            if (diff.isEmpty() == false) {
-                qDebug() << "EDGE-TILE-FIX: layers are different" << layerName;
-                tileSelection |= diff;
-
-            }
-        } else {
-            qDebug() << "EDGE-TILE-FIX: layer1" << layerName << "is null";
-        }
-    }
-
-    for (QString layerName : tileLayers.keys()) {
-        TileLayer *layer2 = mTileLayers[layerName];
-        if (layer2 == nullptr) {
-            qDebug() << "EDGE-TILE-FIX: layer2" << layerName << "is null";
-        }
-    }
-
-    qDeleteAll(tileLayers);
-}
-
 static QStringList normalizeTileNames(const QStringList &tileNames)
 {
     QStringList ret;

@@ -32,7 +32,6 @@ public:
     bool replaceSourceImage(const QImage &image, bool saveToDisk,
                             QString *error = nullptr);
     bool save(QString *error = nullptr);
-    static bool validateChannelPainting(QString *error = nullptr);
 private:
     QString mapsDirectoryPath() const;
     QString configuredFilePath() const;

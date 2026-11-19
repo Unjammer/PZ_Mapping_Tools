@@ -79,6 +79,7 @@
      <addaction name="actionViewsPlaceholder"/>
     </widget>
     <addaction name="actionShowGrid"/>
+    <addaction name="actionGapCheckBackground"/>
     <addaction name="actionHighlightFloor"/>
     <addaction name="actionHighlightRoom"/>
     <addaction name="actionPinRoomHighlight"/>
@@ -639,6 +640,17 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
+   </property>
+  </action>
+  <action name="actionGapCheckBackground">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Gap Check Background</string>
+   </property>
+   <property name="toolTip">
+    <string>Show magenta behind the building to reveal transparent gaps</string>
    </property>
   </action>
   <action name="actionPinRoomHighlight">

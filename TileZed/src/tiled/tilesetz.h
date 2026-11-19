@@ -44,7 +44,6 @@ QImage generate(const QImage &source, Preset preset, int scale,
 QImage insert(const QImage &sheet, const QImage &tiles, int scale,
               int firstId, QString *error);
 QRect tileRect(const QImage &sheet, int scale, int id);
-bool hasPixels(const QImage &image);
 QImage clean(const QImage &image);
 QStringList maskFiles();
 

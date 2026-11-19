@@ -214,13 +214,15 @@ public:
 
     void writeSettings(QSettings& settings);
     void readSettings(QSettings& settings);
-    static bool validateResolutionTags(QString *error = nullptr);
-
+    Tile *resolvePaletteTile(const QString &name, int id) const;
+    bool selectPaletteTile(const QString &name, int id);
 
 public slots:
     void tilePicked(Tiled::Tile *tile);
 
 signals:
+    void paletteSourcesChanged();
+
     /**
      * Emitted when the current tile changed.
      */
@@ -276,6 +278,7 @@ private slots:
     void layerSwitchToggled();
     void autoSwitchLayerChanged(bool enable);
     void switchLayerForTile(Tiled::Tile *tile);
+    void applyTileSelection(bool copyTileName);
 
     void filterEdited(const QString& text);
 

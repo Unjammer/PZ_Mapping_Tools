@@ -35,7 +35,6 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
-#include <QTemporaryDir>
 #include <QTextStream>
 
 using namespace Tiled;
@@ -153,12 +152,6 @@ RuleListResolution resolveRuleList(const QString &directoryPath)
     }
     resolution.manifestPath = preferred.absoluteFilePath();
     return resolution;
-}
-bool writeFixture(const QString &path, const QByteArray &contents)
-{
-    QFile file(path);
-    return file.open(QIODevice::WriteOnly)
-            && file.write(contents) == contents.size();
 }
 }
 AutomappingManager *AutomappingManager::mInstance = 0;
@@ -522,85 +515,4 @@ void AutomappingManager::cleanUp()
     mVisitedRuleLists.clear();
     mLoadedRuleFiles.clear();
     mLoadAttempted = false;
-}
-bool AutomappingManager::runRuleListSelfTest(
-        QString *summary, QString *errorString)
-{
-    QTemporaryDir temporary;
-    if (!temporary.isValid()) {
-        *errorString = QStringLiteral(
-                    "Could not create Automapper rule-list fixtures.");
-        return false;
-    }
-    QDir root(temporary.path());
-    if (!root.mkpath(QStringLiteral("worlded"))
-            || !root.mkpath(QStringLiteral("legacy"))
-            || !root.mkpath(QStringLiteral("preferred"))) {
-        *errorString = QStringLiteral(
-                    "Could not create Automapper fixture directories.");
-        return false;
-    }
-    const QString worldedDir = root.filePath(
-                QStringLiteral("worlded"));
-    const QString legacyDir = root.filePath(
-                QStringLiteral("legacy"));
-    const QString preferredDir = root.filePath(
-                QStringLiteral("preferred"));
-    const QByteArray worldEdContents(
-                "version = 1\n\nalias\n{\n"
-                "    name = Ash\n"
-                "    tiles = floors_burnt_01_0\n}\n");
-    const QByteArray manifestContents(
-                "# Automapper rules\nrules/roads.tmx\n"
-                "rules/vegetation.txt\n");
-    if (!writeFixture(QDir(worldedDir).filePath(
-                          QLatin1String(kLegacyRulesFile)),
-                      worldEdContents)
-            || !writeFixture(QDir(legacyDir).filePath(
-                                 QLatin1String(kLegacyRulesFile)),
-                             manifestContents)
-            || !writeFixture(QDir(preferredDir).filePath(
-                                 QLatin1String(kLegacyRulesFile)),
-                             worldEdContents)
-            || !writeFixture(QDir(preferredDir).filePath(
-                                 QLatin1String(kPreferredRulesFile)),
-                             manifestContents)) {
-        *errorString = QStringLiteral(
-                    "Could not write Automapper rule-list fixtures.");
-        return false;
-    }
-    const RuleListResolution worlded =
-            resolveRuleList(worldedDir);
-    const RuleListResolution legacy =
-            resolveRuleList(legacyDir);
-    const RuleListResolution preferred =
-            resolveRuleList(preferredDir);
-    if (worlded.worldEdRulesPath.isEmpty()
-            || QFileInfo::exists(worlded.manifestPath)
-            || QFileInfo(worlded.manifestPath).fileName()
-               != QLatin1String(kPreferredRulesFile)) {
-        *errorString = QStringLiteral(
-                    "WorldEd Rules.txt was not isolated from Automapper.");
-        return false;
-    }
-    if (!legacy.legacyManifest
-            || QFileInfo(legacy.manifestPath).fileName()
-               != QLatin1String(kLegacyRulesFile)
-            || !legacy.worldEdRulesPath.isEmpty()) {
-        *errorString = QStringLiteral(
-                    "Legacy Automapper rules.txt compatibility failed.");
-        return false;
-    }
-    if (preferred.legacyManifest
-            || QFileInfo(preferred.manifestPath).fileName()
-               != QLatin1String(kPreferredRulesFile)) {
-        *errorString = QStringLiteral(
-                    "Preferred automapping-rules.txt did not win.");
-        return false;
-    }
-    *summary = QStringLiteral(
-                "WorldEd Rules.txt detection, preferred "
-                "automapping-rules.txt selection, and legacy "
-                "Automapper rules.txt fallback verified");
-    return true;
 }

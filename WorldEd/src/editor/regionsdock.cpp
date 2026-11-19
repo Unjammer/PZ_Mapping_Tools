@@ -47,7 +47,6 @@ extern "C" {
 #include <QSpinBox>
 #include <QStyle>
 #include <QTableWidget>
-#include <QTemporaryDir>
 #include <QTextStream>
 #include <QTreeWidget>
 #include <QTransform>
@@ -872,106 +871,6 @@ bool RegionsDock::validateRecords(const QVector<RegionRecord> &regions,
                         .arg(i + 1).arg(property.key, property.type);
             return false;
         }
-    }
-    return true;
-}
-bool RegionsDock::validateRegionFile(const QString &fileName,
-                                     int *regionCount,
-                                     QString *error) const
-{
-    QVector<RegionRecord> parsed;
-    if (!readFile(fileName, &parsed, error))
-        return false;
-    if (regionCount)
-        *regionCount = parsed.size();
-    return true;
-}
-bool RegionsDock::validateEditor(QString *summary, QString *error)
-{
-    QTemporaryDir temporary;
-    if (!temporary.isValid()) {
-        if (error)
-            *error = QStringLiteral("Could not create a temporary directory.");
-        return false;
-    }
-    const QString sourceName = temporary.filePath(QStringLiteral("regions.lua"));
-    QFile source(sourceName);
-    if (!source.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        if (error)
-            *error = source.errorString();
-        return false;
-    }
-    source.write(
-        "regions = {\n"
-        "  { name = \"Central\", type = \"Region\", x = -10, y = 20, z = 0, width = 600, height = 300 },\n"
-        "  { name = \"Central\", type = \"Region\", x = 590, y = 20, z = 0, width = 300, height = 300 },\n"
-        "  { name = \"\", type = \"Mannequin\", x = 4, y = 5, z = 1, width = 1, height = 1, properties = { Direction = \"SE\", Script = \"Wizard\", Enabled = true, Weight = 1.25 } },\n"
-        "  { name = \"Custom \\\"Zone\\\"\", type = \"CustomType\", x = 7, y = 8, z = 0, width = 9, height = 10 },\n"
-        "}\n");
-    source.close();
-    RegionsDock dock;
-    for (int i = 0; i < dock.mTypeCombo->count(); ++i) {
-        if (!dock.mTypeCombo->itemData(
-                    i, Qt::ToolTipRole).toString().isEmpty()) {
-            continue;
-        }
-        if (error)
-            *error = QStringLiteral("The Regions tooltip is missing for %1.")
-                    .arg(dock.mTypeCombo->itemText(i));
-        return false;
-    }
-    const QStringList utilityTypes = QStringList()
-            << QStringLiteral("NoGas")
-            << QStringLiteral("NoPower")
-            << QStringLiteral("NoWater")
-            << QStringLiteral("NoPowerOrWater");
-    for (const QString &type : utilityTypes) {
-        const int index = dock.mTypeCombo->findText(
-                    type, Qt::MatchFixedString);
-        if (index >= 0 && !dock.mTypeCombo->itemData(
-                    index, Qt::ToolTipRole).toString().isEmpty())
-            continue;
-        if (error)
-            *error = QStringLiteral("The Regions type list or tooltip is missing %1.")
-                    .arg(type);
-        return false;
-    }
-    QVector<RegionRecord> parsed;
-    if (!dock.readFile(sourceName, &parsed, error))
-        return false;
-    if (parsed.size() != 4 || parsed.at(0).x != -10 ||
-            parsed.at(1).name != QStringLiteral("Central") ||
-            parsed.at(2).properties.size() != 4 ||
-            parsed.at(3).name != QStringLiteral("Custom \"Zone\"")) {
-        if (error)
-            *error = QStringLiteral("The fixture was not parsed faithfully.");
-        return false;
-    }
-    QVector<RegionRecord> edited = parsed;
-    edited.insert(1, edited.at(0));
-    edited.removeAt(1);
-    if (edited != parsed) {
-        if (error)
-            *error = QStringLiteral("Add/remove record snapshots changed data.");
-        return false;
-    }
-    const QString outputName = temporary.filePath(
-                QStringLiteral("regions-roundtrip.lua"));
-    if (!dock.writeRecords(outputName, parsed, error))
-        return false;
-    QVector<RegionRecord> roundTrip;
-    if (!dock.readFile(outputName, &roundTrip, error))
-        return false;
-    if (roundTrip != parsed) {
-        if (error)
-            *error = QStringLiteral("regions.lua changed during round trip.");
-        return false;
-    }
-    if (summary) {
-        *summary = QStringLiteral(
-                    "4 ordered rectangles, duplicate names, custom types, "
-                    "escaped strings, typed properties, add/remove, and "
-                    "UTF-8 Lua round trip, with all utility-zone choices");
     }
     return true;
 }

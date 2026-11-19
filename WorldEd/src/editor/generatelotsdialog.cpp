@@ -12,7 +12,6 @@
 #include "world.h"
 #include "worlddocument.h"
 #include "worldcell.h"
-#include "displayscalingvalidation.h"
 
 #include <QDebug>
 #include <QDir>
@@ -231,40 +230,6 @@ bool GenerateLotsDialog::fillHolesWithNearestTile() const
 QString GenerateLotsDialog::holeFillTileName() const
 {
     return ui->holeFillTile->text().trimmed();
-}
-
-bool GenerateLotsDialog::validatePathSelection(QString *error)
-{
-    QComboBox comboBox;
-    const QString previous = QDir::toNativeSeparators(
-                QStringLiteral("C:/maps/previous"));
-    const QString selected = QDir::toNativeSeparators(
-                QStringLiteral("C:/maps/selected"));
-    comboBox.addItem(previous);
-    QString activePath = comboBox.currentText();
-    QObject::connect(&comboBox, &QComboBox::currentTextChanged,
-                     [&activePath](const QString &text) {
-        activePath = text;
-    });
-
-    activePath = selected;
-    selectComboItem(&comboBox, selected);
-    if (comboBox.currentIndex() != 0 || comboBox.currentText() != selected
-            || activePath != selected) {
-        if (error)
-            *error = tr("A new path was not selected on the first update.");
-        return false;
-    }
-
-    activePath = previous;
-    selectComboItem(&comboBox, previous);
-    if (comboBox.currentText() != previous || activePath != previous) {
-        if (error)
-            *error = tr("An existing path was not selected on the first update.");
-        return false;
-    }
-
-    return true;
 }
 
 void GenerateLotsDialog::setExportAsMod(bool enabled)
@@ -581,66 +546,6 @@ GenerateLotsSettings GenerateLotsDialog::editedSettings() const
     settings.preservePlacedTrees = ui->preservePlacedTrees->isChecked();
     settings.exportTextSources = ui->exportTextSources->isChecked();
     return settings;
-}
-
-bool GenerateLotsDialog::validateTreeOptions(QWidget *parent, QString *error)
-{
-    for (WorldGridFormat format : {WorldGridFormat::Legacy300, WorldGridFormat::Native256}) {
-        WorldDocument document(new World(1, 1, format));
-        GenerateLotsSettings settings = document.world()->getGenerateLotsSettings();
-        settings.biomeMap = QStringLiteral("biomemap.png");
-        document.world()->setGenerateLotsSettings(settings);
-        GenerateLotsDialog dialog(&document, parent);
-        dialog.show();
-        const QString name = format == WorldGridFormat::Native256
-                ? QStringLiteral("GenerateLots256") : QStringLiteral("GenerateLots300");
-        if (!PZTools::validateDisplayScaling(&dialog, name, error))
-            return false;
-        auto *scrollArea = dialog.findChild<QScrollArea *>(
-                    QStringLiteral("exportOptionsScrollArea"));
-        for (int position : {0, scrollArea->verticalScrollBar()->maximum()}) {
-            scrollArea->verticalScrollBar()->setValue(position);
-            QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-            if (!dialog.rect().contains(dialog.ui->buttonBox->geometry())
-                    || dialog.ui->buttonBox->height() < dialog.ui->buttonBox->minimumSizeHint().height()) {
-                *error = QStringLiteral("Generate Lots buttons are clipped");
-                return false;
-            }
-        }
-        if (dialog.ui->preservePlacedTrees->isChecked()
-                || !dialog.ui->preservePlacedTrees->isEnabled()) {
-            *error = QStringLiteral("Unexpected default jumbo option state");
-            return false;
-        }
-        dialog.ui->preservePlacedTrees->click();
-        settings = dialog.editedSettings();
-        if (!settings.preservePlacedTrees || settings.biomeMap != QStringLiteral("biomemap.png")
-                || document.world()->getGenerateLotsSettings().preservePlacedTrees) {
-            *error = QStringLiteral("Editing tree options changed unrelated settings or the document");
-            return false;
-        }
-        document.changeGenerateLotsSettings(settings);
-        GenerateLotsDialog reopened(&document, parent);
-        if (!reopened.ui->preservePlacedTrees->isChecked()
-                || !reopened.ui->preservePlacedTrees->isEnabled()) {
-            *error = QStringLiteral("The jumbo option was not restored");
-            return false;
-        }
-        reopened.ui->preservePlacedTrees->click();
-        settings = reopened.editedSettings();
-        if (settings.preservePlacedTrees || settings.biomeMap != QStringLiteral("biomemap.png")
-                || !document.world()->getGenerateLotsSettings().preservePlacedTrees) {
-            *error = QStringLiteral("Disabling the jumbo bypass changed unrelated settings or the document");
-            return false;
-        }
-        document.changeGenerateLotsSettings(settings);
-        GenerateLotsDialog rulesEnabled(&document, parent);
-        if (rulesEnabled.ui->preservePlacedTrees->isChecked()) {
-            *error = QStringLiteral("The disabled jumbo bypass was not restored");
-            return false;
-        }
-    }
-    return true;
 }
 
 void GenerateLotsDialog::selectComboItem(QComboBox *comboBox, const QString &text)

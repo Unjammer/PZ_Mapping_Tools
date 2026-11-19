@@ -1,0 +1,13 @@
+/build/
+/package/
+/.vs/
+*.pro.user
+*.pro.user.*
+.qmake.stash
+Makefile.Debug
+Makefile.Release
+*.obj
+*.pdb
+*.ilk
+*.pyc
+__pycache__/

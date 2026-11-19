@@ -69,6 +69,25 @@ in the title.
 
 Saving writes the binary `.tiles` file and its `.tiles.txt` companion.
 
+## Checking a property catalogue
+
+The TileDefs editor reads the active `TileProperties.txt` to build its
+controls and their tooltips. The opening warning gives the active file path
+and, when different, the bundled catalogue path. A custom mod can read its
+own property names. For example, an older file can still contain
+`FlatTextureOffset`. Tim Baker's older `zomboid` branch defines this key.
+The `basements` catalogue removed it in June 2025. Use **Edit > Review
+Unknown Properties...** to choose which names to remove from a file.
+[Older definition](https://github.com/timbaker/tiled/blob/95c9804be90e004c441e382185420c18dfe23b80/TileProperties.txt#L521-L529)
+and [upstream removal](https://github.com/timbaker/tiled/commit/2c01f0a05e447813c7317b4e4ed8d4fd512c3999).
+
+| Name in an older TileDef | What to check in 42.22.2 |
+| --- | --- |
+| `attachedtoGlass`, `countertop` | The current keys are case-sensitive and spelled `AttachedToGlass` and `Countertop`. |
+| `IsGroundAttached`, `GroundAttachmentN/S/E/W` | Check `IsFloorAttached` and the corresponding `FloorAttachmentN/S/E/W` values for the intended attachment. |
+| `IsGenericCraftingSurface` | Check the explicit `true` or `false` value on `GenericCraftingSurface` before replacing the old presence flag. |
+| `FlatTextureOffset`, `FlatTextureOverride`, `LightPolyStyle` | These names are absent from the 42.22.2 vanilla TileDefs. Check custom mod code before removing them. |
+
 ## Build 42.22 property reference
 
 Build 42.22 adds four ladder keys to the runtime property registry:
@@ -200,5 +219,6 @@ In 42.22 the TileDef calculation happens before that branch, which retains
 the resulting weight. Audit the weight on moveable sprites that use
 `CustomItem`, including custom equipment.
 
-This is a change in how existing properties are read. It does not require
-a new weight property or a new TileDefs editor control.
+The Lua moveable tool's information panel uses a separate calculation. Its
+fallback is 5. A valid `CustomItem` supplies that panel with the item's
+display name and weight.

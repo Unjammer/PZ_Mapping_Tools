@@ -35,7 +35,6 @@ DEFINES += PZTOOLS_APP_ISSUE_NOTIFIER
 INCLUDEPATH += ../../../shared
 INCLUDEPATH += ../../../shared/buildingcatalogue $$PWD/BuildingEditor
 HEADERS += ../../../shared/pztoolspaths.h
-HEADERS += ../../../shared/windowtrimvalidation.h
 HEADERS += ../../../shared/tiledefinitionpaths.h
 HEADERS += ../../../shared/tiledefinitionindex.h
 HEADERS += ../../../shared/tilesetimageloader.h
@@ -43,9 +42,7 @@ HEADERS += ../../../shared/tilesetimagepaths.h
 HEADERS += ../../../shared/loadingdialog.h
 HEADERS += ../../../shared/startupwindowgeometry.h
 HEADERS += ../../../shared/displayscaling.h
-HEADERS += ../../../shared/displayscalingvalidation.h
 HEADERS += wrappinglayout.h
-HEADERS += ../../../shared/tilesetimageloadervalidation.h
 
 # Release with debug info
 msvc:QMAKE_CXXFLAGS_RELEASE += /Zi
@@ -81,6 +78,7 @@ SOURCES += main.cpp\
     ../../../shared/buildingcatalogue/buildingtilesfile.cpp \
     exportlotsprogressdialog.cpp \
     directmappreview.cpp \
+    directmappreviewagent.cpp \
     directmappreviewrunner.cpp \
     environmentpreviewitem.cpp \
     expectedpropertiesdialog.cpp \
@@ -218,7 +216,6 @@ HEADERS  += mainwindow.h \
     ../sharedmainwindowgeometrywidget.h \
     ../../../shared/appissuenotifier.h \
     ../../../shared/pztoolsbuild.h \
-    ../../../shared/tiledefwatchervalidation.h \
     biomemapgeneratordialog.h \
     chunkdataoverride.h \
     chunkdataoverridedialog.h \
@@ -236,7 +233,9 @@ HEADERS  += mainwindow.h \
     ../../../shared/buildingcatalogue/buildingtilesfile.h \
     exportlotsprogressdialog.h \
     directmappreview.h \
+    directmappreviewagent.h \
     directmappreviewrunner.h \
+    playtestgamepath.h \
     environmentpreviewitem.h \
     expectedpropertiesdialog.h \
     generatelotsfailuredialog.h \

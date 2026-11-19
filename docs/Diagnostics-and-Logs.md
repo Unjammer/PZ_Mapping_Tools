@@ -116,39 +116,7 @@ TileZed also records a rate-limited warning when ground-brush preparation takes
 automatic blend-tile cleanup and includes the brush bounds and active metadata
 counts.
 
-The deployed validator can measure a specific map while checking that indexed
-Blends and sparse dirty regions produce the same layers as their compatibility
-paths. It also verifies that the Sand rule resolves only its declared tiles
-when similarly named test or custom sheets are present. When the benchmark map
-contains `blends_natural_01_TEST`, the validator removes and restores that
-sheet, rebuilds the automatic layers, and checks the Sand output after both
-operations:
-
-```powershell
-TileZed.exe --validate-brush-performance C:\path\to\map.tmx
-```
-
-Without a TMX argument, the command runs the built-in brush, undo, Rules, and
-Blends checks only.
-
 ## Reproducing a problem
-
-BuildingEd can check room highlight regions against the direct calculation,
-including edits, Undo, Redo and rotation:
-
-```powershell
-BuildingEd.exe --validate-room-highlight C:\path\to\building.tbx
-```
-
-The tile-property cache check is available in all three applications. It
-checks property-patch ordering and refresh behavior and measures unchanged
-lookups using the configured property files:
-
-```powershell
-TileZed.exe --validate-tile-properties-cache
-BuildingEd.exe --validate-tile-properties-cache
-PZWorldEd.exe --validate-tile-properties-cache
-```
 
 1. Close unrelated PZTools instances.
 2. Start the executable from the current release `bin` directory.

@@ -24,14 +24,6 @@ public:
             const QString &initialContainer = QString(),
             const QString &suggestedProjectRoot = QString());
     ~LootDistributionDialog() override;
-    static bool validateDefinitions(const QString &gamePath,
-                                    const QString &projectRoot,
-                                    QString *summary,
-                                    QString *error);
-    static bool renderValidation(const QString &gamePath,
-                                 const QString &projectRoot,
-                                 const QString &outputFile,
-                                 QString *error);
 private:
     QScopedPointer<LootDistributionDialogPrivate> d;
 };

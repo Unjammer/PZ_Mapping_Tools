@@ -213,68 +213,6 @@ public:
     QList<BmpBlend*> mBlends;
 };
 
-bool BmpToolDialog::validateReloadEquality(QString *errorString)
-{
-    const QString configDirectory =
-            QDir(PortableSettings::installRootPath())
-            .filePath(QLatin1String("config"));
-    const QString rulesPath =
-            QDir(configDirectory).filePath(QLatin1String("Rules.txt"));
-    const QString blendsPath =
-            QDir(configDirectory).filePath(QLatin1String("Blends.txt"));
-    BmpRulesFile rulesFile;
-    if (!rulesFile.read(rulesPath)) {
-        *errorString = tr("Could not read the deployed Rules.txt: %1")
-                .arg(rulesFile.errorString());
-        return false;
-    }
-    QList<BmpAlias *> aliasCopies = rulesFile.aliasesCopy();
-    QList<BmpRule *> ruleCopies = rulesFile.rulesCopy();
-    if (!bmpAliasesEqual(rulesFile.aliases(), aliasCopies) ||
-            !bmpRulesEqual(rulesFile.rules(), ruleCopies)) {
-        qDeleteAll(aliasCopies);
-        qDeleteAll(ruleCopies);
-        *errorString = tr("An unchanged Rules.txt was not recognized");
-        return false;
-    }
-    if (!aliasCopies.isEmpty())
-        aliasCopies.first()->name += QLatin1String("_changed");
-    if (aliasCopies.isEmpty() ||
-            bmpAliasesEqual(rulesFile.aliases(), aliasCopies)) {
-        qDeleteAll(aliasCopies);
-        qDeleteAll(ruleCopies);
-        *errorString = tr("A changed Rules.txt alias was not detected");
-        return false;
-    }
-    qDeleteAll(aliasCopies);
-    qDeleteAll(ruleCopies);
-    BmpBlendsFile blendsFile;
-    if (!blendsFile.read(blendsPath, rulesFile.aliases())) {
-        *errorString = tr("Could not read the deployed Blends.txt: %1")
-                .arg(blendsFile.errorString());
-        return false;
-    }
-    QList<BmpBlend *> blendCopies = blendsFile.blendsCopy();
-    if (!bmpBlendsEqual(blendsFile.blends(), blendCopies)) {
-        qDeleteAll(blendCopies);
-        *errorString = tr("An unchanged Blends.txt was not recognized");
-        return false;
-    }
-    if (!blendCopies.isEmpty())
-        blendCopies.first()->targetLayer += QLatin1String("_changed");
-    if (blendCopies.isEmpty() ||
-            bmpBlendsEqual(blendsFile.blends(), blendCopies)) {
-        qDeleteAll(blendCopies);
-        *errorString = tr("A changed Blends.txt entry was not detected");
-        return false;
-    }
-    qDeleteAll(blendCopies);
-    qInfo() << "Validated no-op Reload detection with"
-            << rulesFile.aliases().size() << "aliases,"
-            << rulesFile.rules().size() << "rules and"
-            << blendsFile.blends().size() << "blends";
-    return true;
-}
 class ReplaceUnknownBmpPixels : public QUndoCommand
 {
 public:

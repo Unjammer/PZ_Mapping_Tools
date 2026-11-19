@@ -115,7 +115,6 @@ public:
     ~DepthMapEditor() override;
     bool setTileset(Tiled::Tileset *tileset, int tileId = -1,
                     bool loadExternalGeometry = true);
-    static bool runFormatSelfTest(QString *error);
 protected:
     void closeEvent(QCloseEvent *event) override;
 private slots:

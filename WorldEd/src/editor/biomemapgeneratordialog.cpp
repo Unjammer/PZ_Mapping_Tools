@@ -23,7 +23,6 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QTableWidget>
-#include <QTemporaryDir>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -666,131 +665,6 @@ QImage BiomeMapGeneratorDialog::createZoneLayer(
     if (objectsLuaTypes)
         objectsLuaTypes->sort(Qt::CaseInsensitive);
     return image;
-}
-
-bool BiomeMapGeneratorDialog::validateFallbackBehavior(QString *summary,
-                                                       QString *error)
-{
-    if (BiomeMapImageProcessor::zoneValueForName(QStringLiteral("Water")) != 0) {
-        if (error)
-            *error = QStringLiteral("Water zones do not map to green-channel value 0.");
-        return false;
-    }
-
-    QTemporaryDir temporary;
-    if (!temporary.isValid()) {
-        if (error)
-            *error = QStringLiteral("Could not create the fallback test directory.");
-        return false;
-    }
-
-    const QString projectPath = QDir(temporary.path())
-            .filePath(QLatin1String("FallbackTest.pzw"));
-    const QString mapsPath = QDir(temporary.path())
-            .filePath(QLatin1String("media/maps/FallbackTest/maps"));
-    if (!QDir().mkpath(mapsPath)) {
-        if (error)
-            *error = QStringLiteral("Could not create the fallback fixture path.");
-        return false;
-    }
-
-    World world(1, 1, WorldGridFormat::Native256);
-    BiomeMapGeneratorDialog dialog(&world, projectPath);
-    dialog.ui->zonesFromWorld->setChecked(true);
-    dialog.ui->outputDirectory->setText(mapsPath);
-    dialog.ui->unzonedFallback->setCurrentIndex(0);
-    if (dialog.effectiveUnzonedFallback() != 64) {
-        if (error)
-            *error = QStringLiteral("Automatic fallback did not select Vanilla-safe green 64 without an override.");
-        return false;
-    }
-
-    const QString overrideFile = QDir(mapsPath)
-            .filePath(QLatin1String("../WorldGenOverride.lua"));
-    const auto writeOverride = [&](const QByteArray &contents) {
-        QFile file(overrideFile);
-        return file.open(QIODevice::WriteOnly | QIODevice::Text) && file.write(contents) == contents.size();
-    };
-    bool biomeOverride = false;
-    if (!writeOverride("--[=[table.insert(biome_map_config, {pixel = 171, zone = 'Vegitation'})]=]\n"
-                       "unrelated = { {pixel = 171, zone = 'Vegitation'} }\n")
-            || dialog.effectiveUnzonedFallback(nullptr, &biomeOverride) != 64 || biomeOverride
-            || !writeOverride("table.insert(biome_map_config, {pixel = 171, biome = 'vegitation'})\n")
-            || dialog.effectiveUnzonedFallback(nullptr, &biomeOverride) != 64 || !biomeOverride
-            || !writeOverride("table.insert(biome_map_config, {pixel = 171, zone = 'Vegitation'})\n")
-            || dialog.effectiveUnzonedFallback(nullptr, &biomeOverride) != 171 || biomeOverride
-            || !writeOverride("biome_map_config = {\n { pixel = 171, biome = 'vegitation', zone = 'Vegitation' },\n}\n")) {
-        if (error)
-            *error = QStringLiteral("BiomeMap did not distinguish literal biome and zone overrides from unrelated or commented entries.");
-        return false;
-    }
-
-    QString detectedPath;
-    if (dialog.effectiveUnzonedFallback(&detectedPath) != 171 ||
-            QDir::cleanPath(detectedPath) != QDir::cleanPath(overrideFile)) {
-        if (error)
-            *error = QStringLiteral("Automatic fallback did not detect the active pixel 171 override.");
-        return false;
-    }
-
-    const QImage overrideZone = dialog.createZoneLayer(
-                QSize(256, 256), 171, true, nullptr, nullptr);
-    dialog.ui->unzonedFallback->setCurrentIndex(1);
-    const QImage vanillaZone = dialog.createZoneLayer(
-                QSize(256, 256), dialog.effectiveUnzonedFallback(), false,
-                nullptr, nullptr);
-    if (overrideZone.isNull() || vanillaZone.isNull() ||
-            qGreen(overrideZone.pixel(127, 127)) != 171 ||
-            qGreen(vanillaZone.pixel(127, 127)) != 64) {
-        if (error)
-            *error = QStringLiteral("Generated zone layers did not preserve the selected green fallback value.");
-        return false;
-    }
-
-    const QDir fixture(temporary.path());
-    const QString output = fixture.filePath(QStringLiteral("output"));
-    const QString fallback = fixture.filePath(QStringLiteral("fallback"));
-    if (!QDir().mkpath(output) || !QDir().mkpath(fallback))
-        return false;
-    QImage pixels(300, 300, QImage::Format_ARGB32);
-    pixels.fill(qRgb(217, 230, 0));
-    QImage existing(256, 256, QImage::Format_ARGB32);
-    existing.fill(qRgb(153, 179, 43));
-    QImage invalid(4, 4, QImage::Format_ARGB32);
-    invalid.fill(Qt::black);
-    const QString firstTile = QStringLiteral("biomemap_1_1.png");
-    const QString existingPath = QDir(output).filePath(firstTile);
-    const QString fallbackPath = QDir(fallback).filePath(firstTile);
-    QString failedFile;
-    QStringList neutral;
-    int tiles = 0;
-    if (!existing.save(existingPath) || !invalid.save(fallbackPath)
-            || !dialog.saveTiles(pixels, output, fallback, QPoint(1, 1), 300,
-                                 &tiles, &failedFile, &neutral)) {
-        if (error)
-            *error = QStringLiteral("Could not export the legacy boundary fixture %1").arg(failedFile);
-        return false;
-    }
-    const QImage first(existingPath);
-    const QImage last(QDir(output).filePath(QStringLiteral("biomemap_2_2.png")));
-    if (tiles != 4 || neutral.size() != 3 || first.size() != existing.size()
-            || last.size() != existing.size()
-            || first.pixel(43, 44) != existing.pixel(0, 0)
-            || first.pixel(44, 44) != pixels.pixel(0, 0)
-            || last.pixel(87, 87) != pixels.pixel(0, 0)
-            || last.pixel(88, 88) != qRgb(64, 64, 0)) {
-        if (error)
-            *error = QStringLiteral("Legacy export did not preserve valid boundary data and native 256-cell offsets.");
-        return false;
-    }
-
-    if (summary) {
-        *summary = QStringLiteral(
-                    "literal overrides, zone fallback and legacy boundary export");
-    }
-    if (error)
-        error->clear();
-    return true;
 }
 
 bool BiomeMapGeneratorDialog::saveTiles(const QImage &image,

@@ -36,3 +36,8 @@ ListOfStringsDialog::~ListOfStringsDialog()
 {
     delete ui;
 }
+
+QPushButton *ListOfStringsDialog::addActionButton(const QString &text)
+{
+    return ui->buttonBox->addButton(text, QDialogButtonBox::ActionRole);
+}

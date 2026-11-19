@@ -961,7 +961,6 @@ private:
     QList<BuildingTileCategory*> mCategories;
     QMap<QString,BuildingTileCategory*> mCategoryByName;
 
-    QList<BuildingTile*> mTiles;
     QMap<QString,BuildingTile*> mTileByName;
 
     Tiled::Tile *mMissingTile;

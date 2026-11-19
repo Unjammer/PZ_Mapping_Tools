@@ -37,6 +37,8 @@ class QToolButton;
 class QUndoGroup;
 class QUndoStack;
 
+namespace TileDefUndoRedo { class RemoveUnknownProperties; }
+
 namespace Ui {
 class TileDefDialog;
 }
@@ -117,6 +119,7 @@ private slots:
     void pasteProperties();
     void pasteFilteredProperties();
     void resetDefaults();
+    void reviewUnknownProperties();
 
     void tileEntered(const QModelIndex &index);
     void tileLeft(const QModelIndex &index);
@@ -139,6 +142,8 @@ private slots:
     void help();
 
 private:
+    friend class ::TileDefUndoRedo::RemoveUnknownProperties;
+
     bool eventFilter(QObject *object, QEvent *event);
     void closeEvent(QCloseEvent *event);
 
@@ -247,6 +252,7 @@ private:
     QList<TileDefTileset*> mRemovedDefTilesets;
 
     const TileDefProperties *mTileDefProperties;
+    QSet<QString> mKnownPropertyNames;
 
     QSet<TileDefTile*> mTilesWithMatchingProperties;
 

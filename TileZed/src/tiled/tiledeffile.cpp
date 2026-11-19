@@ -282,13 +282,13 @@ bool TileDefFile::read(const QString &fileName, bool buildEditorProperties)
                 properties[propertyName] = propertyValue;
             }
             TilePropertyMgr::instance()->modify(properties);
-            if (buildEditorProperties)
-                tile->mPropertyUI.FromProperties(properties);
+            tile->mPropertyUI.FromProperties(properties, buildEditorProperties);
             tile->mProperties = properties;
             tiles[j] = tile;
         }
         for (int j = tileCount; j < tiles.size(); j++) {
             tiles[j] = new TileDefTile(ts, j);
+            tiles[j]->mPropertyUI.FromProperties({}, false);
         }
         ts->mTiles = tiles;
         ts->mDeclaredTileCount = tileCount;
@@ -382,12 +382,11 @@ bool TileDefFile::writeTilesets(
         out << qint32(idOverrides.value(ts->mName, ts->mID));
         out << qint32(ts->mTiles.size());
         foreach (TileDefTile *tile, ts->mTiles) {
-            QMap<QString,QString> &properties = tile->mProperties;
-            tile->mPropertyUI.ToProperties(properties);
+            const auto properties = tile->currentProperties();
             out << qint32(properties.size());
-            foreach (QString key, properties.keys()) {
-                SaveString(out, key);
-                SaveString(out, properties[key]);
+            for (auto it = properties.cbegin(); it != properties.cend(); ++it) {
+                SaveString(out, it.key());
+                SaveString(out, it.value());
             }
         }
     }
@@ -611,10 +610,10 @@ void TileDefProperties::addBoolean(const QString &name, const QString &shortName
 }
 
 void TileDefProperties::addInteger(const QString &name, const QString &shortName,
-                                   int min, int max, int defaultValue)
+                                   int min, int max, int defaultValue, const QString &readAlias)
 {
     TileDefProperty *prop = new IntegerTileDefProperty(name, shortName,
-                                                       min, max, defaultValue);
+                                                       min, max, defaultValue, readAlias);
     mProperties += prop;
     mPropertyByName[name] = prop;
     mShortNameToName[shortName] = name;
@@ -644,25 +643,15 @@ void TileDefProperties::addEnum(const QString &name, const QString &shortName,
     mProperties += prop;
     mPropertyByName[name] = prop;
     if (valueAsPropertyName) {
-        for (const QString &shortName1 : shortEnums) {
-            mShortNameToName[shortName1] = name;
+        for (int i = 0; i < shortEnums.size(); ++i) {
+            if (enums[i] != defaultValue)
+                mShortNameToName[shortEnums[i]] = name;
         }
     } else {
         mShortNameToName[shortName] = name;
     }
-}
-
-QSet<QString> TileDefProperties::extraPropertiesIfSet() const
-{
-    QSet<QString> result;
-    for (TileDefProperty *prop : std::as_const(mProperties)) {
-        if (EnumTileDefProperty * prop1 = prop->asEnum()) {
-            if (!prop1->mExtraPropertyIfSet.isEmpty()) {
-                result += prop1->mExtraPropertyIfSet;
-            }
-        }
-    }
-    return result;
+    if (!extraPropertyIfSet.isEmpty())
+        mExtraPropertiesIfSet.insert(extraPropertyIfSet);
 }
 
 /////
@@ -679,11 +668,7 @@ UIProperties::UIProperties()
             continue;
         }
         if (IntegerTileDefProperty *p = prop->asInteger()) {
-            mProperties[p->mName] = new PropGenericInteger(prop->mName,
-                                                           p->mShortName,
-                                                           p->mMin,
-                                                           p->mMax,
-                                                           p->mDefault);
+            mProperties[p->mName] = new PropGenericInteger(*p);
             continue;
         }
         if (StringTileDefProperty *p = prop->asString()) {
@@ -931,13 +916,18 @@ bool TilePropertyMgr::readTxt()
         return false;
     }
 
-    QString path = info.absoluteFilePath();
+    return readTxt(info.absoluteFilePath());
+}
+
+bool TilePropertyMgr::readTxt(const QString &path)
+{
     SimpleFile simple;
     if (!simple.read(path)) {
         mError = tr("Error reading %1.").arg(path);
         return false;
     }
 
+    QList<IntegerTileDefProperty *> aliasFields;
     foreach (SimpleFileBlock block, simple.blocks) {
         if (block.name == QLatin1String("modify")) {
             if (!addModifier(block))
@@ -947,6 +937,9 @@ bool TilePropertyMgr::readTxt()
         if (block.name == QLatin1String("property")) {
             if (!addProperty(block))
                 return false;
+            auto *integer = mProperties.mProperties.last()->asInteger();
+            if (integer && !integer->mReadAlias.isEmpty())
+                aliasFields.append(integer);
             continue;
         }
         if (block.name == QLatin1String("separator")) {
@@ -959,6 +952,15 @@ bool TilePropertyMgr::readTxt()
         return false;
     }
 
+    for (const auto *prop : std::as_const(aliasFields)) {
+        if (mProperties.mShortNameToName.contains(prop->mReadAlias)
+                || mProperties.extraPropertiesIfSet().contains(prop->mReadAlias)) {
+            mError = tr("ReadAlias '%1' for '%2' is already a catalog key.")
+                    .arg(prop->mReadAlias, prop->mName);
+            return false;
+        }
+        mProperties.mShortNameToName.insert(prop->mReadAlias, prop->mName);
+    }
     return true;
 }
 
@@ -1013,7 +1015,7 @@ bool TilePropertyMgr::addProperty(SimpleFileBlock &block)
                     .arg(Min).arg(Max).arg(Default).arg(block.toString());
             return false;
         }
-        mProperties.addInteger(Name, ShortName, Min, Max, Default);
+        mProperties.addInteger(Name, ShortName, Min, Max, Default, block.value("ReadAlias"));
         mProperties.property(Name)->setToolTip(ToolTip);
         return true;
     }

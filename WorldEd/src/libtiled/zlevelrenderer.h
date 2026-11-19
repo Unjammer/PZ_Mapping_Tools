@@ -102,7 +102,6 @@ public:
     { mPreviewTileResolver = resolver; }
     void setPreviewOverlayResolver(const PreviewTileResolver &resolver)
     { mPreviewOverlayResolver = resolver; }
-    static bool validatePreviewOverlayAlignment(QString *error);
 #endif
 
 private:

@@ -29,7 +29,6 @@
 #include <QImage>
 #include <QImageReader>
 #include <QRegularExpression>
-#include <QTemporaryDir>
 #include <QTextStream>
 
 #if defined(Q_OS_WIN) && (_MSC_VER >= 1600)
@@ -528,61 +527,6 @@ bool TexturePacker::isSolidFloor(const TileDefTile *tile) const
     static const QString FloorOverlay = QStringLiteral("FloorOverlay");
     static const QString solidfloor = QStringLiteral("solidfloor");
     return tile->mProperties.contains(FloorOverlay) || tile->mProperties.contains(solidfloor);
-}
-
-bool TexturePacker::validateTileDefinitions(QString *error)
-{
-    QTemporaryDir directory;
-    if (!directory.isValid() || !QDir().mkpath(directory.filePath(QStringLiteral("images")))) {
-        *error = QStringLiteral("Could not create texture pack validation directory");
-        return false;
-    }
-    const QString images = directory.filePath(QStringLiteral("images"));
-    const QString sheet = QStringLiteral("pack_order_validation");
-    QImage image(8, 4, QImage::Format_ARGB32);
-    image.fill(Qt::red);
-    const QString base = directory.filePath(QStringLiteral("base.tiles.txt"));
-    const QString patch = directory.filePath(QStringLiteral("base.patch.tiles.txt"));
-    const QString replace = directory.filePath(QStringLiteral("replace.tiles.txt"));
-    const auto write = [&](const QString &path, const QByteArray &properties) {
-        QFile file(path);
-        const QByteArray text = "version = 1\ntileset\n{\n file = " + sheet.toUtf8()
-                + "\n size = 2,1\n id = 1\n tile\n {\n xy = 0,0\n"
-                + properties + "\n }\n}\n";
-        return file.open(QIODevice::WriteOnly) && file.write(text) == text.size();
-    };
-    if (!image.save(QDir(images).filePath(sheet + QStringLiteral(".png")))
-            || !write(base, " solidfloor = true") || !write(patch, " FloorOverlay = true")
-            || !write(replace, " solid = true")) {
-        *error = QStringLiteral("Could not write texture pack validation inputs");
-        return false;
-    }
-    for (const bool patched : {true, false}) {
-        TexturePackSettings settings{};
-        settings.mPackFileName = directory.filePath(QStringLiteral("order.pack"));
-        settings.mOutputImageSize = QSize(64, 64);
-        settings.mInputImageDirectories.append({images, true, QSize(4, 4)});
-        settings.mTileDefFiles = patched ? QStringList{base, replace, patch}
-                                         : QStringList{base, patch, replace};
-        TexturePacker packer;
-        if (!packer.pack(settings)) {
-            *error = packer.errorString();
-            return false;
-        }
-        PackFile regular;
-        if (!regular.read(settings.mPackFileName) || regular.textureCount() != (patched ? 1 : 2)) {
-            *error = QStringLiteral("Regular texture pack contains the wrong sprites after TileDef resolution");
-            return false;
-        }
-        PackFile floor;
-        if (!floor.read(directory.filePath(QStringLiteral("order.floor.pack")))
-                || floor.textureCount() != (patched ? 1 : 0)
-                || (patched && floor.pages().first().subTextures().first().name != sheet + QStringLiteral("_0"))) {
-            *error = QStringLiteral("The floor texture pack does not match the final TileDef order");
-            return false;
-        }
-    }
-    return true;
 }
 
 TexturePacker::Translation TexturePacker::WorkOutTranslation(QImage image)

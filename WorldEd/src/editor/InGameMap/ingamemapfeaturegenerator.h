@@ -61,7 +61,6 @@ public:
     explicit InGameMapFeatureGenerator(QObject *parent = nullptr);
 
     bool generateWorld(WorldDocument *worldDoc, GenerateMode mode, FeatureType type);
-    static bool validateRoadMaskProcessing(QString *summary, QString *error);
 
     QString errorString() const { return mError; }
 

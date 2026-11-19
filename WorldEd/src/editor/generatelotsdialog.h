@@ -28,8 +28,6 @@ public:
     bool fillHolesDuringExport() const;
     bool fillHolesWithNearestTile() const;
     QString holeFillTileName() const;
-    static bool validatePathSelection(QString *error);
-    static bool validateTreeOptions(QWidget *parent, QString *error);
 
 protected:
     void showEvent(QShowEvent *event) override;

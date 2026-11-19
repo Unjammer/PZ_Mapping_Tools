@@ -27,6 +27,13 @@
 
 using namespace BuildingEditor;
 
+void SetSelectedObjects::swap()
+{
+    QSet<BuildingObject *> previous = mDocument->selectedObjects();
+    mDocument->setSelectedObjects(mSelectedObjects);
+    mSelectedObjects.swap(previous);
+}
+
 ChangeRoomAtPosition::ChangeRoomAtPosition(BuildingDocument *doc, BuildingFloor *floor,
                                            const QPoint &pos, Room *room) :
     QUndoCommand(QCoreApplication::translate("Undo Commands", "Change Room At Position")),

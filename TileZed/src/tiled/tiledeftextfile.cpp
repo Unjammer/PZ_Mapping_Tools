@@ -129,14 +129,12 @@ bool TileDefTextFile::write(
             int tx = tile->mID % tileset->mColumns;
             int ty = tile->mID / tileset->mColumns;
             tileBlock.addValue("xy", QString(QLatin1String("%1,%2")).arg(tx).arg(ty));
-            QMap<QString,QString> &properties = tile->mProperties;
-            tile->mPropertyUI.ToProperties(properties);
+            const auto properties = tile->currentProperties();
             if (properties.isEmpty()) {
                 continue;
             }
-            const QStringList keys = properties.keys(); // ascending order
-            for (const QString& key : keys) {
-                tileBlock.addValue(key, properties[key]);
+            for (auto it = properties.cbegin(); it != properties.cend(); ++it) {
+                tileBlock.addValue(it.key(), it.value());
             }
             tilesetBlock.blocks += tileBlock;
         }
@@ -219,6 +217,7 @@ TileDefTileset *TileDefTextFile::readTileset(const SimpleFileBlock &block, bool 
     for (int i = 0; i < ts->mTiles.size(); i++) {
         if (ts->mTiles[i] == nullptr) {
             ts->mTiles[i] = new TileDefTile(ts.get(), i);
+            ts->mTiles[i]->mPropertyUI.FromProperties({}, false);
         }
     }
     return ts.release();
@@ -245,8 +244,7 @@ TileDefTile *TileDefTextFile::readTile(const SimpleFileBlock &block, TileDefTile
         return nullptr;
     }
     TilePropertyMgr::instance()->modify(properties);
-    if (buildEditorProperties)
-        tile->mPropertyUI.FromProperties(properties);
+    tile->mPropertyUI.FromProperties(properties, buildEditorProperties);
     tile->mProperties = properties;
     return tile.release();
 }

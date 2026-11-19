@@ -158,7 +158,6 @@ BuildingTile *BuildingTilesMgr::add(const QString &tileName)
     BuildingTile *btile = new BuildingTile(tilesetName, tileIndex);
     Q_ASSERT(!mTileByName.contains(btile->name()));
     mTileByName[btile->name()] = btile;
-    mTiles = mTileByName.values(); // sorted by increasing tileset name and tile index!
     return btile;
 }
 

@@ -28,8 +28,6 @@ tmxviewer.exe
 *.pdb
 *.ilk
 
-tests/test_mapreader
-
 .DS_Store
 Thumbs.db
 

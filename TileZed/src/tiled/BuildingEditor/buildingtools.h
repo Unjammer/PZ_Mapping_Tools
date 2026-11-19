@@ -619,6 +619,7 @@ public:
     static SelectMoveObjectTool *instance();
 
     SelectMoveObjectTool();
+    void startFurniturePlacement();
 
     void mousePressEvent(QGraphicsSceneMouseEvent *event);
     void mouseMoveEvent(QGraphicsSceneMouseEvent *event);
@@ -648,12 +649,14 @@ private:
     void startMoving();
     void updateMovingItems(const QPointF &pos,
                            Qt::KeyboardModifiers modifiers);
-    void finishMoving(const QPointF &pos);
+    void finishMoving(bool duplicate);
     void cancelMoving();
 
     void updateStatusText();
 
     QList<BuildingObject*> objectsInOrder(const QSet<BuildingObject*> &objects);
+    void updateFurnitureCursor(const QPointF &scenePos);
+    void finishFurniturePlacement();
 
 private:
     Q_DISABLE_COPY(SelectMoveObjectTool)
@@ -671,6 +674,7 @@ private:
     QSet<BuildingObject*> mMovingObjects;
     QGraphicsPolygonItem *mSelectionRectItem;
     QList<GraphicsObjectItem*> mClones;
+    BuildingRegionItem *mPasteCursor = nullptr;
 };
 
 /////

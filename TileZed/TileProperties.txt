@@ -4,9 +4,9 @@ property
     Name = Surface
     ShortName =
     Min = 0
-    Max = 128
+    Max = 127
     Default = 0
-    ToolTip = <p>Defines how high a usable surface on this tile is from its base.</p>
+    ToolTip = <p>Height of the supporting surface in pixels, from 0 to 127. A table uses this height to position objects placed on it.</p>
 }
 property
 {
@@ -15,7 +15,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, Surface is interpreted as the base of the object.</p>
+    ToolTip = <p>Treats Surface as the vertical offset of this object's base when stacking it on a surface.</p>
 }
 property
 {
@@ -24,7 +24,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile can be placed on surfaces in any orientation, ignoring direction surface is positioned.</p>
+    ToolTip = <p>Keeps a tabletop moveable's chosen facing when placing it on a table that has facing variants.</p>
 }
 property
 {
@@ -32,9 +32,9 @@ property
     Name = ItemHeight
     ShortName = 
     Min = 0
-    Max = 256
+    Max = 127
     Default = 0
-    ToolTip = <p>Defines tile height.</p>
+    ToolTip = <p>Height of the object in pixels, from 0 to 127. The game adds this to the surface and render offsets when calculating the top of the object.</p>
 }
 
 property
@@ -45,7 +45,7 @@ property
     Min = -128
     Max = 128
     Default = 0
-    ToolTip = <p><b>Engine key:</b> connectX</p><p>Signed X offset used by CellLoader to link adjacent IsoPushableObject sprites into one multi-tile pushable. Set only on pushable-object tiles that belong to such a group.</p>
+    ToolTip = <p><b>Engine key:</b> connectX</p><p>Signed distance in map squares to the other pushable object on the X axis. The other sprite's connectX must point back to this one.</p>
 }
 
 property
@@ -56,7 +56,7 @@ property
     Min = -128
     Max = 128
     Default = 0
-    ToolTip = <p><b>Engine key:</b> connectY</p><p>Signed Y offset used by CellLoader to link adjacent IsoPushableObject sprites into one multi-tile pushable. Set only on pushable-object tiles that belong to such a group.</p>
+    ToolTip = <p><b>Engine key:</b> connectY</p><p>Signed distance in map squares to the other pushable object on the Y axis. The other sprite's connectY must point back to this one.</p>
 }
 
 property
@@ -129,7 +129,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile can share a space with doorframes.</p>
+    ToolTip = <p>Allows a wall-mounted moveable to be placed against a door frame.</p>
 }
 property
 {
@@ -143,10 +143,18 @@ property
 property
 {
     Type = String
+    Name = Parent object name
+    ShortName = name
+    Default =
+    ToolTip = <p>Fallback name returned by IsoObject when the object has no name of its own and uses this sprite.</p>
+}
+property
+{
+    Type = String
     Name = CustomName
     ShortName =
     Default = 
-    ToolTip = <p>Defines the name of this tile.</p>
+    ToolTip = <p>Name used for this moveable. GroupName, when present, appears before it.</p>
 }
 property
 {
@@ -161,13 +169,14 @@ property
         Door = Door
         Electrician = Electrician
         Hammer = Hammer
+        Metal = Metal
         Screwdriver = Screwdriver
         Shovel = Shovel
         Wrench = Wrench
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines tool set required to pick up this tile.</p>
+    ToolTip = <p>Tool group required to pick up this moveable. The group determines which items qualify and which skill to check.</p>
 }
 property
 {
@@ -182,13 +191,14 @@ property
         Door = Door
         Electrician = Electrician
         Hammer = Hammer
+        Metal = Metal
         Screwdriver = Screwdriver
         Shovel = Shovel
         Wrench = Wrench
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines tool set required to place this tile.</p>
+    ToolTip = <p>Tool group required to place this moveable. Use None when placing it requires no tool.</p>
 }
 property
 {
@@ -196,19 +206,19 @@ property
     Name = PickUpLevel
     ShortName =
     Min = 0
-    Max = 5
+    Max = 10
     Default = 0
-    ToolTip = <p>Defines minimum required skill level for players to pick up this tile.</p>
+    ToolTip = <p>Minimum level in the pickup tool group's skill. The game checks this level when the group specifies a skill.</p>
 }
 property
 {
     Type = Integer
     Name = PickUpWeight
     ShortName =
-    Min = 0
+    Min = -1
     Max = 1000
-    Default = 0
-    ToolTip = <p>Defines how heavy this tile is.</p>
+    Default = -1
+    ToolTip = <p>Sprite weight in tenths of an inventory weight unit. For example, 50 gives a weight of 5. Leave at -1 to omit the property. Moveable inventory items then default to 1, while the moveable tool defaults to 5 before applying any CustomItem display weight.</p>
 }
 property
 {
@@ -217,7 +227,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile can be broken with weapons or vehicles.</p>
+    ToolTip = <p>Allows a moveable to break when the player tries to pick it up with its required tool. The pickup tool and the player's skill affect the break chance.</p>
 }
 property
 {
@@ -234,7 +244,7 @@ property
     Name = GroupName
     ShortName =
     Default =
-    ToolTip = <p>Defines the group of objects this tile belongs to.</p>
+    ToolTip = <p>Name shared by the parts of a moveable. It also prefixes CustomName in the displayed moveable name.</p>
 }
 property
 {
@@ -317,7 +327,7 @@ property
     Min = -2147483647
     Max = 2147483647
     Default = 0
-    ToolTip = <p><b>Engine key:</b> LinkedOffset</p><p><b>Advanced B42:</b> signed tile-ID offset stored in the moveable metadata for a linked sprite. Use only for content that also defines LinkedLocIs; behavior depends on the target game version.</p>
+    ToolTip = <p><b>Engine key:</b> LinkedOffset</p><p>Signed sprite offset read into the moveable's linked-sprite metadata.</p>
 }
 property
 {
@@ -325,7 +335,7 @@ property
     Name = Linked movable location
     ShortName = LinkedLocIs
     Default =
-    ToolTip = <p><b>Engine key:</b> LinkedLocIs</p><p><b>Advanced B42:</b> location token stored in the moveable metadata for a linked sprite. The supplied game scripts read this value but do not document a closed list of accepted tokens.</p>
+    ToolTip = <p><b>Engine key:</b> LinkedLocIs</p><p>Location token read into the moveable's linked-sprite metadata.</p>
 }
 property
 {
@@ -334,7 +344,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, multi-tile objects are considered one single item, and will automatically generate adjacent tiles if missing.</p>
+    ToolTip = <p>Uses one inventory item for the whole multi-sprite moveable. The player can pick up and place the complete object together.</p>
 }
 property
 {
@@ -370,7 +380,7 @@ property
     }
     Default = IsoObject
     ValueAsPropertyName = false
-    ToolTip = <p>Defines tile behaviour.</p>
+    ToolTip = <p>World object class created when this moveable is placed, for example IsoRadio or IsoStove. The default is IsoObject.</p>
 }
 property
 {
@@ -395,7 +405,7 @@ property
     Name = Item (full name)
     ShortName = CustomItem
     Default =
-    ToolTip = <p>Defines technical name of this tile. Always starts with "Base.".</p>
+    ToolTip = <p>Full inventory item type for pickup, for example Base.HamRadio1. The moveable tool uses a valid item's name and weight in its information panel. A Moveable inventory item reads PickUpWeight from the sprite.</p>
 }
 separator
 {
@@ -425,7 +435,7 @@ property
     ShortName = IsHigh
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, object occupies top half of a tile's volume.</p>
+    ToolTip = <p>Marks this moveable as occupying the high part of the square for placement checks against high and low objects.</p>
 }
 property
 {
@@ -434,7 +444,7 @@ property
     ShortName = IsLow
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, object occupies bottom half of a tile's volume.</p>
+    ToolTip = <p>Marks this moveable as occupying the low part of the square for placement checks against high and low objects.</p>
 }
 property
 {
@@ -461,7 +471,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile can only be placed on tables.</p>
+    ToolTip = <p>Marks a moveable for placement on a table surface. A tabletop object with BlocksPlacement can also be placed on a free floor square.</p>
 }
 property
 {
@@ -476,7 +486,7 @@ property
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>If true, tile can be used for generic crafting. False is used for debug purposes.</p>
+    ToolTip = <p>True enables generic crafting on this object. False disables it. With None, the game accepts a Surface of 24 to 47 pixels inclusive when IsSurfaceOffset is clear.</p>
 }
 property
 {
@@ -516,6 +526,7 @@ property
         MetalBars = MetalBars
         MetalPipe = MetalPipe
         MetalPlates = MetalPlates
+        MetalPlatesAndBars = MetalPlatesAndBars
         SmallMetalPlates = SmallMetalPlates
         MetalScrap = MetalScrap
         MetalWire = MetalWire
@@ -542,7 +553,7 @@ property
     }
     Default = Undefined
     ValueAsPropertyName = false
-    ToolTip = <p>Defines primary material gained from scrapping this tile.</p>
+    ToolTip = <p>Primary dismantling material. Its definition supplies tools, skill and possible salvage.</p>
 }
 property
 {
@@ -566,6 +577,7 @@ property
         MetalBars = MetalBars
         MetalPipe = MetalPipe
         MetalPlates = MetalPlates
+        MetalPlatesAndBars = MetalPlatesAndBars
         SmallMetalPlates = SmallMetalPlates
         MetalScrap = MetalScrap
         MetalWire = MetalWire
@@ -581,6 +593,7 @@ property
         RailroadTie = RailroadTie,
         RailroadTrack = RailroadTrack,
         Rubber = Rubber
+        Sandbag = Sandbag
         Screws = Screws
         Sink = Sink
         Steel = Steel
@@ -591,7 +604,7 @@ property
     }
     Default = Undefined
     ValueAsPropertyName = false
-    ToolTip = <p>Defines secondary material gained from scrapping this tile.</p>
+    ToolTip = <p>Additional material used to look up salvage when this object is dismantled.</p>
 }
 property
 {
@@ -610,10 +623,12 @@ property
         Fridge = Fridge
         Glass = Glass
         Leather = Leather
+        Log = Log
         Mechanical = Mechanical
         MetalBars = MetalBars
         MetalPipe = MetalPipe
         MetalPlates = MetalPlates
+        MetalPlatesAndBars = MetalPlatesAndBars
         SmallMetalPlates = SmallMetalPlates
         MetalScrap = MetalScrap
         MetalWire = MetalWire
@@ -629,6 +644,7 @@ property
         RailroadTie = RailroadTie,
         RailroadTrack = RailroadTrack,
         Rubber = Rubber
+        Sandbag = Sandbag
         Screws = Screws
         Sink = Sink
         Steel = Steel
@@ -639,7 +655,7 @@ property
     }
     Default = Undefined
     ValueAsPropertyName = false
-    ToolTip = <p>Defines tertiary material gained from scrapping this tile.</p>
+    ToolTip = <p>Third material used to look up salvage when this object is dismantled.</p>
 }
 property
 {
@@ -691,7 +707,7 @@ property
     Min = -1
     Max = 100
     Default = -1
-    ToolTip = <p>Used in the code, but no tiles have this property.</p>
+    ToolTip = <p>Number of tool uses for dismantling. Leave at -1 to use the ScrapSize default of 3 for Small, 5 for Medium or 10 for Large.</p>
 }
 
 separator
@@ -705,7 +721,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile is overlaid on a different tile to create small differences in appearance.</p>
+    ToolTip = <p>Marks a sprite as overlay artwork. The game's tile overlay definitions map overlay sprites to the underlying tiles.</p>
 }
 
 property
@@ -741,7 +757,7 @@ property
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines coverage type of grime on this tile.</p>
+    ToolTip = <p>Selects the grime overlay that BuildingEd fits to a wall or window, including full windows, trim and the left or right half of a double window.</p>
 }
 
 property
@@ -751,7 +767,7 @@ property
     ShortName = lightswitch
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile can emit light when powered.</p>
+    ToolTip = <p>Creates a light switch. A switch with sprite light colours controls its own light source. A switch without them controls room lighting.</p>
 }
 property
 {
@@ -760,7 +776,7 @@ property
     ShortName = 
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile has accompanying light tile in <tileset name>_on sheet.</p>
+    ToolTip = <p>Looks for the same tile index in the companion sheet named with an _on suffix, then draws it when this object's on-state overlay is active.</p>
 }
 property
 {
@@ -826,7 +842,7 @@ property
     Min = 0
     Max = 128
     Default = 0
-    ToolTip = <p>Defines distance light from this light source will travel.</p>
+    ToolTip = <p>Radius of the local light source in map squares. A positive value overrides the default radius used when the light source is created.</p>
 }
 
 property
@@ -836,7 +852,7 @@ property
     ShortName = streetlight
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile will emit light when sunlight is low.</p>
+    ToolTip = <p>Marks a street light. Its on-state overlay requires grid power and a night level of at least 0.5.</p>
 }
 
 
@@ -898,7 +914,7 @@ property
     ShortName = doorTrans
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, door has window.</p>
+    ToolTip = <p>Allows light and vision through the closed door, as for a glazed door.</p>
 }
 property
 {
@@ -1112,7 +1128,7 @@ property
     ShortName = exterior
     Default = true
     ReverseLogic = false
-    ToolTip = <p>If true, tile is indoors. Is true by default.</p>
+    ToolTip = <p>Clear IsIndoor to write the exterior flag on the sprite. Leave it checked to omit that flag.</p>
 }
 property
 {
@@ -1177,18 +1193,18 @@ property
     ShortName =
     Min = 0
     Max = 100
-    Default = 0
-    ToolTip = <p>Defines the percentage of incoming light allowed to pass through a closed curtain.</p>
+    Default = 33
+    ToolTip = <p>Percentage of light transmitted through a closed curtain. The game uses 33 when unset. An explicit LightFilterMix overrides this value in 42.22.2.</p>
 }
 property
 {
     Type = Integer
     Name = LightFilterMix
     ShortName =
-    Min = 0
+    Min = -1
     Max = 100
-    Default = 0
-    ToolTip = <p>Defines the percentage of incoming light color to preserve as it passes through a closed curtain.</p>
+    Default = -1
+    ToolTip = <p>In 42.22.2 a value from 0 to 100 overrides LightFilterIntensity for a closed curtain. Leave at -1 to use LightFilterIntensity.</p>
 }
 separator
 {
@@ -1239,7 +1255,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>Used in the code, but no tiles have this property.</p>
+    ToolTip = <p>Marks the square as transparent in the game's square-to-square line-of-sight checks.</p>
 }
 property
 {
@@ -1266,7 +1282,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile will always render, ignoring cutaway system.</p>
+    ToolTip = <p>Keeps this square from being classified as part of a collapsible building by the cutaway renderer.</p>
 }
 
 property
@@ -1296,7 +1312,7 @@ property
     Name = ContainerType
     ShortName = container
     Default =
-    ToolTip = <p>Defines type of container.</p>
+    ToolTip = <p>Container type used when creating this object's item inventory, for example counter or crate.</p>
 }
 property
 {
@@ -1304,9 +1320,9 @@ property
     Name = ContainerCapacity
     ShortName = 
     Min = 0
-    Max = 100
-    Default = 0
-    ToolTip = <p>Defines max capacity of container.</p>
+    Max = 2147483647
+    Default = 50
+    ToolTip = <p>Base storage capacity of the main item container. The game uses 50 when no capacity is specified.</p>
 }
 property
 {
@@ -1339,7 +1355,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-	ToolTip = <p>If true, tile is fridge.</p>
+	ToolTip = <p>Marks the object's item container as refrigerated when the game tests its container type.</p>
 }
 property
 {
@@ -1348,7 +1364,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile is a freezer.</p>
+    ToolTip = <p>Creates a freezer compartment. It becomes a second inventory when the object already has a main container.</p>
 }
 property
 {
@@ -1356,9 +1372,9 @@ property
     Name = FreezerCapacity
     ShortName = 
     Min = 0
-    Max = 50
-    Default = 0
-    ToolTip = <p>Defines capacity of this tile's freezer.</p>
+    Max = 2147483647
+    Default = 15
+    ToolTip = <p>Base storage capacity of the freezer compartment. The game uses 15 when Freezer is set without a capacity.</p>
 }
 property
 {
@@ -1382,7 +1398,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-	ToolTip = <p>If true, tile doesn't contain freezer.</p>
+	ToolTip = <p>Tag found on stock fridge sprites. The game creates a freezer compartment when Freezer is present, including on sprites that also carry NoFreezer.</p>
 }
 property
 {
@@ -1391,7 +1407,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-	ToolTip = <p>If true, tile is microwave.</p>
+	ToolTip = <p>Tag found on stock microwave sprites, which also use the microwave container type and IsoStove as their IsoType.</p>
 }
 property
 {
@@ -1427,9 +1443,9 @@ property
     Name = RoofGroup
     ShortName = 
     Min = 0
-	Max = 100
+	Max = 10
     Default = 0
-    ToolTip = <p>Defines which roof group tile belongs to.</p>
+    ToolTip = <p>Chooses the floor sprite used beneath a roof when the game fills a missing floor. The game defines groups 0 to 10. Group 4 uses an invisible floor.</p>
 }
 property
 {
@@ -1458,12 +1474,18 @@ property
 }
 property
 {
-    Type = Boolean
+    Type = Enum
     Name = Reversible fascia edge
     ShortName = FasciaEdgeReversible
-    Default = false
-    ReverseLogic = false
-    ToolTip = <p><b>Engine key:</b> FasciaEdgeReversible</p><p>Allows north- or west-facing fascia edges to attach to the tile's own square one level above when the normally adjacent attachment square is unavailable.</p>
+    Enums
+    {
+        None =
+        True = true
+        False = false
+    }
+    Default = None
+    ValueAsPropertyName = false
+    ToolTip = <p><b>Engine key:</b> FasciaEdgeReversible</p><p>True lets a north or west fascia use the square one level directly above it when the normal adjacent attachment square is unavailable. Both False and None leave the fallback disabled.</p>
 }
 property
 {
@@ -1573,7 +1595,7 @@ property
     Name = RoofWallStart
     ShortName = 
     Default =
-    ToolTip = <p>Defines first tile of visually identical roof walls.</p>
+    ToolTip = <p>Name of the first sprite in a roof wall set, for example walls_exterior_roofs_01_0.</p>
 }
 property
 {
@@ -1724,7 +1746,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile ignores cutaway logic and is always visible on screen.</p>
+    ToolTip = <p>Allows this sprite to draw on levels at or above the renderer's usual maximum visible level.</p>
 }
 property
 {
@@ -1827,7 +1849,7 @@ property
     Min = 0
     Max = 1000000
     Default = 0
-    ToolTip = <p>Defines amount of water tile starts with.</p>
+    ToolTip = <p>Starting water reserve on the sprite. A value of 9999 or more marks its water supply as infinite.</p>
 }
 property
 {
@@ -1837,7 +1859,7 @@ property
     Min = 0
     Max = 1000000
     Default = 0
-    ToolTip = <p>Defines max amount of water tile can store.</p>
+    ToolTip = <p>Maximum water reserve. When the sprite has no maximum, the game uses its starting water amount unless the object has its own stored reserve.</p>
 }
 property
 {
@@ -1875,9 +1897,9 @@ property
     Name = FuelAmount
     ShortName = fuelAmount
     Min = 0
-    Max = 1000
+    Max = 2147483647
     Default = 0
-    ToolTip = <p>Defines amount of fuel tile starts with.</p>
+    ToolTip = <p>Base amount used to generate a fuel station's supply. The sandbox fuel settings determine the starting amount. Stock pumps use 20000.</p>
 }
 
 separator
@@ -1937,30 +1959,30 @@ property
     Type = Integer
     Name = OpenTileOffset
     ShortName =
-    Min = -1000
-    Max = 1000
+    Min = -2147483648
+    Max = 2147483647
     Default = 0
-    ToolTip = <p>Defines offset to visually identical tile with open window.</p>
+    ToolTip = <p>Signed tile-index offset from the closed window sprite to the open window sprite.</p>
 }
 property
 {
     Type = Integer
     Name = SmashedTileOffset
     ShortName =
-    Min = -1000
-    Max = 1000
+    Min = -2147483648
+    Max = 2147483647
     Default = 0
-    ToolTip = <p>Defines offset to visually identical tile with smashed window.</p>
+    ToolTip = <p>Signed tile-index offset from the closed window sprite to the smashed window sprite.</p>
 }
 property
 {
     Type = Integer
     Name = GlassRemovedOffset
     ShortName =
-    Min = -1000
-    Max = 1000
+    Min = -2147483648
+    Max = 2147483647
     Default = 0
-    ToolTip = <p>Defines offset to visually identical tile with no window.</p>
+    ToolTip = <p>Signed tile-index offset from the closed window sprite to the sprite after broken glass is removed. When absent, the game uses the smashed sprite.</p>
 }
 property
 {
@@ -1969,7 +1991,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile contains a window that cannot be unlocked with a key, such as shop windows or barred windows in prison cells.</p>
+    ToolTip = <p>Creates a permanently locked window.</p>
 }
 property
 {
@@ -2048,20 +2070,117 @@ property
     Type = Integer
     Name = FireRequirement
     ShortName = fireRequirement
+    ReadAlias = firerequirement
     Min = 0
     Max = 1000000
     Default = 0
-    ToolTip = <p>Defines required energy for tile to catch fire.</p>
+    ToolTip = <p>Fire resistance used by the game. A floor's value affects the starting energy, lifetime and spread of fire. Older files may store the same setting as firerequirement.</p>
 }
 
 property
 {
     Type = Boolean
-    Name = Vegitation
+    Name = Prevent normal fire ignition
+    ShortName = unflamable
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>Marks the square as ineligible for normal ignition. A fire started with the game's burn-anywhere override bypasses this check.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Hide upper floors
+    ShortName = hidewalls
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>When the character stands on a square with this flag, the renderer limits the visible levels above the character.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Blueprint object
+    ShortName = blueprint
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>Skips this object's sprite when the game combines object properties and types for the square.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Vertical vision blocker
+    ShortName = noStart
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>Blocks the game's visibility check between floors on a square with this flag. Placing a floor can remove objects that carry it.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = North table edge
+    ShortName = tableN
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>Includes the north edge when the game determines which edge this object blocks.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = West table edge
+    ShortName = tableW
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>Includes the west edge when the game determines which edge this object blocks.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Attached to stairs
+    ShortName = attachtostairs
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>Marks an object for removal from the same square when the stair destruction routine removes a stair segment.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Block sight flag
+    ShortName = blocksight
+    Default = false
+    ReverseLogic = false
+    ToolTip = <p>The game sets this flag on certain trees. It also checks the aggregated flag when building a solid chunk physics shape for other squares.</p>
+}
+
+property
+{
+    Type = Enum
+    Name = Map audio object
+    ShortName =
+    Enums
+    {
+        None =
+        Jukebox = jukebox
+        Radio = radio
+    }
+    Default = None
+    ValueAsPropertyName = true
+    ToolTip = <p>Creates an IsoJukebox or IsoRadio when the map loader instantiates this sprite. The separate IsoType setting is used when placing a moveable item.</p>
+}
+
+property
+{
+    Type = Boolean
+    Name = Vegetation
     ShortName = vegitation
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile has grass.</p>
+    ToolTip = <p>Marks the square as vegetation. The fire simulation uses this flag, including when setting the energy of a new fire.</p>
 }
 
 property
@@ -2071,7 +2190,7 @@ property
     ShortName = propaneTank
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, marks tile as containing a propane tank.</p>
+    ToolTip = <p>Marks a propane barbecue sprite. The game checks two flagged variants eight tile indices apart to distinguish a fitted tank from a removed tank.</p>
 }
 
 separator
@@ -2083,10 +2202,10 @@ property
     Type = Integer
     Name = StackReplaceTileOffset
     ShortName = 
-    Min = -1000
-    Max = 1000
+    Min = -32768
+    Max = 32767
     Default = 0
-    ToolTip = <p>Defines offset to visually identical tile placed on floor.</p>
+    ToolTip = <p>Signed tile-index offset to the replacement sprite used when the game updates stacked objects on this square.</p>
 }
 property
 {
@@ -2104,7 +2223,7 @@ property
     ShortName = 
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile can collect water from rainfall.</p>
+    ToolTip = <p>Identifies a water collector to the moveable tool. Empty it before picking it up or dismantling it.</p>
 }
 
 separator
@@ -2135,9 +2254,9 @@ property
     Name = Minimum Speed To Damage
     ShortName = MinimumCarSpeedDmg
     Min = 0
-    Max = 120
-    Default = 0
-    ToolTip = <p>Defines minimum speed of a vehicle, in KpH, for this tile to be damaged in an impact.</p>
+    Max = 2147483647
+    Default = 150
+    ToolTip = <p>A vehicle must exceed this speed in km/h to damage an object marked HitByCar. The game uses 150 when the threshold is unset.</p>
 }
 property
 {
@@ -2147,7 +2266,7 @@ property
     Min = 0
     Max = 34
     Default = 0
-    ToolTip = <p>Used in the code, but no tiles have this property.</p>
+    ToolTip = <p>Scales the collision impulse applied to a vehicle using its mass and speed. Higher values increase the impulse.</p>
 }
 property
 {
@@ -2155,7 +2274,7 @@ property
     Name = Damaged Sprite (by car)
     ShortName = DamagedSprite
     Default = 
-    ToolTip = <p>When hit by a car at sufficient speed, specified tile replaces existing tile.</p>
+    ToolTip = <p>Name of the replacement sprite used when a HitByCar object crosses its first vehicle-damage threshold.</p>
 }
 property
 {
@@ -2175,7 +2294,7 @@ property
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines basic collision shape.</p>
+    ToolTip = <p>Adds a basic collision shape to the square for vehicle physics. Choose a solid block, a directional wall, a tree or a floor.</p>
 }
 property
 {
@@ -2183,7 +2302,7 @@ property
     Name = PhysicsMesh
     ShortName =
     Default =
-    ToolTip = <p>Defines detailed collision shape.</p>
+    ToolTip = <p>Name of a registered mesh for vehicle collision on this square, for example ramp20segment1n. An unqualified name is looked up in the Base module.</p>
 }
 property
 {
@@ -2200,7 +2319,7 @@ property
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines which direction this tile slopes in.</p>
+    ToolTip = <p>Direction of the high edge of the slope. The opposite edge uses SlopedSurfaceHeightMin.</p>
 }
 property
 {
@@ -2210,7 +2329,7 @@ property
     Min = 0
     Max = 100
     Default = 0
-    ToolTip = <p>Defines height of lowest point in slope.</p>
+    ToolTip = <p>Height of the low edge as a percentage of one storey. Zero is floor level and 100 is the level above.</p>
 }
 property
 {
@@ -2220,7 +2339,7 @@ property
     Min = 0
     Max = 100
     Default = 0
-    ToolTip = <p>Defines height of highest point in slope.</p>
+    ToolTip = <p>Height of the high edge as a percentage of one storey. Zero is floor level and 100 is the level above.</p>
 }
 
 separator
@@ -2241,17 +2360,17 @@ property
 property
 {
     Type = Enum
-    Name = Wind Speed
+    Name = Wind sway preset
     ShortName = WindType
 	Enums
 	{
-		0.05 = 1
-		0.21 = 2
-		0.54 = 3
+		1 = 1
+		2 = 2
+		3 = 3
 	}
-    Default = 0.05
+    Default = 1
 	ValueAsPropertyName = false
-    ToolTip = <p>Defines required wind speed for tile to sway.</p>
+    ToolTip = <p>Wind animation preset for MoveWithWind sprites. Preset 1 sways the most and responds to lighter wind. Preset 3 sways the least and needs stronger wind.</p>
 }
 
 separator
@@ -2273,7 +2392,7 @@ property
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines sound made by curtains when opened or closed.</p>
+    ToolTip = <p>Selects the curtain sound family. With None the game uses CurtainShort. Sheet also identifies a sheet curtain.</p>
 }
 
 property
@@ -2301,7 +2420,7 @@ property
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines sound made by door when opened or closed.</p>
+    ToolTip = <p>Sound prefix for this door's actions, including opening, closing and breaking. With None the game uses WoodDoor.</p>
 }
 
 property
@@ -2319,11 +2438,12 @@ property
         ZombieThumpMetalPoleGate =
         ZombieThumpMetal =
         ZombieThumpWindow =
+        ZombieThumpWindowExtra =
         ZombieThumpWood =
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines sound made when zombies hit this tile.</p>
+    ToolTip = <p>Sound event played when zombies thump this object. With None, a door chooses its thump sound from its DoorSound family.</p>
 }
 
 property
@@ -2359,7 +2479,7 @@ property
     Name = ContainerPutSound
     ShortName =
     Default = 
-    ToolTip = <p>Defines the sound played when transfering an item into a container.</p>
+    ToolTip = <p>Sound event played when transferring an item into this container.</p>
 }
 
 property
@@ -2368,7 +2488,7 @@ property
     Name = ContainerTakeSound
     ShortName =
     Default = 
-    ToolTip = <p>Defines the sound played when transfering an item from a container.</p>
+    ToolTip = <p>Sound event played when transferring an item out of this container.</p>
 }
 
 property
@@ -2381,11 +2501,11 @@ property
         None =
         Wood =
         Metal =
-        MetalBars = MetalGate
+        Metal Gate = MetalGate
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines material of high fence.</p>
+    ToolTip = <p>Material used to select sounds for climbing a high fence and for breaking it.</p>
 }
 
 property
@@ -2407,7 +2527,7 @@ property
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines material of low fence.</p>
+    ToolTip = <p>Material used to select climbing and tripping sounds for a low fence. The game falls back to Wood for an unrecognised material.</p>
 }
 
 property
@@ -2419,6 +2539,10 @@ property
     {
         None =
         Concrete = Concrete
+        Upstairs = Upstairs
+        BrokenGlass = BrokenGlass
+        Puddle = Puddle
+        Snow = Snow
         Grass = Grass
         Gravel = Gravel
         Wood = Wood
@@ -2430,7 +2554,7 @@ property
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines footstep sound of tile when traversed.</p>
+    ToolTip = <p>Surface sound for footsteps and for dragging a body across this tile. Snow on the square can override the sprite's material.</p>
 }
 
 property
@@ -2445,7 +2569,7 @@ property
     }
     Default = Generator
     ValueAsPropertyName = false
-    ToolTip = <p>Defines sound made by generator.</p>
+    ToolTip = <p>Prefix for generator sounds such as the running loop and backfire. The game uses Generator when unset.</p>
 }
 
 property
@@ -2485,7 +2609,7 @@ property
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines sound made by attacking moveable objects.</p>
+    ToolTip = <p>Impact material of this sprite. Ceramic and metal materials can also select the sound used when furniture breaks.</p>
 }
 
 property
@@ -2505,7 +2629,7 @@ property
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines material of seat.</p>
+    ToolTip = <p>Selects the sound suffix used when sitting down on this furniture or getting up from it.</p>
 }
 
 property
@@ -2521,7 +2645,7 @@ property
     }
     Default = Generic
     ValueAsPropertyName = false
-    ToolTip = <p>Defines sink material.</p>
+    ToolTip = <p>Sink material used to select ambient and breakage sounds.</p>
 }
 
 separator
@@ -2594,7 +2718,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-	ToolTip = <p>If true, tile is TV.</p>
+	ToolTip = <p>Tag found on television sprites. A moveable television also specifies IsoTelevision as its IsoType.</p>
 }
 
 
@@ -2605,7 +2729,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-	ToolTip = <p>If true, tile is located in a living room.</p>
+	ToolTip = <p>Marks this sprite with the livingRoom tag. The room name is set separately in the building.</p>
 }
 
 property
@@ -2615,7 +2739,7 @@ property
     ShortName =
     Default = false
     ReverseLogic = false
-    ToolTip = <p>If true, tile will always draw on top of all other objects on square. Used for shower doors.</p>
+    ToolTip = <p>Sorts this object with walls and door frames, before doors on the same square.</p>
 }
 
 property
@@ -2632,5 +2756,5 @@ property
     }
     Default = None
     ValueAsPropertyName = false
-    ToolTip = <p>Defines sink material.</p>
+    ToolTip = <p>Wall classification stored on this sprite. Choose Wall for a wall, Doorframe for a door frame or Windowframe for a window frame.</p>
 }

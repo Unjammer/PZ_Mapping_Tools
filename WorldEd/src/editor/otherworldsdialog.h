@@ -16,7 +16,6 @@ class OtherWorldsDialog : public QDialog
 public:
     explicit OtherWorldsDialog(WorldDocument *worldDoc,
                                QWidget *parent = nullptr);
-    static bool validateWorkflow(QString *summary, QString *error);
 
 private slots:
     void addProject();

@@ -20,6 +20,7 @@
 
 #include "buildingtiles.h"
 #include "mixedtilesetview.h"
+#include <QHash>
 
 namespace BuildingEditor {
 class BuildingTileEntry;
@@ -36,7 +37,6 @@ public:
     QModelIndex index(BuildingTileEntry *entry);
     BuildingTileEntry *entry(const QModelIndex &index);
     int entryCount() const { return mEntries.size(); }
-    int missingEntryCount() const { return mMissingEntryCount; }
 
     typedef Tiled::Tileset Tileset;
 private slots:
@@ -46,10 +46,12 @@ private slots:
     void tilesetRemoved(Tiled::Tileset *tileset);
 
 private:
+    void indexWallVariants();
+    void showWallVariant(const QModelIndex &index);
+    QHash<QPair<BuildingTileCategory *, BuildingTile *>, QList<BuildingTileEntry *>> mWallVariants;
     QList<BuildingTileEntry*> mEntries;
     bool mCategoryLabels;
     bool mSettingEntries;
-    int mMissingEntryCount;
 };
 
 } // namespace BuildingEditor

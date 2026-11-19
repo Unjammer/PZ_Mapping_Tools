@@ -106,8 +106,11 @@
 #include "depthmapeditor.h"
 #include "tilesetzeditor.h"
 #include "tilesetz.h"
-#include <QTemporaryDir>
 #include <QThread>
+#include <QCheckBox>
+#include <QListView>
+#include <QPushButton>
+#include <QScopeGuard>
 #include "luatiletool.h"
 #include "luatooldialog.h"
 #include "mapcomposite.h"
@@ -123,6 +126,7 @@
 #include "tiledefdialog.h"
 #include "tiledeffile.h"
 #include "tilelayerspanel.h"
+#include "tilepalettewindow.h"
 #include "tilemetainfodialog.h"
 #include "tilemetainfomgr.h"
 #include "tileoverlaydialog.h"
@@ -663,6 +667,12 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     connect(mTilesetDock, &TilesetDock::currentTileChanged,
             tileObjectsTool, &CreateObjectTool::setTile);
 #ifdef ZOMBOID
+    setTileHistoryEnabled(TilePaletteWindow::historyEnabledForEditor(QStringLiteral("TileZed")));
+    const auto recordUsed = [this](Tile *tile) {
+        ensureTilePalette()->recordUsedTile(tile->tileset()->name(), tile->id());
+    };
+    connect(mStampBrush, &AbstractTileTool::tilePainted, this, recordUsed);
+    connect(mBucketFillTool, &AbstractTileTool::tilePainted, this, recordUsed);
     connect(mStampBrush, &StampBrush::tilePicked,
             this, &MainWindow::tilePicked);
     connect(mTileLayersPanel, &TileLayersPanel::tilePicked,
@@ -744,6 +754,17 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     addToolBar(toolManager->toolBar());
 
 #ifdef ZOMBOID
+    mTilePaletteAction = new QAction(QIcon(QStringLiteral(":/images/24x24/tile-palette.svg")),
+                                     tr("Tile Palettes"), this);
+    mTilePaletteAction->setObjectName(QStringLiteral("actionTilePalette"));
+    mTilePaletteAction->setCheckable(true);
+    toolManager->toolBar()->addAction(mTilePaletteAction);
+    connect(mTilePaletteAction, &QAction::triggered, this, [this](bool checked) {
+        if (checked)
+            showTilePalette();
+        else if (mTilePalette)
+            mTilePalette->hide();
+    });
     QToolButton *selectionScopeButton =
             mTileSelectionScope->createToolButton(
                 toolManager->toolBar(), [this]() {
@@ -796,6 +817,7 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     mUi->menuView->addAction(mLevelsDock->toggleViewAction());
     mUi->menuView->addAction(mWorldEdDock->toggleViewAction());
     mUi->menuView->addAction(mMapsDock->toggleViewAction());
+    mUi->menuView->addAction(mTilePaletteAction);
     mBmpToolsDock = BmpToolDialog::instance();
     addDockWidget(Qt::RightDockWidgetArea, mBmpToolsDock);
     tabifyDockWidget(mAutomappingDock, mBmpToolsDock);
@@ -1776,6 +1798,7 @@ void MainWindow::paste()
         }
         mActionHandler->selectNone();
         mStampBrush->setLayerStamps(stamps, anchorLevel);
+        updatePaletteCurrentTile(nullptr);
         ToolManager::instance()->selectTool(mStampBrush);
         statusBar()->showMessage(
                     tr("%1 copied tile layer(s) follow the pointer. Left-click to place.")
@@ -2450,78 +2473,78 @@ void MainWindow::editInTileSetZ(Tile *tile)
     mTileSetZEditor->activateWindow();
 }
 
-bool MainWindow::validateTileSetZCatalog(QString *error)
+void MainWindow::setTileHistoryEnabled(bool enabled)
 {
-    QTemporaryDir temporary(QDir(Preferences::instance()->tiles2xDirectory())
-                             .filePath(QStringLiteral("tilesetz-XXXXXX")));
-    if (!temporary.isValid()) {
-        *error = tr("The configured 2x Tiles directory must be writable.");
-        return false;
-    }
-    const QString name = QFileInfo(temporary.path()).fileName().replace(QLatin1Char('-'), QLatin1Char('_'));
-    const QString path = temporary.filePath(name + QStringLiteral(".png"));
-    QImage sheet = TileSetZ::blank(QSize(1024, 256));
-    sheet.fill(Qt::blue);
-    if (!TileSetZ::saveImage(sheet, path, error))
-        return false;
-    mTileSetZAction->trigger();
-    if (!mTileSetZEditor) {
-        *error = tr("The TileSetZ menu action did not open its editor.");
-        return false;
-    }
-    mTileSetZEditor->hide();
-    mTileSetZEditor->imageSaved(path);
-    auto waitFor = [](const std::function<bool()> &condition) {
-        QElapsedTimer timer;
-        timer.start();
-        while (!condition() && timer.elapsed() < 10000) {
-            QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 20);
-            QThread::msleep(5);
+    mStampBrush->setTrackUsedTiles(enabled);
+    mBucketFillTool->setTrackUsedTiles(enabled);
+}
+
+void MainWindow::updatePaletteCurrentTile(const TileLayer *stamp)
+{
+    if (!mTilePalette)
+        return;
+    const Tile *tile = stamp && stamp->width() == 1 && stamp->height() == 1 ? stamp->cellAt(0, 0).tile : nullptr;
+    mTilePalette->setCurrentTile(tile ? tile->tileset()->name() : QString(), tile ? tile->id() : -1);
+}
+
+TilePaletteWindow *MainWindow::ensureTilePalette()
+{
+    if (mTilePalette)
+        return mTilePalette;
+    mTilePalette = new TilePaletteWindow(QStringLiteral("TileZed"), this);
+    mTilePalette->setTileResolver([this](const QString &name, int id) {
+        return mTilesetDock->resolvePaletteTile(name, id);
+    });
+    connect(mTilePalette, &TilePaletteWindow::tileActivated, this, [this](const QString &name, int id) {
+        if (mTilesetDock->selectPaletteTile(name, id))
+            return;
+        statusBar()->showMessage(mMapDocument ? tr("Tile unavailable in the current map or Tiles directory.")
+                                              : tr("Open a map to paint with this tile."), 4000);
+    });
+    connect(mTilePalette, &TilePaletteWindow::visibilityChanged, mTilePaletteAction, &QAction::setChecked);
+    connect(mTilePalette, &TilePaletteWindow::historyEnabledChanged, this, &MainWindow::setTileHistoryEnabled);
+    auto *refresh = new QTimer(mTilePalette);
+    refresh->setSingleShot(true);
+    connect(refresh, &QTimer::timeout, mTilePalette, [this]() {
+        if (mTilePaletteDirty && mTilePalette->isVisible()) {
+            mTilePalette->refreshTiles();
+            mTilePaletteDirty = false;
         }
-        return condition();
+    });
+    const auto scheduleRefresh = [this, refresh]() {
+        mTilePaletteDirty = true;
+        if (mTilePalette->isVisible() && !refresh->isActive())
+            refresh->start(0);
     };
-    TileMetaInfoMgr *catalog = TileMetaInfoMgr::instance();
-    if (!waitFor([&] { return catalog->tileset(name) && catalog->tileset(name)->isLoaded(); })) {
-        *error = tr("The saved sheet was not discovered in the catalogue.");
-        return false;
+    connect(mTilesetDock, &TilesetDock::paletteSourcesChanged, mTilePalette, scheduleRefresh);
+    connect(TilesetManager::instance(), &TilesetManager::tilesetChanged, mTilePalette, scheduleRefresh);
+    auto *catalog = TileMetaInfoMgr::instance();
+    connect(catalog, &TileMetaInfoMgr::tilesetAdded, mTilePalette, scheduleRefresh);
+    connect(catalog, &TileMetaInfoMgr::tilesetRemoved, mTilePalette, scheduleRefresh);
+    connect(catalog, &TileMetaInfoMgr::tilesetCatalogLoaded, mTilePalette, scheduleRefresh);
+    connect(catalog, &TileMetaInfoMgr::tilesetDiscoveryFinished, mTilePalette, scheduleRefresh);
+    updatePaletteCurrentTile(mStampBrush->stamp());
+    return mTilePalette;
+}
+
+void MainWindow::showTilePalette()
+{
+    TilePaletteWindow *palette = ensureTilePalette();
+    if (mTilePaletteDirty) {
+        palette->refreshTiles();
+        mTilePaletteDirty = false;
     }
-    Tileset *tileset = catalog->tileset(name);
-    if (tileset->tileCount() != 8 || !mTileSetZEditor->openTileset(tileset, 5)) {
-        *error = tr("The discovered sheet could not be opened for editing.");
-        return false;
+    palette->show();
+    palette->raise();
+    palette->activateWindow();
+}
+
+void MainWindow::addTilePaletteFavorite(Tile *tile)
+{
+    if (tile) {
+        showTilePalette();
+        mTilePalette->addFavoriteTile(tile->tileset()->name(), tile->id());
     }
-    const QImage before = tileset->tileAt(5)->image();
-    QWidget *canvas = mTileSetZEditor->findChild<QWidget *>(QStringLiteral("TileSetZCanvas"));
-    if (!canvas) {
-        *error = tr("The pixel editor is unavailable.");
-        return false;
-    }
-    QMouseEvent press(QEvent::MouseButtonPress, QPointF(4, 4), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(4, 4), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
-    QCoreApplication::sendEvent(canvas, &press);
-    QCoreApplication::sendEvent(canvas, &release);
-    QAction *saveAction = nullptr;
-    for (QAction *action : mTileSetZEditor->menuBar()->actions().first()->menu()->actions())
-        if (action->shortcut() == QKeySequence(QKeySequence::Save))
-            saveAction = action;
-    if (!saveAction) {
-        *error = tr("The tilesheet Save action is unavailable.");
-        return false;
-    }
-    saveAction->trigger();
-    if (!waitFor([&] { return tileset->tileAt(5)->image() != before; })) {
-        *error = tr("Saving did not refresh the edited tile in the catalogue.");
-        return false;
-    }
-    const QImage saved(path);
-    if (saved.pixel(5 * 128 + 2, 2) != qRgb(255, 255, 255)
-            || saved.copy(0, 0, 128, 256) != sheet.copy(0, 0, 128, 256)) {
-        *error = tr("Saving changed a different tile from the selected ID.");
-        return false;
-    }
-    mTileSetZEditor->close();
-    qInfo() << "TileSetZ catalogue validation: menu, discovery, selected ID, save and reload passed";
-    return true;
 }
 
 void MainWindow::depthMapEditor()
@@ -3811,6 +3834,9 @@ void MainWindow::rotateStampRight()
  */
 void MainWindow::setStampBrush(const TileLayer *tiles)
 {
+#ifdef ZOMBOID
+    updatePaletteCurrentTile(tiles);
+#endif
     if (!tiles)
         return;
 
@@ -4184,6 +4210,9 @@ void MainWindow::mapDocumentChanged(MapDocument *mapDocument)
     mTileLayersPanel->setDocument(mMapDocument);
 #endif
     mTilesetDock->setMapDocument(mMapDocument);
+#ifdef ZOMBOID
+    updatePaletteCurrentTile(nullptr);
+#endif
     AutomappingManager::instance()->setMapDocument(mMapDocument);
     QuickStampManager::instance()->setMapDocument(mMapDocument);
 

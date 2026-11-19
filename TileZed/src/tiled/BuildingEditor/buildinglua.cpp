@@ -3,8 +3,10 @@
 #include "buildingdocument.h"
 #include "buildingfloor.h"
 #include "buildingobjects.h"
+#include "buildingpreferences.h"
 #include "buildingtemplates.h"
 #include "buildingtiles.h"
+#include "buildingtiletools.h"
 #include "buildingundoredo.h"
 #include "furnituregroups.h"
 #include "luaconsole.h"
@@ -182,7 +184,7 @@ int BuildingLuaScript::argumentBase(lua_State *state)
 {
     return lua_istable(state, 1) ? 2 : 1;
 }
-void BuildingLuaScript::registerApi(lua_State *state)
+int BuildingLuaScript::registerApi(lua_State *state)
 {
     lua_newtable(state);
     lua_pushinteger(state, 3);
@@ -231,14 +233,24 @@ void BuildingLuaScript::registerApi(lua_State *state)
     setFunction(state, "clearTileSelection", luaClearTileSelection, this);
     lua_setglobal(state, "building");
     lua_newtable(state);
-    lua_pushinteger(state, 1);
+    lua_pushinteger(state, 2);
     lua_setfield(state, -2, "apiVersion");
+    setFunction(state, "registerFloorGrime", luaRegisterFloorGrime, this);
     setFunction(state, "availableActions", luaAvailableActions, this);
     setFunction(state, "invoke", luaInvoke, this);
     lua_setglobal(state, "app");
+    static const char bindFloorGrime[] =
+            "local register, raise = app.registerFloorGrime, error\n"
+            "function app.registerFloorGrime(...)\n"
+            "    local message = register(...)\n"
+            "    if message then raise(message, 2) end\n"
+            "end";
+    const int status = luaL_loadbuffer(state, bindFloorGrime, sizeof(bindFloorGrime) - 1, "=Floor Grime");
+    return status == LUA_OK ? lua_pcall(state, 0, 0, 0) : status;
 }
 bool BuildingLuaScript::run(const QString &fileName, QString *error)
 {
+    mFloorGrimeMaterials.clear();
     lua_State *state = luaL_newstate();
     if (!state) {
         if (error)
@@ -246,7 +258,7 @@ bool BuildingLuaScript::run(const QString &fileName, QString *error)
         return false;
     }
     luaL_openlibs(state);
-    registerApi(state);
+    int status = registerApi(state);
     pushString(state, QFileInfo(fileName).absolutePath());
     lua_setglobal(state, "scriptDirectory");
     PROGRESS progress(QObject::tr("Running BuildingEd Lua script: %1")
@@ -255,7 +267,8 @@ bool BuildingLuaScript::run(const QString &fileName, QString *error)
     QElapsedTimer elapsed;
     elapsed.start();
     const QByteArray nativeFileName = QFile::encodeName(fileName);
-    int status = luaL_loadfile(state, nativeFileName.constData());
+    if (status == LUA_OK)
+        status = luaL_loadfile(state, nativeFileName.constData());
     if (status == LUA_OK) {
         const int base = lua_gettop(state);
         lua_pushcfunction(state, traceback);
@@ -264,6 +277,11 @@ bool BuildingLuaScript::run(const QString &fileName, QString *error)
         status = lua_pcall(state, 0, 0, base);
         lua_sethook(state, nullptr, 0, 0);
         lua_remove(state, base);
+    }
+    if (status == LUA_OK && !mFloorGrimeMaterials.isEmpty()
+            && !BuildingPreferences::instance()->luaFloorGrimeEnabled()) {
+        lua_pushliteral(state, "Lua Floor Grime materials are disabled in BuildingEd Preferences");
+        status = LUA_ERRRUN;
     }
     if (status != LUA_OK) {
         const char *message = lua_tostring(state, -1);
@@ -279,6 +297,10 @@ bool BuildingLuaScript::run(const QString &fileName, QString *error)
             : QObject::tr("---------- BuildingEd script completed in %1s ----------");
     LuaConsole::instance()->write(result.arg(elapsed.elapsed() / 1000.0));
     lua_close(state);
+    if (status == LUA_OK) {
+        for (const auto &material : std::as_const(mFloorGrimeMaterials))
+            FloorGrimeTileTool::instance()->registerMaterial(material.first, material.second);
+    }
     return status == LUA_OK;
 }
 bool BuildingLuaScript::applyChanges(const QString &undoText)
@@ -981,6 +1003,42 @@ int BuildingLuaScript::luaAvailableActions(lua_State *state)
     }
     return 1;
 }
+int BuildingLuaScript::luaRegisterFloorGrime(lua_State *state)
+{
+    if (!BuildingPreferences::instance()->luaFloorGrimeEnabled()) {
+        lua_pushliteral(state, "Lua Floor Grime materials are disabled in BuildingEd Preferences");
+        return 1;
+    }
+    const int base = argumentBase(state);
+    if (lua_type(state, base) != LUA_TSTRING || lua_type(state, base + 1) != LUA_TTABLE) {
+        lua_pushliteral(state, "registerFloorGrime expects a material name and a table of directions");
+        return 1;
+    }
+    const QString name = luaString(state, base).trimmed();
+    if (name.isEmpty()) {
+        lua_pushliteral(state, "Floor Grime material needs a name");
+        return 1;
+    }
+    QStringList tiles;
+    BuildingTileCategory *category = BuildingTilesMgr::instance()->catGrimeFloor();
+    for (int i = 0; i < category->enumCount(); ++i) {
+        const QString key = category->enumToString(i);
+        pushString(state, key);
+        lua_rawget(state, base + 1);
+        const QString tile = lua_type(state, -1) == LUA_TSTRING
+                ? luaString(state, -1).trimmed() : QString();
+        lua_pop(state, 1);
+        QString error;
+        if (!BuildingTilesMgr::validateTileName(tile, &error)) {
+            pushString(state, key + QStringLiteral(": ") + error);
+            return 1;
+        }
+        tiles.append(BuildingTilesMgr::normalizeTileName(tile));
+    }
+    fromLua(state)->mFloorGrimeMaterials.append(qMakePair(name, tiles));
+    return 0;
+}
+
 int BuildingLuaScript::luaInvoke(lua_State *state)
 {
     BuildingLuaScript *self = fromLua(state);

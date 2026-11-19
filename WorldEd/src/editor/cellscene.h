@@ -969,14 +969,10 @@ public:
     void selectAllPartialChunks();
     void clearPartialChunks();
     int autoFixHolesOnLevelZero(QString *backupPath, QString *error);
-    static bool validateHoleRepair(QString *error);
     int basementGroundOpeningCount(WorldCellLot *lot) const;
     int pierceGroundAtBasementStairs(WorldCellLot *lot,
                                      QStringList *backupPaths,
                                      QString *error);
-    static bool validateBasementPlacement(QString *error);
-    static bool validateInGameMapReload(QString *error);
-    static bool validateScaledRendering(QString *error);
 
     bool hasHoleInFloor() const
     { return !mHoleInFloor.isEmpty(); }

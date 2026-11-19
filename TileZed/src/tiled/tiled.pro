@@ -37,9 +37,7 @@ INCLUDEPATH += $$top_srcdir/../shared
 INCLUDEPATH += $$top_srcdir/../shared/buildingcatalogue $$PWD/BuildingEditor
 SOURCES += BuildingEditor/basementexporter.cpp
 HEADERS += BuildingEditor/basementexporter.h
-HEADERS += BuildingEditor/basementexportvalidation.h BuildingEditor/buildingstairvalidation.h
 HEADERS += ../../../shared/pztoolspaths.h
-HEADERS += ../../../shared/windowtrimvalidation.h
 HEADERS += ../../../shared/tiledefinitionpaths.h
 HEADERS += ../../../shared/tiledefinitionindex.h
 HEADERS += ../../../shared/tilesetimageloader.h
@@ -47,8 +45,6 @@ HEADERS += ../../../shared/tilesetimagepaths.h
 HEADERS += ../../../shared/loadingdialog.h
 HEADERS += ../../../shared/startupwindowgeometry.h
 HEADERS += ../../../shared/displayscaling.h
-HEADERS += ../../../shared/displayscalingvalidation.h
-HEADERS += ../../../shared/tilesetimageloadervalidation.h
 
 DEFINES += QT_NO_CAST_FROM_ASCII \
     QT_NO_CAST_TO_ASCII
@@ -156,6 +152,7 @@ SOURCES += ../../../shared/appissuenotifier.cpp \
     propertiesmodel.cpp \
     propertiesview.cpp \
     quickstampmanager.cpp \
+    tilepalettewindow.cpp \
     removetilesetsdialog.cpp \
     renamelayer.cpp \
     resizedialog.cpp \
@@ -312,8 +309,6 @@ HEADERS += ../../../shared/settingsvalue.h \
     tilesetz.h \
     tilesetzeditor.h \
     BuildingEditor/buildingroomregions.h \
-    BuildingEditor/roomhighlightvalidation.h \
-    BuildingEditor/buildingcatalogvalidation.h \
     BuildingEditor/buildingtransform.h \
     aboutdialog.h \
     ../firstlaunchdialog.h \
@@ -321,7 +316,6 @@ HEADERS += ../../../shared/settingsvalue.h \
     ../sharedmainwindowgeometrywidget.h \
     ../../../shared/appissuenotifier.h \
     ../../../shared/pztoolsbuild.h \
-    ../../../shared/tiledefwatchervalidation.h \
     BuildingEditor/attributeeditmode.h \
     BuildingEditor/attributeeditmode_p.h \
     BuildingEditor/buildingattributesdock.h \
@@ -337,7 +331,6 @@ HEADERS += ../../../shared/settingsvalue.h \
     abstracttiletool.h \
     abstracttool.h \
     tiletoolpreviewcache.h \
-    tileworkflowvalidation.h \
     addremovelayer.h \
     addremovemapobject.h \
     addremovetileset.h \
@@ -412,6 +405,7 @@ HEADERS += ../../../shared/settingsvalue.h \
     propertiesmodel.h \
     propertiesview.h \
     quickstampmanager.h \
+    tilepalettewindow.h \
     rangeset.h \
     removetilesetsdialog.h \
     renamelayer.h \

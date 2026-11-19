@@ -153,7 +153,8 @@ public:
     { return mMapRenderer; }
 
     QString buildingTileAt(int x, int y, int level, const QString &layerName);
-    QString buildingTileAt(int x, int y, const QList<bool> visibleLevels);
+    QString buildingTileAt(int x, int y, const QList<bool> &visibleLevels);
+    QVector<QPair<QString, QString>> tilesAtSquare(int level, const QPoint &pos) const;
 
     static QStringList layerNames(int level);
     static QStringList requiredLayerNames();

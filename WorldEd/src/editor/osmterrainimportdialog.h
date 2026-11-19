@@ -59,7 +59,6 @@ public:
     bool generatesRoadMarkings() const;
     bool generatesNavZones() const;
     bool generatesForagingZones() const;
-    static bool validateLayout(QString *summary, QString *error);
 private slots:
     void browseProject();
     void browseOutput();

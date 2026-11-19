@@ -11,8 +11,8 @@ class DirectMapPreviewRunner
 public:
     static bool isRunning();
     static bool start(const QString &project, const QString &gameDirectory, const QVector<QPoint> &selection,
-                      const QString &validationScript, QString &error,
-                      std::function<void(bool)> finished = {});
+                      QString &error,
+                      std::function<void(bool, const QString &)> finished = {});
 };
 
 #endif

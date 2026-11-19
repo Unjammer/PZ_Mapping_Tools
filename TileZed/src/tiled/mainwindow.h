@@ -92,6 +92,7 @@ class MapsDock;
 class TileDefDialog;
 class TileLayersPanel;
 class TileSelectionScope;
+class TilePaletteWindow;
 class WorldEdDock;
 #endif
 
@@ -110,7 +111,7 @@ public:
     static MainWindow *mInstance;
     static MainWindow *instance() { return mInstance; }
     void editInTileSetZ(Tiled::Tile *tile = nullptr);
-    bool validateTileSetZCatalog(QString *error);
+    void addTilePaletteFavorite(Tiled::Tile *tile);
 #endif
 
     MainWindow(QWidget *parent = nullptr, Qt::WindowFlags flags = Qt::WindowFlags());
@@ -394,6 +395,13 @@ private:
     SnowEditor *mSnowEditor = nullptr;
     DepthMapEditor *mDepthMapEditor = nullptr;
     TileSetZEditor *mTileSetZEditor = nullptr;
+    TilePaletteWindow *ensureTilePalette();
+    void showTilePalette();
+    void setTileHistoryEnabled(bool enabled);
+    void updatePaletteCurrentTile(const TileLayer *stamp);
+    TilePaletteWindow *mTilePalette = nullptr;
+    bool mTilePaletteDirty = false;
+    QAction *mTilePaletteAction = nullptr;
     ActionManager *mActionManager = nullptr;
     KeyboardShortcutWindow *mKeyboardShortcutWindow = nullptr;
     QAction *mUndoAction = nullptr;

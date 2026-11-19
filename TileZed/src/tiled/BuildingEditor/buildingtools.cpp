@@ -23,6 +23,7 @@
 #include "buildingfloor.h"
 #include "buildingobjects.h"
 #include "buildingorthoview.h"
+#include "buildingpreferences.h"
 #include "buildingtemplates.h"
 #include "buildingtiles.h"
 #include "buildingundoredo.h"
@@ -32,6 +33,7 @@
 #include <QApplication>
 #include <QDebug>
 #include <QGraphicsRectItem>
+#include <QGraphicsView>
 #include <QGraphicsSceneMouseEvent>
 #include <QImage>
 #include <QStyleOptionGraphicsItem>
@@ -2167,31 +2169,6 @@ RoofCornerSlope30Tool::RoofCornerSlope30Tool()
 
 /////
 
-class SetSelectedObjects : public QUndoCommand
-{
-public:
-    SetSelectedObjects(BuildingDocument *doc, const QSet<BuildingObject*> &selection) :
-        mDocument(doc),
-        mSelectedObjects(selection)
-    {}
-
-    void undo() { swap(); }
-    void redo() { swap(); }
-
-private:
-    void swap()
-    {
-        QSet<BuildingObject*> old = mDocument->selectedObjects();
-        mDocument->setSelectedObjects(mSelectedObjects);
-        mSelectedObjects = old;
-    }
-
-    BuildingDocument *mDocument;
-    QSet<BuildingObject*> mSelectedObjects;
-};
-
-/////
-
 BasementAccessTool *BasementAccessTool::mInstance = nullptr;
 
 BasementAccessTool *BasementAccessTool::instance()
@@ -2387,18 +2364,31 @@ SelectMoveObjectTool::SelectMoveObjectTool() :
     mHoverObject(0),
     mSelectionRectItem(0)
 {
+    connect(BuildingPreferences::instance(), &BuildingPreferences::furnitureClipboardEnabledChanged, this, [this](bool enabled) {
+        if (!enabled && mPasteCursor)
+            finishFurniturePlacement();
+    });
     updateStatusText();
 }
 
 void SelectMoveObjectTool::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (mPasteCursor) {
+        if (event->button() == Qt::RightButton) {
+            finishFurniturePlacement();
+        } else if (event->button() == Qt::LeftButton) {
+            updateFurnitureCursor(event->scenePos());
+            document()->pasteFurnitureAt(mEditor->sceneToTile(event->scenePos(), mEditor->currentLevel()));
+        }
+        return;
+    }
     if (event->button() == Qt::LeftButton) {
         if (mMode != NoMode) // Ignore additional presses during select/move
             return;
         mMouseDown = true;
         mStartScenePos = event->scenePos();
         mClickedObject = mEditor->topmostObjectAt(mStartScenePos);
-        if (mMouseOverObject && !(event->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier)))
+        if (mClickedObject && !(event->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier)))
             startMoving();
     }
     if (event->button() == Qt::RightButton) {
@@ -2410,6 +2400,10 @@ void SelectMoveObjectTool::mousePressEvent(QGraphicsSceneMouseEvent *event)
 void SelectMoveObjectTool::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
     QPointF pos = event->scenePos();
+    if (mPasteCursor) {
+        updateFurnitureCursor(pos);
+        return;
+    }
 
     if (!mMouseDown) {
         BuildingObject *object = mEditor->topmostObjectAt(pos);
@@ -2454,7 +2448,7 @@ void SelectMoveObjectTool::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 
 void SelectMoveObjectTool::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
-    if (event->button() != Qt::LeftButton)
+    if (mPasteCursor || event->button() != Qt::LeftButton || !mMouseDown)
         return;
 
     switch (mMode) {
@@ -2485,7 +2479,7 @@ void SelectMoveObjectTool::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         break;
     case Moving:
         mMouseDown = false;
-        finishMoving(event->scenePos());
+        finishMoving(event->modifiers().testFlag(Qt::ControlModifier));
         break;
     case CancelMoving:
         mMode = NoMode;
@@ -2500,10 +2494,8 @@ void SelectMoveObjectTool::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 
 void SelectMoveObjectTool::currentModifiersChanged(Qt::KeyboardModifiers modifiers)
 {
-    Q_UNUSED(modifiers)
-
     if (mMode == Moving) {
-        bool duplicate = controlModifier();
+        const bool duplicate = modifiers.testFlag(Qt::ControlModifier);
         if (duplicate && mClones.isEmpty()) {
             int index = floor()->objectCount();
             foreach (BuildingObject *object, objectsInOrder(mMovingObjects)) {
@@ -2541,13 +2533,61 @@ void SelectMoveObjectTool::currentModifiersChanged(Qt::KeyboardModifiers modifie
 void SelectMoveObjectTool::activate()
 {
     BaseTool::activate();
+    connect(document(), &BuildingDocument::currentFloorChanged, this, [this]() {
+        if (mPasteCursor)
+            startFurniturePlacement();
+    });
 }
 
 void SelectMoveObjectTool::deactivate()
 {
     if (mMode == Moving)
         cancelMoving();
+    if (mMode == Selecting)
+        mEditor->removeItem(mSelectionRectItem);
+    mMode = NoMode;
+    mMouseDown = false;
+    mClickedObject = nullptr;
+    finishFurniturePlacement();
     BaseTool::deactivate();
+}
+
+void SelectMoveObjectTool::startFurniturePlacement()
+{
+    if (!mEditor || !BuildingPreferences::instance()->furnitureClipboardEnabled() || document()->clipboardFurnitureRegion().isEmpty())
+        return;
+    if (!mPasteCursor) {
+        mPasteCursor = new BuildingRegionItem(mEditor);
+        mPasteCursor->setZValue(mEditor->ZVALUE_CURSOR);
+        mEditor->addItem(mPasteCursor);
+        mEditor->setMouseOverObject(nullptr);
+        setHandCursor(HandNone);
+    }
+    if (!mEditor->views().isEmpty()) {
+        QGraphicsView *view = mEditor->views().first();
+        updateFurnitureCursor(view->mapToScene(view->viewport()->mapFromGlobal(QCursor::pos())));
+    }
+    updateStatusText();
+}
+
+void SelectMoveObjectTool::finishFurniturePlacement()
+{
+    if (mPasteCursor) {
+        delete mPasteCursor;
+        mPasteCursor = nullptr;
+        updateStatusText();
+    }
+}
+
+void SelectMoveObjectTool::updateFurnitureCursor(const QPointF &scenePos)
+{
+    const int level = mEditor->currentLevel();
+    const QPoint target = mEditor->sceneToTile(scenePos, level);
+    const QRegion &region = document()->clipboardFurnitureRegion();
+    mPasteCursor->setRegion(region, level);
+    mPasteCursor->setPos(mEditor->tileToScene(target, level) - mEditor->tileToScene(QPoint(), level));
+    const bool fits = floor()->bounds().contains(region.boundingRect().translated(target));
+    mPasteCursor->setColor(fits ? QColor(64, 160, 255, 128) : QColor(220, 64, 64, 128));
 }
 
 void SelectMoveObjectTool::objectAboutToBeRemoved(BuildingObject *object)
@@ -2621,8 +2661,6 @@ void SelectMoveObjectTool::startMoving()
 void SelectMoveObjectTool::updateMovingItems(const QPointF &pos,
                                              Qt::KeyboardModifiers modifiers)
 {
-    Q_UNUSED(modifiers)
-
     QPoint startTilePos = mEditor->sceneToTile(mStartScenePos, mEditor->currentLevel());
     QPoint currentTilePos = mEditor->sceneToTile(pos, mEditor->currentLevel());
     mDragOffset = currentTilePos - startTilePos;
@@ -2630,10 +2668,8 @@ void SelectMoveObjectTool::updateMovingItems(const QPointF &pos,
     currentModifiersChanged(modifiers);
 }
 
-void SelectMoveObjectTool::finishMoving(const QPointF &pos)
+void SelectMoveObjectTool::finishMoving(bool duplicate)
 {
-    Q_UNUSED(pos)
-
     Q_ASSERT(mMode == Moving);
     mMode = NoMode;
 
@@ -2655,7 +2691,7 @@ void SelectMoveObjectTool::finishMoving(const QPointF &pos)
         return;
 
     QUndoStack *undoStack = this->undoStack();
-    if (controlModifier()) {
+    if (duplicate) {
         undoStack->beginMacro(tr("Copy %n Object(s)", "", mMovingObjects.size()));
         QSet<BuildingObject*> clones;
         foreach (BuildingObject *object, objectsInOrder(mMovingObjects)) {
@@ -2714,7 +2750,9 @@ void SelectMoveObjectTool::cancelMoving()
 
 void SelectMoveObjectTool::updateStatusText()
 {
-    if (mMode == Moving) {
+    if (mPasteCursor) {
+        setStatusText(tr("Left-click to paste furniture on this floor. Right-click to finish."));
+    } else if (mMode == Moving) {
         setStatusText(tr("CTRL to duplicate objects.  Right-click to cancel."));
     } else if (mMode == Selecting) {
         setStatusText(tr("CTRL to toggle selected state.  SHIFT to add to selection."));

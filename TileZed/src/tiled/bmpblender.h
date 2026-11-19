@@ -26,6 +26,7 @@
 #include <QSet>
 #include <QStringList>
 #include <QVector>
+#include <array>
 
 namespace Tiled {
 class BmpAlias;
@@ -117,8 +118,6 @@ public:
     BmpBlender(Map *map, QObject *parent = nullptr);
     ~BmpBlender();
 
-    static bool validateUnavailableTilesetFiltering(QString *errorString);
-
     void setMap(Map *map);
 
     void fromMap();
@@ -152,8 +151,6 @@ public:
     void setHack(bool hack) { mHack = hack; }
     void setUseBlendCandidateIndex(bool enabled)
     { mUseBlendCandidateIndex = enabled; }
-    void setUseSparseWorkRegions(bool enabled)
-    { mUseSparseWorkRegions = enabled; }
     QSet<Tile*> knownBlendTiles()
     { return mKnownBlendTiles; }
     void tilesToPixels(int x1, int y1, int x2, int y2);
@@ -193,10 +190,10 @@ private:
     QHash<QString,Tileset*> mTilesetByName;
     bool mInitTilesLater;
 
-    Tile *getNeighbouringTile(int x, int y);
+    enum Neighbor { North, South, East, West, NeighborCount };
+    using Neighbors = std::array<Tile *, NeighborCount>;
     class BlendWrapper;
-    BlendWrapper *getBlendRule(int x, int y, Tile *tile, const QString &layer,
-                               const QVector<Tile *> &neighbors);
+    BlendWrapper *getBlendRule(Tile *tile, const QString &layer, const Neighbors &neighbors) const;
 
     class AliasWrapper
     {
@@ -234,16 +231,13 @@ private:
     public:
         BlendWrapper(BmpBlend *blend, int order) :
             mBlend(blend),
-            mOrder(order),
-            mCandidateMark(0)
+            mOrder(order)
         {}
         BmpBlend *mBlend;
         int mOrder;
-        quint32 mCandidateMark;
         QVector<Tile*> mMainTiles;
         QVector<Tile*> mBlendTiles;
         QVector<Tile*> mExcludeTiles;
-        QList<QVector<Tile*> > mExclude2Tiles;
         QSet<Tile*> mMainTileSet;
         QSet<Tile*> mBlendTileSet;
         QSet<Tile*> mExcludeTileSet;
@@ -253,8 +247,8 @@ private:
     QList<BlendWrapper*> mBlendList;
     QStringList mBlendLayers;
     QMap<QString,QList<BlendWrapper*> > mBlendsByLayer;
-    QHash<QString,QHash<Tile*,QVector<BlendWrapper*> > > mBlendCandidatesByLayer;
-    quint32 mBlendCandidateSerial = 0;
+    using BlendCandidates = std::array<QHash<Tile *, QVector<BlendWrapper *>>, NeighborCount>;
+    QHash<QString, BlendCandidates> mBlendCandidatesByLayer;
     QSet<QString> mBlendExclude2Layers;
     int mInactiveRuleCount = 0;
     int mInactiveBlendCount = 0;
@@ -263,7 +257,6 @@ private:
     bool mHack;
     bool mBlendEdgesEverywhere;
     bool mUseBlendCandidateIndex;
-    bool mUseSparseWorkRegions;
     typedef QHash<int,BlendWrapper*> BlendGrid;
     QMap<QString,BlendGrid> mBlendGrids; // blend at each x,y
 

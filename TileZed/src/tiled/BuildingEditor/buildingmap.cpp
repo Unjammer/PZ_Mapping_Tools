@@ -45,6 +45,7 @@
 
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QtMath>
 
 #include <algorithm>
 
@@ -111,77 +112,117 @@ QString BuildingMap::buildingTileAt(int x, int y, int level, const QString &laye
     return tileName;
 }
 
-QString BuildingMap::buildingTileAt(int x, int y, const QList<bool> visibleLevels)
+QVector<QPair<QString, QString>> BuildingMap::tilesAtSquare(int level, const QPoint &pos) const
 {
-    // x and y are scene coordinates
-    // Perform per-pixel hit detection
-    Tile *tile = nullptr;
+    QVector<QPair<QString, QString>> result;
+    BuildingFloor *floor = mBuilding->floor(level);
+    if (!floor || !floor->contains(pos, 1, 1))
+        return result;
 
-    for (int level = 0; level < mBuilding->floorCount(); level++) {
-        if (!visibleLevels[level]) continue;
-        CompositeLayerGroup *lgBlend = mBlendMapComposite->layerGroupForLevel(level);
-        CompositeLayerGroup *lg = mMapComposite->layerGroupForLevel(level);
-        QPoint tilePos = mMapRenderer->pixelToTileCoordsInt(QPoint(x, y), level);
-        const int DXY = 16; // must handle JUMBOXXL
-        for (int ty = tilePos.y() - DXY; ty < tilePos.y() + DXY; ty++) {
-            for (int tx = tilePos.x() - DXY; tx < tilePos.x() + DXY; tx++) {
-                QRectF tileBox = mMapRenderer->boundingRect(QRect(tx, ty, 1, 1), level);
-                for (int i = 0; i < lg->layerCount(); i++) {
-                    // Automatic building tiles first.
-                    // User-drawn tiles second.
-                    TileLayer *tlBlend = lgBlend->layers().at(i);
-                    TileLayer *tl = lg->layers().at(i);
-                    QString layerName = MapComposite::layerNameWithoutPrefix(tl->name());
-                    if (!mBuilding->floor(level)->layerVisibility(layerName))
+    const auto *group = mMapComposite->layerGroupForLevel(level);
+    if (!group)
+        return result;
+    const auto &columns = floor->squares;
+    const BuildingFloor::Square *square = pos.x() < columns.size()
+            && pos.y() < columns.at(pos.x()).size() ? &columns.at(pos.x()).at(pos.y()) : nullptr;
+    const auto &layers = group->layers();
+    for (auto it = layers.crbegin(); it != layers.crend(); ++it) {
+        const QString &layer = (*it)->name();
+        QString tileName = floor->grimeAt(layer, pos.x(), pos.y());
+        if (tileName.isEmpty() && square) {
+            const int section = mLayerToSection.value(layer, -1);
+            if (section < 0)
+                continue;
+            BuildingTile *tile = square->mTiles.at(section);
+            if (!tile) {
+                auto *entry = square->mEntries.at(section);
+                if (entry && !entry->isNone())
+                    tile = entry->tile(square->mEntryEnum.at(section));
+            }
+            if (tile && !tile->isNone())
+                tileName = tile->name();
+        }
+        if (!tileName.isEmpty())
+            result.append(qMakePair(layer, tileName));
+    }
+    return result;
+}
+
+QString BuildingMap::buildingTileAt(int x, int y, const QList<bool> &visibleLevels)
+{
+    const QPoint cursor(x, y);
+    for (int level = qMin(mBuilding->floorCount(), visibleLevels.size()) - 1; level >= 0; --level) {
+        if (!visibleLevels.at(level))
+            continue;
+        auto *user = mMapComposite->layerGroupForLevel(level);
+        auto *generated = mBlendMapComposite->layerGroupForLevel(level);
+        if (!user || !generated)
+            continue;
+        const int displayScale = mMapRenderer->is2x() ? 2 : 1;
+        const QMargins margins = user->drawMargins() * displayScale;
+        const int horizontal = qMax(margins.left(), margins.right()) + mMap->tileWidth() * displayScale;
+        const int below = margins.bottom() + mMap->tileHeight() * displayScale;
+        const QRect anchors(cursor - QPoint(horizontal, below),
+                            cursor + QPoint(horizontal, margins.top()));
+        QRect bounds;
+        for (const QPoint &corner : {anchors.topLeft(), anchors.topRight(),
+                                     anchors.bottomLeft(), anchors.bottomRight()}) {
+            bounds |= QRect(mMapRenderer->pixelToTileCoordsInt(corner, level), QSize(1, 1));
+        }
+        bounds &= QRect(0, 0, mMap->width(), mMap->height());
+        if (bounds.isEmpty())
+            continue;
+        QVector<int> layers;
+        for (int layer = user->layerCount() - 1; layer >= 0; --layer) {
+            TileLayer *tl = user->layers().at(layer);
+            if (user->isLayerVisible(tl) && user->layerOpacity(tl) > 0)
+                layers.append(layer);
+        }
+        for (int diagonal = bounds.right() + bounds.bottom();
+             diagonal >= bounds.left() + bounds.top(); --diagonal) {
+            const int first = qMin(bounds.right(), diagonal - bounds.top());
+            const int last = qMax(bounds.left(), diagonal - bounds.bottom());
+            for (int tx = first; tx >= last; --tx) {
+                const int ty = diagonal - tx;
+                for (int layer : layers) {
+                    Tile *tile = user->layers().at(layer)->cellAt(tx, ty).tile;
+                    if (!tile)
+                        tile = generated->layers().at(layer)->cellAt(tx, ty).tile;
+                    if (!tile)
                         continue;
-                    if (!tl->contains(tx, ty)) continue;
-                    Tile *test = tl->cellAt(tx, ty).tile; // user tile
-                    if (!test)
-                        test = tlBlend->cellAt(tx, ty).tile; // building tile
-                    if (test) {
-                        Tile *realTile = test;
-                        if (test->properties().contains(QLatin1String("invisible"))
-                                || (test->image().isNull()
-                                    && test->hasResolvedSource())) {
-                            test = TilesetManager::instance()->invisibleTile();
-                        }
-                        if (test->image().isNull() && !test->hasResolvedSource()) {
-                            test = TilesetManager::instance()->missingTile();
-                        }
-                        QRect imageBox(test->offset(), test->image().size());
-                        QPoint p = QPoint(x, y) - (tileBox.bottomLeft().toPoint() - QPoint(0, test->height()));
-                        QSize customSize = CustomTileSize::forTileset(test->tileset()->name());
-                        if (!customSize.isEmpty()) {
-                            QRectF tileBox2 = tileBox.translated(-(customSize.width() - 64), 0);
-                            p = QPoint(x, y) - (tileBox2.bottomLeft().toPoint() - QPoint(0, test->height()));
-                        }
-                        // Handle double-size tiles
-                        else if (qRound(tileBox.width()) == test->width() * 2) {
-                            p = QPoint(x, y) - (tileBox.bottomLeft().toPoint() - QPoint(0, test->height() * 2));
-                            p.rx() /= 2;
-                            p.ry() /= 2;
-                        } else if (qRound(tileBox.width()) == test->width() / 2) {
-
-                        }
-                        // Hit test a small box around the cursor?
-                        QRect box(p - QPoint(0, 0), p + QPoint(0, 0));
-                        for (int px = box.left(); px <= box.right(); px++) {
-                            for (int py = box.top(); py <= box.bottom(); py++) {
-                                if (imageBox.contains(px, py)) {
-                                    QRgb pixel = test->image().pixel(px - imageBox.x(), py - imageBox.y());
-                                    if (qAlpha(pixel) > 0)
-                                        tile = realTile;
-                                }
-                            }
-                        }
+                    Tile *imageTile = tile;
+                    if (tile->properties().contains(QLatin1String("invisible"))
+                            || (tile->image().isNull() && tile->hasResolvedSource())) {
+                        if (!mMapRenderer->isShowInvisibleTiles())
+                            continue;
+                        imageTile = TilesetManager::instance()->invisibleTile();
+                    } else if (tile->image().isNull()) {
+                        imageTile = TilesetManager::instance()->missingTile();
                     }
+                    const QRect cell = mMapRenderer->boundingRect(QRect(tx, ty, 1, 1), level);
+                    QPointF topLeft = QPoint(cell.left(), cell.top() + cell.height())
+                            + imageTile->tileset()->tileOffset() + imageTile->offset()
+                            - QPoint(0, imageTile->height());
+                    qreal scale = 1;
+                    const QSize customSize = CustomTileSize::forTileset(tile->tileset()->name());
+                    if (!customSize.isEmpty()) {
+                        topLeft.rx() -= (customSize.width() - 64) / 2;
+                    } else if (cell.width() == imageTile->width() * 2) {
+                        scale = 2;
+                        topLeft += imageTile->offset() - QPoint(0, imageTile->height());
+                    } else if (cell.width() * 2 == imageTile->width()) {
+                        scale = 0.5;
+                        topLeft.ry() += imageTile->height() / 2;
+                    }
+                    const QPointF sample = (QPointF(cursor) + QPointF(0.5, 0.5) - topLeft) / scale;
+                    const QPoint pixel(qFloor(sample.x()), qFloor(sample.y()));
+                    const QImage &image = imageTile->image();
+                    if (image.rect().contains(pixel) && qAlpha(image.pixel(pixel)) > 0)
+                        return BuildingTilesMgr::nameForTile(tile);
                 }
             }
         }
     }
-
-    if (tile)
-        return BuildingTilesMgr::nameForTile(tile);
     return QString();
 }
 
@@ -381,25 +422,21 @@ void BuildingMap::resetUserTiles(BuildingFloor *floor)
 
 void BuildingMap::suppressTiles(BuildingFloor *floor, const QRegion &rgn)
 {
-    QRegion update;
-    if (mSuppressTiles.contains(floor) && mSuppressTiles[floor] == rgn)
+    const QRegion previous = mSuppressTiles.value(floor);
+    if (previous == rgn)
         return;
-    if (rgn.isEmpty()) {
-        update = mSuppressTiles[floor];
+    if (rgn.isEmpty())
         mSuppressTiles.remove(floor);
-    } else {
-        update = rgn | mSuppressTiles[floor];
-        mSuppressTiles[floor] = rgn;
-    }
-    if (!update.isEmpty()) {
-        for (QRect r : update) {
-            r &= floor->bounds(1, 1);
-            pendingSquaresToTileLayers[floor] |= r;
-            foreach (QString layerName, floor->grimeLayers())
-                pendingUserTilesToLayer[floor][layerName] |= r;
-        }
-        schedulePending();
-    }
+    else
+        mSuppressTiles.insert(floor, rgn);
+
+    const QRegion changed = previous.xored(rgn).intersected(floor->bounds(1, 1));
+    if (changed.isEmpty())
+        return;
+    pendingSquaresToTileLayers[floor] |= changed;
+    for (const QString &layerName : floor->grimeLayers())
+        pendingUserTilesToLayer[floor][layerName] |= changed;
+    schedulePending();
 }
 
 Map *BuildingMap::mergedMap() const

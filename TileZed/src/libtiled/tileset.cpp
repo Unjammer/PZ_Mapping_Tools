@@ -33,6 +33,7 @@
 
 #include <QBitmap>
 #include <QSet>
+#include <algorithm>
 
 using namespace Tiled;
 
@@ -69,26 +70,22 @@ bool Tileset::loadFromImage(const QImage &image, const QString &fileName)
     int tileNum = 0;
 #ifdef ZOMBOID
     QImage image2 = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    if (mTransparentColor.isValid() && mTransparentColor.rgba() != 0) {
+        const QRgb key = mTransparentColor.rgba();
+        for (int y = 0; y < image2.height(); ++y) {
+            auto *pixels = reinterpret_cast<QRgb *>(image2.scanLine(y));
+            if (!pixels)
+                return false;
+            std::replace(pixels, pixels + image2.width(), key, QRgb(0));
+        }
+    }
 #endif
     for (int y = mMargin; y <= stopHeight; y += mTileHeight + mTileSpacing) {
         for (int x = mMargin; x <= stopWidth; x += mTileWidth + mTileSpacing) {
 #ifdef ZOMBOID
-            QImage tileImage = image2.copy(x, y, mTileWidth, mTileHeight);
-
-            if (mTransparentColor.isValid()) {
-                for (int x = 0; x < mTileWidth; x++) {
-                    for (int y = 0; y < mTileHeight; y++) {
-                        if (tileImage.pixel(x, y) == mTransparentColor.rgba())
-                            tileImage.setPixel(x, y, qRgba(0,0,0,0));
-                    }
-                }
-            }
-
-            if (tileNum < oldTilesetSize) {
-                mTiles.at(tileNum)->setImage(tileImage);
-            } else {
-                mTiles.append(new Tile(tileImage, tileNum, this));
-            }
+            if (tileNum >= oldTilesetSize)
+                mTiles.append(new Tile(mTileWidth, mTileHeight, tileNum, this));
+            mTiles.at(tileNum)->setImage(image2, QRect(x, y, mTileWidth, mTileHeight));
 #else
             const QImage tileImage = image.copy(x, y, mTileWidth, mTileHeight);
             QPixmap tilePixmap = QPixmap::fromImage(tileImage);

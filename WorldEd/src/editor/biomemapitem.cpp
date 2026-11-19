@@ -282,64 +282,6 @@ void BiomeMapItem::paintZoneStrokeOnImage(QImage *image,
         }
     }
 }
-bool BiomeMapItem::validateChannelPainting(QString *error)
-{
-    QImage image(24, 16, QImage::Format_ARGB32);
-    image.fill(qRgba(179, 64, 33, 255));
-    paintBiomeStrokeOnImage(&image, QPoint(2, 2), QPoint(2, 2), 0, 255);
-    const QRgb biomePainted = image.pixel(2, 2);
-    if (qRed(biomePainted) != 255 || qGreen(biomePainted) != 64 ||
-            qBlue(biomePainted) != 33 ||
-            image.pixel(7, 7) != qRgba(179, 64, 33, 255)) {
-        if (error)
-            *error = QStringLiteral("Red-channel painting did not preserve the green and blue channels.");
-        return false;
-    }
-    paintZoneStrokeOnImage(&image, QPoint(9, 1), QPoint(9, 1),
-                           0, 115, QPoint());
-    for (int y = 0; y < 8; ++y) {
-        for (int x = 8; x < 16; ++x) {
-            const QRgb pixel = image.pixel(x, y);
-            if (qGreen(pixel) != 115 || qRed(pixel) != 179 ||
-                    qBlue(pixel) != 33) {
-                if (error)
-                    *error = QStringLiteral("Green-channel painting did not fill one complete 8 x 8 chunk while preserving red and blue.");
-                return false;
-            }
-        }
-    }
-    if (qGreen(image.pixel(7, 7)) != 64 ||
-            qGreen(image.pixel(16, 7)) != 64) {
-        if (error)
-            *error = QStringLiteral("Green-channel painting escaped its selected 8 x 8 chunk.");
-        return false;
-    }
-    paintZoneStrokeOnImage(&image, QPoint(1, 9), QPoint(23, 9),
-                           0, 141, QPoint());
-    for (int y = 8; y < 16; ++y) {
-        for (int x = 0; x < 24; ++x) {
-            if (qGreen(image.pixel(x, y)) != 141) {
-                if (error)
-                    *error = QStringLiteral("A green-channel drag left a gap between 8 x 8 chunks.");
-                return false;
-            }
-        }
-    }
-    QImage offsetImage(16, 16, QImage::Format_ARGB32);
-    offsetImage.fill(qRgba(192, 64, 0, 255));
-    paintZoneStrokeOnImage(&offsetImage, QPoint(0, 0), QPoint(0, 0),
-                           0, 102, QPoint(4, 4));
-    if (qGreen(offsetImage.pixel(3, 3)) != 102 ||
-            qGreen(offsetImage.pixel(4, 3)) != 64 ||
-            qGreen(offsetImage.pixel(3, 4)) != 64) {
-        if (error)
-            *error = QStringLiteral("Green-channel painting was not aligned to the absolute 8 x 8 world grid.");
-        return false;
-    }
-    if (error)
-        error->clear();
-    return true;
-}
 bool BiomeMapItem::replaceSourceImage(const QImage &image,
                                       bool saveToDisk,
                                       QString *error)

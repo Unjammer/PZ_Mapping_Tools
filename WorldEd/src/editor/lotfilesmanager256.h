@@ -196,16 +196,7 @@ public:
     bool overwriteSpawnMap256(int cell256X, int cell256Y);
     bool writeZombieIntensity(QDataStream &out, int cell256X, int cell256Y);
 
-    static bool validateHeatmapOverwrite(QString *error);
 
-    static bool validateNative256Geometry(QString *error);
-    static bool validateJumboExport(QString *error);
-    static bool validateRoomOwnership(QString *error);
-    static bool validateReferencedRoomDefs(const QString &tmxPath,
-                                           QString *summary,
-                                           QString *error);
-    static bool validateMissingMapReferenceCleanup(QString *summary,
-                                                   QString *error);
 
     QString errorString() const { return mError; }
 

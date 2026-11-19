@@ -17,6 +17,7 @@
 
 #include "buildingtileentryview.h"
 
+#include "buildingpreferences.h"
 #include "buildingtiles.h"
 
 #include "tilemetainfomgr.h"
@@ -24,6 +25,7 @@
 
 #include "tile.h"
 #include "tileset.h"
+#include <QToolTip>
 
 using namespace BuildingEditor;
 using namespace Tiled::Internal;
@@ -31,8 +33,7 @@ using namespace Tiled::Internal;
 BuildingTileEntryView::BuildingTileEntryView(QWidget *parent) :
     MixedTilesetView(parent),
     mCategoryLabels(false),
-    mSettingEntries(false),
-    mMissingEntryCount(0)
+    mSettingEntries(false)
 {
     connect(TilesetManager::instance(), &TilesetManager::tilesetChanged,
             this, &BuildingTileEntryView::tilesetChanged);
@@ -45,11 +46,28 @@ BuildingTileEntryView::BuildingTileEntryView(QWidget *parent) :
             this, &BuildingTileEntryView::tilesetRemoved);
 
     model()->setShowTransparentTiles(true);
+    connect(this, &MixedTilesetView::tileEntered, this, &BuildingTileEntryView::showWallVariant);
+    connect(BuildingPreferences::instance(), &BuildingPreferences::wallVariantDetailsChanged,
+            this, [this](bool enabled) {
+        if (enabled) {
+            indexWallVariants();
+        } else {
+            for (const auto &variants : std::as_const(mWallVariants)) {
+                if (variants.size() > 1) {
+                    for (BuildingTileEntry *item : variants)
+                        model()->setData(index(item), QString(), Qt::ToolTipRole);
+                }
+            }
+            mWallVariants.clear();
+            QToolTip::hideText();
+        }
+    });
 }
 
 void BuildingTileEntryView::clear()
 {
     mEntries.clear();
+    mWallVariants.clear();
     MixedTilesetView::clear();
 }
 
@@ -61,10 +79,11 @@ void BuildingTileEntryView::setEntries(const QList<BuildingTileEntry*> &entries,
     QList<Tiled::Tile*> tiles;
     QList<void*> userData;
     QStringList headers;
-    mMissingEntryCount = 0;
 
     mEntries = entries;
-    mEntries.detach(); // userData points to individual elements of this list
+    mWallVariants.clear();
+    if (BuildingPreferences::instance()->wallVariantDetails())
+        indexWallVariants();
 
     QList<Tileset*> requiredTilesets;
     for (BuildingTileEntry *entry : std::as_const(mEntries)) {
@@ -84,8 +103,6 @@ void BuildingTileEntryView::setEntries(const QList<BuildingTileEntry*> &entries,
     }
     for (BuildingTileEntry* entry : std::as_const(mEntries)) {
         if (Tiled::Tile *tile = BuildingTilesMgr::instance()->tileFor(entry->displayTile())) {
-            if (tile == TilesetManager::instance()->missingTile())
-                ++mMissingEntryCount;
             tiles += tile;
             userData += entry;
             if (categoryLabels)
@@ -105,6 +122,51 @@ void BuildingTileEntryView::setEntries(const QList<BuildingTileEntry*> &entries,
 QModelIndex BuildingTileEntryView::index(BuildingTileEntry *entry)
 {
     return model()->index((void*)entry);
+}
+
+void BuildingTileEntryView::indexWallVariants()
+{
+    for (BuildingTileEntry *entry : std::as_const(mEntries)) {
+        BuildingTileCategory *category = entry->category();
+        if (!entry->isNone() && (category->asExteriorWalls() || category->asInteriorWalls()
+                || category->asExteriorWallTrim() || category->asInteriorWallTrim()))
+            mWallVariants[qMakePair(category, entry->displayTile())].append(entry);
+    }
+}
+
+void BuildingTileEntryView::showWallVariant(const QModelIndex &index)
+{
+    if (mWallVariants.isEmpty())
+        return;
+    BuildingTileEntry *item = entry(index);
+    if (!item || item->isNone())
+        return;
+    auto it = mWallVariants.constFind(qMakePair(item->category(), item->displayTile()));
+    if (it == mWallVariants.constEnd() || it->size() < 2)
+        return;
+
+    const auto &variants = it.value();
+    QStringList lines{item->displayTile()->name(),
+                      tr("Variant %1 of %2").arg(variants.indexOf(item) + 1).arg(variants.size())};
+    QVector<int> shown;
+    for (BuildingTileEntry *other : variants) {
+        if (item == other)
+            continue;
+        for (int i = 0; i < item->tileCount(); ++i) {
+            if (item->tile(i) == other->tile(i) && item->offset(i) == other->offset(i))
+                continue;
+            if (!shown.contains(i)) {
+                shown.append(i);
+                const QPoint offset = item->offset(i);
+                QString value = item->tile(i)->isNone() ? tr("Unassigned") : item->tile(i)->name();
+                if (!offset.isNull())
+                    value += tr(" (offset %1, %2)").arg(offset.x()).arg(offset.y());
+                lines.append(item->category()->enumToString(i) + QStringLiteral(": ") + value);
+            }
+            break;
+        }
+    }
+    model()->setData(index, lines.join(QLatin1Char('\n')), Qt::ToolTipRole);
 }
 
 BuildingTileEntry *BuildingTileEntryView::entry(const QModelIndex &index)

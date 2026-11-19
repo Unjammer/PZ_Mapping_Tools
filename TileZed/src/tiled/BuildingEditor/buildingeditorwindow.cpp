@@ -537,6 +537,13 @@ BuildingEditorWindow::BuildingEditorWindow(QWidget *parent) :
             prefs, &BuildingPreferences::setShowGrid);
     connect(prefs, &BuildingPreferences::showGridChanged,
             ui->actionShowGrid, &QAction::setChecked);
+    ui->actionGapCheckBackground->setChecked(prefs->gapCheckBackground());
+    connect(ui->actionGapCheckBackground, &QAction::toggled,
+            prefs, &BuildingPreferences::setGapCheckBackground);
+    connect(prefs, &BuildingPreferences::gapCheckBackgroundChanged,
+            ui->actionGapCheckBackground, &QAction::setChecked);
+    connect(prefs, &BuildingPreferences::furnitureClipboardEnabledChanged,
+            this, &BuildingEditorWindow::updateActions);
 
     ui->actionHighlightFloor->setChecked(prefs->highlightFloor());
     connect(ui->actionHighlightFloor, &QAction::toggled,
@@ -721,55 +728,6 @@ BuildingEditorWindow::~BuildingEditorWindow()
     BuildingTilesDialog::deleteInstance();
     ToolManager::deleteInstance();
     delete ui;
-}
-
-void BuildingEditorWindow::setDiagnosticShortcutsEnabled(bool enabled)
-{
-    if (!enabled || !mDiagnosticActions.isEmpty())
-        return;
-
-    auto addDiagnosticAction = [this](const QString &name,
-                                      const QString &shortcut,
-                                      BaseTool *tool) {
-        QAction *action = new QAction(name, this);
-        action->setShortcut(QKeySequence(shortcut));
-        action->setShortcutContext(Qt::ApplicationShortcut);
-        addAction(action);
-        mDiagnosticActions.append(action);
-        connect(action, &QAction::triggered, this, [this, name, tool]() {
-            if (!mCurrentDocument || !mCurrentDocumentStuff) {
-                qWarning() << "BuildingEd diagnostic shortcut ignored without an open building:" << name;
-                return;
-            }
-            if (tool == PencilTool::instance() && !currentRoom()
-                    && currentBuilding()->roomCount() > 0) {
-                setCurrentRoom(currentBuilding()->room(0));
-            }
-            mCurrentDocumentStuff->toObject();
-            tool->makeCurrent();
-            qInfo() << "BuildingEd diagnostic shortcut selected" << name
-                    << "for building" << currentBuilding()->size()
-                    << "level" << mCurrentDocument->currentLevel();
-        });
-    };
-
-    addDiagnosticAction(QStringLiteral("room"), QStringLiteral("Shift+F5"),
-                        PencilTool::instance());
-    addDiagnosticAction(QStringLiteral("wall"), QStringLiteral("Shift+F6"),
-                        WallTool::instance());
-    addDiagnosticAction(QStringLiteral("door"), QStringLiteral("Shift+F7"),
-                        DoorTool::instance());
-    addDiagnosticAction(QStringLiteral("window"), QStringLiteral("Shift+F8"),
-                        WindowTool::instance());
-    addDiagnosticAction(QStringLiteral("stairs"), QStringLiteral("Shift+F9"),
-                        StairsTool::instance());
-    addDiagnosticAction(QStringLiteral("furniture"), QStringLiteral("Shift+F10"),
-                        FurnitureTool::instance());
-
-    qInfo() << "BuildingEd diagnostic shortcuts enabled: Shift+F5 through Shift+F10";
-    statusBar()->showMessage(
-                tr("Diagnostic shortcuts enabled: Shift+F5 Room, F6 Wall, F7 Door, F8 Window, F9 Stairs, F10 Furniture"),
-                15000);
 }
 
 void BuildingEditorWindow::closeEvent(QCloseEvent *event)
@@ -1498,6 +1456,11 @@ void BuildingEditorWindow::editCut()
 
 void BuildingEditorWindow::editCopy()
 {
+    if (mCurrentDocument && mCurrentDocumentStuff->isObject()) {
+        if (BuildingPreferences::instance()->furnitureClipboardEnabled())
+            mCurrentDocument->copySelectedFurniture();
+        return;
+    }
     captureTileClipboard(false);
 }
 
@@ -1641,6 +1604,14 @@ void BuildingEditorWindow::captureTileClipboard(bool cut)
 
 void BuildingEditorWindow::editPaste()
 {
+    if (mCurrentDocument && mCurrentDocumentStuff->isObject()) {
+        if (BuildingPreferences::instance()->furnitureClipboardEnabled()
+                && !mCurrentDocument->clipboardFurnitureRegion().isEmpty()) {
+            SelectMoveObjectTool::instance()->makeCurrent();
+            SelectMoveObjectTool::instance()->startFurniturePlacement();
+        }
+        return;
+    }
     if (!mCurrentDocument || currentLayer().isEmpty())
         return;
 
@@ -2500,6 +2471,7 @@ void BuildingEditorWindow::initActionManager()
     actionManager->registerAction(ui->actionKeyboardShortcuts, CONTEXT_MENU, CATEGORY_MENU_EDIT, QStringLiteral("Menu.Edit.KeyboardShortcuts"));
 
     actionManager->registerAction(ui->actionShowGrid, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.ShowGrid"));
+    actionManager->registerAction(ui->actionGapCheckBackground, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.GapCheckBackground"));
     actionManager->registerAction(ui->actionHighlightFloor, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.HighlightCurrentFloor"));
     actionManager->registerAction(ui->actionHighlightRoom, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.HighlightRoom"));
     actionManager->registerAction(ui->actionPinRoomHighlight, CONTEXT_MENU, CATEGORY_MENU_VIEW, QStringLiteral("Menu.View.PinRoomHighlight"));
@@ -2943,6 +2915,7 @@ void BuildingEditorWindow::updateActions()
     ui->actionPinRoomHighlight->setChecked(pinned);
     ui->actionPinRoomHighlight->setEnabled(hasDoc && isoScene);
     ui->actionShowWalls->setEnabled(hasDoc && isoScene);
+    ui->actionGapCheckBackground->setEnabled(hasDoc && isoScene);
     PencilTool::instance()->setEnabled(hasEditor && objectMode && currentRoom() != 0);
     WallTool::instance()->setEnabled(hasEditor && objectMode && showObjects);
     SelectMoveRoomsTool::instance()->setEnabled(hasEditor && objectMode);
@@ -3004,8 +2977,11 @@ void BuildingEditorWindow::updateActions()
 
     bool hasTileSel = hasDoc && !objectMode && !mCurrentDocument->tileSelection().isEmpty();
     ui->actionCut->setEnabled(hasTileSel && !attributeMode);
-    ui->actionCopy->setEnabled(hasTileSel && !attributeMode);
-    ui->actionPaste->setEnabled(hasDoc && !objectMode && !attributeMode && mCurrentDocument->clipboardHasContent());
+    const bool furnitureClipboard = objectMode && showObjects && BuildingPreferences::instance()->furnitureClipboardEnabled();
+    ui->actionCopy->setEnabled((hasTileSel && !attributeMode) || (furnitureClipboard && mCurrentDocument->hasSelectedFurniture()));
+    ui->actionPaste->setEnabled(objectMode
+                                ? furnitureClipboard && !mCurrentDocument->clipboardFurnitureRegion().isEmpty()
+                                : hasDoc && !attributeMode && mCurrentDocument->clipboardHasContent());
     if (!objectMode) {
         ui->actionSelectAll->setEnabled(!currentLayer().isEmpty());
         ui->actionSelectNone->setEnabled(hasTileSel);

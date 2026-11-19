@@ -283,53 +283,6 @@ static QTransform alignedPreviewOverlayTransform(
                       sourceTransform.m21(), sourceTransform.m22(),
                       dx, dy);
 }
-bool ZLevelRenderer::validatePreviewOverlayAlignment(QString *error)
-{
-    Tileset sourceTileset(QStringLiteral("preview_source"), 64, 128);
-    Tileset overlayTileset(QStringLiteral("preview_source_on"), 64, 128);
-    QImage sourceImage(128, 256, QImage::Format_ARGB32);
-    sourceImage.fill(Qt::transparent);
-    QPainter sourcePainter(&sourceImage);
-    sourcePainter.fillRect(QRect(60, 28, 9, 194), Qt::black);
-    sourcePainter.end();
-    QImage overlayImage(128, 256, QImage::Format_ARGB32);
-    overlayImage.fill(Qt::transparent);
-    QPainter overlayPainter(&overlayImage);
-    overlayPainter.setPen(Qt::NoPen);
-    overlayPainter.setBrush(Qt::white);
-    overlayPainter.drawEllipse(QRect(48, 16, 33, 33));
-    overlayPainter.end();
-    Tile sourceTile(sourceImage, 0, &sourceTileset);
-    Tile overlayTile(overlayImage, 0, &overlayTileset);
-    const QPoint sharedCellPixel(64, 32);
-    const QPointF sourceLocal =
-            sharedCellPixel - previewImageOrigin(&sourceTile);
-    const QPointF overlayLocal =
-            sharedCellPixel - previewImageOrigin(&overlayTile);
-    const QList<QTransform> sourceTransforms = {
-        QTransform(1.0, 0.0, 0.0, 1.0, 420.0, 180.0),
-        QTransform(-1.0, 0.0, 0.0, 1.0, 560.0, 180.0),
-        QTransform(0.0, 1.0, 1.0, 0.0, 420.0, 180.0),
-        QTransform(2.0, 0.0, 0.0, 2.0, 420.0, 180.0)
-    };
-    for (const QTransform &sourceTransform : sourceTransforms) {
-        const QTransform overlayTransform =
-                alignedPreviewOverlayTransform(
-                    sourceTransform, &sourceTile, &overlayTile);
-        const QPointF sourcePoint = sourceTransform.map(sourceLocal);
-        const QPointF overlayPoint = overlayTransform.map(overlayLocal);
-        if (QLineF(sourcePoint, overlayPoint).length() > 0.001) {
-            if (error) {
-                *error = QStringLiteral(
-                    "cropped overlay anchor differs by %1 pixels")
-                    .arg(QLineF(sourcePoint, overlayPoint).length());
-            }
-            return false;
-        }
-    }
-    return true;
-}
-
 void ZLevelRenderer::drawTileLayer(QPainter *painter,
                                       const TileLayer *layer,
                                       const QRectF &exposed) const

@@ -39,20 +39,28 @@
 #include "tileset.h"
 
 #include <QAbstractItemView>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QCloseEvent>
 #include <QActionGroup>
 #include <QDesktopServices>
+#include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFormLayout>
 #include <QImageReader>
+#include <QHeaderView>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMenu>
 #include <QProxyStyle>
+#include <QPushButton>
 #include <QScrollBar>
 #include <QSettings>
+#include <QSpinBox>
 #include <QToolBar>
 #include <QToolButton>
+#include <QTreeWidget>
 #include <QUndoGroup>
 #include <QUndoStack>
 #include <QUrl>
@@ -273,6 +281,66 @@ public:
     QVariant mValue;
 };
 
+class RemoveUnknownProperties : public QUndoCommand
+{
+public:
+    RemoveUnknownProperties(TileDefDialog *dialog, const QSet<QString> &names)
+        : QUndoCommand(QCoreApplication::translate("UndoCommands", "Remove Unknown Properties")),
+          mDialog(dialog)
+    {
+        for (TileDefTileset *tileset : dialog->mTileDefFile->tilesets()) {
+            for (TileDefTile *tile : std::as_const(tileset->mTiles)) {
+                QMap<QString,QString> removed;
+                for (auto it = tile->mProperties.cbegin(); it != tile->mProperties.cend(); ++it) {
+                    if (names.contains(it.key()))
+                        removed.insert(it.key(), it.value());
+                }
+                if (!removed.isEmpty()) {
+                    const QPoint pos(tile->id() % tileset->mColumns, tile->id() / tileset->mColumns);
+                    mChanges.append({tileset, pos, std::move(removed)});
+                }
+            }
+        }
+        setObsolete(mChanges.isEmpty());
+    }
+
+    void undo() override { apply(false); }
+    void redo() override { apply(true); }
+
+private:
+    struct Change {
+        TileDefTileset *tileset;
+        QPoint pos;
+        QMap<QString,QString> values;
+    };
+
+    void apply(bool remove)
+    {
+        mDialog->highlightTilesWithMatchingProperties(nullptr);
+        for (const Change &change : std::as_const(mChanges)) {
+            TileDefTileset *ts = change.tileset;
+            if (change.pos.x() >= ts->mColumns || change.pos.y() >= ts->mRows)
+                continue;
+            TileDefTile *tile = ts->tileAt(change.pos.y() * ts->mColumns + change.pos.x());
+            for (auto it = change.values.cbegin(); it != change.values.cend(); ++it) {
+                if (remove)
+                    tile->mProperties.remove(it.key());
+                else
+                    tile->mProperties.insert(it.key(), it.value());
+            }
+            if (mDialog->mCurrentDefTileset == ts)
+                mDialog->setToolTipEtc(tile->id());
+        }
+        if (!mDialog->ui->propertyFilter->text().isEmpty() || !mDialog->ui->valueFilter->text().isEmpty()) {
+            mDialog->applyPropertyFilters();
+            mDialog->selectCurrentVisibleTileset();
+        }
+    }
+
+    TileDefDialog *mDialog;
+    QVector<Change> mChanges;
+};
+
 class ReassignTilesetIDs : public QUndoCommand
 {
 public:
@@ -345,6 +413,10 @@ TileDefDialog::TileDefDialog(QWidget *parent) :
 {
     ui->setupUi(this);
     addToolWindowCloseButton(this, ui->gridLayout);
+    mKnownPropertyNames = mTileDefProperties->extraPropertiesIfSet();
+    for (auto it = mTileDefProperties->mShortNameToName.cbegin();
+         it != mTileDefProperties->mShortNameToName.cend(); ++it)
+        mKnownPropertyNames.insert(it.key());
 
     QMenu *targetMenu = new QMenu(tr("Target Format"), this);
     QActionGroup *targetGroup = new QActionGroup(this);
@@ -428,6 +500,7 @@ TileDefDialog::TileDefDialog(QWidget *parent) :
     connect(ui->actionPasteProperties, &QAction::triggered, this, &TileDefDialog::pasteProperties);
     connect(ui->actionPasteFilteredProperties, &QAction::triggered, this, &TileDefDialog::pasteFilteredProperties);
     connect(ui->actionReset, &QAction::triggered, this, qOverload<>(&TileDefDialog::resetDefaults));
+    connect(ui->actionReviewUnknownProperties, &QAction::triggered, this, &TileDefDialog::reviewUnknownProperties);
 
     /////
 
@@ -520,19 +593,10 @@ TileDefDialog::TileDefDialog(QWidget *parent) :
     ui->menuRecentFiles->insertSeparator(ui->actionClearRecentFiles);
     setRecentFilesMenu();
 
-    foreach (QObject *o, ui->propertySheet->children()) {
-        if (o->isWidgetType()) {
-            delete o;
-        }
-    }
-    delete ui->propertySheet->layout();
     QFormLayout *form = new QFormLayout(ui->propertySheet);
-    ui->propertySheet->setLayout(form);
     form->setRowWrapPolicy(QFormLayout::DontWrapRows);
     form->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
     mPropertySheetFormLayout = form;
-
-//    form->setVerticalSpacing(4);
 
     connect(ui->rightPropertyFilter, &QLineEdit::textEdited, this, &TileDefDialog::rightPropertyFilterEdited);
 
@@ -1423,7 +1487,8 @@ void TileDefDialog::applyPropertyFilters()
             QString tilesetName = item->data(Qt::UserRole).toString();
             if (TileDefTileset *tdts = mTileDefFile->tileset(tilesetName)) {
                 for (TileDefTile *tdt : std::as_const(tdts->mTiles)) {
-                    for (auto it = tdt->mProperties.cbegin(); it != tdt->mProperties.cend(); it++) {
+                    const auto properties = tdt->currentProperties();
+                    for (auto it = properties.cbegin(); it != properties.cend(); ++it) {
                         if ((key.isEmpty() || it.key().contains(key, Qt::CaseInsensitive)) &&
                                 (value.isEmpty() || it.value().contains(value, Qt::CaseInsensitive))) {
                             bVisible = true;
@@ -1572,6 +1637,7 @@ void TileDefDialog::updateUI()
     bool hasFile = mTileDefFile != nullptr;
     ui->actionSave->setEnabled(hasFile);
     ui->actionSaveAs->setEnabled(hasFile);
+    ui->actionReviewUnknownProperties->setEnabled(hasFile);
 
     ui->actionTilesDirectory->setEnabled(hasFile);
 
@@ -1746,8 +1812,10 @@ bool TileDefDialog::fileSave(const QString &fileName)
 
     TileDefTextFile txtFile;
     if (!txtFile.write(fileName + QLatin1String(".txt"), mTileDefFile->tilesets())) {
-        QMessageBox::warning(this, tr("Error writing .tiles file"),
-                             txtFile.errorString());
+        QMessageBox::warning(this, tr("Error writing .tiles.txt file"),
+                             tr("The binary .tiles file was saved. Saving its text copy failed.\n%1")
+                             .arg(txtFile.errorString()));
+        return false;
     }
 
 #ifdef TDEF_TILES_DIR
@@ -1895,25 +1963,18 @@ void TileDefDialog::setToolTipEtc(int tileID)
 
     MixedTilesetModel *m = ui->tiles->model();
 
-    // Show .tiles property/value pairs.
-    QMap<QString,QString> properties;
-    defTile->mPropertyUI.ToProperties(properties);
-    if (properties.size()) {
+    const auto properties = defTile->currentProperties();
+    QStringList known, unknown;
+    for (auto it = properties.cbegin(); it != properties.cend(); ++it) {
+        QStringList &list = mKnownPropertyNames.contains(it.key()) ? known : unknown;
+        list += tr("%1 = %2").arg(it.key(), it.value());
+    }
+    if (!known.isEmpty()) {
         tooltip += QLatin1String("\nOutput:");
-        for (const QString& name : properties.keys()) {
-            tooltip += tr("%1 = %2").arg(name).arg(properties[name]);
-        }
+        tooltip += known;
     }
 
-    // Use a different background color for tiles that have unknown property names.
-    QColor color; // invalid means use default color
-    QStringList knownPropertyNames = defTile->mPropertyUI.knownPropertyNames();
-    QSet<QString> known(knownPropertyNames.begin(), knownPropertyNames.end()); // FIXME: same for every tile
-    QStringList unknown;
-    for (const QString& name : defTile->mProperties.keys()) {
-        if (!known.contains(name))
-            unknown += tr("%1 = %2").arg(name).arg(defTile->mProperties[name]);
-    }
+    QColor color;
     if (properties.isEmpty()) {
         QStyleOption styleOption;
         styleOption.initFrom(ui->tiles);
@@ -1988,9 +2049,7 @@ void TileDefDialog::highlightTilesWithMatchingProperties(TileDefTile *defTile)
     if (!defTile)
         return;
 
-    // Get the properties on the given tile.  Exit if properties is nil.
-    QMap<QString,QString> props = defTile->mProperties;
-    defTile->mPropertyUI.ToProperties(props);
+    const auto props = defTile->currentProperties();
     if (props.isEmpty())
         return;
     mTilesWithMatchingProperties += defTile;
@@ -2001,9 +2060,7 @@ void TileDefDialog::highlightTilesWithMatchingProperties(TileDefTile *defTile)
         if (defTile == defTile2)
             continue;
 
-        QMap<QString,QString> props2 = defTile2->mProperties;
-        defTile2->mPropertyUI.ToProperties(props2);
-        if (props == props2)
+        if (props == defTile2->currentProperties())
             mTilesWithMatchingProperties.insert(defTile2);
     }
 
@@ -2369,20 +2426,17 @@ void TileDefDialog::tilesDirChanged()
 
 void TileDefDialog::checkProperties()
 {
-    const QSet<QString> extraProperties = mTileDefProperties->extraPropertiesIfSet();
     QStringList warnings;
+    bool hasUnknown = false;
     for (TileDefTileset *tsDef : mTileDefFile->tilesets()) {
         for (TileDefTile *tdt : std::as_const(tsDef->mTiles)) {
             for (auto it = tdt->mProperties.cbegin(); it != tdt->mProperties.cend(); it++) {
                 QString propName = it.key();
                 QString propValue = it.value();
-                if (extraProperties.contains(propName)) {
-                    continue;
-                }
-                QString label = mTileDefProperties->shortNameToName(propName);
-                if (label.isEmpty()) {
+                if (!mKnownPropertyNames.contains(propName)) {
+                    hasUnknown = true;
                     warnings += QStringLiteral("%1_%2 has unknown property %3").arg(tdt->tileset()->mName).arg(tdt->id()).arg(propName);
-                } else if (TileDefProperty *prop = mTileDefProperties->property(label)) {
+                } else if (TileDefProperty *prop = mTileDefProperties->property(mTileDefProperties->shortNameToName(propName))) {
                     if (EnumTileDefProperty *enumProp = prop->asEnum()) {
                         if (enumProp->mValueAsPropertyName == false && enumProp->mShortEnums.contains(propValue) == false) {
                             warnings += QStringLiteral("%1_%2 has undefined enum value %3=%4").arg(tdt->tileset()->mName).arg(tdt->id()).arg(propName).arg(propValue);
@@ -2395,12 +2449,91 @@ void TileDefDialog::checkProperties()
     if (warnings.isEmpty()) {
         return;
     }
-    QString prompt = tr("Some issues were found in the .tiles file.\nYou may need to update your TileProperties.txt file.\n\nOriginal: %1\n\nYours: %2")
-            .arg(QDir::toNativeSeparators(Preferences::instance()->appConfigPath(TilePropertyMgr::instance()->txtName())))
-            .arg(QDir::toNativeSeparators(TilePropertyMgr::instance()->txtPath()));
+    const QFileInfo active(TilePropertyMgr::instance()->txtPath());
+    const QFileInfo bundled(QDir(Preferences::instance()->appConfigPath()), TilePropertyMgr::instance()->txtName());
+    QString prompt = tr("The entries below use names or enum values outside the active catalogue. "
+                        "Mods and older files can use their own definitions.\n\nActive catalogue\n%1")
+            .arg(QDir::toNativeSeparators(active.absoluteFilePath()));
+    if (bundled.isFile() && bundled != active)
+        prompt += tr("\n\nBundled catalogue\n%1").arg(QDir::toNativeSeparators(bundled.absoluteFilePath()));
     BuildingEditor::ListOfStringsDialog dialog(prompt, warnings, this);
     dialog.setWindowTitle(tr("Tileset Property Issues"));
+    bool reviewRequested = false;
+    if (hasUnknown) {
+        QPushButton *review = dialog.addActionButton(ui->actionReviewUnknownProperties->text());
+        review->setObjectName(QStringLiteral("reviewUnknownPropertiesButton"));
+        connect(review, &QPushButton::clicked, &dialog, [&] {
+            reviewRequested = true;
+            dialog.accept();
+        });
+    }
     dialog.exec();
+    if (reviewRequested)
+        reviewUnknownProperties();
+}
+
+void TileDefDialog::reviewUnknownProperties()
+{
+    if (!mTileDefFile)
+        return;
+    struct Usage {
+        int count = 0;
+        QString example;
+    };
+    QMap<QString,Usage> unknown;
+    for (TileDefTileset *tileset : mTileDefFile->tilesets()) {
+        for (TileDefTile *tile : std::as_const(tileset->mTiles)) {
+            for (auto it = tile->mProperties.cbegin(); it != tile->mProperties.cend(); ++it) {
+                if (mKnownPropertyNames.contains(it.key()))
+                    continue;
+                Usage &usage = unknown[it.key()];
+                if (!usage.count)
+                    usage.example = QStringLiteral("%1_%2 = %3").arg(tileset->mName).arg(tile->id()).arg(it.value());
+                ++usage.count;
+            }
+        }
+    }
+    QDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("reviewUnknownProperties"));
+    dialog.setWindowTitle(tr("Review Unknown Properties"));
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *message = new QLabel(&dialog);
+    message->setTextFormat(Qt::PlainText);
+    message->setWordWrap(true);
+    const QString file = QDir::toNativeSeparators(mTileDefFile->fileName());
+    message->setText(unknown.isEmpty() ? tr("The active property definitions recognize every property in %1.").arg(file)
+                    : tr("These names are absent from the active TileProperties.txt. A mod may still use them. "
+                         "Removing a checked name affects every tile that uses it in this file.\n%1").arg(file));
+    layout->addWidget(message);
+    auto *tree = new QTreeWidget(&dialog);
+    tree->setObjectName(QStringLiteral("unknownProperties"));
+    tree->setRootIsDecorated(false);
+    tree->setHeaderLabels({tr("Property"), tr("Tiles"), tr("Example tile and value")});
+    for (auto it = unknown.cbegin(); it != unknown.cend(); ++it) {
+        auto *item = new QTreeWidgetItem(tree, {it.key(), QString::number(it->count), it->example});
+        item->setCheckState(0, Qt::Unchecked);
+    }
+    tree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    layout->addWidget(tree);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, &dialog);
+    auto *remove = buttons->addButton(tr("Remove Checked Properties"), QDialogButtonBox::AcceptRole);
+    remove->setObjectName(QStringLiteral("removeUnknownProperties"));
+    remove->setEnabled(false);
+    layout->addWidget(buttons);
+    QSet<QString> checked;
+    connect(tree, &QTreeWidget::itemChanged, &dialog, [&](QTreeWidgetItem *item, int) {
+        if (item->checkState(0) == Qt::Checked)
+            checked.insert(item->text(0));
+        else
+            checked.remove(item->text(0));
+        remove->setEnabled(!checked.isEmpty());
+    });
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    dialog.resize(640, 400);
+    if (dialog.exec() == QDialog::Accepted && !checked.isEmpty())
+        mUndoStack->push(new RemoveUnknownProperties(this, checked));
 }
 
 QString TileDefDialog::tilesDir()

@@ -27,6 +27,7 @@
 #include <QRect>
 #include <QRegion>
 #include <QSet>
+#include <QSharedPointer>
 
 class QUndoStack;
 
@@ -94,6 +95,10 @@ public:
     bool isModified() const;
 
     void setSelectedObjects(const QSet<BuildingObject*> &selection);
+    bool hasSelectedFurniture() const;
+    void copySelectedFurniture();
+    bool pasteFurnitureAt(const QPoint &position);
+    const QRegion &clipboardFurnitureRegion() const { return mClipboardFurnitureRegion; }
 
     const QSet<BuildingObject*> &selectedObjects() const
     { return mSelectedObjects; }
@@ -313,6 +318,19 @@ private:
     Room *mCurrentRoom;
     QString mCurrentLayerName;
     QSet<BuildingObject*> mSelectedObjects;
+    struct ClipboardFurniture {
+        QPoint offset;
+        int definition;
+        FurnitureTile::FurnitureOrientation orientation;
+    };
+    struct ClipboardFurnitureDefinition {
+        QSharedPointer<FurnitureTiles> snapshot;
+        FurnitureTiles *match;
+        FurnitureTiles *resolve(Building *building);
+    };
+    QVector<ClipboardFurnitureDefinition> mClipboardFurnitureDefinitions;
+    QVector<ClipboardFurniture> mClipboardFurniture;
+    QRegion mClipboardFurnitureRegion;
     QRegion mRoomSelection;
     QPoint mPinnedRoomHighlight = QPoint(-1, -1);
     QRegion mTileSelection;

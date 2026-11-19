@@ -41,8 +41,6 @@ public:
     void writeSettings(QSettings &settings);
 
     void switchTo();
-    bool validateFurnitureCatalog(QString *errorString);
-
 protected:
     void changeEvent(QEvent *event);
 

@@ -131,6 +131,26 @@ building:deleteTile(level, "FloorGrime", 3, 4)</code></pre>
 <tr><td><code>replaceTilesByName(level,layer,oldName,newName)</code></td><td>Replaces every exact match in one layer and returns the count.</td></tr>
 </table>
 
+<h3>Register a Floor Grime brush material</h3>
+<p>Enable <strong>Allow Lua scripts to register Floor Grime brushes</strong> in
+<strong>Edit &gt; Preferences &gt; Editing</strong>. Use
+<code>app:registerFloorGrime(name, directions)</code> to select eight
+tiles for the Floor Grime brush. Each direction takes a tile name from a loaded
+sheet. For example, this brush uses sprites from the street curb sheet.</p>
+<pre><code>local curbs = {
+    West = 40, North = 41, East = 43, South = 42,
+    SouthWest = 32, NorthWest = 36, NorthEast = 39, SouthEast = 2
+}
+for direction, id in pairs(curbs) do
+    curbs[direction] = "street_curbs_01_" .. id
+end
+app:registerFloorGrime("Street curbs", curbs)</code></pre>
+<p>Run the script with a building open and select <strong>Floor Grime</strong> in Tile mode.
+Right-drag to choose a direction and left-click to paint. Press Shift to cycle
+through the materials. Successful registration selects the material and lasts
+until BuildingEd closes. Running the script again with the same name replaces
+that brush. Painted tiles are saved with the building.</p>
+
 <h2>Qt application actions</h2>
 <p>The global <code>app</code> queues existing BuildingEd actions. They execute
 only after the script succeeds and its transactional edits enter the Undo

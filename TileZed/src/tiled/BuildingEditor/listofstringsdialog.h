@@ -32,6 +32,7 @@ public:
     explicit ListOfStringsDialog(const QString &message, const QStringList &strings,
                                  QWidget *parent = 0);
     ~ListOfStringsDialog();
+    QPushButton *addActionButton(const QString &text);
     
 private:
     Ui::ListOfStringsDialog *ui;

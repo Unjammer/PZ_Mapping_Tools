@@ -154,7 +154,6 @@ class MapManager : public QObject
 public:
     static MapManager *instance();
     static void deleteInstance();
-    static bool validateBuildingImport(QString *error, const QString &stairFixtureDirectory = QString());
 
     /**
      * Returns the canonical (absolute) path for a map file.

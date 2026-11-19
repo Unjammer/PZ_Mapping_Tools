@@ -17,7 +17,6 @@ public:
                                      QWidget *parent = nullptr);
     ~BiomeMapGeneratorDialog() override;
     QString generatedBiomeMapFile() const { return mGeneratedBiomeMapFile; }
-    static bool validateFallbackBehavior(QString *summary, QString *error);
 private slots:
     void browseMainImage();
     void browseVegetationImage();

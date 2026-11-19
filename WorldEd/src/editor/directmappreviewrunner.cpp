@@ -1,33 +1,141 @@
 #include "directmappreviewrunner.h"
 #include "directmappreview.h"
+#include "directmappreviewagent.h"
+#include "playtestgamepath.h"
+#include "../portablesettings.h"
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDataStream>
 #include <QDebug>
 #include <QDir>
-#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QHostAddress>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QOperatingSystemVersion>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QPointer>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
-#include <QTimer>
 #include <QUuid>
+#include <QVersionNumber>
 
+#include <algorithm>
 #include <memory>
 
 namespace {
 
 const QByteArray readyMarker("[PZDirectMapPreview] Lua ready");
-const QByteArray passedMarker("[PZDirectMapPreview] validation passed");
+
+bool appendLauncherOptions(const QJsonValue &value, QStringList &options)
+{
+    if (value.isUndefined())
+        return true;
+    if (!value.isArray())
+        return false;
+    for (const auto argument : value.toArray()) {
+        if (!argument.isString() || argument.toString().trimmed().isEmpty())
+            return false;
+        const QString option = argument.toString();
+        if (!option.startsWith(QLatin1String("-javaagent:"))
+                && !option.startsWith(QLatin1String("-agentlib:"))
+                && !option.startsWith(QLatin1String("-agentpath:")))
+            options.append(option);
+    }
+    return true;
+}
+
+bool readLauncher(const QByteArray &data, const QVersionNumber &windows, QStringList &vmArgs,
+                  QStringList &classpath, QString &mainClass, QString &error)
+{
+    error.clear();
+    vmArgs.clear();
+    classpath.clear();
+    QJsonParseError parseError;
+    const QJsonDocument json = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        error = QObject::tr("Invalid launcher JSON at byte %1: %2").arg(parseError.offset).arg(parseError.errorString());
+        return false;
+    }
+    const QJsonObject config = json.object();
+    mainClass = config.value(QStringLiteral("mainClass")).toString().trimmed().replace(QLatin1Char('/'), QLatin1Char('.'));
+    if (mainClass.isEmpty() || !config.value(QStringLiteral("classpath")).isArray()) {
+        error = QObject::tr("The game launcher configuration requires mainClass and classpath.");
+        return false;
+    }
+    for (const auto entry : config.value(QStringLiteral("classpath")).toArray()) {
+        if (!entry.isString() || entry.toString().trimmed().isEmpty()) {
+            error = QObject::tr("The game launcher classpath contains an empty or invalid entry.");
+            return false;
+        }
+        classpath.append(entry.toString());
+    }
+    if (classpath.isEmpty()) {
+        error = QObject::tr("The game launcher classpath is empty.");
+        return false;
+    }
+    if (!appendLauncherOptions(config.value(QStringLiteral("vmArgs")), vmArgs)) {
+        error = QObject::tr("The game launcher vmArgs must be a list of Java options.");
+        return false;
+    }
+    const auto platforms = config.value(QStringLiteral("windows")).toObject();
+    QVersionNumber matched;
+    QString matchedKey;
+    for (auto it = platforms.constBegin(); it != platforms.constEnd(); ++it) {
+        int length = 0;
+        const auto version = QVersionNumber::fromString(it.key(), &length).normalized();
+        if (length == it.key().size() && !version.isNull() && version <= windows && version > matched) {
+            matched = version;
+            matchedKey = it.key();
+        }
+    }
+    QStringList platformOptions;
+    if (!matchedKey.isEmpty() && !appendLauncherOptions(platforms.value(matchedKey).toObject().value(QStringLiteral("vmArgs")), platformOptions)) {
+        error = QObject::tr("The game launcher has invalid Windows Java options for %1.").arg(matchedKey);
+        return false;
+    }
+    const auto selectsCollector = [](const QString &option) {
+        return option.startsWith(QLatin1String("-XX:+Use")) && option.endsWith(QLatin1String("GC"));
+    };
+    const bool collectorSelected = std::any_of(vmArgs.cbegin(), vmArgs.cend(), selectsCollector);
+    for (const QString &option : platformOptions) {
+        if (!(collectorSelected && selectsCollector(option)))
+            vmArgs.append(option);
+    }
+    return true;
+}
+
+QString javaProfilePath(const QDir &game, const QString &directory)
+{
+    const auto usable = [](const QString &path) {
+        return !path.isEmpty() && !path.contains(QLatin1Char('='))
+                && QString::fromLocal8Bit(path.toLocal8Bit()) == path;
+    };
+    const QString absolute = QDir::toNativeSeparators(directory);
+    if (usable(absolute))
+        return absolute;
+    const QString relative = QDir::toNativeSeparators(game.relativeFilePath(directory));
+    if (usable(relative))
+        return relative;
+#ifdef Q_OS_WIN
+    const DWORD size = GetShortPathNameW(reinterpret_cast<LPCWSTR>(absolute.utf16()), nullptr, 0);
+    if (size) {
+        std::wstring shortPath(size, L'\0');
+        const DWORD count = GetShortPathNameW(reinterpret_cast<LPCWSTR>(absolute.utf16()), &shortPath[0], size);
+        if (count > 0 && count < size) {
+            const QString path = QString::fromWCharArray(shortPath.data(), int(count));
+            if (usable(path))
+                return path;
+        }
+    }
+#endif
+    return {};
+}
 
 QByteArray encodeCell(const QByteArray &source)
 {
@@ -80,7 +188,7 @@ QByteArray encodeCell(const QByteArray &source)
 class PreviewSession final : public QObject
 {
 public:
-    explicit PreviewSession(std::function<void(bool)> finished)
+    explicit PreviewSession(std::function<void(bool, const QString &)> finished)
         : QObject(qApp), completion(std::move(finished))
     {
         process.setProcessChannelMode(QProcess::MergedChannels);
@@ -90,25 +198,25 @@ public:
         connect(&process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
                 this, [this](int code, QProcess::ExitStatus status) {
             readOutput();
-            bool mapFilesAbsent = true;
-            if (validation) {
-                const QStringList mapFiles{QStringLiteral("*.lotheader"), QStringLiteral("*.lotpack"),
-                                           QStringLiteral("chunkdata*"), QStringLiteral("*.lot")};
-                QDirIterator artifacts(profile.path(), mapFiles, QDir::Files, QDirIterator::Subdirectories);
-                mapFilesAbsent = !artifacts.hasNext();
-                if (mapFilesAbsent)
-                    qInfo() << "Direct map preview generated no LOT or chunkdata files";
-                else
-                    qWarning().noquote() << "Direct map preview produced an unexpected map file:" << artifacts.next();
+            if (!pendingOutput.isEmpty())
+                handleLine(pendingOutput.trimmed());
+            QString failure;
+            if (status != QProcess::NormalExit || code != 0)
+                failure = tr("The game stopped with exit code %1.").arg(code);
+            else if (!ready)
+                failure = tr("The game closed before the source map became playable.");
+            if (!failure.isEmpty()) {
+                if (!javaError.isEmpty())
+                    failure += QStringLiteral("\n") + javaError;
+                qWarning().noquote() << "Direct map preview:" << failure << "\n" << QString::fromUtf8(outputTail).trimmed();
+                const QFile &log = PortableSettings::messageLogFile();
+                if (log.isOpen())
+                    failure += tr("\n\nWorldEd log: %1").arg(QDir::toNativeSeparators(log.fileName()));
             }
-            const bool success = status == QProcess::NormalExit && code == 0
-                    && ready && mapFilesAbsent && (!validation || validationPassed);
-            if (!success)
-                qWarning().noquote() << "Direct map preview exited with code" << code;
             if (completion)
-                completion(success);
+                completion(failure.isEmpty(), failure);
             deleteLater();
-        });
+        }, Qt::QueuedConnection);
         connect(&server, &QTcpServer::newConnection, this, [this] {
             while (QTcpSocket *socket = server.nextPendingConnection()) {
                 connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
@@ -134,41 +242,51 @@ public:
                 });
             }
         });
-        timeout.setSingleShot(true);
-        connect(&timeout, &QTimer::timeout, this, [this] {
-            qWarning() << "Direct map preview timed out before becoming playable";
-            process.kill();
-        });
     }
 
     ~PreviewSession() override
     {
+        disconnect(&process, nullptr, this, nullptr);
         if (process.state() != QProcess::NotRunning) {
             process.kill();
             process.waitForFinished(3000);
         }
     }
 
-    bool begin(const QDir &game, const QString &agent, QVector<QByteArray> sourceCells,
-               const QJsonArray &spawn, const QString &validationScript, QString &error)
+    bool begin(const QDir &game, QStringList args, const QStringList &classpath, const QString &mainClass,
+               QVector<QByteArray> sourceCells,
+               const QJsonArray &spawn, QString &error)
     {
-        if (!profile.isValid()) {
-            error = profile.errorString();
+        QString javaDirectory;
+        QStringList tempRoots{QDir::tempPath()};
+#ifdef Q_OS_WIN
+        const QString windows = qEnvironmentVariable("SystemRoot");
+        if (!windows.isEmpty())
+            tempRoots.append(QDir(windows).filePath(QStringLiteral("Temp")));
+#endif
+        tempRoots.removeDuplicates();
+        for (const QString &root : tempRoots) {
+            auto candidate = std::make_unique<QTemporaryDir>(QDir(root).filePath(QStringLiteral("PZDirectMapPreview-XXXXXX")));
+            if (!candidate->isValid())
+                continue;
+            javaDirectory = javaProfilePath(game, candidate->path());
+            if (!javaDirectory.isEmpty()) {
+                profile = std::move(candidate);
+                break;
+            }
+        }
+        if (!profile) {
+            error = tr("Could not create a temporary game profile usable by the bundled Java runtime. Check the TEMP folder and its permissions.\n%1")
+                    .arg(QDir::toNativeSeparators(QDir::tempPath()));
             return false;
         }
+        QString agentPath;
+        if (!DirectMapPreviewAgent::deploy(profile->path(), agentPath, error))
+            return false;
+        const QString agent = QDir::toNativeSeparators(QDir(javaDirectory).filePath(QDir(profile->path()).relativeFilePath(agentPath)));
         if (spawn.size() != 3) {
             error = tr("The map sources do not provide a playable starting square.");
             return false;
-        }
-        QByteArray checks;
-        validation = !validationScript.isEmpty();
-        if (validation) {
-            QFile file(validationScript);
-            if (!file.open(QIODevice::ReadOnly)) {
-                error = file.errorString();
-                return false;
-            }
-            checks = file.readAll();
         }
         const QByteArray scenario = QStringLiteral(R"lua(
 debugScenarios = debugScenarios or {}
@@ -195,7 +313,7 @@ Events.OnGameStart.Add(function()
     print("[PZDirectMapPreview] Lua ready at " .. player:getX() .. "," .. player:getY() .. "," .. player:getZ())
 end)
 )lua").arg(spawn.at(0).toInt()).arg(spawn.at(1).toInt()).arg(spawn.at(2).toInt()).toUtf8();
-        const QDir cache(profile.path());
+        const QDir cache(profile->path());
         const QString mod = QStringLiteral("mods/PZDirectMapPreview/common/");
         if (!write(cache, QStringLiteral("mods/reset-mods-42_00.txt"), "", error)
                 || !write(cache, QStringLiteral("mods/default.txt"),
@@ -209,7 +327,7 @@ end)
                 || !write(cache, mod + QStringLiteral("media/maps/PZDirectMapPreview/map.info"),
                           "title=WorldEd Direct Map Preview\nfixed2x=true\n", error)
                 || !write(cache, mod + QStringLiteral("media/lua/client/PZDirectMapPreview.lua"),
-                          scenario + '\n' + checks, error))
+                          scenario, error))
             return false;
 
         if (!server.listen(QHostAddress::LocalHost)) {
@@ -219,48 +337,29 @@ end)
         const QString token = QUuid::createUuid().toString(QUuid::WithoutBraces);
         request = "PZDP/1 " + token.toLatin1() + '\n';
         cells = std::move(sourceCells);
-        QFile configuration(game.filePath(QStringLiteral("ProjectZomboid64.json")));
-        if (!configuration.open(QIODevice::ReadOnly)) {
-            error = configuration.errorString();
-            return false;
-        }
-        const QJsonObject launcher = QJsonDocument::fromJson(configuration.readAll()).object();
-        QStringList args;
-        for (const QJsonValue &argument : launcher.value(QStringLiteral("vmArgs")).toArray()) {
-            const QString option = argument.toString();
-            if (option.startsWith(QLatin1String("-javaagent:"))
-                    || option.startsWith(QLatin1String("-agentlib:"))
-                    || option.startsWith(QLatin1String("-agentpath:")))
-                continue;
-            args << option;
-        }
-        QStringList classpath;
-        for (const QJsonValue &part : launcher.value(QStringLiteral("classpath")).toArray())
-            classpath << part.toString();
-        if (classpath.isEmpty() || launcher.value(QStringLiteral("mainClass")).toString().isEmpty()) {
-            error = tr("The installed game launcher configuration is invalid.");
-            return false;
-        }
         args << QStringLiteral("-Dnosave=true")
-             << QStringLiteral("-javaagent:%1=%2:%3").arg(agent).arg(server.serverPort()).arg(token)
-             << QStringLiteral("-cp") << classpath.join(QLatin1Char(';'))
-             << launcher.value(QStringLiteral("mainClass")).toString().replace(QLatin1Char('/'), QLatin1Char('.'))
+             << (QStringLiteral("-javaagent:") + agent + QLatin1Char('=') + QString::number(server.serverPort()) + QLatin1Char(':') + token)
+             << QStringLiteral("-cp") << classpath.join(QDir::listSeparator())
+             << mainClass
              << QStringLiteral("-debug") << QStringLiteral("-nosteam")
-             << QStringLiteral("-cachedir=") + QDir::toNativeSeparators(profile.path())
+             << QStringLiteral("-cachedir=") + javaDirectory
              << QStringLiteral("-modfolders") << QStringLiteral("mods");
-        qInfo().noquote() << "Direct map preview profile:" << profile.path();
+        qInfo().noquote() << "Direct map preview profile:" << profile->path();
         QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
         environment.remove(QStringLiteral("_JAVA_OPTIONS"));
         environment.remove(QStringLiteral("JAVA_TOOL_OPTIONS"));
         environment.remove(QStringLiteral("JDK_JAVA_OPTIONS"));
         process.setProcessEnvironment(environment);
         process.setWorkingDirectory(game.absolutePath());
-        process.start(game.filePath(QStringLiteral("jre64/bin/java.exe")), args);
+        const QString program = game.filePath(QStringLiteral("jre64/bin/java.exe"));
+        qInfo().noquote() << "Direct map preview game runtime:" << QDir::toNativeSeparators(program)
+                          << "main class:" << mainClass;
+        process.start(program, args);
         if (!process.waitForStarted(5000)) {
-            error = process.errorString();
+            error = tr("Could not start the game's Java runtime.\n%1\n%2")
+                    .arg(QDir::toNativeSeparators(program), process.errorString());
             return false;
         }
-        timeout.start(180000);
         return true;
     }
 
@@ -286,7 +385,8 @@ private:
         QFile file(path);
         if (!QDir().mkpath(QFileInfo(path).absolutePath())
                 || !file.open(QIODevice::WriteOnly) || file.write(data) != data.size()) {
-            error = tr("Could not stage %1.").arg(QDir::toNativeSeparators(path));
+            error = tr("Could not write the playtest profile file.\n%1\n%2")
+                    .arg(QDir::toNativeSeparators(path), file.errorString());
             return false;
         }
         return true;
@@ -294,36 +394,47 @@ private:
 
     void readOutput()
     {
-        pendingOutput += process.readAllStandardOutput();
-        int end;
-        while ((end = pendingOutput.indexOf('\n')) >= 0) {
-            const QByteArray line = pendingOutput.left(end).trimmed();
-            pendingOutput.remove(0, end + 1);
-            if (line.contains(readyMarker))
-                ready = true;
-            if (line.contains(passedMarker))
-                validationPassed = true;
-            if (ready && (!validation || validationPassed))
-                timeout.stop();
-            if (line.contains("[PZDirectMapPreview]") || line.contains("[PZ Direct Map]")
-                    || line.contains("ERROR") || line.contains("Exception") || line.startsWith("at ")
-                    || line.startsWith("Caused by:") || line.startsWith("Suppressed:"))
-                qInfo().noquote() << QString::fromUtf8(line);
+        const QByteArray bytes = process.readAllStandardOutput();
+        if (bytes.isEmpty())
+            return;
+        constexpr int maxBytes = 16384;
+        outputTail.append(bytes);
+        if (outputTail.size() > maxBytes)
+            outputTail.remove(0, outputTail.size() - maxBytes);
+        pendingOutput.append(bytes);
+        int begin = 0;
+        for (int end = pendingOutput.indexOf('\n'); end >= 0; end = pendingOutput.indexOf('\n', begin)) {
+            handleLine(pendingOutput.mid(begin, end - begin).trimmed());
+            begin = end + 1;
         }
+        pendingOutput.remove(0, qMax(begin, pendingOutput.size() - maxBytes));
     }
 
-    QTemporaryDir profile{QDir::tempPath() + QStringLiteral("/PZDirectMapPreview-XXXXXX")};
+    void handleLine(const QByteArray &line)
+    {
+        if (line.contains(readyMarker))
+            ready = true;
+        if (line.startsWith("Caused by:") || (javaError.isEmpty()
+                && (line.startsWith("Error") || line.startsWith("Unrecognized") || line.startsWith("Exception in thread")
+                    || line.startsWith("Invalid maximum heap size") || line.startsWith("Could not"))))
+            javaError = QString::fromUtf8(line.left(512));
+        if (line.contains("[PZDirectMapPreview]") || line.contains("[PZ Direct Map]")
+                || line.contains("ERROR") || line.contains("Exception") || line.startsWith("at ")
+                || line.startsWith("Caused by:") || line.startsWith("Suppressed:"))
+            qInfo().noquote() << QString::fromUtf8(line);
+    }
+
+    std::unique_ptr<QTemporaryDir> profile;
     QTcpServer server;
     QProcess process;
-    QTimer timeout;
     QByteArray request;
     QVector<QByteArray> cells;
     int nextCell = 0;
     QByteArray pendingOutput;
-    std::function<void(bool)> completion;
-    bool validation = false;
+    QByteArray outputTail;
+    QString javaError;
+    std::function<void(bool, const QString &)> completion;
     bool ready = false;
-    bool validationPassed = false;
 };
 
 QPointer<PreviewSession> activeSession;
@@ -336,26 +447,43 @@ bool DirectMapPreviewRunner::isRunning()
 }
 
 bool DirectMapPreviewRunner::start(const QString &project, const QString &gameDirectory,
-                                   const QVector<QPoint> &selection, const QString &validationScript, QString &error,
-                                   std::function<void(bool)> finished)
+                                   const QVector<QPoint> &selection, QString &error,
+                                   std::function<void(bool, const QString &)> finished)
 {
     if (isRunning()) {
         error = QObject::tr("A direct map preview is already running.");
         return false;
     }
-    const QDir game(gameDirectory);
-    const QString agent = QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(
-                QStringLiteral("../tools/DirectMapPreview/PZDirectMapPreview.jar"));
-    if (gameDirectory.isEmpty() || !game.exists(QStringLiteral("projectzomboid.jar"))
-            || !game.exists(QStringLiteral("jre64/bin/java.exe")) || !QFileInfo::exists(agent)) {
-        error = QObject::tr("Direct preview requires a Project Zomboid 42.22.2 installation and the bundled preview agent.");
+    error = PlaytestGamePath::installationError(gameDirectory);
+    if (!error.isEmpty())
+        return false;
+    const QDir game(PlaytestGamePath::root(gameDirectory));
+    QFile configuration(game.filePath(QStringLiteral("ProjectZomboid64.json")));
+    if (!configuration.open(QIODevice::ReadOnly)) {
+        error = QObject::tr("Could not read the game launcher configuration.\n%1\n%2")
+                .arg(QDir::toNativeSeparators(configuration.fileName()), configuration.errorString());
+        return false;
+    }
+    const auto os = QOperatingSystemVersion::current();
+    const QVersionNumber windows(os.majorVersion(), os.minorVersion(), os.microVersion());
+    QStringList vmArgs;
+    QStringList classpath;
+    QString mainClass;
+    if (!readLauncher(configuration.readAll(), windows, vmArgs, classpath, mainClass, error)) {
+        error += QLatin1Char('\n') + QDir::toNativeSeparators(configuration.fileName());
         return false;
     }
     QFile jar(game.filePath(QStringLiteral("projectzomboid.jar")));
     QCryptographicHash hash(QCryptographicHash::Sha256);
-    if (!jar.open(QIODevice::ReadOnly) || !hash.addData(&jar)
-            || hash.result().toHex() != QByteArrayLiteral("3c4a7c5f149d784758c6fb5f8fa85f3a21d572e38bc081400e89035f8120d287")) {
-        error = QObject::tr("This prototype requires the exact Project Zomboid 42.22.2 Windows JAR.");
+    if (!jar.open(QIODevice::ReadOnly) || !hash.addData(&jar)) {
+        error = QObject::tr("Could not read the installed game JAR.\n%1\n%2")
+                .arg(QDir::toNativeSeparators(jar.fileName()), jar.errorString());
+        return false;
+    }
+    if (hash.result().toHex() != QByteArrayLiteral("3c4a7c5f149d784758c6fb5f8fa85f3a21d572e38bc081400e89035f8120d287")) {
+        qWarning().noquote() << "Direct map preview game JAR SHA-256:" << hash.result().toHex() << jar.fileName();
+        error = QObject::tr("This playtest supports the original Project Zomboid 42.22.2 Windows game JAR. The selected installation has a different JAR.\n%1")
+                .arg(QDir::toNativeSeparators(jar.fileName()));
         return false;
     }
     QVector<QByteArray> cells;
@@ -363,7 +491,7 @@ bool DirectMapPreviewRunner::start(const QString &project, const QString &gameDi
     if (!DirectMapPreview::read(project, cells, spawn, error, selection))
         return false;
     auto session = std::make_unique<PreviewSession>(std::move(finished));
-    if (!session->begin(game, agent, std::move(cells), spawn, validationScript, error))
+    if (!session->begin(game, vmArgs, classpath, mainClass, std::move(cells), spawn, error))
         return false;
     activeSession = session.release();
     return true;

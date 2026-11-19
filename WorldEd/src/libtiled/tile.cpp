@@ -30,6 +30,7 @@
 #include "tile.h"
 
 #include "tileset.h"
+#include "../../../shared/tileimagebounds.h"
 
 #include <QMargins>
 #include <QPainter>
@@ -46,32 +47,19 @@ bool Tile::hasResolvedSource() const
 
 void Tile::setImage(const QImage &image)
 {
-    mImage = QImage();
-    mImageOffset = QPoint(0, 0);
-    mImageSize = image.size();
+    setImage(image, image.rect());
+}
 
-    int top = 0;
-    while (top < image.height() && isRowTransparent(image, top))
-        top++;
-    if (top == image.height()) {
+void Tile::setImage(const QImage &sheet, const QRect &area)
+{
+    if (!area.isEmpty() && !sheet.rect().contains(area)) {
+        setImage(sheet.copy(area));
         return;
     }
-    mImageOffset.setY(top);
-
-    int bottom = image.height() - 1;
-    while (bottom > top && isRowTransparent(image, bottom))
-        bottom--;
-
-    int left = 0;
-    while (left < image.width() && isColumnTransparent(image, left))
-        left++;
-    mImageOffset.setX(left);
-
-    int right = image.width() - 1;
-    while (right > left && isColumnTransparent(image, right))
-        right--;
-
-    mImage = image.copy(left, top, right - left + 1, bottom - top + 1);
+    const QRect bounds = TileImageBounds::visibleRect(sheet, area);
+    mImage = bounds.isEmpty() ? QImage() : sheet.copy(bounds);
+    mImageSize = area.size();
+    mImageOffset = bounds.isEmpty() ? QPoint() : bounds.topLeft() - area.topLeft();
 }
 
 void Tile::setEmptyImage(int width, int height)
@@ -141,22 +129,3 @@ bool Tile::hasSameImageData(const Tile *tile) const
                            size_t(mImage.sizeInBytes())) == 0;
 }
 
-bool Tile::isRowTransparent(const QImage &image, int row)
-{
-    for (int x = 0; x < image.width(); x++) {
-        QRgb rgb = image.pixel(x, row);
-        if (qAlpha(rgb) > 0)
-            return false;
-    }
-    return true;
-}
-
-bool Tile::isColumnTransparent(const QImage &image, int col)
-{
-    for (int y = 0; y < image.height(); y++) {
-        QRgb rgb = image.pixel(col, y);
-        if (qAlpha(rgb) > 0)
-            return false;
-    }
-    return true;
-}

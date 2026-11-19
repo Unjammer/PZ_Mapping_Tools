@@ -26,6 +26,7 @@ using namespace BuildingEditor;
 static const char *KEY_MAPS_DIRECTORY = "MapsDirectory";
 static const char *KEY_TILE_SCALE = "MainWindow/CategoryScale";
 static const char *KEY_SHOW_GRID = "ShowGrid";
+static const char *KEY_GAP_CHECK_BACKGROUND = "PreviewWindow/GapCheckBackground";
 static const char *KEY_GRID_COLOR = "GridColor";
 static const char *KEY_HIGHLIGHT_FLOOR = "PreviewWindow/HighlightFloor";
 static const char *KEY_HIGHLIGHT_ROOM = "HighlightRoom";
@@ -62,6 +63,11 @@ BuildingPreferences::BuildingPreferences(QObject *parent) :
     mMapsDirectory = mSettings.value(QLatin1String(KEY_MAPS_DIRECTORY),
                                      Tiled::Internal::Preferences::instance()->mapsDirectory()).toString();
     mShowGrid = mSettings.value(QLatin1String(KEY_SHOW_GRID), true).toBool();
+    mGapCheckBackground = mSettings.value(QLatin1String(KEY_GAP_CHECK_BACKGROUND), false).toBool();
+    mFurnitureClipboardEnabled = mSettings.value(QStringLiteral("Editing/FurnitureClipboardEnabled"), false).toBool();
+    mRevealPickedTileset = mSettings.value(QStringLiteral("Editing/RevealPickedTileset"), false).toBool();
+    mWallVariantDetails = mSettings.value(QStringLiteral("Editing/WallVariantDetails"), false).toBool();
+    mLuaFloorGrimeEnabled = mSettings.value(QStringLiteral("Editing/LuaFloorGrimeEnabled"), false).toBool();
     mGridColor = mSettings.value(QLatin1String(KEY_GRID_COLOR), QColor(Qt::black).name()).toString();
     mHighlightFloor = mSettings.value(QLatin1String(KEY_HIGHLIGHT_FLOOR),
                                       true).toBool();
@@ -124,6 +130,51 @@ void BuildingPreferences::setGridColor(const QColor &gridColor)
     mGridColor = gridColor;
     mSettings.setValue(QLatin1String(KEY_GRID_COLOR), mGridColor.name());
     emit gridColorChanged(mGridColor);
+}
+
+void BuildingPreferences::setGapCheckBackground(bool enabled)
+{
+    if (mGapCheckBackground == enabled)
+        return;
+    mGapCheckBackground = enabled;
+    mSettings.setValue(QLatin1String(KEY_GAP_CHECK_BACKGROUND), enabled);
+    emit gapCheckBackgroundChanged(enabled);
+}
+
+void BuildingPreferences::setFurnitureClipboardEnabled(bool enabled)
+{
+    if (mFurnitureClipboardEnabled == enabled)
+        return;
+    mFurnitureClipboardEnabled = enabled;
+    mSettings.setValue(QStringLiteral("Editing/FurnitureClipboardEnabled"), enabled);
+    emit furnitureClipboardEnabledChanged(enabled);
+}
+
+void BuildingPreferences::setRevealPickedTileset(bool enabled)
+{
+    if (mRevealPickedTileset == enabled)
+        return;
+    mRevealPickedTileset = enabled;
+    mSettings.setValue(QStringLiteral("Editing/RevealPickedTileset"), enabled);
+    emit revealPickedTilesetChanged(enabled);
+}
+
+void BuildingPreferences::setWallVariantDetails(bool enabled)
+{
+    if (mWallVariantDetails == enabled)
+        return;
+    mWallVariantDetails = enabled;
+    mSettings.setValue(QStringLiteral("Editing/WallVariantDetails"), enabled);
+    emit wallVariantDetailsChanged(enabled);
+}
+
+void BuildingPreferences::setLuaFloorGrimeEnabled(bool enabled)
+{
+    if (mLuaFloorGrimeEnabled == enabled)
+        return;
+    mLuaFloorGrimeEnabled = enabled;
+    mSettings.setValue(QStringLiteral("Editing/LuaFloorGrimeEnabled"), enabled);
+    emit luaFloorGrimeEnabledChanged(enabled);
 }
 
 void BuildingPreferences::setHighlightFloor(bool highlight)

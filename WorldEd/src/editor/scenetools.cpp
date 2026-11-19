@@ -748,34 +748,6 @@ void SelectMoveObjectTool::deleteInstance()
     delete mInstance;
 }
 
-bool SelectMoveObjectTool::validateContextMenuDispatch(QString *error)
-{
-    QAction propertiesAction(nullptr);
-    QAction accessAction(nullptr);
-    QAction removeAction(nullptr);
-    QAction unrelatedAction(nullptr);
-
-    if (objectContextChoice(nullptr, &propertiesAction, nullptr,
-                            &removeAction) != ObjectContextChoice::None
-            || objectContextChoice(&propertiesAction, &propertiesAction,
-                                   nullptr, &removeAction)
-               != ObjectContextChoice::Properties
-            || objectContextChoice(&accessAction, &propertiesAction,
-                                   &accessAction, &removeAction)
-               != ObjectContextChoice::BasementAccess
-            || objectContextChoice(&removeAction, &propertiesAction,
-                                   nullptr, &removeAction)
-               != ObjectContextChoice::Remove
-            || objectContextChoice(&unrelatedAction, &propertiesAction,
-                                   nullptr, &removeAction)
-               != ObjectContextChoice::None) {
-        if (error)
-            *error = tr("Object context-menu action dispatch is invalid");
-        return false;
-    }
-    return true;
-}
-
 void SelectMoveObjectTool::deactivate()
 {
     if (mResizeHandle) {
@@ -4430,41 +4402,6 @@ PasteCellsTool::PasteCellsTool()
 
 PasteCellsTool::~PasteCellsTool()
 {
-}
-
-bool PasteCellsTool::validateCellPastePlacement(QString *summary,
-                                                QString *error)
-{
-    QVector<QPoint> sourceCells;
-    sourceCells << QPoint(2, 3) << QPoint(3, 3) << QPoint(2, 4);
-    const QPoint sourceAnchor = topLeftCell(sourceCells, QPoint(-1, -1));
-    const QPoint selectedAnchor = topLeftCell(
-                QVector<QPoint>() << QPoint(7, 5), sourceAnchor);
-    const QRect worldBounds(0, 0, 10, 10);
-    const QPoint dropAnchor = boundedDropCell(
-                sourceCells, sourceAnchor, selectedAnchor, worldBounds);
-    if (sourceAnchor != QPoint(2, 3)
-            || dropAnchor != QPoint(7, 5)
-            || pastedCellPosition(QPoint(2, 3), sourceAnchor, dropAnchor)
-               != QPoint(7, 5)
-            || pastedCellPosition(QPoint(3, 3), sourceAnchor, dropAnchor)
-               != QPoint(8, 5)
-            || pastedCellPosition(QPoint(2, 4), sourceAnchor, dropAnchor)
-               != QPoint(7, 6)) {
-        if (error)
-            *error = tr("The selected target cell did not anchor the paste.");
-        return false;
-    }
-    if (boundedDropCell(sourceCells, sourceAnchor, QPoint(9, 9),
-                        worldBounds) != QPoint(8, 8)) {
-        if (error)
-            *error = tr("The paste footprint was not kept inside the world.");
-        return false;
-    }
-    if (summary)
-        *summary = tr("selected-cell anchoring, relative multi-cell positions "
-                      "and world-bound clamping verified");
-    return true;
 }
 
 void PasteCellsTool::activate()

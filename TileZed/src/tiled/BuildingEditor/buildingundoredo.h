@@ -56,6 +56,19 @@ enum {
     UndoCmd_ChangeRoom = 1006,
 };
 
+class SetSelectedObjects : public QUndoCommand
+{
+public:
+    SetSelectedObjects(BuildingDocument *document, const QSet<BuildingObject *> &selection)
+        : mDocument(document), mSelectedObjects(selection) {}
+    void undo() override { swap(); }
+    void redo() override { swap(); }
+private:
+    void swap();
+    BuildingDocument *mDocument;
+    QSet<BuildingObject *> mSelectedObjects;
+};
+
 class ChangeRoomAtPosition : public QUndoCommand
 {
 public:

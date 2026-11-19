@@ -1,4 +1,7 @@
 <RCC>
+    <qresource prefix="/playtest">
+        <file alias="PZDirectMapPreview.jar">../../../tools/DirectMapPreview/PZDirectMapPreview.jar</file>
+    </qresource>
     <qresource prefix="/">
         <file>images/about-tiled-logo.png</file>
         <file>images/tiled-icon-16.png</file>

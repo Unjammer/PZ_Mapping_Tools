@@ -39,8 +39,6 @@ public:
     const QVector<StreetNameRecord> &streets() const { return mStreets; }
     int selectedStreetIndex() const { return mSelectedStreet; }
     bool saveForProject();
-    bool validateStreetFile(const QString &fileName, int *streetCount,
-                            QString *error) const;
     void applySnapshot(const QVector<StreetNameRecord> &streets,
                        int selectedStreet);
 protected:

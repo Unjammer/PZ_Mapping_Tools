@@ -54,7 +54,6 @@ bool fitInGameMapRendererBudget(
         int *repairedFeatures,
         QString *error);
 
-bool validateInGameMapRendererBudget(QString *summary, QString *error);
 
 class InGameMapWriter
 {

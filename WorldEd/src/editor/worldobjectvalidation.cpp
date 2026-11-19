@@ -120,20 +120,6 @@ QStringList WorldObjectValidation::spawnProfessions(WorldCellObject *object)
     return professions;
 }
 
-QStringList WorldObjectValidation::expectedObjectTypes()
-{
-    return QStringList() << QLatin1String("SpawnPoint")
-                         << QLatin1String("ParkingStall")
-                         << QLatin1String("Vehicle")
-                         << QLatin1String("WaterFlow")
-                         << QLatin1String("WaterZone")
-                         << QLatin1String("RoomTone")
-                         << QLatin1String("Mannequin")
-                         << QLatin1String("Animal")
-                         << QLatin1String("Basement")
-                         << QLatin1String("WorldGen");
-}
-
 QStringList WorldObjectValidation::expectedPropertyNames(
         const QString &typeName)
 {

@@ -47,8 +47,6 @@ class BmpToolDialog : public QDockWidget
     
 public:
     static BmpToolDialog *instance();
-    static bool validateReloadEquality(QString *errorString);
-
     void setVisible(bool visible);
 
     void setVisibleLater(bool visible);

@@ -32,8 +32,6 @@ public:
     static bool canEdit(WorldCellObject *object);
     static bool edit(WorldDocument *worldDocument,
                      WorldCellObject *object, QWidget *parent);
-    static bool validate(const QString &defaultsPath,
-                         QString *summary, QString *error);
 
 protected:
     void accept() override;

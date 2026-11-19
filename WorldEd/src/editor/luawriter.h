@@ -43,10 +43,6 @@ public:
     QString errorString() const;
     QStringList warnings() const;
 
-    static bool validateSpawnPointExport(QString *summary, QString *error);
-    static bool validateZoneExport(QString *summary, QString *error,
-                                   const QString &projectPath = QString());
-    static bool validateFishingZoneExport(QString *error);
 
 private:
     void writeWorld(World *world, QIODevice *device, const QString &absDirPath);

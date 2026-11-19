@@ -81,29 +81,6 @@ static void applyImagePatch(QImage &destination, const QImage &patch,
     painter.drawImage(destinationRect, patch, sourceRect);
 }
 
-bool MiniMapItem::validateBmpPatchTransfer(QString *errorString)
-{
-    const QRgb patchColor = qRgb(25, 150, 210);
-    QImage destination(8, 8, QImage::Format_ARGB32);
-    destination.fill(Qt::black);
-    QImage patch(3, 2, QImage::Format_ARGB32);
-    patch.fill(patchColor);
-    applyImagePatch(destination, patch, QPoint(2, 4));
-    for (int y = 0; y < destination.height(); ++y) {
-        for (int x = 0; x < destination.width(); ++x) {
-            const bool inPatch = QRect(2, 4, 3, 2).contains(x, y);
-            const QRgb expected = inPatch ? patchColor : qRgb(0, 0, 0);
-            if (destination.pixel(x, y) != expected) {
-                *errorString = QStringLiteral(
-                            "MiniMap BMP patch changed pixel %1,%2 incorrectly")
-                        .arg(x).arg(y);
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 /////
 
 ShadowMap::ShadowMap(MapInfo *mapInfo)

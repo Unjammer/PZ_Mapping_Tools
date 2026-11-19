@@ -391,7 +391,11 @@ BuildingIsoScene::BuildingIsoScene(QObject *parent) :
 
     mRenderer = new IsoBuildingRenderer;
 
-    setBackgroundBrush(Qt::darkGray);
+    const auto setGapBackground = [this](bool enabled) {
+        setBackgroundBrush(enabled ? Qt::magenta : Qt::darkGray);
+    };
+    setGapBackground(prefs()->gapCheckBackground());
+    connect(prefs(), &BuildingPreferences::gapCheckBackgroundChanged, this, setGapBackground);
 
     mDarkRectangle->setPen(Qt::NoPen);
     mDarkRectangle->setBrush(Qt::black);
@@ -437,13 +441,11 @@ MapRenderer *BuildingIsoScene::mapRenderer() const
 void BuildingIsoScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     if (event->button() == Qt::RightButton) {
-        const bool pencilClick = mCurrentTool == PencilTool::instance()
-                && !event->modifiers().testFlag(Qt::ShiftModifier);
-        mRightPressPosition = event->screenPos();
-        mRightPressScenePosition = event->scenePos();
-        mRightPressActive = event->buttons() == Qt::RightButton && !pencilClick;
-        mRightPressDragged = false;
-        if (mRightPressActive) {
+        mContextMenuPress = event->buttons() == Qt::RightButton
+                && event->modifiers().testFlag(Qt::ShiftModifier);
+        if (mContextMenuPress) {
+            mContextMenuPressPosition = event->screenPos();
+            mContextMenuDragged = false;
             event->accept();
             return;
         }
@@ -454,22 +456,9 @@ void BuildingIsoScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
 
 void BuildingIsoScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
-    if (!(event->buttons() & Qt::RightButton))
-        mRightPressActive = false;
-    if (mRightPressActive && (event->buttons() & Qt::RightButton)
-            && (event->screenPos() - mRightPressPosition).manhattanLength()
-            >= QApplication::startDragDistance() && !mRightPressDragged) {
-        mRightPressDragged = true;
-        QGraphicsSceneMouseEvent press(QEvent::GraphicsSceneMousePress);
-        press.setButton(Qt::RightButton);
-        press.setButtons(Qt::RightButton);
-        press.setScenePos(mRightPressScenePosition);
-        press.setScreenPos(mRightPressPosition.toPoint());
-        press.setModifiers(event->modifiers());
-        if (mCurrentTool)
-            mCurrentTool->mousePressEvent(&press);
-    }
-    if (mRightPressActive && !mRightPressDragged) {
+    if (mContextMenuPress && event->buttons().testFlag(Qt::RightButton)) {
+        if ((event->screenPos() - mContextMenuPressPosition).manhattanLength() >= QApplication::startDragDistance())
+            mContextMenuDragged = true;
         event->accept();
         return;
     }
@@ -479,7 +468,7 @@ void BuildingIsoScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 
 void BuildingIsoScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
-    if (event->button() == Qt::RightButton && mRightPressActive && !mRightPressDragged) {
+    if (event->button() == Qt::RightButton && mContextMenuPress) {
         event->accept();
         return;
     }
@@ -490,11 +479,10 @@ void BuildingIsoScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 void BuildingIsoScene::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 {
     if (!currentFloor() || (event->reason() == QGraphicsSceneContextMenuEvent::Mouse
-            && (!mRightPressActive || mRightPressDragged))) {
+            && (!mContextMenuPress || mContextMenuDragged))) {
         event->ignore();
         return;
     }
-    mRightPressActive = false;
     const QPoint position = sceneToTile(event->scenePos(), currentLevel());
     QMenu menu;
     QAction *pin = menu.addAction(tr("Pin Room Highlight"));
@@ -546,7 +534,7 @@ void BuildingIsoScene::setDocument(BuildingDocument *doc)
     mPendingLayerVisibilityFloors.clear();
     mHighlightRoomLock = false;
     mHighlightRoomPos = QPoint(-1, -1);
-    mRightPressActive = false;
+    mContextMenuPress = false;
 
     qDeleteAll(mFloorItems);
     mFloorItems.clear();
@@ -1095,6 +1083,8 @@ void BuildingIsoScene::BuildingToMap()
     connect(mBuildingMap, &BuildingMap::mapResized, this, &BuildingIsoScene::mapResized);
     connect(mBuildingMap, &BuildingMap::layersUpdated,
             this, &BuildingIsoScene::layersUpdated);
+    connect(mBuildingMap, &BuildingMap::layersUpdated,
+            this, &BuildingIsoScene::tileContentsChanged);
 
     mRenderer->asIso()->mMapRenderer = mBuildingMap->mapRenderer();
 
@@ -1952,9 +1942,11 @@ void BuildingIsoView::mouseMoveEvent(QMouseEvent *event)
     if (!scene()->document())
         return;
 
-    QPoint tilePos = scene()->sceneToTile(mLastMouseScenePos, scene()->currentLevel());
-    if (tilePos != mLastMouseTilePos) {
+    const int level = scene()->currentLevel();
+    QPoint tilePos = scene()->sceneToTile(mLastMouseScenePos, level);
+    if (tilePos != mLastMouseTilePos || level != mLastMouseLevel) {
         mLastMouseTilePos = tilePos;
+        mLastMouseLevel = level;
         emit mouseCoordinateChanged(mLastMouseTilePos);
 
         scene()->setCursorPosition(tilePos);
@@ -1969,6 +1961,12 @@ void BuildingIsoView::mouseReleaseEvent(QMouseEvent *event)
     }
 
     QGraphicsView::mouseReleaseEvent(event);
+}
+
+QPoint BuildingIsoView::mouseTilePosition() const
+{
+    return mLastMouseLevel >= 0 && scene() && scene()->currentFloor()
+            ? scene()->sceneToTile(mLastMouseScenePos, scene()->currentLevel()) : QPoint(-1, -1);
 }
 
 /**

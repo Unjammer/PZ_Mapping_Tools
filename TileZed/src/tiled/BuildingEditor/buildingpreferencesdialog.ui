@@ -144,6 +144,37 @@
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="editingTab">
+      <attribute name="title"><string>Editing</string></attribute>
+      <layout class="QVBoxLayout" name="editingLayout">
+       <item>
+        <widget class="QCheckBox" name="furnitureClipboardEnabled">
+         <property name="text"><string>Enable furniture copy and paste in Ortho and Iso</string></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="revealPickedTileset">
+         <property name="text"><string>Show the tileset palette when picking a tile</string></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="wallVariantDetails">
+         <property name="text"><string>Show wall and trim variant details in tooltips</string></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="luaFloorGrimeEnabled">
+         <property name="text"><string>Allow Lua scripts to register Floor Grime brushes</string></property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="editingSpacer">
+         <property name="orientation"><enum>Qt::Vertical</enum></property>
+         <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
    <item>

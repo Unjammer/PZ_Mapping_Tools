@@ -22,10 +22,6 @@ public:
                                PROGRESS *initializationProgress = nullptr);
     ~PackExtractDialog();
 
-    static bool runSelfTest(QString *summary, QString *errorString);
-    static bool renderValidation(const QString &outputFile,
-                                 QString *errorString);
-
     bool initializationCanceled() const
     { return mInitializationCanceled; }
 

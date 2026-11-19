@@ -180,7 +180,7 @@ public:
     static BuildingEditorWindow *instance()
     { return mInstance; }
 
-    explicit BuildingEditorWindow(QWidget *parent = 0);
+    explicit BuildingEditorWindow(QWidget *parent = nullptr);
     ~BuildingEditorWindow();
 
     void closeEvent(QCloseEvent *event);
@@ -191,8 +191,6 @@ public:
     bool confirmAllSave();
 
     bool Startup();
-    void setDiagnosticShortcutsEnabled(bool enabled);
-
     void readSettings();
     void startSettingsAutoSave();
 
@@ -386,7 +384,6 @@ private:
     Core::Internal::FancyTabWidget *mTabWidget;
 
     bool mDocumentChanging;
-    QList<QAction*> mDiagnosticActions;
 };
 
 } // namespace BuildingEditor

@@ -15,15 +15,21 @@ specified in the TileProperties.txt file.&nbsp; You can easily add new
 property-editing controls to the editor by editing the
 TileProperties.txt file in a
 text editor program.&nbsp; The TileProperties.txt file is read in every
-time the Tile Properites Editor is displayed.&nbsp; So you may close
+time the Tile Properties Editor is opened.&nbsp; So you may close
 the editor (but keep TileZed running), edit TileProperties.txt, then
 open the editor again to see the changes.<br>
 <br>
 There is also a set of simple <a href="modify.html">commands that can modify the properties</a> in a .tiles file when it is read in.<br>
-<h2>Default Values</h2>All properties in the editor have a default
-value.&nbsp; When a property is set to its default value, no property
-is written to the .tiles file.&nbsp; The label for an editor control
+<h2>Default Values</h2>Each control has a default value for tiles without that
+setting. On an existing tile, Save preserves the stored names and values of
+fields you leave untouched. Editing a field uses the representation defined
+by its control. For example, returning an ordinary integer to its default
+removes its key from the file.&nbsp; The label for an editor control
 (like a checkbox) is displayed in <span style="font-weight: bold;">bold</span> when a property does not have its default value.<br>
+<p>If a tile uses an unrecognized name, the opening warning shows the active
+catalogue path. The name may belong to an older tool or a mod. To remove
+selected names from the open file, use <b>Edit &gt; Review Unknown Properties...</b>.
+Undo restores the original values.</p>
 <h2>Boolean Properties</h2>
 property<br>
 {<br>
@@ -61,6 +67,11 @@ Integer properties are displayed as a spinbox in the editor.&nbsp; In a .tiles f
   <li><span style="font-weight: bold;">ShortName</span> is the name of the property written to the .tiles file.</li>
   <li><span style="font-weight: bold;">Min</span> and <span style="font-weight: bold;">Max</span> limit the values the user can enter in the spinbox.&nbsp; <span style="font-weight: bold;">Min</span> must be less than <span style="font-weight: bold;">Max</span>.<br>
   </li>
+  <li>An optional <b>ReadAlias</b> lets the same integer control read an alternative
+stored name, such as <code>firerequirement</code> for <code>fireRequirement</code>.
+An edited value keeps the spelling already present on the tile. If both names
+are present, the field initially shows the value of <b>ShortName</b> and an
+explicit edit updates both.</li>
   <li><span style="font-weight: bold;">Default</span> is the default value for the property.&nbsp; It must be between <span style="font-weight: bold;">Min</span> and <span style="font-weight: bold;">Max</span> inclusive.<br>
   </li>
 </ul>

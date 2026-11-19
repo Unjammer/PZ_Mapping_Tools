@@ -40,9 +40,6 @@ public:
     explicit CheckBuildingsWindow(QWidget *parent = 0);
     ~CheckBuildingsWindow();
 
-    static bool validateSelectionRefresh(QString *error);
-    static bool validateFixBatch(QString *error);
-
 private slots:
     void browse();
     void check();

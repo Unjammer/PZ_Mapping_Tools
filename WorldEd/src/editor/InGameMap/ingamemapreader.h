@@ -18,7 +18,10 @@
 #ifndef INGAMEMAPREADER_H
 #define INGAMEMAPREADER_H
 
-#include <QString>
+#include "ingamemapcell.h"
+
+#include <QPoint>
+#include <QVector>
 
 class World;
 class WorldDocument;
@@ -30,11 +33,22 @@ class InGameMapReaderPrivate;
 class InGameMapReader
 {
 public:
+    struct OverlayCell {
+        QPoint position;
+        QVector<InGameMapFeature> features;
+    };
+
+    struct Overlay {
+        int cellSize = 0;
+        QVector<OverlayCell> cells;
+    };
+
     InGameMapReader();
     ~InGameMapReader();
 
     World *readWorld(QIODevice *device, const QString &path, World *world);
     World *readWorld(const QString &fileName, World* world);
+    bool readOverlay(const QString &fileName, Overlay &overlay);
     bool replaceWorld(const QString &fileName, WorldDocument *document);
 
     QString errorString() const;

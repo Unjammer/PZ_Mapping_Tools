@@ -35,6 +35,7 @@ class FurnitureTiles;
 
 class FurnitureTile
 {
+    friend class FurnitureTiles;
 public:
     enum FurnitureOrientation {
         FurnitureUnknown = -1,
@@ -134,6 +135,8 @@ public:
     };
 
     FurnitureTiles(bool corners);
+    FurnitureTiles(const FurnitureTiles &other);
+    FurnitureTiles &operator=(const FurnitureTiles &) = delete;
     ~FurnitureTiles();
 
     void setGroup(FurnitureGroup *group)
@@ -261,7 +264,6 @@ signals:
     void furnitureTileChanged(BuildingEditor::FurnitureTile *ftile);
 
 private:
-    bool upgradeTxt();
     bool mergeTxt();
 
 private:

@@ -1740,6 +1740,18 @@ Ligne %1, colonne %2</translation>
 <context>
     <name>Tiled::Internal::MainWindow</name>
     <message>
+        <source>Tile unavailable in the current map or Tiles directory.</source>
+        <translation>Cette tuile est introuvable dans la carte active et le dossier Tiles.</translation>
+    </message>
+    <message>
+        <source>Open a map to paint with this tile.</source>
+        <translation>Ouvrez une carte pour peindre avec cette tuile.</translation>
+    </message>
+    <message>
+        <source>Tile Palettes</source>
+        <translation>Palettes de tuiles</translation>
+    </message>
+    <message>
         <location filename="../src/tiled/mainwindow.cpp" line="+136"/>
         <location line="+8"/>
         <source>Undo</source>
@@ -2495,6 +2507,10 @@ Do you want to replace it?</source>
 </context>
 <context>
     <name>Tiled::Internal::TilesetView</name>
+    <message>
+        <source>Add to Tile Palette</source>
+        <translation>Ajouter à la palette de tuiles</translation>
+    </message>
     <message>
         <source>Properties...</source>
         <translation type="obsolete">Propriétés...</translation>
@@ -3423,36 +3439,6 @@ Par exemple, library=Bibliothèque</translation>
         <source>Saved %1 and generated %2. Game files were not modified.</source>
         <translation>%1 a été enregistré et %2 a été généré. Les fichiers du jeu n’ont pas été modifiés.</translation>
     </message>
-    <message>
-        <source>The project/mod root is inside the read-only game directory.</source>
-        <translation>Le dossier racine du projet ou du mod se trouve dans le dossier du jeu en lecture seule.</translation>
-    </message>
-    <message>
-        <source>Unresolved project procedural references:
-%1</source>
-        <translation>Références procédurales non résolues dans le projet.
-%1</translation>
-    </message>
-    <message>
-        <source>%1 rooms, %2 containers (%3 procedural, %4 direct), %5 procedural distributions, %6 project overrides, %7 unresolved read-only game references</source>
-        <translation>%1 pièces, %2 conteneurs (%3 procéduraux et %4 directs), %5 distributions procédurales, %6 surcharges du projet et %7 références du jeu en lecture seule non résolues</translation>
-    </message>
-    <message>
-        <source>Could not create screenshot directory %1.</source>
-        <translation>Impossible de créer le dossier de captures d’écran %1.</translation>
-    </message>
-    <message>
-        <source>Could not save loot-editor screenshot %1.</source>
-        <translation>Impossible d’enregistrer la capture d’écran de l’éditeur de butin %1.</translation>
-    </message>
-    <message>
-        <source>Loot localization validation failed.</source>
-        <translation>La validation de la localisation du butin a échoué.</translation>
-    </message>
-    <message>
-        <source>. Loot localization checks passed.</source>
-        <translation>. La localisation du butin a été vérifiée.</translation>
-    </message>
 </context>
 <context>
     <name>BuildingEditor::BuildingPreferencesDialog</name>
@@ -3764,6 +3750,119 @@ Le supprimer quand même ?</translation>
     <message>
         <source>Select All</source>
         <translation>Tout sélectionner</translation>
+    </message>
+</context>
+<context>
+    <name>BuildingEditor::TileEditModeToolBar</name>
+    <message>
+        <source>Tile Palettes</source>
+        <translation>Palettes de tuiles</translation>
+    </message>
+</context>
+<context>
+    <name>BuildingEditor::BuildingTilesetView</name>
+    <message>
+        <source>Add to Tile Palette</source>
+        <translation>Ajouter à la palette de tuiles</translation>
+    </message>
+</context>
+<context>
+    <name>Tiled::Internal::TilePaletteWindow</name>
+    <message>
+        <source>Delete Palette…</source>
+        <translation>Supprimer la palette…</translation>
+    </message>
+    <message>
+        <source>Delete Palette</source>
+        <translation>Supprimer la palette</translation>
+    </message>
+    <message>
+        <source>Delete the favorite palette “%1”?</source>
+        <translation>Supprimer la palette de favoris « %1 » ?</translation>
+    </message>
+    <message>
+        <source>Tile Palettes</source>
+        <translation>Palettes de tuiles</translation>
+    </message>
+    <message>
+        <source>Favorites</source>
+        <translation>Favoris</translation>
+    </message>
+    <message>
+        <source>Recently Used</source>
+        <translation>Tuiles récentes</translation>
+    </message>
+    <message>
+        <source>Favorite palette</source>
+        <translation>Palette de favoris</translation>
+    </message>
+    <message>
+        <source>New Palette…</source>
+        <translation>Nouvelle palette…</translation>
+    </message>
+    <message>
+        <source>Add current tile</source>
+        <translation>Ajouter la tuile active</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>Retirer</translation>
+    </message>
+    <message>
+        <source>Import…</source>
+        <translation>Importer…</translation>
+    </message>
+    <message>
+        <source>Export…</source>
+        <translation>Exporter…</translation>
+    </message>
+    <message>
+        <source>Record recently used tiles</source>
+        <translation>Mémoriser les tuiles récemment utilisées</translation>
+    </message>
+    <message>
+        <source>Add to favorites</source>
+        <translation>Ajouter aux favoris</translation>
+    </message>
+    <message>
+        <source>My tiles</source>
+        <translation>Mes tuiles</translation>
+    </message>
+    <message>
+        <source>New Palette</source>
+        <translation>Nouvelle palette</translation>
+    </message>
+    <message>
+        <source>Palette name</source>
+        <translation>Nom de la palette</translation>
+    </message>
+    <message>
+        <source>Import Tile Palette</source>
+        <translation>Importer une palette de tuiles</translation>
+    </message>
+    <message>
+        <source>Tile palettes (*.json)</source>
+        <translation>Palettes de tuiles (*.json)</translation>
+    </message>
+    <message>
+        <source>Export Tile Palette</source>
+        <translation>Exporter une palette de tuiles</translation>
+    </message>
+    <message>
+        <source>Add to %1</source>
+        <translation>Ajouter à %1</translation>
+    </message>
+    <message>
+        <source>The palette exceeds the 8 MiB import limit.</source>
+        <translation>La palette dépasse la limite d’importation de 8 Mio.</translation>
+    </message>
+    <message>
+        <source>The palette exceeds the 8 MiB exchange limit.</source>
+        <translation>La palette dépasse la limite d’échange de 8 Mio.</translation>
+    </message>
+    <message>
+        <source>Expected a version 1 tile palette with a name and valid tileset IDs.</source>
+        <translation>Le fichier doit contenir une palette de version 1 avec un nom et des identifiants de tuiles valides.</translation>
     </message>
 </context>
 </TS>

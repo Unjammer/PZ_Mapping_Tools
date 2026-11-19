@@ -184,6 +184,10 @@ BuildingPreferencesDialog::BuildingPreferencesDialog(QWidget *parent) :
 
     ui->isometric->setChecked(!prefs()->levelIsometric());
     ui->levelIsometric->setChecked(prefs()->levelIsometric());
+    ui->furnitureClipboardEnabled->setChecked(prefs()->furnitureClipboardEnabled());
+    ui->revealPickedTileset->setChecked(prefs()->revealPickedTileset());
+    ui->wallVariantDetails->setChecked(prefs()->wallVariantDetails());
+    ui->luaFloorGrimeEnabled->setChecked(prefs()->luaFloorGrimeEnabled());
 }
 
 BuildingPreferencesDialog::~BuildingPreferencesDialog()
@@ -206,6 +210,10 @@ void BuildingPreferencesDialog::accept()
     prefs()->setGridColor(ui->gridColor->color());
     prefs()->setUseOpenGL(mUseOpenGL);
     prefs()->setLevelIsometric(ui->levelIsometric->isChecked());
+    prefs()->setFurnitureClipboardEnabled(ui->furnitureClipboardEnabled->isChecked());
+    prefs()->setRevealPickedTileset(ui->revealPickedTileset->isChecked());
+    prefs()->setWallVariantDetails(ui->wallVariantDetails->isChecked());
+    prefs()->setLuaFloorGrimeEnabled(ui->luaFloorGrimeEnabled->isChecked());
     prefs()->setAutoSaveIntervalMinutes(
                 mAutoSaveCombo->currentData().toInt());
     Tiled::Internal::Preferences::instance()

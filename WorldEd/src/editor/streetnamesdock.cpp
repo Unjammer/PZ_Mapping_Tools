@@ -267,16 +267,6 @@ StreetNamesDock::~StreetNamesDock()
 {
     detachScene();
 }
-bool StreetNamesDock::validateStreetFile(
-        const QString &fileName, int *streetCount, QString *error) const
-{
-    QVector<StreetNameRecord> parsed;
-    if (!readFile(fileName, &parsed, error))
-        return false;
-    if (streetCount)
-        *streetCount = parsed.size();
-    return true;
-}
 void StreetNamesDock::changeEvent(QEvent *event)
 {
     QDockWidget::changeEvent(event);

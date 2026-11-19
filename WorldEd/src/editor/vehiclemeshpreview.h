@@ -58,11 +58,6 @@ public:
     void clear();
     void clearRendered();
 
-    static bool validate(const QString &gameDirectory,
-                         QString *summary,
-                         QString *error);
-    static QImage validationImage(const QString &gameDirectory,
-                                  QString *error);
 
 private:
     struct TextBlock

@@ -401,6 +401,9 @@ void TilesetView::contextMenuEvent(QContextMenuEvent *event)
         connect(editImage, &QAction::triggered, this, [tile] {
             MainWindow::instance()->editInTileSetZ(tile);
         });
+        menu.addAction(tr("Add to Tile Palette"), this, [tile] {
+            MainWindow::instance()->addTilePaletteFavorite(tile);
+        });
         actionExportSelection = menu.addAction(
                     QIcon(QLatin1String(":images/16x16/document-export.png")),
                     tr("Export Selection as PNG..."));

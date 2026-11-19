@@ -87,9 +87,14 @@ public:
 
     QString currentTile() const
     { return mTileName; }
+    QString singleTileBrush() const;
 
     void setCaptureTiles(FloorTileGrid *tiles, const QRegion &rgn);
     void setClipboardPlacement();
+
+signals:
+    void brushChanged();
+    void tilesPainted();
 
 public slots:
     void activate();
@@ -184,6 +189,7 @@ public:
     static PickTileTool *instance();
 
     PickTileTool();
+    void setInspectorAction(QAction *action) { mInspectorAction = action; }
 
     void mousePressEvent(QGraphicsSceneMouseEvent *event);
     void mouseMoveEvent(QGraphicsSceneMouseEvent *event);
@@ -191,6 +197,7 @@ public:
 
 signals:
     void tilePicked(const QString &tileName);
+    void inspectSquare(const QPoint &position);
 
 public slots:
     void activate() {}
@@ -198,6 +205,7 @@ public slots:
 
 private:
     Q_DISABLE_COPY(PickTileTool)
+    QAction *mInspectorAction = nullptr;
     static PickTileTool *mInstance;
     ~PickTileTool() { mInstance = nullptr; }
 
@@ -217,7 +225,7 @@ public:
 
     void currentModifiersChanged(Qt::KeyboardModifiers modifiers);
 
-    void setTile(const QString &tileName);
+    void registerMaterial(const QString &name, const QStringList &tiles);
 
     QString currentTile() const
     { return mTileName; }
@@ -229,6 +237,7 @@ public slots:
 private:
     void updateCursor(const QPointF &scenePos, bool force = true);
     int pickGrimeEnum(const QPointF &scenePos);
+    void updateMaterialTile();
     void cycleGrime();
     void updateStatusText();
 
@@ -243,7 +252,10 @@ private:
     Qt::KeyboardModifiers mModifiers;
     bool mRotating;
     int mFloorGrimeEntry = 0;
-    int mFloorGrime = -1;
+    int mCustomEntry = -1;
+    int mFloorGrime = 0;
+    QStringList mMaterialNames;
+    QVector<QStringList> mMaterialTiles;
     QPointF mMouseScenePos;
     QPointF mStartScenePos;
     QPoint mStartTilePos;

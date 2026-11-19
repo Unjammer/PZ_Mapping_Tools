@@ -1,5 +1,19 @@
 # PZ Mapping Tools source rules
 
+## Working on a fork
+
+These instructions apply to contributors and automated tools throughout
+the repository. Use [BUILDING.md](BUILDING.md) to compile the three editors.
+Keep generated objects, executables, local settings and diagnostic captures
+outside the source tree. Keep the Java agent JAR used by the WorldEd resource
+compiler together with its sources and rebuild script.
+
+Before distributing a fork, read [Forks and redistribution](UPSTREAM-HISTORY.md#forks-and-redistribution)
+and [the component notices](THIRD_PARTY_NOTICES.txt). Check the license and
+copyright headers of the files you change. Record your own modifications
+under your own name, retain prior credits, and provide the source for the
+exact binaries you distribute under the applicable license terms.
+
 ## Repository provenance
 
 Tim Baker created the original Project Zomboid WorldEd and TileZed foundation.

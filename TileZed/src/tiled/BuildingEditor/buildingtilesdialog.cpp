@@ -1337,44 +1337,6 @@ void BuildingTilesDialog::setTilesetList()
     qInfo() << "Building Tiles dialog tileset list refreshed:"
             << ui->tilesetList->count() << "entries";
 }
-bool BuildingTilesDialog::validateTilesetCatalog(QString *errorString)
-{
-    TileMetaInfoMgr *manager = TileMetaInfoMgr::instance();
-    const int expectedCount = manager->tilesets().count();
-    const int actualCount = ui->tilesetList->count();
-    if (actualCount != expectedCount) {
-        if (errorString) {
-            *errorString = tr(
-                        "Building > Tiles lists %1 tilesets, but the "
-                        "loaded catalogue contains %2.")
-                    .arg(actualCount).arg(expectedCount);
-        }
-        return false;
-    }
-    for (int row = 0; row < actualCount; ++row) {
-        QListWidgetItem *item = ui->tilesetList->item(row);
-        Tileset *tileset = manager->tileset(row);
-        if (!item || !tileset || item->text() != tileset->name()) {
-            if (errorString) {
-                *errorString = tr(
-                            "Building > Tiles row %1 does not match the "
-                            "loaded catalogue.")
-                        .arg(row);
-            }
-            return false;
-        }
-    }
-    if (actualCount > 0 && !mCurrentTileset) {
-        if (errorString) {
-            *errorString = tr(
-                        "Building > Tiles did not select an available "
-                        "tileset.");
-        }
-        return false;
-    }
-    return true;
-}
-
 void BuildingTilesDialog::saveSplitterSizes(QSplitter *splitter)
 {
     QSettings &settings = BuildingPreferences::instance()->settings();

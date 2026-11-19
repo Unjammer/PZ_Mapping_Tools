@@ -54,6 +54,5 @@ public:
             OsmProjectDataSummary *summary,
             QString *error,
             const OsmProjectProgress &progress = OsmProjectProgress());
-    static bool validate(QString *summary, QString *error);
 };
 #endif

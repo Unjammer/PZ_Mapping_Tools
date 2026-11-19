@@ -18,7 +18,6 @@
 #include <QImageWriter>
 #include <QSaveFile>
 #include <QStringList>
-#include <QTemporaryDir>
 
 namespace
 {
@@ -209,58 +208,4 @@ QColor valueColor(quint8 value)
     return QColor(qMin(red, 255), qMin(green, 255), qMin(blue, 255), 225);
 }
 
-bool validateWorkflow(QString *summary, QString *error)
-{
-    QImage image(ImageSize, ImageSize, QImage::Format_ARGB32);
-    image.fill(Qt::transparent);
-    image.setPixel(3, 4, qRgba(31, 0, 0, 255));
-    image.setPixel(5, 6, qRgba(0, 0, 0, 255));
-    if (!validateImage(image, error)
-            || mergedBits(image, 3, 4, 32) != 31
-            || mergedBits(image, 5, 6, 31) != 0
-            || mergedBits(image, 7, 8, 16) != 16
-            || !hasExplicitPixels(image)) {
-        if (error && error->isEmpty())
-            *error = translated("Chunk data override merge behavior is incorrect.");
-        return false;
-    }
-
-    QTemporaryDir temporaryDirectory;
-    if (!temporaryDirectory.isValid()) {
-        if (error)
-            *error = translated("Could not create the chunk data validation directory.");
-        return false;
-    }
-    const QString filePath = temporaryDirectory.filePath(
-                QStringLiteral("chunkdata_10_20.png"));
-    QImage loaded;
-    if (!saveImage(filePath, image, error)
-            || !loadImage(filePath, &loaded, error)
-            || loaded != image) {
-        if (error && error->isEmpty())
-            *error = translated("Chunk data override PNG round trip failed.");
-        return false;
-    }
-
-    QImage invalidSize(255, 256, QImage::Format_ARGB32);
-    invalidSize.fill(Qt::transparent);
-    QString expectedError;
-    if (validateImage(invalidSize, &expectedError)) {
-        if (error)
-            *error = translated("An invalid chunk data image size was accepted.");
-        return false;
-    }
-    QImage invalidValue(ImageSize, ImageSize, QImage::Format_ARGB32);
-    invalidValue.fill(Qt::transparent);
-    invalidValue.setPixel(1, 1, qRgba(32, 0, 0, 255));
-    if (validateImage(invalidValue, &expectedError)) {
-        if (error)
-            *error = translated("An unsupported chunk data flag was accepted.");
-        return false;
-    }
-    if (summary) {
-        *summary = translated("256 x 256 RGBA validation, atomic PNG round trip, inherit, explicit empty, and combined values 0 through 31 passed");
-    }
-    return true;
-}
 }

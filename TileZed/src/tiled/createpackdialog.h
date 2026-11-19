@@ -61,8 +61,6 @@ public:
     explicit CreatePackDialog(QWidget *parent = 0);
     ~CreatePackDialog();
 
-    static bool validateRecentPacks(QString *error);
-
 private:
     void settingsToUI(const TexturePackSettings &settings);
     void settingsFromUI(TexturePackSettings &settings);

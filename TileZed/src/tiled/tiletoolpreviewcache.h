@@ -41,12 +41,9 @@ class TileToolPreviewState
 public:
     bool accept(const TileToolPreviewKey &key);
     void invalidate();
-    quint64 acceptedCount() const;
-
 private:
     TileToolPreviewKey mKey;
     bool mValid = false;
-    quint64 mAcceptedCount = 0;
 };
 
 class TileToolTilesCache
@@ -57,9 +54,6 @@ public:
                                   int shapeCount,
                                   Tile *missingTile);
     void invalidate();
-    quint64 buildCount() const;
-    quint64 tilesetVisitCount() const;
-
 private:
     Map *mMap = nullptr;
     QVector<QString> mTileNames;
@@ -67,12 +61,8 @@ private:
     Tile *mMissingTile = nullptr;
     int mShapeCount = 0;
     bool mValid = false;
-    quint64 mBuildCount = 0;
-    quint64 mTilesetVisitCount = 0;
 };
 
-bool validateTileToolPointerPerformance(QString *summary,
-                                        QString *errorString);
 QRectF tileToolPreviewRect(MapDocument *document,
                            const TileLayer *preview,
                            const QRect &tileBounds);

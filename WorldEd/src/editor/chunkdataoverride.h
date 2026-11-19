@@ -43,7 +43,6 @@ bool hasExplicitPixels(const QImage &image);
 quint8 mergedBits(const QImage &image, int x, int y, quint8 generatedBits);
 QString valueDescription(quint8 value);
 QColor valueColor(quint8 value);
-bool validateWorkflow(QString *summary, QString *error);
 }
 
 #endif

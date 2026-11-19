@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory)][string]$JdkDirectory,
     [Parameter(Mandatory)][string]$GameDirectory,
-    [Parameter(Mandatory)][string]$OutputDirectory
+    [string]$OutputDirectory = $PSScriptRoot
 )
 
 $ErrorActionPreference = 'Stop'

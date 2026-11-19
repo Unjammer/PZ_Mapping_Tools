@@ -21,9 +21,119 @@
 #include "buildingdocument.h"
 #include "buildingdocumentmgr.h"
 #include "buildingfloor.h"
+#include "buildingisoview.h"
 #include "buildingmap.h"
 
+#include <QCheckBox>
+#include <QHeaderView>
+#include <QLabel>
+#include <QTreeWidget>
+#include <QVBoxLayout>
+
 using namespace BuildingEditor;
+
+BuildingTileInspector::BuildingTileInspector(QWidget *parent)
+    : QDockWidget(tr("Tile Layers at Cursor"), parent),
+      mFollow(new QCheckBox(tr("Follow cursor"))),
+      mPosition(new QLabel),
+      mTiles(new QTreeWidget)
+{
+    setObjectName(QStringLiteral("TileEditMode.TileInspector"));
+    QWidget *contents = new QWidget(this);
+    auto *layout = new QVBoxLayout(contents);
+    auto *controls = new QHBoxLayout;
+    mFollow->setChecked(true);
+    mFollow->setToolTip(tr("Use Shift+click with Pick Tiles to hold a square."));
+    controls->addWidget(mFollow);
+    controls->addStretch();
+    controls->addWidget(mPosition);
+    layout->addLayout(controls);
+    mTiles->setHeaderLabels({tr("Layer"), tr("Tile")});
+    mTiles->setRootIsDecorated(false);
+    mTiles->setUniformRowHeights(true);
+    mTiles->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    mTiles->setToolTip(tr("Double-click a tile to show its tileset and select its layer."));
+    layout->addWidget(mTiles);
+    setWidget(contents);
+
+    connect(this, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+        mShown = visible;
+        if (visible) {
+            if (mView && mFollow->isChecked())
+                mSquare = mView->mouseTilePosition();
+            refresh();
+        }
+    });
+    connect(mFollow, &QCheckBox::toggled, this, [this](bool follow) {
+        if (follow && mView)
+            mSquare = mView->mouseTilePosition();
+        refresh();
+    });
+    connect(mTiles, &QTreeWidget::itemActivated, this, [this](QTreeWidgetItem *item) {
+        emit tileActivated(item->text(1), item->text(0));
+    });
+}
+
+void BuildingTileInspector::setView(BuildingIsoView *view)
+{
+    if (mView) {
+        mView->disconnect(this);
+        mView->scene()->disconnect(this);
+        if (auto *document = mView->scene()->document())
+            document->disconnect(this);
+    }
+    mView = view;
+    mSquare = view ? view->mouseTilePosition() : QPoint(-1, -1);
+    mFollow->setChecked(true);
+    if (view) {
+        connect(view, &BuildingIsoView::mouseCoordinateChanged, this, [this](const QPoint &pos) {
+            if (mShown && mFollow->isChecked() && mSquare != pos) {
+                mSquare = pos;
+                refresh();
+            }
+        });
+        connect(view->scene(), &BuildingIsoScene::tileContentsChanged, this,
+                [this](int level, const QRegion &region) {
+            if (mShown && level == mView->scene()->currentLevel() && region.contains(mSquare))
+                refresh();
+        });
+        connect(view->scene()->document(), &BuildingDocument::currentFloorChanged, this, [this] {
+            if (mFollow->isChecked())
+                mSquare = mView->mouseTilePosition();
+            refresh();
+        });
+    }
+    refresh();
+}
+
+void BuildingTileInspector::inspectSquare(const QPoint &pos)
+{
+    mSquare = pos;
+    mFollow->setChecked(false);
+    show();
+    raise();
+    refresh();
+}
+
+void BuildingTileInspector::refresh()
+{
+    if (!mShown)
+        return;
+    BuildingIsoScene *scene = mView ? mView->scene() : nullptr;
+    QVector<QPair<QString, QString>> rows;
+    QString position;
+    if (scene && scene->currentFloorContains(mSquare, 1, 1) && scene->buildingMap()) {
+        rows = scene->buildingMap()->tilesAtSquare(scene->currentLevel(), mSquare);
+        position = tr("%1, %2, %3").arg(mSquare.x()).arg(mSquare.y()).arg(scene->currentLevel());
+    }
+    mPosition->setText(position);
+    if (mRows == rows)
+        return;
+    mRows = rows;
+    mTiles->clear();
+    for (const auto &row : rows)
+        new QTreeWidgetItem(mTiles, {row.first, row.second});
+}
 
 BuildingLayersDock::BuildingLayersDock(QWidget *parent) :
     QDockWidget(parent),

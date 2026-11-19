@@ -44,7 +44,6 @@ public:
                             const QImage &zoneLayer,
                             const QPoint &worldOrigin = QPoint(),
                             int chunkSize = 8);
-    static bool validateConfiguration(QString *errorString);
 private:
     static const QSet<int> &knownValues();
     static const QSet<int> &overrideValues();

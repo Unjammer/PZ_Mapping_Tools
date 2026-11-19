@@ -29,8 +29,6 @@ public:
     explicit TileSetZEditor(QWidget *parent = nullptr);
     ~TileSetZEditor() override;
     bool openTileset(Tiled::Tileset *tileset, int tileId);
-    static bool runSelfTest(QString *error);
-
 signals:
     void imageSaved(const QString &path);
 

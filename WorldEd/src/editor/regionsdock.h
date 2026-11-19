@@ -56,9 +56,6 @@ public:
     void setDocument(Document *document);
     void clearDocument();
     bool saveForProject();
-    bool validateRegionFile(const QString &fileName, int *regionCount,
-                            QString *error) const;
-    static bool validateEditor(QString *summary, QString *error);
     const QVector<RegionRecord> &regions() const { return mRegions; }
     int selectedRegionIndex() const { return mSelectedRegion; }
     void applySnapshot(const QVector<RegionRecord> &regions,

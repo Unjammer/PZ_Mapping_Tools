@@ -21,22 +21,6 @@ public:
     explicit WorldGenPreviewDialog(WorldDocument *worldDocument,
                                    QWidget *parent = nullptr);
     ~WorldGenPreviewDialog() override;
-    static bool validateDefinitions(const QString &path,
-                                    QString *summary,
-                                    QString *error);
-    static bool validateProjectOverlay(const QString &gamePath,
-                                       const QString &projectPath,
-                                       QString *summary,
-                                       QString *error);
-    static bool renderValidationPreview(const QString &path,
-                                        const QString &outputFile,
-                                        QString *error);
-    static bool renderValidationPrefabEditor(const QString &path,
-                                             const QString &outputFile,
-                                             QString *error);
-    static bool validatePrefabImport(const QString &fileName,
-                                     QString *summary,
-                                     QString *error);
 private:
     QScopedPointer<WorldGenPreviewDialogPrivate> d;
 };
@@ -47,9 +31,6 @@ public:
     explicit WorldGenPrefabDialog(WorldDocument *worldDocument,
                                   QWidget *parent = nullptr);
     ~WorldGenPrefabDialog() override;
-    static bool renderValidationWindow(const QString &path,
-                                       const QString &outputFile,
-                                       QString *error);
 private:
     QScopedPointer<WorldGenPreviewDialogPrivate> d;
 };

@@ -90,7 +90,6 @@ public:
     TexturePacker();
 
     bool pack(const TexturePackSettings &settings);
-    static bool validateTileDefinitions(QString *error);
     QString errorString() { return mError; }
 
 private:

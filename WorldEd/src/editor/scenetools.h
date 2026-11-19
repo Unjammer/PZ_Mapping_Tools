@@ -292,7 +292,6 @@ class SelectMoveObjectTool : public BaseCellSceneTool
 public:
     static SelectMoveObjectTool *instance();
     static void deleteInstance();
-    static bool validateContextMenuDispatch(QString *error);
 
     void deactivate() override;
 
@@ -1008,7 +1007,6 @@ public:
     explicit PasteCellsTool();
     ~PasteCellsTool();
 
-    static bool validateCellPastePlacement(QString *summary, QString *error);
     quint64 previewRebuildCount() const { return mPreviewRebuildCount; }
 
     void activate();

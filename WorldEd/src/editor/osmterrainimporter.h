@@ -77,7 +77,6 @@ public:
             double heightMeters,
             int cellSize,
             double metersPerPixel);
-    static QString buildOverpassQuery(const OsmTerrainImportOptions &options);
     static QStringList buildOverpassQueries(
             const OsmTerrainImportOptions &options);
     static QString buildRoadOrientationQuery(
@@ -89,16 +88,10 @@ public:
             int *segmentCount = nullptr,
             double *confidence = nullptr,
             QString *error = nullptr);
-    static bool generateFromOverpassJson(
-            const QByteArray &json,
-            const OsmTerrainImportOptions &options,
-            OsmTerrainImportResult *result,
-            QString *error);
     static bool generateFromOverpassJsonChunks(
             const QList<QByteArray> &chunks,
             const OsmTerrainImportOptions &options,
             OsmTerrainImportResult *result,
             QString *error);
-    static bool validate(QString *summary, QString *error);
 };
 #endif

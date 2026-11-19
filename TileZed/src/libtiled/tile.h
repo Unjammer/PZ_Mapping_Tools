@@ -92,6 +92,7 @@ public:
      * Sets the image of this tile.
      */
     void setImage(const QImage &image);
+    void setImage(const QImage &sheet, const QRect &area);
     void setImage(const Tile *tile);
     void setEmptyImage(int width, int height);
     quint64 imageHash() const;
@@ -121,8 +122,6 @@ public:
     const QImage &imageBlack();
 
 private:
-    bool isRowTransparent(const QImage &image, int row);
-    bool isColumnTransparent(const QImage &image, int col);
     void createImageBlack();
 #else
     /**

@@ -91,8 +91,6 @@ public:
     bool isLoaded() const { return mLoaded; }
     bool reloadRules();
     QString worldEdRulesFilePath() const;
-    static bool runRuleListSelfTest(QString *summary,
-                                    QString *errorString);
 signals:
     /**
      * This signal is emited after automapping was done and an error occurred.

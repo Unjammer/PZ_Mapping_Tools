@@ -101,17 +101,29 @@ bool FurnitureGroups::readTxt()
         return false;
     }
 
-#if !defined(WORLDED)
-    if (!upgradeTxt())
-        return false;
-
-    if (!mergeTxt())
-        return false;
-#endif
-
-    QString path = info.canonicalFilePath();
     BuildingFurnitureFile file;
-    if (!file.read(path)) {
+    bool readFinalFile = true;
+#if !defined(WORLDED)
+    const QString userPath = info.filePath();
+    if (!file.read(userPath)) {
+        mError = file.errorString();
+        return false;
+    }
+    const bool upgrade = file.getVersion() != BuildingFurnitureFile::getVersionLatest();
+    if (upgrade && !file.write(userPath)) {
+        mError = file.errorString();
+        return false;
+    }
+    const QString sourcePath = Tiled::Internal::Preferences::instance()->appConfigPath(txtName());
+    const bool separateConfig = info.canonicalFilePath() != QFileInfo(sourcePath).canonicalFilePath();
+    readFinalFile = upgrade || separateConfig;
+    if (readFinalFile) {
+        qDeleteAll(file.takeGroups());
+        if (separateConfig && !mergeTxt())
+            return false;
+    }
+#endif
+    if (readFinalFile && !file.read(info.canonicalFilePath())) {
         mError = file.errorString();
         return false;
     }
@@ -175,33 +187,6 @@ void FurnitureGroups::layerChanged(FurnitureTiles *ftiles)
 void FurnitureGroups::grimeChanged(FurnitureTile *ftile)
 {
     emit furnitureTileChanged(ftile);
-}
-
-bool FurnitureGroups::upgradeTxt()
-{
-    QString userPath = txtPath();
-
-    BuildingFurnitureFile userFile;
-    if (!userFile.read(userPath)) {
-        mError = userFile.errorString();
-        return false;
-    }
-
-    int userVersion = userFile.getVersion(); // may be zero for unversioned file
-    if (userVersion == BuildingFurnitureFile::getVersionLatest()) {
-        return true;
-    }
-
-    // Not the latest version -> upgrade it.
-
-    // UPGRADE HERE
-
-    // Write the user file out with the latest version and format.
-    if (!userFile.write(userPath)) {
-        mError = userFile.errorString();
-        return false;
-    }
-    return true;
 }
 
 bool FurnitureGroups::mergeTxt()
@@ -461,6 +446,17 @@ FurnitureTiles::FurnitureTiles(bool corners) :
     mTiles[FurnitureTile::FurnitureNW] = new FurnitureTile(this, FurnitureTile::FurnitureNW);
     mTiles[FurnitureTile::FurnitureNE] = new FurnitureTile(this, FurnitureTile::FurnitureNE);
     mTiles[FurnitureTile::FurnitureSE] = new FurnitureTile(this, FurnitureTile::FurnitureSE);
+}
+
+FurnitureTiles::FurnitureTiles(const FurnitureTiles &other)
+    : mGroup(nullptr), mCorners(other.mCorners), mLayer(other.mLayer)
+{
+    mTiles.reserve(other.mTiles.size());
+    for (const FurnitureTile *tile : other.mTiles) {
+        auto *copy = new FurnitureTile(*tile);
+        copy->mOwner = this;
+        mTiles.append(copy);
+    }
 }
 
 FurnitureTiles::~FurnitureTiles()

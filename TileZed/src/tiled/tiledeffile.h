@@ -24,6 +24,7 @@
 #include <QMap>
 #include <QObject>
 #include <QPoint>
+#include <QSet>
 #include <QStringList>
 #include <QVariant>
 #include <QVector>
@@ -92,11 +93,12 @@ public:
     IntegerTileDefProperty(const QString &name,
                            const QString &shortName,
                            int min, int max,
-                           int defaultValue = 0) :
+                           int defaultValue, const QString &readAlias) :
         TileDefProperty(name, shortName),
         mMin(min),
         mMax(max),
-        mDefault(defaultValue)
+        mDefault(defaultValue),
+        mReadAlias(readAlias)
     {
 
     }
@@ -106,6 +108,7 @@ public:
     int mMin;
     int mMax;
     int mDefault;
+    QString mReadAlias;
 };
 
 class StringTileDefProperty : public TileDefProperty
@@ -163,7 +166,7 @@ public:
     void addBoolean(const QString &name, const QString &shortName,
                     bool defaultValue, bool reverseLogic);
     void addInteger(const QString &name, const QString &shortName,
-                    int min, int max, int defaultValue);
+                    int min, int max, int defaultValue, const QString &readAlias = QString());
     void addString(const QString &name, const QString &shortName,
                    const QString &defaultValue);
     void addEnum(const QString &name, const QString &shortName,
@@ -186,12 +189,15 @@ public:
         return mShortNameToName.value(shortName, QString());
     }
 
-    QSet<QString> extraPropertiesIfSet() const;
+    const QSet<QString> &extraPropertiesIfSet() const { return mExtraPropertiesIfSet; }
 
     QList<TileDefProperty*> mProperties;
     QMap<QString,TileDefProperty*> mPropertyByName;
     QMap<QString,QString> mShortNameToName;
     QList<int> mSeparators;
+
+private:
+    QSet<QString> mExtraPropertiesIfSet;
 };
 
 class UIProperties
@@ -372,13 +378,11 @@ public:
     class PropGenericInteger : public UIProperty
     {
     public:
-        PropGenericInteger(const QString &name, const QString &shortName,
-                           int min, int max, int defaultValue = 0) :
-            UIProperty(name, shortName),
-            mMin(min),
-            mMax(max),
-            mDefaultValue(defaultValue),
-            mValue(defaultValue)
+        explicit PropGenericInteger(const IntegerTileDefProperty &definition) :
+            UIProperty(definition.mName, definition.mShortName),
+            mReadAlias(definition.mReadAlias),
+            mDefaultValue(definition.mDefault),
+            mValue(definition.mDefault)
         {
         }
 
@@ -409,16 +413,31 @@ public:
 
         void FromProperties()
         {
-            mValue = mDefaultValue;
-            if (contains(mShortName))
-                mValue = mProperties[mShortName].toInt();
+            auto it = mProperties.constFind(mShortName);
+            if (it == mProperties.constEnd() && !mReadAlias.isEmpty())
+                it = mProperties.constFind(mReadAlias);
+            mValue = it == mProperties.constEnd() ? mDefaultValue : it.value().toInt();
         }
 
         void ToProperties()
         {
-            remove(mShortName); // "waterAmount"
-            if (mValue != mDefaultValue)
-                set(mShortName, QString::number(mValue));
+            if (mValue == mDefaultValue) {
+                remove(mShortName);
+                if (!mReadAlias.isEmpty())
+                    remove(mReadAlias);
+                return;
+            }
+            const QString value = QString::number(mValue);
+            const bool hasAlias = !mReadAlias.isEmpty() && contains(mReadAlias);
+            if (!hasAlias || contains(mShortName))
+                set(mShortName, value);
+            if (hasAlias)
+                set(mReadAlias, value);
+        }
+
+        QStringList knownPropertyNames() const override
+        {
+            return mReadAlias.isEmpty() ? QStringList{mShortName} : QStringList{mShortName, mReadAlias};
         }
 
         void ChangePropertiesV(const QVariant &value)
@@ -436,8 +455,7 @@ public:
             return mValue;
         }
 
-        int mMin;
-        int mMax;
+        QString mReadAlias;
         int mDefaultValue;
         int mValue;
     };
@@ -596,8 +614,10 @@ public:
             int index = mEnums.indexOf(mValue);
 
             if (mValueAsPropertyName) {
-                foreach (QString enumName, mShortEnums)
-                    remove(enumName);
+                for (int i = 0; i < mShortEnums.size(); ++i) {
+                    if (mEnums[i] != mDefaultValue)
+                        remove(mShortEnums[i]);
+                }
                 if (mValue != mDefaultValue) {
                     if (index >= 0) {
                         set(mShortEnums[index]);
@@ -668,35 +688,48 @@ public:
 
     void ChangeProperties(const QString &label, bool newValue)
     {
-        Q_ASSERT(mProperties.contains(label));
-        if (mProperties.contains(label))
-            mProperties[label]->ChangeProperties(newValue);
+        ChangePropertiesV(label, newValue);
     }
 
     void ChangeProperties(const QString &label, int newValue)
     {
-        Q_ASSERT(mProperties.contains(label));
-        if (mProperties.contains(label))
-            mProperties[label]->ChangeProperties(newValue);
+        ChangePropertiesV(label, newValue);
     }
 
     void ChangePropertiesV(const QString &label, const QVariant &newValue)
     {
         Q_ASSERT(mProperties.contains(label));
-        if (mProperties.contains(label))
-            mProperties[label]->ChangePropertiesV(newValue);
+        if (UIProperty *prop = property(label)) {
+            const QVariant previous = prop->value();
+            prop->ChangePropertiesV(newValue);
+            recordChange(prop, previous);
+        }
     }
 
-    void FromProperties(const QMap<QString,QString> &properties)
+    void FromProperties(const QMap<QString,QString> &properties, bool buildEditorProperties = true)
     {
-        foreach (UIProperty *p, mProperties)
-            p->FromProperties(properties);
+        if (buildEditorProperties) {
+            foreach (UIProperty *p, mProperties)
+                p->FromProperties(properties);
+        }
+        mFromStoredProperties = true;
+        mOriginalValues.clear();
     }
 
     void ToProperties(QMap<QString,QString> &properties)
     {
         foreach (UIProperty *p, mProperties)
             p->ToProperties(properties);
+    }
+
+    void applyEdits(QMap<QString,QString> &stored)
+    {
+        if (!mFromStoredProperties) {
+            ToProperties(stored);
+            return;
+        }
+        for (auto it = mOriginalValues.cbegin(); it != mOriginalValues.cend(); ++it)
+            property(it.key())->ToProperties(stored);
     }
 
     bool getBoolean(const QString &label)
@@ -762,7 +795,7 @@ public:
     void copy(const UIProperties &other)
     {
         for (UIProperty *prop : std::as_const(mProperties)) {
-            prop->setValue(other.property(prop->mName)->value());
+            copyValue(prop, other.property(prop->mName)->value());
         }
     }
 
@@ -772,7 +805,7 @@ public:
             UIProperty *prop1 = property(propertyName);
             UIProperty *prop2 = other.property(propertyName);
             if (prop1 != nullptr && prop2 != nullptr) {
-                prop1->setValue(prop2->value());
+                copyValue(prop1, prop2->value());
             }
         }
     }
@@ -785,6 +818,28 @@ public:
     }
 
     QMap<QString,UIProperty*> mProperties;
+
+private:
+    void recordChange(UIProperty *prop, const QVariant &previous)
+    {
+        if (!mFromStoredProperties || previous == prop->value())
+            return;
+        auto original = mOriginalValues.find(prop->mName);
+        if (original == mOriginalValues.end())
+            mOriginalValues.insert(prop->mName, previous);
+        else if (original.value() == prop->value())
+            mOriginalValues.erase(original);
+    }
+
+    void copyValue(UIProperty *prop, const QVariant &value)
+    {
+        const QVariant previous = prop->value();
+        prop->setValue(value);
+        recordChange(prop, previous);
+    }
+
+    bool mFromStoredProperties = false;
+    QMap<QString,QVariant> mOriginalValues;
 };
 
 class TileDefTile
@@ -827,10 +882,13 @@ public:
     int mID;
     UIProperties mPropertyUI;
 
-    // This is to preserve all the properties that were in the .tiles file
-    // for this tile.  If TileProperties.txt changes so that these properties
-    // can't be edited they will still persist in the .tiles file.
-    // TODO: add a way to report/clean out obsolete properties.
+    QMap<QString,QString> currentProperties()
+    {
+        QMap<QString,QString> properties = mProperties;
+        mPropertyUI.applyEdits(properties);
+        return properties;
+    }
+
     QMap<QString,QString> mProperties;
 };
 
@@ -954,6 +1012,7 @@ public:
     QString txtName();
     QString txtPath();
     bool readTxt();
+    bool readTxt(const QString &path);
 
     const TileDefProperties &properties() const
     { return mProperties; }

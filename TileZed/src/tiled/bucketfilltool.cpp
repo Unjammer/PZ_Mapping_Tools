@@ -191,7 +191,20 @@ void BucketFillTool::mousePressed(QGraphicsSceneMouseEvent *event)
                                          brushItem()->tileLayer());
 
     QRegion fillRegion(mFillRegion);
+#ifdef ZOMBOID
+    TileLayer *layer = currentTileLayer();
+    const QPoint local = tilePosition() - layer->position();
+    Tile *used = nullptr;
+    if (mTrackUsedTiles && mStamp && mStamp->width() == 1 && mStamp->height() == 1
+            && fillRegion.contains(tilePosition()) && layer->contains(local)
+            && layer->cellAt(local) != mStamp->cellAt(0, 0))
+        used = mStamp->cellAt(0, 0).tile;
+#endif
     mapDocument()->undoStack()->push(fillTiles);
+#ifdef ZOMBOID
+    if (used && layer->cellAt(local) == mStamp->cellAt(0, 0))
+        emit tilePainted(used);
+#endif
     mapDocument()->emitRegionEdited(fillRegion, currentTileLayer());
 }
 

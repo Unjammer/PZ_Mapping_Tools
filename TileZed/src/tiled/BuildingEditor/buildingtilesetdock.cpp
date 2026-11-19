@@ -55,6 +55,7 @@ BuildingTilesetDock::BuildingTilesetDock(QWidget *parent) :
     mActionSwitchLayer(new QAction(this))
 {
     ui->setupUi(this);
+    connect(ui->tiles, &BuildingTilesetView::addTileToPalette, this, &BuildingTilesetDock::addTileToPalette);
 
 #ifndef TILESET_LIST_FIXED_WIDTH
     mSplitter = ui->splitter;
@@ -122,8 +123,9 @@ BuildingTilesetDock::BuildingTilesetDock(QWidget *parent) :
     connect(TilesetManager::instance(), &TilesetManager::tileLayerNameChanged,
             this, &BuildingTilesetDock::tileLayerNameChanged);
 
-    connect(PickTileTool::instance(), &PickTileTool::tilePicked,
-            this, &BuildingTilesetDock::buildingTilePicked);
+    connect(PickTileTool::instance(), &PickTileTool::tilePicked, this, [this](const QString &tileName) {
+        buildingTilePicked(tileName, BuildingPreferences::instance()->revealPickedTileset());
+    });
 
     retranslateUi();
 }
@@ -139,94 +141,6 @@ void BuildingTilesetDock::firstTimeSetup()
         setTilesetList(); // TileMetaInfoMgr signals might have done this already.
 }
 
-bool BuildingTilesetDock::validateTilesetCatalog(QString *errorString)
-{
-    const int catalogCount = TileMetaInfoMgr::instance()->tilesets().count();
-    if (catalogCount <= 0) {
-        *errorString = tr("The tileset catalog is empty.");
-        return false;
-    }
-    if (ui->tilesets->count() != catalogCount) {
-        *errorString = tr("Tile mode displays %1 of %2 catalog tilesets.")
-                .arg(ui->tilesets->count()).arg(catalogCount);
-        return false;
-    }
-    int validationRow = -1;
-    int fallbackValidationRow = -1;
-    QStringList failures;
-    for (int row = 0; row < catalogCount; ++row) {
-        Tileset *candidate = TileMetaInfoMgr::instance()->tileset(row);
-        if (!candidate) {
-            failures += tr("Catalog row %1 does not reference a tileset.")
-                    .arg(row);
-            continue;
-        }
-        if (candidate->isMissing())
-            continue;
-        if (fallbackValidationRow < 0)
-            fallbackValidationRow = row;
-        if (validationRow < 0 && !candidate->isLoaded())
-            validationRow = row;
-        if (candidate->tileCount() <= 0) {
-            failures += tr("%1 contains no tiles.").arg(candidate->name());
-            continue;
-        }
-        if (candidate->isLoaded()) {
-            for (int tileIndex = 0;
-                 tileIndex < candidate->tileCount(); ++tileIndex) {
-                Tile *tile = candidate->tileAt(tileIndex);
-                if (!tile || tile->width() <= 0 || tile->height() <= 0) {
-                    failures += tr("%1 has invalid storage for tile %2.")
-                            .arg(candidate->name()).arg(tileIndex);
-                    break;
-                }
-            }
-        }
-    }
-    if (!failures.isEmpty()) {
-        *errorString = tr("The preloaded tileset catalog is incomplete:\n%1")
-                .arg(failures.mid(0, 12).join(QLatin1Char('\n')));
-        return false;
-    }
-    if (validationRow < 0)
-        validationRow = fallbackValidationRow;
-    if (validationRow < 0) {
-        *errorString = tr("No available tileset image was found in the catalog.");
-        return false;
-    }
-    Tileset *validationTileset =
-            TileMetaInfoMgr::instance()->tileset(validationRow);
-    const bool validatesLazyLoad =
-            validationTileset && !validationTileset->isLoaded();
-    ui->tilesets->setCurrentRow(validationRow);
-    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-    if (!mCurrentTileset) {
-        *errorString = tr("Tile mode could not select a tileset.");
-        return false;
-    }
-    setTilesList();
-    if (mCurrentTileset->isMissing()) {
-        *errorString = tr("The selected tileset image is missing: %1")
-                .arg(mCurrentTileset->name());
-        return false;
-    }
-    if (!mCurrentTileset->isLoaded()) {
-        *errorString = tr("Tile mode did not load the selected tileset: %1")
-                .arg(mCurrentTileset->name());
-        return false;
-    }
-    if (ui->tiles->model()->rowCount() <= 0) {
-        *errorString = tr("The selected tileset has no visible tiles: %1")
-                .arg(mCurrentTileset->name());
-        return false;
-    }
-    if (validatesLazyLoad) {
-        qInfo().noquote()
-                << "BuildingEd Tile mode lazy-load validation: PASS -"
-                << mCurrentTileset->name();
-    }
-    return true;
-}
 void BuildingTilesetDock::writeSettings(QSettings &settings)
 {
 #ifndef TILESET_LIST_FIXED_WIDTH
@@ -397,8 +311,9 @@ void BuildingTilesetDock::setTilesList()
     }
 }
 
-void BuildingTilesetDock::switchLayerForTile(Tiled::Tile *tile)
+void BuildingTilesetDock::selectDrawTile(Tiled::Tile *tile)
 {
+    DrawTileTool::instance()->setTile(BuildingTilesMgr::nameForTile(tile));
     if (!mDocument || !Preferences::instance()->autoSwitchLayer())
         return;
     int level = mDocument->currentLevel();
@@ -452,12 +367,8 @@ void BuildingTilesetDock::tileSelectionChanged()
     QModelIndexList selection = ui->tiles->selectionModel()->selectedIndexes();
     if (selection.size()) {
         QModelIndex index = selection.first();
-        if (Tile *tile = ui->tiles->model()->tileAt(index)) {
-            QString tileName = BuildingTilesMgr::instance()->nameForTile(tile);
-            DrawTileTool::instance()->setTile(tileName);
-
-            switchLayerForTile(tile);
-        }
+        if (Tile *tile = ui->tiles->model()->tileAt(index))
+            selectDrawTile(tile);
     }
 }
 
@@ -538,19 +449,47 @@ void BuildingTilesetDock::tileScaleChanged(qreal scale)
     mZoomable->setScale(scale);
 }
 
-void BuildingTilesetDock::buildingTilePicked(const QString &tileName)
+bool BuildingTilesetDock::buildingTilePicked(const QString &tileName, bool reveal)
 {
     QString tilesetName;
     int tileID;
 
-    if (BuildingTilesMgr::parseTileName(tileName, tilesetName, tileID)) {
-        if (Tileset *ts = TileMetaInfoMgr::instance()->tileset(tilesetName)) {
-            if (Tile *tile = ts->tileAt(tileID)) {
-                ui->tilesets->setCurrentRow(TileMetaInfoMgr::instance()->indexOf(ts));
-                ui->tiles->setCurrentIndex(ui->tiles->model()->index(tile));
-            }
-        }
+    if (!BuildingTilesMgr::parseTileName(tileName, tilesetName, tileID))
+        return false;
+    const int row = TileMetaInfoMgr::instance()->indexOf(tilesetName);
+    QListWidgetItem *item = ui->tilesets->item(row);
+    if (!item)
+        return false;
+    if (reveal && item->isHidden()) {
+        ui->filter->clear();
+        filterEdited(QString());
     }
+    if (reveal) {
+        show();
+        raise();
+    }
+    ui->tilesets->setCurrentItem(item);
+    if (!item->isHidden())
+        ui->tilesets->scrollToItem(item);
+    Tileset *sheet = TileMetaInfoMgr::instance()->tileset(tilesetName);
+    Tile *tile = sheet && sheet->isLoaded() && !sheet->isMissing() ? sheet->tileAt(tileID) : nullptr;
+    if (!tile)
+        return false;
+    if (sheet != mCurrentTileset && item->isHidden()) {
+        selectDrawTile(tile);
+        return true;
+    }
+    const QModelIndex index = ui->tiles->model()->index(tile);
+    if (!index.isValid())
+        return false;
+    auto *selection = ui->tiles->selectionModel();
+    if (selection->currentIndex() == index && selection->selectedIndexes().size() == 1
+            && selection->isSelected(index))
+        tileSelectionChanged();
+    else
+        selection->setCurrentIndex(index, QItemSelectionModel::ClearAndSelect);
+    ui->tiles->scrollTo(index);
+    return true;
 }
 
 /////
@@ -574,6 +513,10 @@ void BuildingTilesetView::contextMenuEvent(QContextMenuEvent *event)
         return;
 
     QMenu menu;
+    const QString sheet = tile->tileset()->name();
+    const int tileId = tile->id();
+    auto *favorite = menu.addAction(tr("Add to Tile Palette"));
+    favorite->setObjectName(QStringLiteral("buildingAddTileFavorite"));
     QVector<QAction*> layerActions;
     QStringList layerNames;
     if (tile) {
@@ -598,6 +541,10 @@ void BuildingTilesetView::contextMenuEvent(QContextMenuEvent *event)
     }
 
     QAction *action = menu.exec(event->globalPos());
+    if (action == favorite) {
+        emit addTileToPalette(sheet, tileId);
+        return;
+    }
 
     if (action && layerActions.contains(action)) {
         int index = layerActions.indexOf(action);

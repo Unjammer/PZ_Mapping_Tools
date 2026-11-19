@@ -700,6 +700,8 @@ void TilesetDock::refreshTilesetMenu()
 #include "mainwindow.h"
 #include "map.h"
 #include "mapcomposite.h"
+#include "tilemetainfomgr.h"
+#include <QSignalBlocker>
 #include "mapdocument.h"
 #include "mapobject.h"
 #include "movetileset.h"
@@ -914,59 +916,6 @@ private:
 
 } // anonymous namespace
 
-bool TilesetDock::validateResolutionTags(QString *error)
-{
-    const QString root = Preferences::instance()->tilesDirectory();
-    const QString root2x = Preferences::instance()->tiles2xDirectory();
-    struct TestCase {
-        QString source1x;
-        QString source2x;
-        QString expected;
-        QString description;
-    };
-    const QList<TestCase> tests = {
-        {QString(), QDir(root2x).filePath(
-             QStringLiteral("B42ChunkCaching2x.pack/nested/official.png")),
-         QStringLiteral("2x"), QStringLiteral("nested official 2x pack")},
-        {QString(), QDir(root2x).filePath(
-             QStringLiteral("DepthMaps2x.pack/official.png")),
-         QStringLiteral("2x"), QStringLiteral("official DepthMaps pack")},
-        {QString(), QDir(root2x).filePath(
-             QStringLiteral("JumboTrees2x.pack/official.png")),
-         QStringLiteral("2x"), QStringLiteral("official JumboTrees pack")},
-        {QString(), QDir(root2x).filePath(
-             QStringLiteral("JumboTreesBigs2x.pack/official.png")),
-         QStringLiteral("2x"), QStringLiteral("official JumboTreesBigs pack")},
-        {QString(), QDir(root2x).filePath(
-             QStringLiteral("Overlays2x.pack/official.png")),
-         QStringLiteral("2x"), QStringLiteral("official Overlays pack")},
-        {QString(), QDir(root2x).filePath(
-             QStringLiteral("Tiles2x.pack/official.png")),
-         QStringLiteral("2x"), QStringLiteral("official Tiles pack")},
-        {QDir(root).filePath(QStringLiteral("1x/legacy.png")), QString(),
-         QStringLiteral("1x"), QStringLiteral("official 1x tree")},
-        {QDir(root).filePath(QStringLiteral("direct.png")), QString(),
-         QStringLiteral("1x"), QStringLiteral("official root 1x sheet")},
-        {QDir(root).filePath(QStringLiteral("custom/mod.png")), QString(),
-         QStringLiteral("custom"), QStringLiteral("custom tree")},
-        {QDir(root).filePath(QStringLiteral("MyPack/mod.png")), QString(),
-         QStringLiteral("custom"), QStringLiteral("custom nested pack")}
-    };
-    for (const TestCase &test : tests) {
-        const QString actual = tilesetResolutionForSources(
-                    test.source1x, test.source2x);
-        if (actual != test.expected) {
-            if (error) {
-                *error = QStringLiteral("%1 was tagged %2 instead of %3")
-                        .arg(test.description, actual, test.expected);
-            }
-            return false;
-        }
-    }
-    if (error)
-        error->clear();
-    return true;
-}
 TilesetDock::TilesetDock(QWidget *parent):
     QDockWidget(parent),
     mMapDocument(0),
@@ -1274,6 +1223,54 @@ void TilesetDock::tilePicked(Tile *tile)
     }
 }
 
+Tile *TilesetDock::resolvePaletteTile(const QString &name, int id) const
+{
+    Tileset *sheet = mCurrentTileset && mCurrentTileset->name() == name
+            ? mCurrentTileset : mTilesetByName.value(name);
+    if (!sheet) {
+        sheet = TileMetaInfoMgr::instance()->tileset(name);
+        if (sheet)
+            sheet = mTilesetByName.value(sheet->name(), sheet);
+    }
+    if (!sheet || !sheet->isLoaded() || sheet->isMissing() || id < 0 || id >= sheet->tileCount())
+        return nullptr;
+    return sheet->tileAt(id);
+}
+
+bool TilesetDock::selectPaletteTile(const QString &name, int id)
+{
+    if (!mMapDocument)
+        return false;
+    Tile *tile = resolvePaletteTile(name, id);
+    if (!tile || tile->tileset()->columnCount() < 1)
+        return false;
+    Tileset *sheet = tile->tileset();
+    if (!mTilesetByName.contains(sheet->name())) {
+        sheet = sheet->clone();
+        mMapDocument->undoStack()->push(new AddTileset(mMapDocument, sheet));
+    }
+    const int row = mTilesets.indexOf(sheet);
+    if (row < 0)
+        return false;
+    if (mTilesetNamesView->item(row)->isHidden()) {
+        mFilter->clear();
+        filterEdited(QString());
+    }
+    mTilesetNamesView->setCurrentRow(row);
+    auto selection = mTilesetView->selectionModel();
+    const int columns = sheet->columnCount();
+    const QModelIndex index = mTilesetView->model()->index(id / columns, id % columns);
+    if (!index.isValid())
+        return false;
+    {
+        const QSignalBlocker blocker(selection);
+        selection->setCurrentIndex(index, QItemSelectionModel::ClearAndSelect);
+    }
+    applyTileSelection(false);
+    mTilesetView->scrollTo(index);
+    return true;
+}
+
 void TilesetDock::changeEvent(QEvent *e)
 {
     QDockWidget::changeEvent(e);
@@ -1392,6 +1389,11 @@ void TilesetDock::updateCurrentTiles()
     if (!mCurrentTileset)
         return;
 
+    applyTileSelection(true);
+}
+
+void TilesetDock::applyTileSelection(bool copyTileName)
+{
     const QItemSelectionModel *s = mTilesetView->selectionModel();
     const QModelIndexList indexes = s->selection().indexes();
 
@@ -1427,7 +1429,7 @@ void TilesetDock::updateCurrentTiles()
     setCurrentTile(model->tileAt(s->currentIndex()));
 
     // Hack - copy tile name to the clipboard
-    if (mCurrentTile) {
+    if (copyTileName && mCurrentTile) {
         QString tileName = QFileInfo(mCurrentTile->tileset()->imageSource()).baseName() +
                 QLatin1Char('_') + QString::number(mCurrentTile->id());
         qApp->clipboard()->setText(tileName);
@@ -1696,8 +1698,12 @@ void TilesetDock::renameTileset()
 void TilesetDock::tilesetNameChanged(Tileset *tileset)
 {
     int index = mTilesets.indexOf(tileset);
-    if (index >= 0)
+    if (index >= 0) {
+        mTilesetByName.remove(mTilesetByName.key(tileset), tileset);
+        mTilesetByName.insert(tileset->name(), tileset);
         mTilesetNamesView->item(index)->setText(tileset->name());
+        emit paletteSourcesChanged();
+    }
 }
 
 void TilesetDock::newTileset()
@@ -1735,7 +1741,7 @@ void TilesetDock::switchLayerForTile(Tile *tile)
     QString layerName = TilesetManager::instance()->layerName(tile);
     if (!layerName.isEmpty()) {
         Layer *currentLayer = mMapDocument->currentLayer();
-        if (TileLayer *tl = currentLayer->asTileLayer()) { // FIXME: ObjectGroup too?
+        if (TileLayer *tl = currentLayer ? currentLayer->asTileLayer() : nullptr) {
             if (tl->group()) {
                 foreach (TileLayer *tl1, tl->group()->layers()) {
                     QString name = MapComposite::layerNameWithoutPrefix(tl1);
@@ -1836,6 +1842,7 @@ void TilesetDock::setTilesetNamesList()
     }
 
     filterEdited(mFilter->text());
+    emit paletteSourcesChanged();
 }
 
 void TilesetDock::refreshTilesetStatus()

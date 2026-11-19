@@ -159,22 +159,15 @@ bool Tileset::loadFromImage(const QImage &image, const QString &fileName)
     int tileNum = 0;
 #ifdef ZOMBOID
     QImage image3 = image;
-    // For some reason this changes the const 'image'
     replaceTransparentColor(image3, mTransparentColor);
-//    setImage(image3); // This is used to create an OpenGL texture.
     QImage image2 = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
-//    replaceTransparentColor(image2, mTransparentColor);
 #endif
     for (int y = mMargin; y <= stopHeight; y += mTileHeight + mTileSpacing) {
         for (int x = mMargin; x <= stopWidth; x += mTileWidth + mTileSpacing) {
 #ifdef ZOMBOID
-            QImage tileImage = image2.copy(x, y, mTileWidth, mTileHeight);
-
-            if (tileNum < oldTilesetSize) {
-                mTiles.at(tileNum)->setImage(tileImage);
-            } else {
-                mTiles.append(new Tile(tileImage, tileNum, this));
-            }
+            if (tileNum >= oldTilesetSize)
+                mTiles.append(new Tile(mTileWidth, mTileHeight, tileNum, this));
+            mTiles.at(tileNum)->setImage(image2, QRect(x, y, mTileWidth, mTileHeight));
 #else
             const QImage tileImage = image.copy(x, y, mTileWidth, mTileHeight);
             QPixmap tilePixmap = QPixmap::fromImage(tileImage);

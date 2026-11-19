@@ -574,7 +574,6 @@ public:
                              QString *error);
     bool hasWorldMapOverlay(bool forest) const;
     bool worldMapOverlayVisible(bool forest) const;
-    int worldMapOverlayFeatureCount(bool forest) const;
     void setWorldMapOverlayVisible(bool forest, bool visible);
     void clearWorldMapOverlays();
 

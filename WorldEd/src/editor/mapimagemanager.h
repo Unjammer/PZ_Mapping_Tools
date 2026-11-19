@@ -98,7 +98,6 @@ public:
 
     ~MapImageRenderWorker();
 
-    static bool validateBasementThumbnails(QString *error);
 
 signals:
     void mapNeeded(MapImage *mapImage);
@@ -238,8 +237,6 @@ public:
                           QObject *owner = nullptr);
 
     void releaseOwner(QObject *owner);
-    bool containsMapImage(MapImage *mapImage) const;
-    int mapImageReferenceCount(MapImage *mapImage) const;
 
 #ifdef WORLDED
     MapImage *getZombieSpawnImage(const QString &imageName,

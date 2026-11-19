@@ -24,10 +24,6 @@ public:
     explicit TileDefCompare(QWidget *parent = 0);
     ~TileDefCompare();
 
-    static bool runSelfTest(QString *summary, QString *errorString);
-    static bool renderValidation(const QString &outputFile,
-                                 QString *errorString);
-
 protected:
     void closeEvent(QCloseEvent *event) override;
 

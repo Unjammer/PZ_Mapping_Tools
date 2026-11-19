@@ -244,10 +244,11 @@ public:
 
     void calculateUnlitRoomMask();
     void applyDeferredUpdates();
-    bool hasDeferredStructuralMapRebuild() const
-    { return mDeferredStructuralMapRebuild; }
     BuildingMap *buildingMap() const
     { return mBuildingMap; }
+
+signals:
+    void tileContentsChanged(int level, const QRegion &region);
 
 private:
     void BuildingToMap();
@@ -342,10 +343,9 @@ private:
     QSet<BuildingFloor*> mDeferredWholeFloorTileUpdates;
     QMap<BuildingFloor*,QMap<QString,QRegion> > mDeferredFloorTileUpdates;
     QSet<BuildingFloor*> mPendingLayerVisibilityFloors;
-    QPointF mRightPressPosition;
-    QPointF mRightPressScenePosition;
-    bool mRightPressActive = false;
-    bool mRightPressDragged = false;
+    QPoint mContextMenuPressPosition;
+    bool mContextMenuPress = false;
+    bool mContextMenuDragged = false;
 };
 
 class BuildingIsoView : public QGraphicsView
@@ -377,6 +377,7 @@ public:
 
     void setHandScrolling(bool handScrolling);
     void setRenderDiagnosticsEnabled(bool enabled);
+    QPoint mouseTilePosition() const;
 
 signals:
     void mouseCoordinateChanged(const QPoint &tilePos);
@@ -396,7 +397,8 @@ private:
     Tiled::Internal::Zoomable *mZoomable;
     QPoint mLastMousePos;
     QPointF mLastMouseScenePos;
-    QPoint mLastMouseTilePos;
+    QPoint mLastMouseTilePos{-1, -1};
+    int mLastMouseLevel = -1;
     bool mHandScrolling;
     bool mRenderDiagnosticsEnabled;
     QLabel *mRenderDiagnosticsLabel;

@@ -18,6 +18,7 @@
 #include "preferences.h"
 #include "../../../shared/tiledefinitionpaths.h"
 #include "../portablesettings.h"
+#include "playtestgamepath.h"
 
 #include <QApplication>
 #include <QDir>
@@ -25,11 +26,73 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QPalette>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QSettings>
 #include <QTextStream>
 
 namespace {
+
+QString configuredPlaytestGame(const QString &configured, const QString &remembered)
+{
+    for (const QString &candidate : {configured, remembered}) {
+        if (!candidate.isEmpty() && PlaytestGamePath::installationError(candidate).isEmpty())
+            return PlaytestGamePath::root(candidate);
+    }
+    return {};
+}
+
+QString steamPlaytestGame(const QStringList &steamRoots)
+{
+    const QRegularExpression libraryPath(
+                QStringLiteral("^\\s*\"(?:path|[0-9]+)\"\\s+\"([^\"]+)\""),
+                QRegularExpression::CaseInsensitiveOption);
+    for (const QString &root : steamRoots) {
+        if (root.isEmpty())
+            continue;
+        QStringList libraries{QDir::cleanPath(QDir::fromNativeSeparators(root))};
+        QFile folders(QDir(root).filePath(QStringLiteral("steamapps/libraryfolders.vdf")));
+        if (folders.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            while (!folders.atEnd()) {
+                const auto match = libraryPath.match(QString::fromUtf8(folders.readLine()));
+                if (!match.hasMatch())
+                    continue;
+                QString path = match.captured(1);
+                path.replace(QStringLiteral("\\\\"), QStringLiteral("\\"));
+                path = QDir::cleanPath(QDir::fromNativeSeparators(path));
+                if (QDir::isAbsolutePath(path) && !libraries.contains(path, Qt::CaseInsensitive))
+                    libraries.append(path);
+            }
+        }
+        for (const QString &library : libraries) {
+            const QString path = QDir(library).filePath(QStringLiteral("steamapps/common/ProjectZomboid"));
+            if (PlaytestGamePath::installationError(path).isEmpty())
+                return path;
+        }
+    }
+    return {};
+}
+
+QStringList steamInstallations()
+{
+    QStringList paths;
+#ifdef Q_OS_WIN
+    const QSettings userSteam(QStringLiteral("HKEY_CURRENT_USER\\Software\\Valve\\Steam"),
+                              QSettings::NativeFormat);
+    const QSettings machineSteam(QStringLiteral("HKEY_LOCAL_MACHINE\\Software\\Valve\\Steam"),
+                                 QSettings::Registry32Format);
+    paths << userSteam.value(QStringLiteral("SteamPath")).toString()
+          << machineSteam.value(QStringLiteral("InstallPath")).toString();
+#endif
+    for (const char *name : {"ProgramFiles(x86)", "ProgramFiles"}) {
+        const QString programFiles = qEnvironmentVariable(name);
+        if (!programFiles.isEmpty())
+            paths << QDir(programFiles).filePath(QStringLiteral("Steam"));
+    }
+    paths.removeAll(QString());
+    paths.removeDuplicates();
+    return paths;
+}
 
 int basementResourceFileCount(const QString &root,
                               const QStringList &patterns)
@@ -594,46 +657,6 @@ void Preferences::reloadSharedPaths()
         emit tilesDirectoryChanged();
 }
 
-bool Preferences::validateSharedPaths(QString *errorString)
-{
-    Preferences *preferences = instance();
-    const QString configuration = PortableSettings::sharedConfigurationPath();
-    const QString tiles = PortableSettings::sharedTilesPath();
-    if (!PortableSettings::isConfigurationPath(configuration)
-            || !PortableSettings::isTilesPath(tiles)) {
-        *errorString = QStringLiteral("Configure valid shared directories first.");
-        return false;
-    }
-    const QString originalConfiguration = preferences->mConfigDirectory;
-    const QString originalTiles = preferences->mTilesDirectory;
-    preferences->mConfigDirectory.clear();
-    preferences->mTilesDirectory.clear();
-    int notifications = 0;
-    bool coherentNotification = true;
-    const QMetaObject::Connection connection = QObject::connect(
-                preferences, &Preferences::tilesDirectoryChanged,
-                preferences, [&]() {
-        ++notifications;
-        coherentNotification = coherentNotification
-                && preferences->configPath() == configuration
-                && preferences->tilesDirectory() == tiles;
-    });
-    preferences->reloadSharedPaths();
-    const bool refreshed = preferences->configPath() == configuration
-            && preferences->tilesDirectory() == tiles
-            && notifications == 1 && coherentNotification;
-    preferences->reloadSharedPaths();
-    const bool unchanged = notifications == 1;
-    QObject::disconnect(connection);
-    preferences->mConfigDirectory = originalConfiguration;
-    preferences->mTilesDirectory = originalTiles;
-    if (!refreshed || !unchanged) {
-        *errorString = QStringLiteral("Shared path refresh or no-op notification failed.");
-        return false;
-    }
-    return true;
-}
-
 QString Preferences::configPath(const QString &fileName) const
 {
     return configPath() + QLatin1Char('/') + fileName;
@@ -1150,6 +1173,37 @@ QString Preferences::projectZomboidDirectory() const
 {
     return mProjectZomboidDirectory;
 }
+QString Preferences::playtestGameDirectory(QString *error) const
+{
+    if (error)
+        error->clear();
+    const QSettings shared(PortableSettings::sharedSettingsFilePath(), QSettings::IniFormat);
+    const QString configured = shared.value(QStringLiteral("Paths/ProjectZomboidDirectory"),
+                                            mProjectZomboidDirectory).toString();
+    const QString remembered = mSettings->value(QStringLiteral("Playtest/GameDirectory")).toString();
+    const QString selected = configuredPlaytestGame(configured, remembered);
+    if (!selected.isEmpty())
+        return selected;
+    const QString detected = steamPlaytestGame(steamInstallations());
+    if (detected.isEmpty() && error)
+        *error = PlaytestGamePath::installationError(configured.isEmpty() ? remembered : configured);
+    return detected;
+}
+
+void Preferences::setPlaytestGameDirectory(const QString &path)
+{
+    const QString root = PlaytestGamePath::root(path);
+    if (!PlaytestGamePath::installationError(root).isEmpty())
+        return;
+    if (!PortableSettings::isGamePath(mProjectZomboidDirectory) && PortableSettings::isGamePath(root)) {
+        setProjectZomboidDirectory(root);
+        mSettings->remove(QStringLiteral("Playtest/GameDirectory"));
+    } else {
+        mSettings->setValue(QStringLiteral("Playtest/GameDirectory"), root);
+    }
+    mSettings->sync();
+}
+
 void Preferences::setProjectZomboidDirectory(const QString &path)
 {
     const QString normalized = PortableSettings::normalizedGamePath(path);

@@ -19,8 +19,14 @@
 #define BUILDINGLAYERSDOCK_H
 
 #include <QDockWidget>
+#include <QPair>
+#include <QPointer>
+#include <QVector>
 
+class QCheckBox;
+class QLabel;
 class QListWidgetItem;
+class QTreeWidget;
 
 namespace Ui {
 class BuildingLayersDock;
@@ -30,6 +36,30 @@ namespace BuildingEditor {
 
 class BuildingDocument;
 class BuildingFloor;
+class BuildingIsoView;
+
+class BuildingTileInspector : public QDockWidget
+{
+    Q_OBJECT
+public:
+    explicit BuildingTileInspector(QWidget *parent = nullptr);
+    void setView(BuildingIsoView *view);
+    void inspectSquare(const QPoint &pos);
+
+signals:
+    void tileActivated(const QString &tileName, const QString &layer);
+
+private:
+    void refresh();
+
+    QPointer<BuildingIsoView> mView;
+    QCheckBox *mFollow;
+    QLabel *mPosition;
+    QTreeWidget *mTiles;
+    QPoint mSquare{-1, -1};
+    bool mShown = false;
+    QVector<QPair<QString, QString>> mRows;
+};
 
 class BuildingLayersDock : public QDockWidget
 {

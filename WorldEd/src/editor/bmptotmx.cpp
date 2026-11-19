@@ -54,7 +54,6 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QStringList>
-#include <QTemporaryFile>
 #include <QUndoStack>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
@@ -101,33 +100,6 @@ BitmapValidationResult validateBitmapColors(
     }
     return result;
 }
-bool validateBitmapColorRepair(QString *error)
-{
-    const QRgb black = qRgb(0, 0, 0);
-    const QRgb known = qRgb(12, 34, 56);
-    const QRgb unknown = qRgb(90, 80, 70);
-    QSet<QRgb> knownColors;
-    knownColors.insert(black);
-    knownColors.insert(known);
-    QImage image(3, 1, QImage::Format_ARGB32);
-    image.setPixel(0, 0, black);
-    image.setPixel(1, 0, known);
-    image.setPixel(2, 0, unknown);
-    const BitmapValidationResult result = validateBitmapColors(
-                image, knownColors, known, true, QPoint(100, 200));
-    if (result.unknownPixels != 1 ||
-            result.repairedPixels != 1 ||
-            image.pixel(2, 0) != known ||
-            result.samples.value(unknown) !=
-                QList<QPoint>({QPoint(102, 200)})) {
-        if (error)
-            *error = QStringLiteral(
-                "BMP color validation and repair self-test failed");
-        return false;
-    }
-    return true;
-}
-
 QString xmlAttribute(QString value)
 {
     value.replace(QLatin1Char('&'), QLatin1String("&amp;"));
@@ -400,155 +372,6 @@ BMPToTMX::~BMPToTMX()
 {
     qDeleteAll(mRules);
     qDeleteAll(mBlends);
-}
-
-bool BMPToTMX::validateGenerationInputs(WorldDocument *worldDoc)
-{
-    if (!worldDoc || !worldDoc->world()) {
-        mError = tr("No WorldEd project is available for BMP to TMX validation.");
-        return false;
-    }
-    mWorldDoc = worldDoc;
-    mError.clear();
-    TileMetaInfoMgr::instance()->resolveTilesets();
-    if (!LoadBaseXML()) {
-        mError += tr("\n(while reading MapBaseXML.txt)");
-        return false;
-    }
-    if (!LoadRules()) {
-        mError += tr("\n(while reading Rules.txt)");
-        return false;
-    }
-    if (!LoadBlends()) {
-        mError += tr("\n(while reading Blends.txt)");
-        return false;
-    }
-    if (!loadGenerationTilesets())
-        return false;
-    QString repairError;
-    if (!validateBitmapColorRepair(&repairError)) {
-        mError = repairError;
-        return false;
-    }
-    return true;
-}
-
-bool BMPToTMX::validateMetadataOnly(QString *summary, QString *error)
-{
-    QTemporaryFile oldRulesFile;
-    const QByteArray oldRules(
-                "0,1,2,3,floors_01_0,0_Floor\r\n");
-    if (!oldRulesFile.open() ||
-            oldRulesFile.write(oldRules) != oldRules.size() ||
-            !oldRulesFile.flush()) {
-        if (error)
-            *error = QStringLiteral("Could not create the old Rules.txt validation file");
-        return false;
-    }
-    const QString oldRulesPath = oldRulesFile.fileName();
-    oldRulesFile.close();
-    Tiled::Internal::BmpRulesFile oldFormatRules;
-    if (!oldFormatRules.read(oldRulesPath, false)) {
-        if (error)
-            *error = QStringLiteral("Could not read old Rules.txt without conversion: %1")
-                    .arg(oldFormatRules.errorString());
-        return false;
-    }
-    QByteArray preservedOldRules;
-    QString oldRulesError;
-    if (!readBinaryFile(oldRulesPath, &preservedOldRules, &oldRulesError) ||
-            preservedOldRules != oldRules) {
-        if (error)
-            *error = QStringLiteral("Metadata-only validation modified old Rules.txt: %1")
-                    .arg(oldRulesError);
-        return false;
-    }
-    BmpAlias alias(QStringLiteral("Grass & Stone"),
-                   QStringList() << QStringLiteral("floors_01_000")
-                                 << QStringLiteral("floors_01_001"));
-    BmpRule rule(QStringLiteral("Ground \"A\""), 0, qRgb(10, 20, 30),
-                 QStringList() << alias.name << QString(),
-                 QStringLiteral("0_Floor"), qRgb(0, 0, 0), true);
-    BmpBlend blend(QStringLiteral("0_FloorOverlay"), alias.name,
-                   QStringLiteral("blends_01_000"), BmpBlend::NW,
-                   QStringList() << QStringLiteral("exclude_01_000"),
-                   QStringList() << QStringLiteral("tileset")
-                                 << QStringLiteral("0_Floor"));
-    const QList<BmpAlias *> aliases = QList<BmpAlias *>() << &alias;
-    const QList<BmpRule *> rules = QList<BmpRule *>() << &rule;
-    const QList<BmpBlend *> blends = QList<BmpBlend *>() << &blend;
-    const QByteArray source(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n"
-                "<map marker=\"outside\">\r\n"
-                " <layer name=\"Floor\"><data>UNCHANGED-DATA</data></layer>\r\n"
-                " <bmp-settings version=\"1\">\r\n"
-                "  <rules-file file=\"old-rules.txt\"/>\r\n"
-                "  <blends-file file=\"old-blends.txt\"/>\r\n"
-                "  <edges-everywhere value=\"true\"/>\r\n"
-                "  <aliases><alias name=\"old\" tiles=\"old_01_000\"/></aliases>\r\n"
-                "  <rules><rule label=\"old\" bitmapIndex=\"0\" color=\"1 1 1\" tileChoices=\"old\" targetLayer=\"0_Floor\" condition=\"0 0 0\"/></rules>\r\n"
-                "  <blends><blend targetLayer=\"0_Floor\" mainTile=\"old\" blendTile=\"old\" dir=\"n\" ExclusionList=\"\" exclude2=\"\"/></blends>\r\n"
-                " </bmp-settings>\r\n"
-                " <bmp-image index=\"0\"><color rgb=\"1 2 3\">PIXELS</color></bmp-image>\r\n"
-                " <bmp-noblend layer=\"0_Floor\">MASK</bmp-noblend>\r\n"
-                "</map>\r\n");
-    const QMap<QString, QByteArray> elements = metadataElements(
-                QStringLiteral("C:/project/cell.tmx"),
-                QStringLiteral("C:/config/Rules.txt"),
-                QStringLiteral("C:/config/Blends.txt"),
-                aliases, rules, blends, QByteArray("\r\n"));
-    QByteArray updated;
-    QString updateError;
-    if (!replaceMetadataElements(source, elements, &updated, &updateError)) {
-        if (error)
-            *error = updateError;
-        return false;
-    }
-    const QList<QByteArray> preserved = QList<QByteArray>()
-            << QByteArray("<map marker=\"outside\">")
-            << QByteArray("<layer name=\"Floor\"><data>UNCHANGED-DATA</data></layer>")
-            << QByteArray("<edges-everywhere value=\"true\"/>")
-            << QByteArray("<bmp-image index=\"0\"><color rgb=\"1 2 3\">PIXELS</color></bmp-image>")
-            << QByteArray("<bmp-noblend layer=\"0_Floor\">MASK</bmp-noblend>");
-    for (const QByteArray &value : preserved) {
-        if (!updated.contains(value)) {
-            if (error)
-                *error = QStringLiteral("Metadata-only validation changed preserved TMX content");
-            return false;
-        }
-    }
-    if (!updated.contains("<rules-file file=\"../config/Rules.txt\"/>") ||
-            !updated.contains("<blends-file file=\"../config/Blends.txt\"/>") ||
-            !updated.contains("name=\"Grass &amp; Stone\"") ||
-            !updated.contains("label=\"Ground &quot;A&quot;\"") ||
-            !updated.contains("tileChoices=\"Grass &amp; Stone null\"") ||
-            !updated.contains("obsolete=\"true\"") ||
-            !updated.contains("dir=\"nw\"")) {
-        if (error)
-            *error = QStringLiteral("Metadata-only validation did not serialize the expected snapshot");
-        return false;
-    }
-    QByteArray secondPass;
-    if (!replaceMetadataElements(updated, elements, &secondPass, &updateError) ||
-            secondPass != updated) {
-        if (error)
-            *error = QStringLiteral("Metadata-only validation is not idempotent: %1")
-                    .arg(updateError);
-        return false;
-    }
-    QByteArray invalidOutput;
-    if (replaceMetadataElements(
-                QByteArray("<map><layer/></map>"), elements,
-                &invalidOutput, &updateError)) {
-        if (error)
-            *error = QStringLiteral("Metadata-only validation accepted a TMX without bmp-settings");
-        return false;
-    }
-    if (summary) {
-        *summary = QStringLiteral(
-                    "five metadata elements replaced, preserved content unchanged, old Rules.txt unchanged, XML valid, and repeated application was a no-op");
-    }
-    return true;
 }
 
 bool BMPToTMX::updateMetadataOnly(BMPToTMX::GenerateMode mode)

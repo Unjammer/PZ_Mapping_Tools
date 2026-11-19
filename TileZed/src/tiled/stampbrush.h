@@ -121,6 +121,9 @@ private:
      * either by rightclicking (Capture) or at the tilesetdock
      */
     TileLayer *mStamp;
+#ifdef ZOMBOID
+    bool mRecordedStroke = false;
+#endif
     QList<Tileset *> mTilesetReferences;
 
 #ifdef ZOMBOID

@@ -37,10 +37,6 @@ public:
     explicit PackCompare(QWidget *parent = nullptr);
     ~PackCompare();
 
-    static bool runSelfTest(QString *summary, QString *errorString);
-    static bool renderValidation(const QString &outputFile,
-                                 QString *errorString);
-
 private slots:
     void browse1();
     void browse2();

@@ -3315,36 +3315,6 @@ Example: library=Library</source>
         <source>Saved %1 and generated %2. Game files were not modified.</source>
         <translation>已保存 %1 并生成 %2。游戏文件未修改。</translation>
     </message>
-    <message>
-        <source>The project/mod root is inside the read-only game directory.</source>
-        <translation>项目或模组的根目录位于只读的游戏目录中。</translation>
-    </message>
-    <message>
-        <source>Unresolved project procedural references:
-%1</source>
-        <translation>项目中未解析的程序化分布引用如下。
-%1</translation>
-    </message>
-    <message>
-        <source>%1 rooms, %2 containers (%3 procedural, %4 direct), %5 procedural distributions, %6 project overrides, %7 unresolved read-only game references</source>
-        <translation>%1 个房间，%2 个容器（%3 个程序化分布，%4 个直接分布），%5 个程序化分布定义，%6 个项目覆盖，%7 个未解析的只读游戏引用</translation>
-    </message>
-    <message>
-        <source>Could not create screenshot directory %1.</source>
-        <translation>无法创建截图目录 %1。</translation>
-    </message>
-    <message>
-        <source>Could not save loot-editor screenshot %1.</source>
-        <translation>无法保存战利品编辑器的截图 %1。</translation>
-    </message>
-    <message>
-        <source>Loot localization validation failed.</source>
-        <translation>战利品本地化验证失败。</translation>
-    </message>
-    <message>
-        <source>. Loot localization checks passed.</source>
-        <translation>。战利品本地化检查通过。</translation>
-    </message>
 </context>
 <context>
     <name>BuildingEditor::BuildingPreferencesDialog</name>

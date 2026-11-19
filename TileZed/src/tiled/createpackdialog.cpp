@@ -397,47 +397,6 @@ void CreatePackDialog::writeSettings()
     settings.endGroup();
 }
 
-bool CreatePackDialog::validateRecentPacks(QString *error)
-{
-    QSettings settings;
-    settings.beginGroup(QStringLiteral("CreatePackDialog"));
-    QVariantMap original;
-    for (const QString &key : settings.allKeys())
-        original.insert(key, settings.value(key));
-    settings.remove(QString());
-    bool valid = true;
-    {
-        CreatePackDialog dialog;
-        for (int i = 0; i < 25; ++i)
-            dialog.rememberPackFile(QStringLiteral("C:/packs/map-%1.pack").arg(i));
-        dialog.ui->packNameEdit->setCurrentText(QStringLiteral("C:/packs/map-7.pack"));
-        dialog.apply();
-        const QStringList paths = settings.value(QStringLiteral("recentFiles")).toStringList();
-        valid = paths.size() == 20
-                && paths.first() == QDir::toNativeSeparators(QStringLiteral("C:/packs/map-7.pack"));
-        dialog.rememberPackFile(QStringLiteral("c:/packs/MAP-7.pack"));
-        dialog.rememberPackFile(QString());
-        valid = valid && dialog.ui->packNameEdit->count() == 20;
-    }
-    {
-        CreatePackDialog restored;
-        valid = valid && restored.ui->packNameEdit->count() == 20
-                && restored.ui->packNameEdit->currentText()
-                == QDir::toNativeSeparators(QStringLiteral("C:/packs/map-7.pack"));
-        TexturePackSettings packSettings;
-        restored.settingsFromUI(packSettings);
-        valid = valid && packSettings.mPackFileName
-                == restored.ui->packNameEdit->currentText();
-    }
-    settings.remove(QString());
-    for (auto it = original.cbegin(); it != original.cend(); ++it)
-        settings.setValue(it.key(), it.value());
-    settings.endGroup();
-    if (!valid && error)
-        *error = QStringLiteral("Recent pack paths did not preserve selection, order or persistence.");
-    return valid;
-}
-
 /////
 
 PackSettingsFile::PackSettingsFile()

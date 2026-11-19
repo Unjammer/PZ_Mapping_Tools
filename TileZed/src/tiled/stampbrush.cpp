@@ -263,6 +263,9 @@ void StampBrush::mousePressed(QGraphicsSceneMouseEvent *event)
         return;
 
     if (event->button() == Qt::LeftButton) {
+#ifdef ZOMBOID
+        mRecordedStroke = false;
+#endif
         switch (mBrushBehavior) {
         case Line:
             mStampReferenceX = mStampX;
@@ -688,9 +691,20 @@ void StampBrush::doPaint(bool mergeable, int whereX, int whereY)
 #endif
     paint->setMergeable(mergeable);
 #ifdef ZOMBOID
+    const QPoint local(whereX - tileLayer->x(), whereY - tileLayer->y());
+    Tile *used = nullptr;
+    if (mTrackUsedTiles && !mRecordedStroke && mStamp && mStamp->width() == 1 && mStamp->height() == 1
+            && stamp->width() == 1 && stamp->height() == 1 && tileLayer->cellAt(local) != stamp->cellAt(0, 0))
+        used = stamp->cellAt(0, 0).tile;
     MainWindow::instance()->beginDocumentTransaction();
 #endif
     mapDocument()->undoStack()->push(paint);
+#ifdef ZOMBOID
+    if (used && tileLayer->cellAt(local) == stamp->cellAt(0, 0)) {
+        mRecordedStroke = true;
+        emit tilePainted(used);
+    }
+#endif
     mapDocument()->emitRegionEdited(brushItem()->tileRegion(), tileLayer);
 #ifdef ZOMBOID
     MainWindow::instance()->endDocumentTransaction();

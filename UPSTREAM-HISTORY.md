@@ -12,6 +12,26 @@ It exists because this repository combines two independent source histories
 into one source tree. The combined repository is therefore not represented by
 GitHub as a conventional fork of either upstream repository.
 
+## Forks and redistribution
+
+Preserve the copyright, license and warranty notices that apply to each
+component. The editor sources, libraries, themes and runtime dependencies
+carry different terms. Use the per-file headers, [component notices](THIRD_PARTY_NOTICES.txt)
+and the license texts in `licenses/` when preparing a distribution.
+
+Credit the upstream authors and identify your fork's changes separately.
+Keep the [authors list](AUTHORS.txt) and [feature provenance](FEATURE_PROVENANCE.md)
+with redistributions of this project. Where GPLv2 applies, modified files
+must carry prominent notices identifying that they were changed and the
+date of the changes.
+
+When distributing binaries, meet the corresponding-source obligations for
+those exact binaries, including the build and installation scripts. One
+way to do this for an online release is to offer the matching source at
+the same download location. If you use a written source offer, update the
+contact and delivery details so the distributor can fulfil it. Review the
+applicable terms for bundled libraries as well. [GPL version 2, sections 1–3](licenses/GPL-2.0.txt)
+
 ## October 30, 2026 additions
 
 Alree / Unjammer connected BuildingEd's inherited wall-preview preference to

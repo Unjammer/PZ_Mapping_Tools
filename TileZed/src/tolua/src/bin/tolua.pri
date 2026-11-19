@@ -4,6 +4,6 @@ tolua.name = tolua generator
 tolua.input = TOLUA_PKG
 tolua.depends = $$TOLUA_DEPS $${tolua_exe}
 tolua.output = ${QMAKE_FILE_BASE}.tolua.cpp
-tolua.commands = $${tolua_exe} -n $${TOLUA_PKGNAME} -o $$shell_path($$OUT_PWD/${QMAKE_FILE_BASE}.tolua.cpp) ${QMAKE_FILE_NAME}
+tolua.commands = $$shell_quote($$tolua_exe) -n $$TOLUA_PKGNAME -o ${QMAKE_FILE_OUT} ${QMAKE_FILE_IN}
 tolua.variable_out = GENERATED_SOURCES
 QMAKE_EXTRA_COMPILERS += tolua

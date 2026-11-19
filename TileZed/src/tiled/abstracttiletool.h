@@ -25,6 +25,7 @@
 
 namespace Tiled {
 
+class Tile;
 class TileLayer;
 
 namespace Internal {
@@ -57,7 +58,17 @@ public:
     void mouseLeft();
     void mouseMoved(const QPointF &pos, Qt::KeyboardModifiers modifiers);
 
+#ifdef ZOMBOID
+    void setTrackUsedTiles(bool enabled) { mTrackUsedTiles = enabled; }
+
+signals:
+    void tilePainted(Tiled::Tile *tile);
+#endif
+
 protected:
+#ifdef ZOMBOID
+    bool mTrackUsedTiles = false;
+#endif
     void mapDocumentChanged(MapDocument *oldDocument,
                             MapDocument *newDocument);
 

@@ -28,7 +28,7 @@ class QMainWindow;
 class QTabWidget;
 class QToolButton;
 
-namespace Tiled { namespace Internal { class TileSelectionScope; } }
+namespace Tiled { namespace Internal { class TilePaletteWindow; class TileSelectionScope; } }
 
 namespace BuildingEditor {
 
@@ -36,6 +36,7 @@ class BuildingDocument;
 class BuildingFurnitureDock;
 class BuildingIsoView;
 class BuildingLayersDock;
+class BuildingTileInspector;
 class BuildingTilesetDock;
 class CategoryDock;
 class EditModeStatusBar;
@@ -59,13 +60,14 @@ public:
     BuildingDocument *mCurrentDocument;
     QToolButton *mFloorLabel;
     Tiled::Internal::TileSelectionScope *mSelectionScope;
+    QAction *mTilePaletteAction;
 };
 
 class TileEditMode : public IMode
 {
     Q_OBJECT
 public:
-    explicit TileEditMode(QObject *parent = 0);
+    explicit TileEditMode(QObject *parent);
 
     void readSettings(QSettings &settings);
     void writeSettings(QSettings &settings);
@@ -86,6 +88,10 @@ public slots:
     void updateActions();
 
 private:
+    void createTilePalette();
+    void updatePaletteBrush();
+    void updatePaletteVisibility();
+
     EmbeddedMainWindow *mMainWindow;
     QTabWidget *mTabWidget;
     EditModeStatusBar *mStatusBar;
@@ -93,7 +99,10 @@ private:
     TileEditModeToolBar *mToolBar;
     BuildingFurnitureDock *mFurnitureDock;
     BuildingLayersDock *mLayersDock;
+    BuildingTileInspector *mTileInspector;
     BuildingTilesetDock *mTilesetDock;
+    Tiled::Internal::TilePaletteWindow *mTilePalette = nullptr;
+    bool mPaletteTilesDirty = false;
     bool mFirstTimeSeen;
 
     BuildingDocument *mCurrentDocument;

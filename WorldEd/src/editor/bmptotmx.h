@@ -58,8 +58,6 @@ public:
 
     bool generateWorld(WorldDocument *worldDoc, GenerateMode mode);
     bool generateCell(WorldCell *cell);
-    bool validateGenerationInputs(WorldDocument *worldDoc);
-    static bool validateMetadataOnly(QString *summary, QString *error);
 
     QString errorString() const { return mError; }
 

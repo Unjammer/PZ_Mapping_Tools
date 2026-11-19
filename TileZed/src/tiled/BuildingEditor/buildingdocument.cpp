@@ -253,6 +253,89 @@ void BuildingDocument::setClipboardTiles(FloorTileGrid *tiles, const QRegion &rg
     mClipboardPreservesPlanes = false;
 }
 
+bool BuildingDocument::hasSelectedFurniture() const
+{
+    for (BuildingObject *object : mSelectedObjects) {
+        if (object->floor() == currentFloor() && object->asFurniture() && object->asFurniture()->furnitureTile())
+            return true;
+    }
+    return false;
+}
+
+void BuildingDocument::copySelectedFurniture()
+{
+    QVector<ClipboardFurniture> copied;
+    QVector<ClipboardFurnitureDefinition> definitions;
+    QHash<FurnitureTiles *, int> definitionIndexes;
+    QRegion footprint;
+    for (BuildingObject *object : currentFloor()->objects()) {
+        if (!mSelectedObjects.contains(object) || !object->asFurniture())
+            continue;
+        FurnitureTile *tile = object->asFurniture()->furnitureTile();
+        if (tile) {
+            auto *owner = tile->owner();
+            auto it = definitionIndexes.find(owner);
+            if (it == definitionIndexes.end()) {
+                it = definitionIndexes.insert(owner, definitions.size());
+                definitions.append(ClipboardFurnitureDefinition{QSharedPointer<FurnitureTiles>::create(*owner), owner});
+            }
+            copied.append(ClipboardFurniture{object->pos(), it.value(), tile->orient()});
+            footprint += object->bounds();
+        }
+    }
+    if (copied.isEmpty())
+        return;
+    const QPoint origin = footprint.boundingRect().topLeft();
+    for (ClipboardFurniture &entry : copied)
+        entry.offset -= origin;
+    mClipboardFurniture.swap(copied);
+    mClipboardFurnitureDefinitions.swap(definitions);
+    mClipboardFurnitureRegion = footprint.translated(-origin);
+    emit clipboardTilesChanged();
+}
+
+FurnitureTiles *BuildingDocument::ClipboardFurnitureDefinition::resolve(Building *building)
+{
+    const auto equal = [this](FurnitureTiles *tiles) {
+        return tiles->hasCorners() == snapshot->hasCorners() && tiles->equals(snapshot.data());
+    };
+    const auto &used = building->usedFurniture();
+    if (used.contains(match) && equal(match))
+        return match;
+    for (FurnitureTiles *tiles : used) {
+        if (equal(tiles)) {
+            match = tiles;
+            return match;
+        }
+    }
+    match = new FurnitureTiles(*snapshot);
+    building->retainFurnitureTiles(match);
+    return match;
+}
+
+bool BuildingDocument::pasteFurnitureAt(const QPoint &position)
+{
+    if (mClipboardFurniture.isEmpty()
+            || !currentFloor()->bounds().contains(mClipboardFurnitureRegion.boundingRect().translated(position)))
+        return false;
+    QVector<FurnitureTiles *> definitions(mClipboardFurnitureDefinitions.size(), nullptr);
+    mUndoStack->beginMacro(tr("Paste Furniture"));
+    QSet<BuildingObject *> selection;
+    for (const ClipboardFurniture &entry : qAsConst(mClipboardFurniture)) {
+        const QPoint target = position + entry.offset;
+        auto *object = new FurnitureObject(currentFloor(), target.x(), target.y());
+        FurnitureTiles *&definition = definitions[entry.definition];
+        if (!definition)
+            definition = mClipboardFurnitureDefinitions[entry.definition].resolve(building());
+        object->setFurnitureTile(definition->tile(entry.orientation));
+        mUndoStack->push(new AddObject(this, currentFloor(), currentFloor()->objectCount(), object));
+        selection.insert(object);
+    }
+    mUndoStack->push(new SetSelectedObjects(this, selection));
+    mUndoStack->endMacro();
+    return true;
+}
+
 void BuildingDocument::setClipboardTileLayers(
         const QList<ClipboardTileLayer> &layers,
         const QRegion &rgn,

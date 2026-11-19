@@ -15,8 +15,7 @@ unmodified Qt source archive is available at:
 
     https://download.qt.io/archive/qt/5.14/5.14.2/single/
 
-If either source download becomes unavailable, any recipient of this binary
-distribution may request the corresponding source through:
+Any third party may request the corresponding source through:
 
     https://github.com/Unjammer/PZ_Mapping_Tools/issues
 

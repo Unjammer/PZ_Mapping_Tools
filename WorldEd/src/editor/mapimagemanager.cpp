@@ -211,16 +211,6 @@ void MapImageManager::releaseOwner(QObject *owner)
     }
 }
 
-bool MapImageManager::containsMapImage(MapImage *mapImage) const
-{
-    return mMapImages.values().contains(mapImage);
-}
-
-int MapImageManager::mapImageReferenceCount(MapImage *mapImage) const
-{
-    return mImageOwners.value(mapImage).size();
-}
-
 bool MapImageManager::discardMapImageIfUnused(MapImage *mapImage)
 {
     if (!mapImage || !mapImage->mLoaded
@@ -1455,60 +1445,6 @@ void MapImageRenderWorker::resume(MapImage *mapImage,
 
     mJobs.prepend(Job(mapImage, imageFileName));
     scheduleWork();
-}
-
-bool MapImageRenderWorker::validateBasementThumbnails(QString *error)
-{
-    Tileset tiles(QStringLiteral("thumbnail_colors"), 64, 128);
-    QImage atlas(192, 128, QImage::Format_ARGB32);
-    QPainter painter(&atlas);
-    painter.fillRect(QRect(0, 0, 64, 128), Qt::red);
-    painter.fillRect(QRect(64, 0, 64, 128), Qt::green);
-    painter.fillRect(QRect(128, 0, 64, 128), Qt::blue);
-    painter.end();
-    if (!tiles.loadFromImage(atlas, QString())) {
-        *error = QStringLiteral("Cannot create thumbnail tiles");
-        return false;
-    }
-    Map map(Map::LevelIsometric, 8, 8, 64, 32);
-    map.addTileset(&tiles);
-    for (int level = -1; level <= 1; ++level) {
-        auto *layer = new TileLayer(QStringLiteral("Furniture"), 0, 0, 8, 8);
-        layer->setLevel(level);
-        layer->setCell(1 + (level + 1) * 2, 2, Cell(tiles.tileAt(level + 1)));
-        map.addLayer(layer);
-    }
-    MapInfo info(&map);
-    info.setFilePath(QStringLiteral("<LotFilesManagerMap>"));
-    MapComposite composite(&info);
-    InterruptibleThread thread;
-    MapImageRenderWorker worker(&thread);
-    for (int firstLevel : {-1, 0, 1, 2}) {
-        const MapImageData data = worker.generateMapImage(&composite, firstLevel);
-        QSet<int> colors;
-        const QImage image = data.image.convertToFormat(QImage::Format_ARGB32);
-        for (int y = 0; y < image.height(); ++y) {
-            for (int x = 0; x < image.width(); ++x) {
-                const QRgb pixel = image.pixel(x, y);
-                if (qAlpha(pixel) < 128)
-                    continue;
-                if (qRed(pixel) > 200 && qGreen(pixel) < 30 && qBlue(pixel) < 30)
-                    colors.insert(-1);
-                if (qGreen(pixel) > 200 && qRed(pixel) < 30 && qBlue(pixel) < 30)
-                    colors.insert(0);
-                if (qBlue(pixel) > 200 && qRed(pixel) < 30 && qGreen(pixel) < 30)
-                    colors.insert(1);
-            }
-        }
-        QSet<int> expected;
-        for (int level = firstLevel; level <= 1; ++level)
-            expected.insert(level);
-        if (colors != expected || (firstLevel <= 1 && !data.valid())) {
-            *error = QStringLiteral("Thumbnail floor filter %1 differs from visible floors").arg(firstLevel);
-            return false;
-        }
-    }
-    return true;
 }
 
 MapImageData MapImageRenderWorker::generateMapImage(MapComposite *mapComposite, int firstLevel)

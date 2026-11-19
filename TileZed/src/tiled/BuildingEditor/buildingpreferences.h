@@ -44,6 +44,14 @@ public:
     bool showGrid() const
     { return mShowGrid; }
 
+    bool gapCheckBackground() const
+    { return mGapCheckBackground; }
+
+    bool furnitureClipboardEnabled() const { return mFurnitureClipboardEnabled; }
+    bool revealPickedTileset() const { return mRevealPickedTileset; }
+    bool wallVariantDetails() const { return mWallVariantDetails; }
+    bool luaFloorGrimeEnabled() const { return mLuaFloorGrimeEnabled; }
+
     QColor gridColor() const
     { return mGridColor; }
 
@@ -83,6 +91,11 @@ public:
 signals:
     void mapsDirectoryChanged();
     void showGridChanged(bool show);
+    void gapCheckBackgroundChanged(bool enabled);
+    void furnitureClipboardEnabledChanged(bool enabled);
+    void revealPickedTilesetChanged(bool enabled);
+    void wallVariantDetailsChanged(bool enabled);
+    void luaFloorGrimeEnabledChanged(bool enabled);
     void gridColorChanged(const QColor &gridColor);
     void highlightFloorChanged(bool highlight);
     void highlightRoomChanged(bool highlight);
@@ -99,6 +112,11 @@ signals:
 public slots:
     void setMapsDirectory(const QString &path);
     void setShowGrid(bool show);
+    void setGapCheckBackground(bool enabled);
+    void setFurnitureClipboardEnabled(bool enabled);
+    void setRevealPickedTileset(bool enabled);
+    void setWallVariantDetails(bool enabled);
+    void setLuaFloorGrimeEnabled(bool enabled);
     void setGridColor(const QColor &gridColor);
     void setHighlightFloor(bool highlight);
     void setHighlightRoom(bool highlight);
@@ -117,6 +135,11 @@ private:
     QSettings mSettings;
     QString mMapsDirectory;
     bool mShowGrid;
+    bool mGapCheckBackground;
+    bool mFurnitureClipboardEnabled;
+    bool mRevealPickedTileset;
+    bool mWallVariantDetails;
+    bool mLuaFloorGrimeEnabled;
     QColor mGridColor;
     bool mHighlightFloor;
     bool mHighlightRoom;

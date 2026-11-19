@@ -37,7 +37,6 @@ public:
     QString configPath() const;
     QString configPath(const QString &fileName) const;
     void reloadSharedPaths();
-    static bool validateSharedPaths(QString *errorString);
 
     QString appConfigPath() const;
     QString appConfigPath(const QString &fileName) const;
@@ -97,6 +96,8 @@ public:
 
     QString projectZomboidDirectory() const;
     void setProjectZomboidDirectory(const QString &path);
+    QString playtestGameDirectory(QString *error = nullptr) const;
+    void setPlaytestGameDirectory(const QString &path);
     QString gameMediaPath(const QString &relativePath = QString()) const;
 
     QString tiles2xDirectory() const;

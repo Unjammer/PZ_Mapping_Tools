@@ -42,7 +42,6 @@
 #include <QSaveFile>
 #include <QSettings>
 #include <QTextBrowser>
-#include <QTemporaryDir>
 #include <QToolButton>
 
 using namespace Tiled::Internal;
@@ -223,18 +222,6 @@ QString htmlList(const QStringList &values)
     for (const QString &value : values)
         html += QStringLiteral("<li>%1</li>").arg(value.toHtmlEscaped());
     return html + QStringLiteral("</ul>");
-}
-TileDefTileset *createTestTileset(
-        const QString &name, int id, int tileCount)
-{
-    TileDefTileset *tileset = new TileDefTileset;
-    tileset->mName = name;
-    tileset->mImageSource = name + QStringLiteral(".png");
-    tileset->mColumns = 0;
-    tileset->mRows = 0;
-    tileset->mID = id;
-    tileset->resize(qMax(1, tileCount), 1);
-    return tileset;
 }
 }
 TileDefCompare::TileDefCompare(QWidget *parent) :
@@ -1012,137 +999,3 @@ void TileDefCompare::setRecentFilesCombo2()
     ui->packEdit2->setCurrentIndex(0);
 }
 
-bool TileDefCompare::runSelfTest(
-        QString *summary, QString *errorString)
-{
-    TileDefFile file1;
-    TileDefFile file2;
-    TileDefTileset *shared1 =
-            createTestTileset(QStringLiteral("shared"), 1, 2);
-    shared1->tileAt(0)->mProperties[
-            QStringLiteral("SnowTile")] =
-            QStringLiteral("snow_0");
-    shared1->tileAt(1)->mProperties[
-            QStringLiteral("BurntTile")] =
-            QStringLiteral("burnt_1");
-    file1.insertTileset(file1.tilesets().size(), shared1);
-    TileDefTileset *shared2 =
-            createTestTileset(QStringLiteral("shared"), 7, 1);
-    shared2->tileAt(0)->mProperties[
-            QStringLiteral("SnowTile")] =
-            QStringLiteral("snow_9");
-    file2.insertTileset(file2.tilesets().size(), shared2);
-    file1.insertTileset(
-                file1.tilesets().size(),
-                createTestTileset(
-                    QStringLiteral("only_file_1"), 2, 1));
-    file2.insertTileset(
-                file2.tilesets().size(),
-                createTestTileset(
-                    QStringLiteral("only_file_2"), 3, 1));
-    const TileDefAnalysis analysis =
-            analyzeTileDefs(file1, file2);
-    int modified = 0;
-    int only1 = 0;
-    int only2 = 0;
-    for (const TileDifference &difference :
-         analysis.tileDifferences) {
-        if (difference.kind == ModifiedProperties)
-            ++modified;
-        else if (difference.kind == OnlyInFile1)
-            ++only1;
-        else if (difference.kind == OnlyInFile2)
-            ++only2;
-    }
-    if (analysis.unique1 !=
-            QStringList{QStringLiteral("only_file_1")} ||
-            analysis.unique2 !=
-            QStringList{QStringLiteral("only_file_2")} ||
-            analysis.structuralDifferences.size() != 1 ||
-            modified != 1 || only1 != 2 || only2 != 1) {
-        *errorString = QStringLiteral(
-                    "Enhanced tiledef analysis returned "
-                    "unique=%1/%2 structural=%3 modified=%4 "
-                    "only1=%5 only2=%6")
-                .arg(analysis.unique1.size())
-                .arg(analysis.unique2.size())
-                .arg(analysis.structuralDifferences.size())
-                .arg(modified).arg(only1).arg(only2);
-        return false;
-    }
-    *summary = QStringLiteral(
-                "unique tilesets, structural metadata, modified "
-                "properties, and file-only tile records verified");
-    return true;
-}
-bool TileDefCompare::renderValidation(
-        const QString &outputFile, QString *errorString)
-{
-    QTemporaryDir temporary;
-    if (!temporary.isValid()) {
-        *errorString = QStringLiteral(
-                    "Could not create the comparator render directory.");
-        return false;
-    }
-    TileDefFile file1;
-    TileDefFile file2;
-    TileDefTileset *shared1 =
-            createTestTileset(QStringLiteral("demo_natural"), 1, 3);
-    shared1->tileAt(0)->mProperties[QStringLiteral("SnowTile")] =
-            QStringLiteral("demo_snow_0");
-    shared1->tileAt(1)->mProperties[QStringLiteral("BurntTile")] =
-            QStringLiteral("demo_burnt_1");
-    shared1->tileAt(2)->mProperties[QStringLiteral("Material")] =
-            QStringLiteral("wood");
-    file1.insertTileset(file1.tilesets().size(), shared1);
-    file1.insertTileset(
-                file1.tilesets().size(),
-                createTestTileset(
-                    QStringLiteral("file1_only"), 2, 2));
-    TileDefTileset *shared2 =
-            createTestTileset(QStringLiteral("demo_natural"), 7, 2);
-    shared2->tileAt(0)->mProperties[QStringLiteral("SnowTile")] =
-            QStringLiteral("demo_snow_9");
-    shared2->tileAt(1)->mProperties[QStringLiteral("BurntTile")] =
-            QStringLiteral("demo_burnt_1");
-    file2.insertTileset(file2.tilesets().size(), shared2);
-    file2.insertTileset(
-                file2.tilesets().size(),
-                createTestTileset(
-                    QStringLiteral("file2_only"), 3, 1));
-    const auto syncProperties = [](TileDefFile &file) {
-        for (TileDefTileset *tileset : file.tilesets()) {
-            for (TileDefTile *tile : tileset->mTiles) {
-                tile->mPropertyUI.FromProperties(
-                            tile->mProperties);
-            }
-        }
-    };
-    syncProperties(file1);
-    syncProperties(file2);
-    const QString path1 =
-            temporary.filePath(QStringLiteral("baseline.tiles"));
-    const QString path2 =
-            temporary.filePath(QStringLiteral("candidate.tiles"));
-    if (!file1.write(path1) || !file2.write(path2)) {
-        *errorString = QStringLiteral(
-                    "Could not create the comparator render fixtures: %1 %2")
-                .arg(file1.errorString(), file2.errorString());
-        return false;
-    }
-    TileDefCompare window;
-    window.ui->packEdit1->setEditText(path1);
-    window.ui->packEdit2->setEditText(path2);
-    window.compare();
-    window.resize(1180, 760);
-    window.show();
-    qApp->processEvents();
-    const QPixmap image = window.grab();
-    if (image.isNull() || !image.save(outputFile, "PNG")) {
-        *errorString = QStringLiteral(
-                    "Could not save the .tiles comparator render to %1.")
-                .arg(QDir::toNativeSeparators(outputFile));
-        return false;
-    }
-    return true;
-}

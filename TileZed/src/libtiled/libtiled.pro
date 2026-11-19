@@ -41,6 +41,7 @@ SOURCES += compression.cpp \
     tile.cpp
 HEADERS += compression.h \
     ../../../shared/rastertilecache.h \
+    ../../../shared/tileimagebounds.h \
     customtilesize.h \
     imagelayer.h \
     isometricrenderer.h \

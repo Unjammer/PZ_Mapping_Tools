@@ -60,7 +60,6 @@ public:
             const QString &backupRoot = QString());
     static QString report(const QList<TilesetCleanupResult> &results,
                           const QString &backupRoot = QString());
-    static bool validate(QString *summary, QString *error);
 };
 class TilesetCleanupDialog : public QDialog
 {

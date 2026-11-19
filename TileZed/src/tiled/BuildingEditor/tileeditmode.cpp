@@ -28,7 +28,9 @@
 #include "buildingisoview.h"
 #include "buildinglayersdock.h"
 #include "buildingmap.h"
+#include "buildingpreferences.h"
 #include "buildingtemplates.h"
+#include "buildingtiles.h"
 #include "buildingtilesetdock.h"
 #include "buildingtiletools.h"
 #include "editmodestatusbar.h"
@@ -36,6 +38,10 @@
 
 #include "zoomable.h"
 #include "tileselectionscope.h"
+#include "../tilepalettewindow.h"
+#include "tilemetainfomgr.h"
+#include "tileset.h"
+#include "tilesetmanager.h"
 
 #include <QAction>
 #include <QComboBox>
@@ -43,6 +49,7 @@
 #include <QMainWindow>
 #include <QStackedWidget>
 #include <QTabWidget>
+#include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
 #include <QUndoStack>
@@ -75,6 +82,10 @@ TileEditModeToolBar::TileEditModeToolBar(QWidget *parent) :
     addAction(BuildingEditorWindow::instance()->actionIface()->actionSelectTiles);
     addAction(BuildingEditorWindow::instance()->actionIface()->actionPickTiles);
     addAction(BuildingEditorWindow::instance()->actionIface()->actionFloorGrime);
+    mTilePaletteAction = addAction(QIcon(QStringLiteral(":/images/24x24/tile-palette.svg")), tr("Tile Palettes"));
+    mTilePaletteAction->setObjectName(QStringLiteral("buildingTilePaletteAction"));
+    mTilePaletteAction->setCheckable(true);
+    mTilePaletteAction->setEnabled(false);
     addSeparator();
     addWidget(mSelectionScope->createToolButton(this, [this]() {
         QStringList names;
@@ -162,6 +173,7 @@ Tiled::Internal::Zoomable *TileEditModePerDocumentStuff::zoomable() const
 void TileEditModePerDocumentStuff::activate()
 {
     ToolManager::instance()->setEditor(scene());
+    mMode->mTileInspector->setView(view());
 
     connect(view(), &BuildingIsoView::mouseCoordinateChanged,
             mMode->mStatusBar, &EditModeStatusBar::mouseCoordinateChanged);
@@ -188,6 +200,7 @@ void TileEditModePerDocumentStuff::activate()
 
 void TileEditModePerDocumentStuff::deactivate()
 {
+    mMode->mTileInspector->setView(nullptr);
 //    document()->disconnect(this);
 //    document()->disconnect(mMode); /////
     view()->disconnect(mMode->mStatusBar);
@@ -253,6 +266,7 @@ TileEditMode::TileEditMode(QObject *parent) :
     mToolBar(new TileEditModeToolBar),
     mFurnitureDock(new BuildingFurnitureDock),
     mLayersDock(new BuildingLayersDock),
+    mTileInspector(new BuildingTileInspector),
     mTilesetDock(new BuildingTilesetDock),
     mFirstTimeSeen(true),
     mCurrentDocument(0),
@@ -288,11 +302,25 @@ TileEditMode::TileEditMode(QObject *parent) :
     mMainWindow->addToolBar(Qt::LeftToolBarArea, commonToolBar);
     mMainWindow->addToolBar(mToolBar);
     mMainWindow->registerDockWidget(mLayersDock);
+    mMainWindow->registerDockWidget(mTileInspector);
     mMainWindow->registerDockWidget(mTilesetDock);
     mMainWindow->registerDockWidget(mFurnitureDock);
     mMainWindow->addDockWidget(Qt::RightDockWidgetArea, mLayersDock);
+    mMainWindow->addDockWidget(Qt::RightDockWidgetArea, mTileInspector);
+    mMainWindow->tabifyDockWidget(mLayersDock, mTileInspector);
+    mTileInspector->hide();
     mMainWindow->addDockWidget(Qt::RightDockWidgetArea, mTilesetDock);
     mMainWindow->tabifyDockWidget(mTilesetDock, mFurnitureDock);
+
+    PickTileTool::instance()->setInspectorAction(mTileInspector->toggleViewAction());
+    connect(PickTileTool::instance(), &PickTileTool::inspectSquare,
+            mTileInspector, &BuildingTileInspector::inspectSquare);
+    connect(mTileInspector, &BuildingTileInspector::tileActivated, this,
+            [this](const QString &tileName, const QString &layer) {
+        mTilesetDock->buildingTilePicked(tileName, true);
+        if (mCurrentDocument)
+            mCurrentDocument->setCurrentLayer(layer);
+    });
 
     connect(mTabWidget, &QTabWidget::currentChanged,
             this, &TileEditMode::currentDocumentTabChanged);
@@ -306,6 +334,18 @@ TileEditMode::TileEditMode(QObject *parent) :
     }
 
     setWidget(mMainWindow);
+
+    connect(mToolBar->mTilePaletteAction, &QAction::triggered,
+            this, &TileEditMode::updatePaletteVisibility);
+    connect(mTilesetDock, &BuildingTilesetDock::addTileToPalette, this, [this](const QString &sheet, int id) {
+        if (!isActive() || !mCurrentDocument)
+            return;
+        mToolBar->mTilePaletteAction->setChecked(true);
+        updatePaletteVisibility();
+        mTilePalette->addFavoriteTile(sheet, id);
+    });
+    if (Tiled::Internal::TilePaletteWindow::historyEnabledForEditor(QStringLiteral("BuildingEd")))
+        createTilePalette();
 
     connect(BuildingDocumentMgr::instance(), &BuildingDocumentMgr::documentAdded,
             this, &TileEditMode::documentAdded);
@@ -351,6 +391,7 @@ void TileEditMode::onActiveStateChanged(bool active)
             QAction *action = dockWidget->toggleViewAction();
             map[action->text()] = action;
         }
+        map[mToolBar->mTilePaletteAction->text()] = mToolBar->mTilePaletteAction;
         foreach (QAction *action, map.values())
             menu->addAction(action);
         menu->addSeparator();
@@ -361,6 +402,7 @@ void TileEditMode::onActiveStateChanged(bool active)
         if (mCurrentDocumentStuff)
             mCurrentDocumentStuff->deactivate();
     }
+    updatePaletteVisibility();
 }
 
 void TileEditMode::documentAdded(BuildingDocument *doc)
@@ -394,6 +436,8 @@ void TileEditMode::currentDocumentChanged(BuildingDocument *doc)
         if (isActive())
             mCurrentDocumentStuff->activate();
     }
+    updatePaletteBrush();
+    updatePaletteVisibility();
 }
 
 void TileEditMode::documentAboutToClose(int index, BuildingDocument *doc)
@@ -417,4 +461,94 @@ void TileEditMode::documentTabCloseRequested(int index)
 
 void TileEditMode::updateActions()
 {
+}
+
+void TileEditMode::createTilePalette()
+{
+    if (mTilePalette)
+        return;
+    using Tiled::Internal::TilePaletteWindow;
+    using Tiled::Internal::TileMetaInfoMgr;
+    mTilePalette = new TilePaletteWindow(QStringLiteral("BuildingEd"), BuildingEditorWindow::instance());
+    auto *catalog = TileMetaInfoMgr::instance();
+    mTilePalette->setTileResolver([catalog](const QString &name, int id) -> const Tiled::Tile * {
+        auto *sheet = catalog->tileset(name);
+        return sheet && sheet->isLoaded() && !sheet->isMissing() ? sheet->tileAt(id) : nullptr;
+    });
+    auto *refresh = new QTimer(mTilePalette);
+    refresh->setSingleShot(true);
+    connect(refresh, &QTimer::timeout, mTilePalette, [this] {
+        if (mPaletteTilesDirty && mTilePalette->isVisible()) {
+            mPaletteTilesDirty = false;
+            mTilePalette->refreshTiles();
+        }
+    });
+    const auto catalogChanged = [this, refresh] {
+        mPaletteTilesDirty = true;
+        if (mTilePalette->isVisible() && !refresh->isActive())
+            refresh->start(0);
+    };
+    connect(catalog, &TileMetaInfoMgr::tilesetDiscoveryFinished, mTilePalette, catalogChanged);
+    connect(catalog, &TileMetaInfoMgr::tilesetCatalogLoaded, mTilePalette, catalogChanged);
+    connect(catalog, &TileMetaInfoMgr::tilesetAdded, mTilePalette, catalogChanged);
+    connect(catalog, &TileMetaInfoMgr::tilesetRemoved, mTilePalette, catalogChanged);
+    connect(Tiled::Internal::TilesetManager::instance(), &Tiled::Internal::TilesetManager::tilesetChanged,
+            mTilePalette, catalogChanged);
+    connect(mTilePalette, &TilePaletteWindow::visibilityChanged, this, [this](bool shown) {
+        if (isActive() && mCurrentDocument)
+            mToolBar->mTilePaletteAction->setChecked(shown);
+    });
+    connect(mTilePalette, &TilePaletteWindow::tileActivated, this, [this](const QString &sheet, int id) {
+        if (!isActive() || !mCurrentDocument)
+            return;
+        const QString name = BuildingTilesMgr::nameForTile(sheet, id);
+        if (mTilesetDock->buildingTilePicked(name, BuildingPreferences::instance()->revealPickedTileset())) {
+            auto *draw = DrawTileTool::instance();
+            if (draw->action()->isEnabled() && ToolManager::instance()->currentTool() != draw)
+                draw->action()->trigger();
+        }
+    });
+    auto *draw = DrawTileTool::instance();
+    connect(draw, &DrawTileTool::brushChanged, this, &TileEditMode::updatePaletteBrush);
+    connect(draw, &DrawTileTool::tilesPainted, mTilePalette, [this, draw] {
+        if (!isActive() || !mCurrentDocument || !mTilePalette->historyEnabled())
+            return;
+        QString sheet;
+        int id;
+        if (BuildingTilesMgr::parseTileName(draw->singleTileBrush(), sheet, id))
+            mTilePalette->recordUsedTile(sheet, id);
+    });
+}
+
+void TileEditMode::updatePaletteBrush()
+{
+    if (!mTilePalette || !mTilePalette->isVisible())
+        return;
+    QString sheet;
+    int id = -1;
+    if (mCurrentDocument)
+        BuildingTilesMgr::parseTileName(DrawTileTool::instance()->singleTileBrush(), sheet, id);
+    mTilePalette->setCurrentTile(sheet, id);
+}
+
+void TileEditMode::updatePaletteVisibility()
+{
+    QAction *toggle = mToolBar->mTilePaletteAction;
+    const bool available = isActive() && mCurrentDocument;
+    toggle->setEnabled(available);
+    if (!available || !toggle->isChecked()) {
+        if (mTilePalette)
+            mTilePalette->hide();
+        return;
+    }
+    createTilePalette();
+    if (!mTilePalette->isVisible()) {
+        if (mPaletteTilesDirty) {
+            mPaletteTilesDirty = false;
+            mTilePalette->refreshTiles();
+        }
+        mTilePalette->show();
+        mTilePalette->raise();
+    }
+    updatePaletteBrush();
 }
